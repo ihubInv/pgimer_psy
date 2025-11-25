@@ -1,0 +1,121 @@
+{
+  "psychiatric_medications": {
+    "antidepressants": {
+      "ssri": [
+        {"name": "Fluoxetine", "brands": ["Prozac", "Fludac", "Flunil"], "strengths": ["10mg", "20mg", "60mg"]},
+        {"name": "Sertraline", "brands": ["Zoloft", "Serlift", "Daxid"], "strengths": ["25mg", "50mg", "100mg"]},
+        {"name": "Paroxetine", "brands": ["Paxil", "Pari", "Xet"], "strengths": ["12.5mg", "25mg", "37.5mg"]},
+        {"name": "Escitalopram", "brands": ["Nexito", "Feliz-S", "Stalopam"], "strengths": ["5mg", "10mg", "20mg"]},
+        {"name": "Citalopram", "brands": ["Citadep", "Cital"], "strengths": ["10mg", "20mg", "40mg"]},
+        {"name": "Fluvoxamine", "brands": ["Faverin", "Fluvoxin"], "strengths": ["50mg", "100mg"]}
+      ],
+      "snri": [
+        {"name": "Venlafaxine", "brands": ["Efexor", "Venlor", "Veniz"], "strengths": ["37.5mg", "75mg", "150mg"]},
+        {"name": "Desvenlafaxine", "brands": ["Pristiq", "Desnor"], "strengths": ["50mg", "100mg"]},
+        {"name": "Duloxetine", "brands": ["Cymbalta", "Duzela", "Dulane"], "strengths": ["20mg", "30mg", "40mg", "60mg"]}
+      ],
+      "tricyclics": [
+        {"name": "Amitriptyline", "brands": ["Tryptomer", "Amitryn"], "strengths": ["10mg", "25mg", "50mg", "75mg"]},
+        {"name": "Imipramine", "brands": ["Tofranil", "Depsonil"], "strengths": ["25mg", "75mg"]},
+        {"name": "Clomipramine", "brands": ["Anafranil", "Clonil"], "strengths": ["25mg", "50mg", "75mg"]},
+        {"name": "Doxepin", "brands": ["Spectra"], "strengths": ["25mg", "75mg"]},
+        {"name": "Nortriptyline", "brands": ["Sensival"], "strengths": ["10mg", "25mg"]}
+      ],
+      "maoi": [
+        {"name": "Moclobemide", "brands": ["Aurorix"], "strengths": ["150mg", "300mg"]}
+      ],
+      "others": [
+        {"name": "Mirtazapine", "brands": ["Remeron", "Mirtaz", "Mitaso"], "strengths": ["7.5mg", "15mg", "30mg", "45mg"]},
+        {"name": "Bupropion", "brands": ["Wellbutrin", "Bupron"], "strengths": ["75mg", "150mg", "300mg"]},
+        {"name": "Trazodone", "brands": ["Trazonil"], "strengths": ["50mg", "100mg"]},
+        {"name": "Agomelatine", "brands": ["Valdoxan", "Agopose"], "strengths": ["25mg"]},
+        {"name": "Vortioxetine", "brands": ["Brintellix"], "strengths": ["5mg", "10mg", "20mg"]}
+      ]
+    },
+    "antipsychotics": {
+      "typical_first_generation": [
+        {"name": "Haloperidol", "brands": ["Serenace", "Haldol", "Peridol"], "strengths": ["0.5mg", "1.5mg", "5mg", "10mg"]},
+        {"name": "Chlorpromazine", "brands": ["Largactil", "Clorpromazine"], "strengths": ["25mg", "50mg", "100mg"]},
+        {"name": "Fluphenazine", "brands": ["Modecate"], "strengths": ["1mg", "2.5mg", "5mg", "25mg injection"]},
+        {"name": "Trifluoperazine", "brands": ["Stelazine", "Trinicalm"], "strengths": ["1mg", "5mg", "10mg"]},
+        {"name": "Perphenazine", "brands": ["Trilafon"], "strengths": ["2mg", "4mg", "8mg"]},
+        {"name": "Pimozide", "brands": ["Orap"], "strengths": ["1mg", "2mg", "4mg"]}
+      ],
+      "atypical_second_generation": [
+        {"name": "Risperidone", "brands": ["Risperdal", "Risdone", "Risnia"], "strengths": ["0.25mg", "0.5mg", "1mg", "2mg", "3mg", "4mg"]},
+        {"name": "Olanzapine", "brands": ["Zyprexa", "Olapin", "Oleanz"], "strengths": ["2.5mg", "5mg", "7.5mg", "10mg", "15mg", "20mg"]},
+        {"name": "Quetiapine", "brands": ["Seroquel", "Qutipin", "Qutan"], "strengths": ["25mg", "50mg", "100mg", "200mg", "300mg", "400mg"]},
+        {"name": "Clozapine", "brands": ["Clozaril", "Sizopin", "Clopine"], "strengths": ["25mg", "50mg", "100mg"]},
+        {"name": "Aripiprazole", "brands": ["Abilify", "Aripzo", "Arip"], "strengths": ["5mg", "10mg", "15mg", "20mg", "30mg"]},
+        {"name": "Paliperidone", "brands": ["Invega", "Paliris"], "strengths": ["3mg", "6mg", "9mg"]},
+        {"name": "Amisulpride", "brands": ["Solian", "Amisulpride"], "strengths": ["50mg", "100mg", "200mg"]},
+        {"name": "Ziprasidone", "brands": ["Geodon"], "strengths": ["20mg", "40mg", "60mg", "80mg"]},
+        {"name": "Asenapine", "brands": ["Saphris"], "strengths": ["5mg", "10mg"]},
+        {"name": "Lurasidone", "brands": ["Latuda"], "strengths": ["40mg", "80mg"]},
+        {"name": "Cariprazine", "brands": ["Vraylar"], "strengths": ["1.5mg", "3mg", "4.5mg", "6mg"]}
+      ]
+    },
+    "mood_stabilizers": [
+      {"name": "Lithium Carbonate", "brands": ["Lithosun", "Licab"], "strengths": ["300mg", "400mg"]},
+      {"name": "Valproate/Divalproex", "brands": ["Depakote", "Divaa", "Valprol"], "strengths": ["200mg", "250mg", "500mg", "750mg"]},
+      {"name": "Carbamazepine", "brands": ["Tegretol", "Mazetol", "Zeptol"], "strengths": ["100mg", "200mg", "400mg"]},
+      {"name": "Lamotrigine", "brands": ["Lamictal", "Lamitor"], "strengths": ["25mg", "50mg", "100mg", "200mg"]},
+      {"name": "Oxcarbazepine", "brands": ["Trileptal", "Oxetol"], "strengths": ["150mg", "300mg", "600mg"]}
+    ],
+    "anxiolytics": {
+      "benzodiazepines": [
+        {"name": "Alprazolam", "brands": ["Xanax", "Alprax", "Restyl"], "strengths": ["0.25mg", "0.5mg", "1mg"]},
+        {"name": "Clonazepam", "brands": ["Klonopin", "Clonotril", "Lonazep"], "strengths": ["0.25mg", "0.5mg", "1mg", "2mg"]},
+        {"name": "Lorazepam", "brands": ["Ativan", "Lorazep"], "strengths": ["0.5mg", "1mg", "2mg"]},
+        {"name": "Diazepam", "brands": ["Valium", "Calmpose"], "strengths": ["2mg", "5mg", "10mg"]},
+        {"name": "Chlordiazepoxide", "brands": ["Librium", "Reclide"], "strengths": ["5mg", "10mg", "25mg"]},
+        {"name": "Oxazepam", "brands": ["Serax"], "strengths": ["10mg", "15mg", "30mg"]},
+        {"name": "Nitrazepam", "brands": ["Mogadon", "Nitrosun"], "strengths": ["5mg", "10mg"]},
+        {"name": "Triazolam", "brands": ["Halcion"], "strengths": ["0.125mg", "0.25mg"]}
+      ],
+      "non_benzodiazepines": [
+        {"name": "Buspirone", "brands": ["Buspar", "Buspin"], "strengths": ["5mg", "10mg", "15mg"]},
+        {"name": "Hydroxyzine", "brands": ["Atarax"], "strengths": ["10mg", "25mg"]},
+        {"name": "Propranolol", "brands": ["Inderal"], "strengths": ["10mg", "20mg", "40mg"]}
+      ]
+    },
+    "hypnotics": [
+      {"name": "Zolpidem", "brands": ["Ambien", "Zolfresh", "Zolpid"], "strengths": ["5mg", "10mg"]},
+      {"name": "Zopiclone", "brands": ["Imovane", "Zopicon"], "strengths": ["3.75mg", "7.5mg"]},
+      {"name": "Eszopiclone", "brands": ["Lunesta"], "strengths": ["1mg", "2mg", "3mg"]}
+    ],
+    "adhd_medications": [
+      {"name": "Methylphenidate", "brands": ["Ritalin", "Inspiral"], "strengths": ["5mg", "10mg", "20mg"]},
+      {"name": "Atomoxetine", "brands": ["Strattera", "Attentrol"], "strengths": ["10mg", "18mg", "25mg", "40mg", "60mg"]}
+    ],
+    "anti_dementia": [
+      {"name": "Donepezil", "brands": ["Aricept", "Donep"], "strengths": ["5mg", "10mg"]},
+      {"name": "Rivastigmine", "brands": ["Exelon", "Rivadem"], "strengths": ["1.5mg", "3mg", "4.5mg", "6mg"]},
+      {"name": "Memantine", "brands": ["Namenda", "Mentra"], "strengths": ["5mg", "10mg"]},
+      {"name": "Galantamine", "brands": ["Razadyne"], "strengths": ["4mg", "8mg", "12mg"]}
+    ],
+    "anticholinergics": [
+      {"name": "Trihexyphenidyl", "brands": ["Artane", "Pacitane"], "strengths": ["2mg", "5mg"]},
+      {"name": "Benzhexol", "brands": ["Parkitane"], "strengths": ["2mg", "5mg"]},
+      {"name": "Procyclidine", "brands": ["Kemadrin"], "strengths": ["5mg"]}
+    ],
+    "substance_abuse_treatment": [
+      {"name": "Naltrexone", "brands": ["Nodict", "Naltima"], "strengths": ["50mg"]},
+      {"name": "Acamprosate", "brands": ["Campral"], "strengths": ["333mg"]},
+      {"name": "Disulfiram", "brands": ["Antabuse", "Disulfiram"], "strengths": ["250mg", "500mg"]},
+      {"name": "Buprenorphine", "brands": ["Suboxone", "Buprigesic"], "strengths": ["0.2mg", "2mg", "8mg"]},
+      {"name": "Methadone", "brands": ["Methadone"], "strengths": ["5mg", "10mg"]}
+    ],
+    "combination_medications": [
+      {"name": "Olanzapine + Fluoxetine", "brands": ["Symbyax"], "strengths": ["6mg+25mg", "12mg+50mg"]},
+      {"name": "Chlordiazepoxide + Amitriptyline", "brands": ["Limbitrol"], "strengths": ["5mg+12.5mg", "10mg+25mg"]},
+      {"name": "Perphenazine + Amitriptyline", "brands": ["Etrafon"], "strengths": ["2mg+25mg", "4mg+25mg"]}
+    ]
+  },
+  "notes": {
+    "disclaimer": "This is a comprehensive but not exhaustive list. New medications are regularly introduced.",
+    "usage": "All medications should be prescribed by qualified psychiatrists only.",
+    "schedule": "Many of these medications are controlled under NDPS Act and require special prescriptions.",
+    "storage": "This data is for reference purposes only and should not be used for self-medication."
+  }
+}

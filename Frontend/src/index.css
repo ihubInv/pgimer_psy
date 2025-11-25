@@ -1,0 +1,231 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Set default font families */
+  * {
+    font-family: 'Arial', 'Helvetica', sans-serif; /* General UI text default */
+  }
+
+  body {
+    @apply antialiased;
+    font-family: 'Open Sans', sans-serif; /* Dashboard overall UI */
+    /* Soft Off-White Background - Easy on Eyes */
+    background: #f8f9fa;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* Headers and Navigation - Roboto */
+  h1, h2, h3, h4, h5, h6, nav, header {
+    font-family: 'Roboto', sans-serif;
+  }
+
+  /* Section Titles - Montserrat */
+  section > h1, section > h2, section > h3,
+  .section-title, [class*="section-title"] {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  /* Forms, Filters, Menus - Lato */
+  form, input, select, textarea,
+  .form-element, [class*="form"], [class*="filter"], [class*="menu"] {
+    font-family: 'Lato', sans-serif;
+  }
+
+  /* Button Labels - Roboto (must come after form to override) */
+  button, .btn, [class*="button"], [type="button"], [type="submit"],
+  form button, form .btn, form [class*="button"] {
+    font-family: 'Roboto', sans-serif;
+  }
+
+  /* Numbers, Statistics, Graphs - Roboto */
+  .number, .statistic, .graph, [class*="stat"], [class*="metric"] {
+    font-family: 'Roboto', sans-serif;
+  }
+
+  /* Data Tables and Patient Lists - Open Sans */
+  table, .table, .data-table, [class*="table"], 
+  .patient-list, [class*="patient-list"] {
+    font-family: 'Open Sans', sans-serif;
+  }
+
+  /* Main Content Areas - Helvetica */
+  main, .main-content, [class*="content"], 
+  .widget-label, [class*="widget"] {
+    font-family: 'Helvetica', 'Arial', sans-serif;
+  }
+
+  /* Detailed Patient Information - Helvetica */
+  .patient-details, [class*="patient-details"], 
+  .detail-view, [class*="detail"] {
+    font-family: 'Helvetica', 'Arial', sans-serif;
+  }
+
+  /* Reports - Arial */
+  .report, [class*="report"] {
+    font-family: 'Arial', 'Helvetica', sans-serif;
+  }
+
+  /* Sidebar Menus - Arial */
+  aside, .sidebar, [class*="sidebar"] {
+    font-family: 'Arial', 'Helvetica', sans-serif;
+  }
+
+  /* Subheadings - Source Sans Pro */
+  .subheading, [class*="subheading"], 
+  .help-text, [class*="help"], 
+  .tooltip, [class*="tooltip"],
+  .notification, [class*="notification"] {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+
+  /* Supporting Text, Alerts, Banners - Raleway */
+  .supporting-text, [class*="supporting"],
+  .alert, [class*="alert"],
+  .banner, [class*="banner"],
+  .summary-box, [class*="summary"] {
+    font-family: 'Raleway', sans-serif;
+  }
+
+  /* Explanatory Paragraphs, Notes - Merriweather */
+  .explanatory, [class*="explanatory"],
+  .note, [class*="note"],
+  .description, [class*="description"],
+  .widget-note, [class*="widget-note"] {
+    font-family: 'Merriweather', serif;
+  }
+
+  /* Chart Labels - Lato */
+  .chart-label, [class*="chart-label"],
+  [class*="chart"] label {
+    font-family: 'Lato', sans-serif;
+  }
+
+  /* Section Descriptions - Lato */
+  .section-description, [class*="section-description"] {
+    font-family: 'Lato', sans-serif;
+  }
+
+  /* Highlighted KPIs - Montserrat */
+  .kpi, [class*="kpi"], [class*="highlight"] {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background:
+      radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
+      radial-gradient(circle at 90% 10%, rgba(168, 85, 247, 0.03) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.02) 0%, transparent 50%),
+      radial-gradient(circle at 80% 90%, rgba(251, 146, 60, 0.03) 0%, transparent 50%),
+      radial-gradient(circle at 20% 80%, rgba(14, 165, 233, 0.03) 0%, transparent 50%);
+    z-index: -1;
+    pointer-events: none;
+    animation: gradient-shift 20s ease infinite;
+  }
+
+  @keyframes gradient-shift {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.8;
+    }
+  }
+}
+
+/* Glassmorphism utility classes */
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow:
+      0 8px 32px 0 rgba(31, 38, 135, 0.1),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    box-shadow:
+      0 8px 32px 0 rgba(31, 38, 135, 0.08),
+      0 2px 8px 0 rgba(31, 38, 135, 0.05),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  }
+
+  .glass-sidebar {
+    background: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border-right: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow:
+      4px 0 24px 0 rgba(31, 38, 135, 0.08),
+      inset -1px 0 0 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .glass-header {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow:
+      0 4px 24px 0 rgba(31, 38, 135, 0.08),
+      inset 0 -1px 0 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .glass-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-hover:hover {
+    background: rgba(255, 255, 255, 0.85);
+    transform: translateY(-2px);
+    box-shadow:
+      0 12px 40px 0 rgba(31, 38, 135, 0.12),
+      0 4px 12px 0 rgba(31, 38, 135, 0.08),
+      inset 0 1px 0 0 rgba(255, 255, 255, 1);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-400 rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500;
+}
+
+/* Smooth transitions */
+* {
+  @apply transition-colors duration-200;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+

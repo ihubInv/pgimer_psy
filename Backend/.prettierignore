@@ -1,0 +1,11 @@
+node_modules/
+logs/
+uploads/
+storage/
+dist/
+build/
+coverage/
+.env
+*.log
+package-lock.json
+yarn.lock
