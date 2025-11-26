@@ -3878,6 +3878,47 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         </Card>
       )}
 
+<div className="flex mt-4 flex-col sm:flex-row justify-end gap-4">
+
+<Button
+  type="button"
+  variant="outline"
+  onClick={(() => navigate('/patients'))}
+  className="px-6 lg:px-8 py-3 bg-white/60 backdrop-blur-md border border-white/30 hover:bg-white/80 hover:border-gray-300/50 text-gray-800 font-semibold shadow-sm hover:shadow-md transition-all duration-200"
+>
+  <FiX className="mr-2" />
+  Cancel
+</Button>
+<Button
+  type="button"
+  onClick={() => {
+    if (returnTab) {
+      navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
+    } else {
+      navigate("/patients");
+    }
+  }}
+  className="px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+>
+  <FiSave className="mr-2" />
+Print All
+</Button>
+<Button
+  type="submit"
+  onClick={() => {
+    if (returnTab) {
+      navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
+    } else {
+      navigate("/patients");
+    }
+  }}
+  className="px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+>
+  <FiSave className="mr-2" />
+  View All Patient
+</Button>
+</div>
+
     </div>
   );
 };

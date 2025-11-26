@@ -23,57 +23,58 @@ import * as XLSX from 'xlsx-js-style';
 import { useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 import { useGetPatientFilesQuery } from '../../features/patients/patientFilesApiSlice';
 import FilePreview from '../../components/FilePreview';
+import ViewADL from '../adl/ViewADL';
+import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
+import PrescriptionView from '../PrescribeMedication/PrescriptionView';
+// const IconInput = ({ icon, label, loading = false, error, defaultValue, ...props }) => {
+//   // Filter out non-DOM props that shouldn't be passed to the input element
+//   const {
+//     defaultToday,
+//     searchable,
+//     formData,
+//     customFieldName,
+//     inputLabel,
+//     options,
+//     customValue,
+//     setCustomValue,
+//     showCustomInput,
+//     containerClassName,
+//     dropdownZIndex,
+//     ...domProps
+//   } = props;
 
+//   // Remove defaultValue if value is provided to avoid controlled/uncontrolled warning
+//   const inputProps = domProps.value !== undefined ? { ...domProps } : { ...domProps, defaultValue };
 
-const IconInput = ({ icon, label, loading = false, error, defaultValue, ...props }) => {
-  // Filter out non-DOM props that shouldn't be passed to the input element
-  const {
-    defaultToday,
-    searchable,
-    formData,
-    customFieldName,
-    inputLabel,
-    options,
-    customValue,
-    setCustomValue,
-    showCustomInput,
-    containerClassName,
-    dropdownZIndex,
-    ...domProps
-  } = props;
-
-  // Remove defaultValue if value is provided to avoid controlled/uncontrolled warning
-  const inputProps = domProps.value !== undefined ? { ...domProps } : { ...domProps, defaultValue };
-
-  return (
-    <div className="space-y-2">
-      <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-        {icon && <span className="text-primary-600">{icon}</span>}
-        {label}
-        {loading && (
-          <FiLoader className="w-4 h-4 text-blue-500 animate-spin" />
-        )}
-      </label>
-      <div className="relative">
-        {icon && (
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
-            <span className="text-gray-500">{icon}</span>
-          </div>
-        )}
-        <input
-          {...inputProps}
-          className={`w-full px-4 py-3 ${icon ? 'pl-11' : 'pl-4'} bg-white/60 backdrop-blur-md border-2 border-gray-300/60 rounded-xl shadow-sm focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 focus:bg-white/80 transition-all duration-300 hover:bg-white/70 hover:border-primary-400/70 placeholder:text-gray-400 text-gray-900 font-medium ${inputProps.className || ''}`}
-        />
-      </div>
-      {error && (
-        <p className="text-red-500 text-xs mt-1 flex items-center gap-1 font-medium">
-          <FiX className="w-3 h-3" />
-          {error}
-        </p>
-      )}
-    </div>
-  );
-};
+//   return (
+//     <div className="space-y-2">
+//       <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+//         {icon && <span className="text-primary-600">{icon}</span>}
+//         {label}
+//         {loading && (
+//           <FiLoader className="w-4 h-4 text-blue-500 animate-spin" />
+//         )}
+//       </label>
+//       <div className="relative">
+//         {icon && (
+//           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
+//             <span className="text-gray-500">{icon}</span>
+//           </div>
+//         )}
+//         <input
+//           {...inputProps}
+//           className={`w-full px-4 py-3 ${icon ? 'pl-11' : 'pl-4'} bg-white/60 backdrop-blur-md border-2 border-gray-300/60 rounded-xl shadow-sm focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 focus:bg-white/80 transition-all duration-300 hover:bg-white/70 hover:border-primary-400/70 placeholder:text-gray-400 text-gray-900 font-medium ${inputProps.className || ''}`}
+//         />
+//       </div>
+//       {error && (
+//         <p className="text-red-500 text-xs mt-1 flex items-center gap-1 font-medium">
+//           <FiX className="w-3 h-3" />
+//           {error}
+//         </p>
+//       )}
+//     </div>
+//   );
+// };
 
 
 
@@ -2194,372 +2195,9 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
           {expandedCards.clinical && (
             <div className="p-6">
               {patientProformas.length > 0 ? (
-                <div ref={clinicalProformaPrintRef} className="space-y-6">
-                  {patientProformas.map((proforma, index) => (
-                    <div key={proforma.id || index} className="relative backdrop-blur-xl bg-white/60 border border-white/40 rounded-2xl p-6 shadow-lg mb-6">
-                      <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-teal-500/5 rounded-2xl"></div>
-                      <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-white/30">
-                        <div className="flex items-center gap-4">
-                          <h4 className="text-lg font-semibold text-gray-900">Visit #{index + 1}</h4>
-                          <span className="text-sm text-gray-500">{proforma.visit_date ? formatDate(proforma.visit_date) : 'N/A'}</span>
-                        </div>
-                        {proforma.id && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const returnPath = returnTab
-                                ? `/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`
-                                : `/patients/${patient?.id}`;
-                              navigate(`/clinical-proforma/edit/${proforma.id}?returnTab=${returnTab || ''}&returnPath=${encodeURIComponent(returnPath)}`);
-                            }}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-                            title="Edit Walk-in Clinical Proforma"
-                          >
-                            <FiEdit className="w-4 h-4" />
-                            Edit
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Visit Type</label>
-                          <p className="text-base font-semibold text-gray-900 mt-1">
-                            {proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
-                          </p>
-                        </div>
-                        {proforma.room_no && (
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Room Number</label>
-                            <p className="text-base font-semibold text-gray-900 mt-1">{proforma.room_no}</p>
-                          </div>
-                        )}
-                        {proforma.doctor_name && (
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Doctor</label>
-                            <p className="text-base font-semibold text-gray-900 mt-1">
-                              {proforma.doctor_name} {proforma.doctor_role ? `(${proforma.doctor_role})` : ''}
-                            </p>
-                          </div>
-                        )}
-                        {proforma.case_severity && (
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Case Severity</label>
-                            <div className="mt-1">
-                              <Badge
-                                className={`${proforma.case_severity === 'severe'
-                                  ? 'bg-red-100 text-red-800 border-red-200'
-                                  : proforma.case_severity === 'moderate'
-                                    ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
-                                    : 'bg-green-100 text-green-800 border-green-200'
-                                  } text-sm font-medium`}
-                              >
-                                {getCaseSeverityLabel(proforma.case_severity)}
-                              </Badge>
-                            </div>
-                          </div>
-                        )}
-                        {proforma.decision && (
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Decision</label>
-                            <p className="text-base font-semibold text-gray-900 mt-1">{proforma.decision}</p>
-                          </div>
-                        )}
-                        {proforma.doctor_decision && (
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Doctor Decision</label>
-                            <p className="text-base font-semibold text-gray-900 mt-1">
-                              {proforma.doctor_decision === 'complex_case' ? 'Complex Case' : 'Simple Case'}
-                            </p>
-                          </div>
-                        )}
-                        {proforma.requires_adl_file !== undefined && (
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Requires ADL File</label>
-                            <div className="mt-1">
-                              <Badge className={proforma.requires_adl_file ? 'bg-orange-100 text-orange-800 border-orange-200' : 'bg-gray-100 text-gray-800 border-gray-200'}>
-                                {proforma.requires_adl_file ? 'Yes' : 'No'}
-                              </Badge>
-                            </div>
-                          </div>
-                        )}
-                        {proforma.informant_present !== undefined && (
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Informant Present</label>
-                            <div className="mt-1">
-                              <Badge className={proforma.informant_present ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-200'}>
-                                {proforma.informant_present ? 'Yes' : 'No'}
-                              </Badge>
-                            </div>
-                          </div>
-                        )}
-                        {proforma.created_at && (
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Created Date</label>
-                            <p className="text-base font-semibold text-gray-900 mt-1">{formatDateTime(proforma.created_at)}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Additional Walk-in Clinical Proforma Fields */}
-                      {(proforma.nature_of_information || proforma.onset_duration || proforma.course || proforma.precipitating_factor || proforma.illness_duration || proforma.current_episode_since) && (
-                        <div className="mt-6 pt-4 border-t border-gray-200">
-                          <h5 className="text-md font-semibold text-gray-900 mb-3">Illness Information</h5>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {proforma.nature_of_information && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Nature of Information</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.nature_of_information}</p>
-                              </div>
-                            )}
-                            {proforma.onset_duration && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Onset Duration</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.onset_duration}</p>
-                              </div>
-                            )}
-                            {proforma.course && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Course</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.course}</p>
-                              </div>
-                            )}
-                            {proforma.precipitating_factor && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Precipitating Factor</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.precipitating_factor}</p>
-                              </div>
-                            )}
-                            {proforma.illness_duration && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Illness Duration</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.illness_duration}</p>
-                              </div>
-                            )}
-                            {proforma.current_episode_since && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Current Episode Since</label>
-                                <p className="text-sm text-gray-900 mt-1">{formatDate(proforma.current_episode_since)}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Clinical Symptoms */}
-                      {(proforma.mood || proforma.behaviour || proforma.speech || proforma.thought || proforma.perception || proforma.somatic || proforma.bio_functions || proforma.adjustment || proforma.cognitive_function || proforma.fits || proforma.sexual_problem || proforma.substance_use) && (
-                        <div className="mt-6 pt-4 border-t border-gray-200">
-                          <h5 className="text-md font-semibold text-gray-900 mb-3">Clinical Symptoms</h5>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {proforma.mood && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Mood</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.mood}</p>
-                              </div>
-                            )}
-                            {proforma.behaviour && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Behaviour</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.behaviour}</p>
-                              </div>
-                            )}
-                            {proforma.speech && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Speech</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.speech}</p>
-                              </div>
-                            )}
-                            {proforma.thought && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Thought</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.thought}</p>
-                              </div>
-                            )}
-                            {proforma.perception && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Perception</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.perception}</p>
-                              </div>
-                            )}
-                            {proforma.somatic && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Somatic</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.somatic}</p>
-                              </div>
-                            )}
-                            {proforma.bio_functions && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Biological Functions</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.bio_functions}</p>
-                              </div>
-                            )}
-                            {proforma.adjustment && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Adjustment</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.adjustment}</p>
-                              </div>
-                            )}
-                            {proforma.cognitive_function && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Cognitive Function</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.cognitive_function}</p>
-                              </div>
-                            )}
-                            {proforma.fits && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Fits</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.fits}</p>
-                              </div>
-                            )}
-                            {proforma.sexual_problem && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Sexual Problem</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.sexual_problem}</p>
-                              </div>
-                            )}
-                            {proforma.substance_use && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Substance Use</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.substance_use}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Mental Status Examination */}
-                      {(proforma.mse_behaviour || proforma.mse_affect || proforma.mse_thought || proforma.mse_delusions || proforma.mse_perception || proforma.mse_cognitive_function) && (
-                        <div className="mt-6 pt-4 border-t border-gray-200">
-                          <h5 className="text-md font-semibold text-gray-900 mb-3">Mental Status Examination (MSE)</h5>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {proforma.mse_behaviour && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Behaviour</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.mse_behaviour}</p>
-                              </div>
-                            )}
-                            {proforma.mse_affect && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Affect</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.mse_affect}</p>
-                              </div>
-                            )}
-                            {proforma.mse_thought && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Thought</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.mse_thought}</p>
-                              </div>
-                            )}
-                            {proforma.mse_delusions && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Delusions</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.mse_delusions}</p>
-                              </div>
-                            )}
-                            {proforma.mse_perception && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Perception</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.mse_perception}</p>
-                              </div>
-                            )}
-                            {proforma.mse_cognitive_function && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Cognitive Function</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.mse_cognitive_function}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* History */}
-                      {(proforma.past_history || proforma.family_history || proforma.associated_medical_surgical) && (
-                        <div className="mt-6 pt-4 border-t border-gray-200">
-                          <h5 className="text-md font-semibold text-gray-900 mb-3">History</h5>
-                          <div className="space-y-4">
-                            {proforma.past_history && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Past History</label>
-                                <p className="text-sm text-gray-900 mt-1 leading-relaxed">{proforma.past_history}</p>
-                              </div>
-                            )}
-                            {proforma.family_history && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Family History</label>
-                                <p className="text-sm text-gray-900 mt-1 leading-relaxed">{proforma.family_history}</p>
-                              </div>
-                            )}
-                            {proforma.associated_medical_surgical && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Associated Medical/Surgical</label>
-                                <p className="text-sm text-gray-900 mt-1 leading-relaxed">{proforma.associated_medical_surgical}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* General Physical Examination */}
-                      {proforma.gpe && (
-                        <div className="mt-6 pt-4 border-t border-gray-200">
-                          <label className="text-sm font-medium text-gray-600">General Physical Examination (GPE)</label>
-                          <p className="text-sm text-gray-900 mt-2 leading-relaxed">{proforma.gpe}</p>
-                        </div>
-                      )}
-
-                      {/* Diagnosis and Treatment */}
-                      {(proforma.diagnosis || proforma.icd_code || proforma.disposal || proforma.workup_appointment || proforma.referred_to || proforma.treatment_prescribed || proforma.adl_reasoning) && (
-                        <div className="mt-6 pt-4 border-t border-gray-200">
-                          <h5 className="text-md font-semibold text-gray-900 mb-3">Diagnosis and Treatment</h5>
-                          <div className="space-y-4">
-                            {proforma.diagnosis && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Diagnosis</label>
-                                <p className="text-sm text-gray-900 mt-2 leading-relaxed">{proforma.diagnosis}</p>
-                              </div>
-                            )}
-                            {proforma.icd_code && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">ICD Code</label>
-                                <p className="text-base font-semibold text-gray-900 mt-1">{proforma.icd_code}</p>
-                              </div>
-                            )}
-                            {proforma.disposal && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Disposal</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.disposal}</p>
-                              </div>
-                            )}
-                            {proforma.workup_appointment && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Workup Appointment</label>
-                                <p className="text-base font-semibold text-gray-900 mt-1">{formatDate(proforma.workup_appointment)}</p>
-                              </div>
-                            )}
-                            {proforma.referred_to && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Referred To</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.referred_to}</p>
-                              </div>
-                            )}
-                            {proforma.treatment_prescribed && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">Treatment Prescribed</label>
-                                <p className="text-sm text-gray-900 mt-1 leading-relaxed">{proforma.treatment_prescribed}</p>
-                              </div>
-                            )}
-                            {proforma.adl_reasoning && (
-                              <div>
-                                <label className="text-sm font-medium text-gray-600">ADL Reasoning</label>
-                                <p className="text-sm text-gray-900 mt-1 leading-relaxed">{proforma.adl_reasoning}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <>
+                <ClinicalProformaDetails proforma={patientProformas[0]} />
+                </>
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <FiFileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
@@ -2615,671 +2253,9 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
           {expandedCards.adl && (
             <div className="p-6">
               {patientAdlFiles.length > 0 ? (
-                <div ref={adlPrintRef} className="space-y-6">
-                  {patientAdlFiles.map((file, index) => {
-                    // Parse JSON fields if they're strings
-                    const complaintsPatient = Array.isArray(file.complaints_patient) ? file.complaints_patient : (file.complaints_patient ? JSON.parse(file.complaints_patient) : []);
-                    const complaintsInformant = Array.isArray(file.complaints_informant) ? file.complaints_informant : (file.complaints_informant ? JSON.parse(file.complaints_informant) : []);
-                    const informants = Array.isArray(file.informants) ? file.informants : (file.informants ? JSON.parse(file.informants) : []);
-                    const familyHistorySiblings = Array.isArray(file.family_history_siblings) ? file.family_history_siblings : (file.family_history_siblings ? JSON.parse(file.family_history_siblings) : []);
-                    const occupationJobs = Array.isArray(file.occupation_jobs) ? file.occupation_jobs : (file.occupation_jobs ? JSON.parse(file.occupation_jobs) : []);
-                    const sexualChildren = Array.isArray(file.sexual_children) ? file.sexual_children : (file.sexual_children ? JSON.parse(file.sexual_children) : []);
-                    const livingResidents = Array.isArray(file.living_residents) ? file.living_residents : (file.living_residents ? JSON.parse(file.living_residents) : []);
-                    const livingInlaws = Array.isArray(file.living_inlaws) ? file.living_inlaws : (file.living_inlaws ? JSON.parse(file.living_inlaws) : []);
-                    const premorbidPersonalityTraits = Array.isArray(file.premorbid_personality_traits) ? file.premorbid_personality_traits : (file.premorbid_personality_traits ? JSON.parse(file.premorbid_personality_traits) : []);
-
-                    return (
-                      <div key={file.id || index} className="border border-gray-200 rounded-lg p-6 bg-white shadow-sm">
-                        {/* ADL File Header */}
-                        <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-gray-300">
-                          <div>
-                            <h4 className="text-xl font-bold text-gray-900">ADL File #{index + 1}</h4>
-                            {file.adl_no && (
-                              <p className="text-sm text-gray-600 mt-1">ADL Number: {file.adl_no}</p>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            {file.file_status && (
-                              <Badge
-                                className={`${file.file_status === 'active'
-                                  ? 'bg-green-100 text-green-800 border-green-200'
-                                  : file.file_status === 'retrieved'
-                                    ? 'bg-blue-100 text-blue-800 border-blue-200'
-                                    : file.file_status === 'stored'
-                                      ? 'bg-gray-100 text-gray-800 border-gray-200'
-                                      : file.file_status === 'archived'
-                                        ? 'bg-amber-100 text-amber-800 border-amber-200'
-                                        : 'bg-gray-100 text-gray-800 border-gray-200'
-                                  } text-sm font-medium mb-2`}
-                              >
-                                {getFileStatusLabel(file.file_status)}
-                              </Badge>
-                            )}
-                            {file.file_created_date && (
-                              <p className="text-xs text-gray-500">{formatDate(file.file_created_date)}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="space-y-8">
-                          {/* Basic Information */}
-                          <div>
-                            <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Basic Information</h5>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {file.patient_name && (
-                                <div>
-                                  <label className="text-sm font-medium text-gray-600">Patient Name</label>
-                                  <p className="text-base font-semibold text-gray-900 mt-1">{file.patient_name}</p>
-                                </div>
-                              )}
-                              {file.cr_no && (
-                                <div>
-                                  <label className="text-sm font-medium text-gray-600">CR Number</label>
-                                  <p className="text-base font-semibold text-gray-900 mt-1">{file.cr_no}</p>
-                                </div>
-                              )}
-                              {file.psy_no && (
-                                <div>
-                                  <label className="text-sm font-medium text-gray-600">PSY Number</label>
-                                  <p className="text-base font-semibold text-gray-900 mt-1">{file.psy_no}</p>
-                                </div>
-                              )}
-                              {file.assigned_doctor_name && (
-                                <div>
-                                  <label className="text-sm font-medium text-gray-600">Assigned Doctor</label>
-                                  <p className="text-base font-semibold text-gray-900 mt-1">
-                                    {file.assigned_doctor_name} {file.assigned_doctor_role ? `(${file.assigned_doctor_role})` : ''}
-                                  </p>
-                                </div>
-                              )}
-                              {file.proforma_visit_date && (
-                                <div>
-                                  <label className="text-sm font-medium text-gray-600">Visit Date</label>
-                                  <p className="text-base font-semibold text-gray-900 mt-1">{formatDate(file.proforma_visit_date)}</p>
-                                </div>
-                              )}
-                              {file.created_by_name && (
-                                <div>
-                                  <label className="text-sm font-medium text-gray-600">Created By</label>
-                                  <p className="text-base font-semibold text-gray-900 mt-1">
-                                    {file.created_by_name} {file.created_by_role ? `(${file.created_by_role})` : ''}
-                                  </p>
-                                </div>
-                              )}
-                              {file.physical_file_location && (
-                                <div>
-                                  <label className="text-sm font-medium text-gray-600">Physical Location</label>
-                                  <p className="text-base font-semibold text-gray-900 mt-1">{file.physical_file_location}</p>
-                                </div>
-                              )}
-                              {file.total_visits && (
-                                <div>
-                                  <label className="text-sm font-medium text-gray-600">Total Visits</label>
-                                  <p className="text-base font-semibold text-gray-900 mt-1">{file.total_visits}</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Complaints */}
-                          {(complaintsPatient.length > 0 && complaintsPatient.some(c => c.complaint)) ||
-                            (complaintsInformant.length > 0 && complaintsInformant.some(c => c.complaint)) ? (
-                            <div>
-                              <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Complaints</h5>
-                              {complaintsPatient.length > 0 && complaintsPatient.some(c => c.complaint) && (
-                                <div className="mb-4">
-                                  <label className="text-sm font-medium text-gray-600 mb-2 block">Patient Complaints</label>
-                                  <div className="space-y-2">
-                                    {complaintsPatient.filter(c => c.complaint).map((complaint, idx) => (
-                                      <div key={idx} className="bg-blue-50 p-3 rounded border border-blue-200">
-                                        <p className="text-sm font-semibold text-gray-900">{complaint.complaint}</p>
-                                        {complaint.duration && (
-                                          <p className="text-xs text-gray-600 mt-1">Duration: {complaint.duration}</p>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              {complaintsInformant.length > 0 && complaintsInformant.some(c => c.complaint) && (
-                                <div>
-                                  <label className="text-sm font-medium text-gray-600 mb-2 block">Informant Complaints</label>
-                                  <div className="space-y-2">
-                                    {complaintsInformant.filter(c => c.complaint).map((complaint, idx) => (
-                                      <div key={idx} className="bg-purple-50 p-3 rounded border border-purple-200">
-                                        <p className="text-sm font-semibold text-gray-900">{complaint.complaint}</p>
-                                        {complaint.duration && (
-                                          <p className="text-xs text-gray-600 mt-1">Duration: {complaint.duration}</p>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ) : null}
-
-                          {/* Informants */}
-                          {informants.length > 0 && informants.some(i => i.name) && (
-                            <div>
-                              <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Informants</h5>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {informants.filter(i => i.name).map((informant, idx) => (
-                                  <div key={idx} className="bg-gray-50 p-4 rounded border border-gray-200">
-                                    <p className="text-sm font-semibold text-gray-900">{informant.name}</p>
-                                    {informant.relationship && (
-                                      <p className="text-xs text-gray-600 mt-1">Relationship: {informant.relationship}</p>
-                                    )}
-                                    {informant.reliability && (
-                                      <p className="text-xs text-gray-600">Reliability: {informant.reliability}</p>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* History of Present Illness */}
-                          {(file.history_narrative || file.history_specific_enquiry || file.history_drug_intake ||
-                            file.history_treatment_place || file.history_treatment_drugs || file.history_treatment_response) && (
-                              <div>
-                                <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">History of Present Illness</h5>
-                                <div className="space-y-4">
-                                  {file.history_narrative && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Narrative History</label>
-                                      <p className="text-sm text-gray-900 mt-1 leading-relaxed">{file.history_narrative}</p>
-                                    </div>
-                                  )}
-                                  {file.history_specific_enquiry && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Specific Enquiry</label>
-                                      <p className="text-sm text-gray-900 mt-1 leading-relaxed">{file.history_specific_enquiry}</p>
-                                    </div>
-                                  )}
-                                  {file.history_drug_intake && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Drug Intake</label>
-                                      <p className="text-sm text-gray-900 mt-1">{file.history_drug_intake}</p>
-                                    </div>
-                                  )}
-                                  {(file.history_treatment_place || file.history_treatment_drugs || file.history_treatment_response) && (
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                      {file.history_treatment_place && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Treatment Place</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.history_treatment_place}</p>
-                                        </div>
-                                      )}
-                                      {file.history_treatment_drugs && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Treatment Drugs</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.history_treatment_drugs}</p>
-                                        </div>
-                                      )}
-                                      {file.history_treatment_response && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Treatment Response</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.history_treatment_response}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                          {/* Past History */}
-                          {(file.past_history_medical || file.past_history_psychiatric_diagnosis ||
-                            file.past_history_psychiatric_treatment || file.past_history_psychiatric_interim) && (
-                              <div>
-                                <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Past History</h5>
-                                <div className="space-y-4">
-                                  {file.past_history_medical && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Medical History</label>
-                                      <p className="text-sm text-gray-900 mt-1">{file.past_history_medical}</p>
-                                    </div>
-                                  )}
-                                  {file.past_history_psychiatric_diagnosis && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Psychiatric Diagnosis</label>
-                                      <p className="text-sm text-gray-900 mt-1">{file.past_history_psychiatric_diagnosis}</p>
-                                    </div>
-                                  )}
-                                  {file.past_history_psychiatric_treatment && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Psychiatric Treatment</label>
-                                      <p className="text-sm text-gray-900 mt-1">{file.past_history_psychiatric_treatment}</p>
-                                    </div>
-                                  )}
-                                  {file.past_history_psychiatric_interim && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Interim Period</label>
-                                      <p className="text-sm text-gray-900 mt-1">{file.past_history_psychiatric_interim}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                          {/* Family History */}
-                          {(file.family_history_father_age || file.family_history_mother_age ||
-                            familyHistorySiblings.length > 0) && (
-                              <div>
-                                <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Family History</h5>
-                                <div className="space-y-4">
-                                  {(file.family_history_father_age || file.family_history_father_education ||
-                                    file.family_history_father_occupation || file.family_history_father_personality) && (
-                                      <div className="bg-blue-50 p-4 rounded border border-blue-200">
-                                        <h6 className="text-sm font-semibold text-gray-900 mb-2">Father</h6>
-                                        <div className="grid grid-cols-2 gap-2 text-sm">
-                                          {file.family_history_father_age && (
-                                            <div><span className="text-gray-600">Age:</span> <span className="font-medium">{file.family_history_father_age}</span></div>
-                                          )}
-                                          {file.family_history_father_education && (
-                                            <div><span className="text-gray-600">Education:</span> <span className="font-medium">{file.family_history_father_education}</span></div>
-                                          )}
-                                          {file.family_history_father_occupation && (
-                                            <div><span className="text-gray-600">Occupation:</span> <span className="font-medium">{file.family_history_father_occupation}</span></div>
-                                          )}
-                                          {file.family_history_father_personality && (
-                                            <div><span className="text-gray-600">Personality:</span> <span className="font-medium">{file.family_history_father_personality}</span></div>
-                                          )}
-                                          {file.family_history_father_deceased && (
-                                            <div><span className="text-gray-600">Deceased:</span> <span className="font-medium">Yes</span></div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                  {(file.family_history_mother_age || file.family_history_mother_education ||
-                                    file.family_history_mother_occupation || file.family_history_mother_personality) && (
-                                      <div className="bg-pink-50 p-4 rounded border border-pink-200">
-                                        <h6 className="text-sm font-semibold text-gray-900 mb-2">Mother</h6>
-                                        <div className="grid grid-cols-2 gap-2 text-sm">
-                                          {file.family_history_mother_age && (
-                                            <div><span className="text-gray-600">Age:</span> <span className="font-medium">{file.family_history_mother_age}</span></div>
-                                          )}
-                                          {file.family_history_mother_education && (
-                                            <div><span className="text-gray-600">Education:</span> <span className="font-medium">{file.family_history_mother_education}</span></div>
-                                          )}
-                                          {file.family_history_mother_occupation && (
-                                            <div><span className="text-gray-600">Occupation:</span> <span className="font-medium">{file.family_history_mother_occupation}</span></div>
-                                          )}
-                                          {file.family_history_mother_personality && (
-                                            <div><span className="text-gray-600">Personality:</span> <span className="font-medium">{file.family_history_mother_personality}</span></div>
-                                          )}
-                                          {file.family_history_mother_deceased && (
-                                            <div><span className="text-gray-600">Deceased:</span> <span className="font-medium">Yes</span></div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                  {familyHistorySiblings.length > 0 && familyHistorySiblings.some(s => s.age || s.sex) && (
-                                    <div>
-                                      <h6 className="text-sm font-semibold text-gray-900 mb-2">Siblings</h6>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                        {familyHistorySiblings.filter(s => s.age || s.sex).map((sibling, idx) => (
-                                          <div key={idx} className="bg-gray-50 p-3 rounded border border-gray-200 text-sm">
-                                            {sibling.age && <span className="text-gray-600">Age: </span>}
-                                            {sibling.age && <span className="font-medium">{sibling.age}</span>}
-                                            {sibling.sex && <span className="text-gray-600 ml-2">Sex: </span>}
-                                            {sibling.sex && <span className="font-medium">{sibling.sex}</span>}
-                                            {sibling.education && <span className="text-gray-600 ml-2">Education: </span>}
-                                            {sibling.education && <span className="font-medium">{sibling.education}</span>}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                          {/* Mental Status Examination */}
-                          {(file.mse_general_demeanour || file.mse_general_tidy || file.mse_general_awareness || file.mse_general_cooperation ||
-                            file.mse_psychomotor_verbalization || file.mse_psychomotor_pressure || file.mse_psychomotor_tension ||
-                            file.mse_psychomotor_posture || file.mse_psychomotor_mannerism || file.mse_psychomotor_catatonic ||
-                            file.mse_affect_subjective || file.mse_affect_tone || file.mse_affect_resting || file.mse_affect_fluctuation ||
-                            file.mse_thought_flow || file.mse_thought_form || file.mse_thought_content ||
-                            file.mse_cognitive_consciousness || file.mse_cognitive_orientation_time || file.mse_cognitive_orientation_place ||
-                            file.mse_cognitive_orientation_person || file.mse_cognitive_memory_immediate || file.mse_cognitive_memory_recent ||
-                            file.mse_cognitive_memory_remote || file.mse_cognitive_subtraction || file.mse_cognitive_digit_span ||
-                            file.mse_cognitive_counting || file.mse_cognitive_general_knowledge || file.mse_cognitive_calculation ||
-                            file.mse_cognitive_similarities || file.mse_cognitive_proverbs || file.mse_insight_understanding || file.mse_insight_judgement) && (
-                              <div>
-                                <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Mental Status Examination (MSE)</h5>
-
-                                {/* General MSE */}
-                                {(file.mse_general_demeanour || file.mse_general_tidy || file.mse_general_awareness || file.mse_general_cooperation) && (
-                                  <div className="mb-4">
-                                    <h6 className="text-md font-semibold text-gray-800 mb-2">General</h6>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                      {file.mse_general_demeanour && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Demeanour</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_general_demeanour}</p>
-                                        </div>
-                                      )}
-                                      {file.mse_general_tidy && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Tidy</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_general_tidy}</p>
-                                        </div>
-                                      )}
-                                      {file.mse_general_awareness && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Awareness</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_general_awareness}</p>
-                                        </div>
-                                      )}
-                                      {file.mse_general_cooperation && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Cooperation</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_general_cooperation}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Psychomotor */}
-                                {(file.mse_psychomotor_verbalization || file.mse_psychomotor_pressure || file.mse_psychomotor_tension ||
-                                  file.mse_psychomotor_posture || file.mse_psychomotor_mannerism || file.mse_psychomotor_catatonic) && (
-                                    <div className="mb-4">
-                                      <h6 className="text-md font-semibold text-gray-800 mb-2">Psychomotor</h6>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {file.mse_psychomotor_verbalization && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Verbalization</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_psychomotor_verbalization}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_psychomotor_pressure && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Pressure</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_psychomotor_pressure}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_psychomotor_tension && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Tension</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_psychomotor_tension}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_psychomotor_posture && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Posture</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_psychomotor_posture}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_psychomotor_mannerism && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Mannerism</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_psychomotor_mannerism}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_psychomotor_catatonic && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Catatonic</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_psychomotor_catatonic}</p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                {/* Affect */}
-                                {(file.mse_affect_subjective || file.mse_affect_tone || file.mse_affect_resting || file.mse_affect_fluctuation) && (
-                                  <div className="mb-4">
-                                    <h6 className="text-md font-semibold text-gray-800 mb-2">Affect</h6>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                      {file.mse_affect_subjective && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Subjective</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_affect_subjective}</p>
-                                        </div>
-                                      )}
-                                      {file.mse_affect_tone && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Tone</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_affect_tone}</p>
-                                        </div>
-                                      )}
-                                      {file.mse_affect_resting && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Resting</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_affect_resting}</p>
-                                        </div>
-                                      )}
-                                      {file.mse_affect_fluctuation && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Fluctuation</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_affect_fluctuation}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Thought */}
-                                {(file.mse_thought_flow || file.mse_thought_form || file.mse_thought_content) && (
-                                  <div className="mb-4">
-                                    <h6 className="text-md font-semibold text-gray-800 mb-2">Thought</h6>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                      {file.mse_thought_flow && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Flow</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_thought_flow}</p>
-                                        </div>
-                                      )}
-                                      {file.mse_thought_form && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Form</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_thought_form}</p>
-                                        </div>
-                                      )}
-                                      {file.mse_thought_content && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Content</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_thought_content}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Cognitive */}
-                                {(file.mse_cognitive_consciousness || file.mse_cognitive_orientation_time || file.mse_cognitive_orientation_place ||
-                                  file.mse_cognitive_orientation_person || file.mse_cognitive_memory_immediate || file.mse_cognitive_memory_recent ||
-                                  file.mse_cognitive_memory_remote || file.mse_cognitive_subtraction || file.mse_cognitive_digit_span ||
-                                  file.mse_cognitive_counting || file.mse_cognitive_general_knowledge || file.mse_cognitive_calculation ||
-                                  file.mse_cognitive_similarities || file.mse_cognitive_proverbs) && (
-                                    <div className="mb-4">
-                                      <h6 className="text-md font-semibold text-gray-800 mb-2">Cognitive</h6>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {file.mse_cognitive_consciousness && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Consciousness</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_consciousness}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_orientation_time && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Orientation (Time)</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_orientation_time}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_orientation_place && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Orientation (Place)</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_orientation_place}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_orientation_person && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Orientation (Person)</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_orientation_person}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_memory_immediate && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Memory (Immediate)</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_memory_immediate}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_memory_recent && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Memory (Recent)</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_memory_recent}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_memory_remote && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Memory (Remote)</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_memory_remote}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_subtraction && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Subtraction</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_subtraction}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_digit_span && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Digit Span</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_digit_span}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_counting && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Counting</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_counting}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_general_knowledge && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">General Knowledge</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_general_knowledge}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_calculation && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Calculation</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_calculation}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_similarities && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Similarities</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_similarities}</p>
-                                          </div>
-                                        )}
-                                        {file.mse_cognitive_proverbs && (
-                                          <div>
-                                            <label className="text-sm font-medium text-gray-600">Proverbs</label>
-                                            <p className="text-sm text-gray-900 mt-1">{file.mse_cognitive_proverbs}</p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                {/* Insight */}
-                                {(file.mse_insight_understanding || file.mse_insight_judgement) && (
-                                  <div className="mb-4">
-                                    <h6 className="text-md font-semibold text-gray-800 mb-2">Insight</h6>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                      {file.mse_insight_understanding && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Understanding</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_insight_understanding}</p>
-                                        </div>
-                                      )}
-                                      {file.mse_insight_judgement && (
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-600">Judgement</label>
-                                          <p className="text-sm text-gray-900 mt-1">{file.mse_insight_judgement}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                          {/* Diagnostic Formulation */}
-                          {(file.diagnostic_formulation_summary || file.diagnostic_formulation_features ||
-                            file.diagnostic_formulation_psychodynamic) && (
-                              <div>
-                                <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Diagnostic Formulation</h5>
-                                <div className="space-y-4">
-                                  {file.diagnostic_formulation_summary && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Summary</label>
-                                      <p className="text-sm text-gray-900 mt-1 leading-relaxed">{file.diagnostic_formulation_summary}</p>
-                                    </div>
-                                  )}
-                                  {file.diagnostic_formulation_features && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Features</label>
-                                      <p className="text-sm text-gray-900 mt-1 leading-relaxed">{file.diagnostic_formulation_features}</p>
-                                    </div>
-                                  )}
-                                  {file.diagnostic_formulation_psychodynamic && (
-                                    <div>
-                                      <label className="text-sm font-medium text-gray-600">Psychodynamic</label>
-                                      <p className="text-sm text-gray-900 mt-1 leading-relaxed">{file.diagnostic_formulation_psychodynamic}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                          {/* Provisional Diagnosis */}
-                          {file.provisional_diagnosis && (
-                            <div>
-                              <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Provisional Diagnosis</h5>
-                              <p className="text-sm text-gray-900 leading-relaxed">{file.provisional_diagnosis}</p>
-                            </div>
-                          )}
-
-                          {/* Treatment Plan */}
-                          {file.treatment_plan && (
-                            <div>
-                              <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Treatment Plan</h5>
-                              <p className="text-sm text-gray-900 leading-relaxed">{file.treatment_plan}</p>
-                            </div>
-                          )}
-
-                          {/* Consultant Comments */}
-                          {file.consultant_comments && (
-                            <div>
-                              <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Consultant Comments</h5>
-                              <p className="text-sm text-gray-900 leading-relaxed">{file.consultant_comments}</p>
-                            </div>
-                          )}
-
-                          {/* Notes */}
-                          {file.notes && (
-                            <div>
-                              <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Additional Notes</h5>
-                              <p className="text-sm text-gray-900 leading-relaxed">{file.notes}</p>
-                            </div>
-                          )}
-
-                          {/* Last Updated */}
-                          {file.updated_at && (
-                            <div className="pt-4 border-t border-gray-200">
-                              <p className="text-xs text-gray-500">Last Updated: {formatDateTime(file.updated_at)}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              
+                <ViewADL adlFiles={patientAdlFiles[0]}/>
+               
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <FiFolder className="h-12 w-12 mx-auto mb-3 text-gray-300" />
@@ -3336,60 +2312,10 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
           {expandedCards.prescriptions && (
             <div className="p-6">
               {allPrescriptions.length > 0 ? (
-                <div ref={prescriptionPrintRef} className="space-y-6">
-                  {Object.entries(prescriptionsByVisit).map(([visitDate, visitData]) => (
-                    <div key={visitDate} className="relative backdrop-blur-xl bg-white/60 border border-white/40 rounded-2xl p-6 shadow-lg mb-6">
-                      <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-yellow-500/5 rounded-2xl"></div>
-                      <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-white/30">
-                        <div>
-                          <h4 className="text-lg font-semibold text-gray-900">Visit on {visitDate}</h4>
-                          {visitData.visitType && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              {visitData.visitType === 'first_visit' ? 'First Visit' : 'Follow-up Visit'}
-                            </p>
-                          )}
-                        </div>
-                        <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-sm font-medium">
-                          {visitData.prescriptions.length} {visitData.prescriptions.length === 1 ? 'Medication' : 'Medications'}
-                        </Badge>
-                      </div>
 
-                      {/* Table format for prescriptions */}
-                      <div className="overflow-x-auto rounded-xl border border-white/40 shadow-lg" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                        <table className="min-w-full text-sm" style={{ position: 'relative' }}>
-                          <thead className="backdrop-blur-md bg-white/50 border-b border-white/40 sticky top-0 z-10">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider backdrop-blur-md bg-white/50">#</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider backdrop-blur-md bg-white/50">Medicine</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider backdrop-blur-md bg-white/50">Dosage</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider backdrop-blur-md bg-white/50">When</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider backdrop-blur-md bg-white/50">Frequency</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider backdrop-blur-md bg-white/50">Duration</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider backdrop-blur-md bg-white/50">Quantity</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider backdrop-blur-md bg-white/50">Details</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider backdrop-blur-md bg-white/50">Notes</th>
-                            </tr>
-                          </thead>
-                          <tbody className="backdrop-blur-sm bg-white/40 divide-y divide-white/30">
-                            {visitData.prescriptions.map((prescription, idx) => (
-                              <tr key={prescription.id || idx} className="hover:bg-white/60 transition-colors duration-200">
-                                <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
-                                <td className="px-4 py-3 font-medium">{prescription.medicine || 'N/A'}</td>
-                                <td className="px-4 py-3">{prescription.dosage || '-'}</td>
-                                <td className="px-4 py-3">{prescription.when_to_take || '-'}</td>
-                                <td className="px-4 py-3">{prescription.frequency || '-'}</td>
-                                <td className="px-4 py-3">{prescription.duration || '-'}</td>
-                                <td className="px-4 py-3">{prescription.quantity || '-'}</td>
-                                <td className="px-4 py-3">{prescription.details || '-'}</td>
-                                <td className="px-4 py-3">{prescription.notes || '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                
+                <PrescriptionView prescription={allPrescriptions[0]} clinicalProformaId={proformaIds[0]} patientId={patient?.id}/>
+              
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <FiPackage className="h-12 w-12 mx-auto mb-3 text-gray-300" />
@@ -3403,7 +2329,7 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
       )}
 
       {/* Patient Documents & Files Preview Section */}
-      {patient?.id && existingFiles && existingFiles.length > 0 && (
+      {/* {patient?.id && existingFiles && existingFiles.length > 0 && (
         <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
           <div className="p-6">
             <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
@@ -3419,7 +2345,7 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
             />
           </div>
         </Card>
-      )}
+      )} */}
 
 <div className="flex mt-4 flex-col sm:flex-row justify-end gap-4">
 
@@ -3431,6 +2357,20 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
 >
   <FiX className="mr-2" />
   Cancel
+</Button>
+<Button
+  type="button"
+  onClick={() => {
+    if (returnTab) {
+      navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
+    } else {
+      navigate("/patients");
+    }
+  }}
+  className="px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+>
+  <FiSave className="mr-2" />
+Print All
 </Button>
 <Button
   type="submit"

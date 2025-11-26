@@ -34,14 +34,13 @@ const DisplayField = ({ label, value, icon, className = '', rows }) => {
   );
 };
 
-const ViewADL = () => {
-  const { id } = useParams();
+const ViewADL = ( {adlFiles} ) => {
   const navigate = useNavigate();
   
-  const { data: adlData, isLoading: isLoadingADL } = useGetADLFileByIdQuery(id, { skip: !id });
-  const adlFile = adlData?.data?.adlFile || adlData?.data?.adl_file || adlData?.data?.file || adlData?.data;
-  
-  const patientId = adlFile?.patient_id;
+  // const { data: adlData, isLoading: isLoadingADL } = useGetADLFileByIdQuery(id, { skip: !id });
+  // const adlFile = adlData?.data?.adlFile || adlData?.data?.adl_file || adlData?.data?.file || adlData?.data;
+  const adlFile = adlFiles;
+  const patientId = adlFiles?.patient_id;
   const { data: patientData, isLoading: isLoadingPatient } = useGetPatientByIdQuery(patientId, { skip: !patientId });
   const patient = patientData?.data?.patient;
   
@@ -50,6 +49,7 @@ const ViewADL = () => {
     skip: !patientId
   });
   const existingFiles = patientFilesData?.data?.files || [];
+
 
   // Parse JSON arrays
   const parseArray = (value) => {
@@ -102,13 +102,13 @@ const ViewADL = () => {
     }));
   };
 
-  if (isLoadingADL || isLoadingPatient) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    );
-  }
+  // if (isLoadingADL || isLoadingPatient) {
+  //   return (
+  //     <div className="min-h-screen flex items-center justify-center">
+  //       <LoadingSpinner />
+  //     </div>
+  //   );
+  // }
 
   if (!adlFile) {
     return (
@@ -134,58 +134,8 @@ const ViewADL = () => {
 
       <div className="relative z-10 space-y-6 p-4 sm:p-6 lg:p-8">
         {/* Main Wrapper Card - Collapsible */}
-        <Card className="relative shadow-2xl border border-white/40 bg-white/70 backdrop-blur-2xl rounded-3xl overflow-hidden mb-6">
-          <div
-            className="flex items-center justify-between cursor-pointer p-6 border-b border-white/30 backdrop-blur-sm bg-white/30 hover:bg-white/40 transition-all duration-300 select-none"
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleCard('mainWrapper');
-            }}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggleCard('mainWrapper');
-              }
-            }}
-          >
-            <div className="flex items-center gap-4">
-              <div className="p-3 backdrop-blur-md bg-gradient-to-br from-primary-500/20 to-indigo-600/20 rounded-xl border border-white/30 shadow-lg">
-                <FiFileText className="h-6 w-6 text-primary-600" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                  View Out Patient Intake Record
-                </h2>
-                {patient && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    <span className="font-semibold">{patient.name}</span>
-                    {patient.cr_no && <span className="text-gray-500"> - CR No: {patient.cr_no}</span>}
-                    {adlFile?.adl_no && <span className="text-gray-500"> - Out Patient Intake No: {adlFile.adl_no}</span>}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {expandedCards.mainWrapper ? (
-                <FiChevronUp className="h-6 w-6 text-gray-500" />
-              ) : (
-                <FiChevronDown className="h-6 w-6 text-gray-500" />
-              )}
-              {/* <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(-1);
-                }}
-                variant="outline"
-                className="flex items-center gap-2 px-4 py-2 border-2 border-gray-300 hover:border-gray-400 transition-colors ml-2 bg-white/60 backdrop-blur-md"
-              >
-                <FiArrowLeft className="w-4 h-4" />
-                Back to All Out Patient Intake Records
-              </Button> */}
-            </div>
-          </div>
+        {/* <Card className="relative shadow-2xl border border-white/40 bg-white/70 backdrop-blur-2xl rounded-3xl overflow-hidden mb-6"> */}
+          
 
           {expandedCards.mainWrapper && (
             <div className="p-6 space-y-6">
@@ -1102,10 +1052,10 @@ const ViewADL = () => {
               />
             </div>
           )}
-        </Card>
+         </Card>
             </div>
           )}
-        </Card>
+        {/* </Card> */}
 
         {/* Patient Documents & Files Preview Section */}
         {patientId && existingFiles && existingFiles.length > 0 && (
@@ -1126,7 +1076,7 @@ const ViewADL = () => {
           </Card>
         )}
 
-        <div className="relative mt-8">
+        {/* <div className="relative mt-8">
               
               <div className="flex flex-col sm:flex-row justify-end gap-4">
             <Button
@@ -1140,7 +1090,7 @@ const ViewADL = () => {
             </Button>
 
               </div>
-            </div>
+            </div> */}
       </div>
     </div>
   );

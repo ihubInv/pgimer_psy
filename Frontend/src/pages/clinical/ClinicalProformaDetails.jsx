@@ -1,9 +1,8 @@
-import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useRef } from 'react';
 import { toast } from 'react-toastify';
 import { FiEdit, FiTrash2, FiArrowLeft, FiPrinter, FiFileText, FiActivity } from 'react-icons/fi';
 import {
-  useGetClinicalProformaByIdQuery,
   useDeleteClinicalProformaMutation,
 } from '../../features/clinical/clinicalApiSlice';
 import { useGetADLFileByIdQuery } from '../../features/adl/adlApiSlice';
@@ -15,17 +14,18 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import FilePreview from '../../components/FilePreview';
 import { formatDate } from '../../utils/formatters';
 
-const ClinicalProformaDetails = () => {
-  const { id } = useParams();
+const ClinicalProformaDetails = ({ proforma }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTab = searchParams.get('returnTab'); // Get returnTab from URL
-
-  const { data, isLoading, refetch } = useGetClinicalProformaByIdQuery(id);
+  
+  // Get proforma ID
+  const id = proforma?.id;
+  
+  // Delete mutation
   const [deleteProforma, { isLoading: isDeleting }] = useDeleteClinicalProformaMutation();
   
   // Fetch ADL file data if this is a complex case
-  const proforma = data?.data?.proforma;
   const isComplexCase = proforma?.doctor_decision === 'complex_case' && proforma?.adl_file_id;
   const { data: adlFileData, isLoading: adlFileLoading } = useGetADLFileByIdQuery(
     proforma?.adl_file_id,
@@ -41,16 +41,17 @@ const ClinicalProformaDetails = () => {
   const existingFiles = patientFilesData?.data?.files || [];
 
   const handleDelete = async () => {
+    if (!id) {
+      toast.error('Cannot delete: Proforma ID not found');
+      return;
+    }
+    
     if (window.confirm('Are you sure you want to delete this clinical proforma? This action cannot be undone.')) {
       try {
         await deleteProforma(id).unwrap();
         toast.success('Clinical proforma deleted successfully');
         
-        // Force refetch the current query to ensure it's removed from cache
-        refetch();
-        
-        // Navigate back immediately - cache invalidation will handle the UI update
-        // Using replace: true to prevent back button from going to deleted page
+        // Navigate back immediately
         if (returnTab) {
           navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`, { replace: true });
         } else {
@@ -704,10 +705,6 @@ const ClinicalProformaDetails = () => {
     };
   };
 
-  if (isLoading) {
-    return <LoadingSpinner size="lg" className="h-96" />;
-  }
-
   if (!proforma) {
     return (
       <div className="text-center py-12">
@@ -748,7 +745,7 @@ const ClinicalProformaDetails = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between no-print">
+      {/* <div className="flex items-center justify-between no-print">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={handleBack}>
             <FiArrowLeft className="mr-2" /> Back
@@ -771,23 +768,23 @@ const ClinicalProformaDetails = () => {
             <FiTrash2 className="mr-2" /> Delete
           </Button>
         </div>
-      </div>
+      </div> */}
 
       {/* Patient & Visit Info */}
       <Card 
         title="Patient & Visit Information"
-        actions={
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handlePrintPatientDetails}
-            className="h-8 w-8 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-            title="Print Patient Details"
-          >
-            <FiPrinter className="w-4 h-4 text-blue-600" />
-          </Button>
-        }
+        // actions={
+        //   <Button
+        //     type="button"
+        //     variant="ghost"
+        //     size="sm"
+        //     onClick={handlePrintPatientDetails}
+        //     className="h-8 w-8 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+        //     title="Print Patient Details"
+        //   >
+        //     <FiPrinter className="w-4 h-4 text-blue-600" />
+        //   </Button>
+        // }
       >
         <div ref={patientDetailsPrintRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div>
@@ -920,7 +917,7 @@ const ClinicalProformaDetails = () => {
       </div>
 
       {/* Print button for Walk-in Clinical Proforma section */}
-      <div className="flex justify-end mb-4 no-print">
+      {/* <div className="flex justify-end mb-4 no-print">
         <Button
           type="button"
           variant="outline"
@@ -929,7 +926,7 @@ const ClinicalProformaDetails = () => {
         >
           <FiPrinter className="mr-2" /> Print Walk-in Clinical Proforma
         </Button>
-      </div>
+      </div> */}
 
       {/* ADL File Requirements */}
       {proforma.requires_adl_file && (

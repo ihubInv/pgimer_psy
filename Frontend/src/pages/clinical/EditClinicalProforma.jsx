@@ -210,8 +210,8 @@ console.log("existingPrescriptionData", existingPrescriptionData);
         treatment_prescribed: getValue(propInitialData.treatment_prescribed),
         doctor_decision: getValue(propInitialData.doctor_decision, 'simple_case'),
         // case_severity: getValue(propInitialData.case_severity),
-        requires_adl_file: propInitialData.requires_adl_file ?? false,
-        adl_reasoning: getValue(propInitialData.adl_reasoning),
+        // requires_adl_file: propInitialData.requires_adl_file ?? false,
+        // adl_reasoning: getValue(propInitialData.adl_reasoning),
       };
     }
 
