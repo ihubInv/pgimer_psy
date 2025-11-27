@@ -34,7 +34,7 @@ class SessionController {
       const now = new Date();
       const inactiveMinutes = (now - lastActivity) / (1000 * 60);
 
-      if (inactiveMinutes > 5) {
+      if (inactiveMinutes > 1) {
         // Session expired due to inactivity
         await tokenRecord.revoke();
         

@@ -65,19 +65,60 @@ const CreatePatient = () => {
   const [sameAsPermanent, setSameAsPermanent] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
 
-  // Restore step state from localStorage on mount
+  // Restore step state from localStorage on mount and after authentication
   useEffect(() => {
     const savedPatientId = localStorage.getItem('createPatient_patientId');
     const savedStep = localStorage.getItem('createPatient_step');
 
-    if (savedPatientId && savedStep === '2') {
-      // Restore step 2 state if patient ID exists
+    // If no saved data, start at step 1
+    if (!savedPatientId || savedStep !== '2') {
+      return;
+    }
+
+    // If token is available, verify patient exists before restoring
+    if (token) {
+      const verifyAndRestore = async () => {
+        try {
+          const baseUrl = import.meta.env.VITE_API_URL || '/api';
+          const response = await fetch(`${baseUrl}/patients/${savedPatientId}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          });
+
+          if (response.ok) {
+            // Patient exists, restore step 2
+            setPatientId(savedPatientId);
+            setCurrentStep(2);
+            setExpandedPatientDetails(true);
+          } else {
+            // Patient doesn't exist, clear localStorage and reset to step 1
+            localStorage.removeItem('createPatient_patientId');
+            localStorage.removeItem('createPatient_step');
+            setCurrentStep(1);
+            setPatientId(null);
+          }
+        } catch (error) {
+          console.error('Error verifying patient:', error);
+          // On error, still restore step 2 (patient might exist, just network issue)
+          setPatientId(savedPatientId);
+          setCurrentStep(2);
+          setExpandedPatientDetails(true);
+        }
+      };
+
+      verifyAndRestore();
+    } else {
+      // Token not available yet (session expired), but restore step 2 anyway
+      // Will verify when token becomes available
       setPatientId(savedPatientId);
       setCurrentStep(2);
-      // Expand the patient details section
       setExpandedPatientDetails(true);
     }
-  }, []);
+  }, [token]); // Run when token changes (after login or session expiration)
 
   // Check if fields with "others"/"other" are selected to show custom inputs
   useEffect(() => {

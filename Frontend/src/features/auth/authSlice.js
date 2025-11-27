@@ -77,14 +77,33 @@ const authSlice = createSlice({
       state.otpRequired = false;
       state.loginData = null;
       try {
+        // Preserve createPatient data when session expires (user might be in middle of creating patient)
+        const createPatientPatientId = localStorage.getItem('createPatient_patientId');
+        const createPatientStep = localStorage.getItem('createPatient_step');
+        
         // Clear all app data from storage on logout
         localStorage.clear();
         sessionStorage.clear();
+        
+        // Restore createPatient data if it existed (preserve user's progress)
+        if (createPatientPatientId && createPatientStep) {
+          localStorage.setItem('createPatient_patientId', createPatientPatientId);
+          localStorage.setItem('createPatient_step', createPatientStep);
+        }
       } catch (e) {
         // Fallback to removing known keys if clear() fails (e.g., quota issues)
+        const createPatientPatientId = localStorage.getItem('createPatient_patientId');
+        const createPatientStep = localStorage.getItem('createPatient_step');
+        
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         try { sessionStorage.clear(); } catch (_) {}
+        
+        // Restore createPatient data if it existed
+        if (createPatientPatientId && createPatientStep) {
+          localStorage.setItem('createPatient_patientId', createPatientPatientId);
+          localStorage.setItem('createPatient_step', createPatientStep);
+        }
       }
     },
     updateUser: (state, action) => {
