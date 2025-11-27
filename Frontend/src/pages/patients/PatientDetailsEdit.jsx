@@ -6,7 +6,7 @@ import {
   FiCalendar, FiGlobe, FiFileText,  FiClock,
   FiHeart, FiBookOpen, FiTrendingUp, FiShield,
   FiNavigation, FiEdit3, FiSave, FiX, FiLayers, 
-  FiFolder, FiChevronDown, FiChevronUp, FiPackage,  FiPrinter
+  FiFolder, FiChevronDown, FiChevronUp, FiPackage, FiHash ,  FiPrinter
 } from 'react-icons/fi';
 import { useUpdatePatientMutation,  } from '../../features/patients/patientsApiSlice';
 import { useGetPatientFilesQuery } from '../../features/patients/patientFilesApiSlice';
@@ -2539,12 +2539,12 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                       </Button>
                       <Button
                         type="submit"
-                        loading={isLoading || isAssigning }
-                        disabled={isLoading || isAssigning }
+                        loading={isLoading }
+                        disabled={isLoading }
                         className="px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
                       >
                         <FiSave className="mr-2" />
-                        {isLoading || isAssigning  ? 'Updating Record...' : 'Update Patient'}
+                        {isLoading  ? 'Updating Record...' : 'Update Patient'}
                       </Button>
                     </div>
                   </div>
