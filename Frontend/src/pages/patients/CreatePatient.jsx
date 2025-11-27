@@ -10,9 +10,9 @@ import {
   FiNavigation, FiTruck, FiEdit3, FiSave, FiX, FiLayers, FiLoader,
   FiChevronDown, FiChevronUp, FiArrowRight, FiCheck
 } from 'react-icons/fi';
-import { useCreatePatientMutation, useAssignPatientMutation, useCreatePatientCompleteMutation, useCheckCRNumberExistsQuery, useUpdatePatientMutation } from '../../features/patients/patientsApiSlice';
+import { useCreatePatientMutation, useAssignPatientMutation, useCreatePatientCompleteMutation, useUpdatePatientMutation } from '../../features/patients/patientsApiSlice';
 import { useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
-import { selectCurrentUser } from '../../features/auth/authSlice';
+import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
 import { updatePatientRegistrationForm, resetPatientRegistrationForm, selectPatientRegistrationForm } from '../../features/form/formSlice';
 import { useCreateClinicalProformaMutation } from '../../features/clinical/clinicalApiSlice';
@@ -42,10 +42,9 @@ const CreatePatient = () => {
   const [createProforma, { isLoading: isCreating }] = useCreateClinicalProformaMutation();
   const [createPatientFiles, { isLoading: isUploadingFiles }] = useCreatePatientFilesMutation();
   const currentUser = useSelector(selectCurrentUser);
+  const token = useSelector(selectCurrentToken);
   // State declarations first
   const [errors, setErrors] = useState({});
-  const [crValidationTimeout, setCrValidationTimeout] = useState(null);
-  const [currentCRNumber, setCurrentCRNumber] = useState('');
   const [expandedPatientDetails, setExpandedPatientDetails] = useState(true);
   const [currentStep, setCurrentStep] = useState(1); // 1 for Out Patient Card, 2 for remaining sections
   const [patientId, setPatientId] = useState(null); // Store patient ID after step 1
@@ -205,49 +204,6 @@ const CreatePatient = () => {
     navigate('/patients');
   };
 
-  // CR number validation
-  const { data: crExists, isLoading: isCheckingCR } = useCheckCRNumberExistsQuery(
-    currentCRNumber,
-    { skip: !currentCRNumber || currentCRNumber.length < 3 }
-  );
-
-
-  // CR validation effect
-  useEffect(() => {
-    const currentCR = formData.cr_no;
-
-    if (currentCR && currentCR.length >= 3) {
-      if (currentCR !== currentCRNumber) {
-        // CR number changed, clear error immediately and reset validation
-        setErrors((prev) => ({ ...prev, patientCRNo: '' }));
-        setCurrentCRNumber(currentCR);
-        // Don't validate yet, wait for API call
-        return;
-      } else if (currentCR === currentCRNumber && !isCheckingCR) {
-        // Only validate if CR number is stable and not checking
-
-
-        if (crExists === true) {
-          // CR exists (exact match), show error
-
-          setErrors((prev) => ({ ...prev, patientCRNo: 'CR No. already exists.' }));
-        } else if (crExists === false) {
-          // CR doesn't exist (exact match), clear error
-
-          setErrors((prev) => ({ ...prev, patientCRNo: '' }));
-        } else {
-          // crExists is undefined or null, clear error to be safe
-
-          setErrors((prev) => ({ ...prev, patientCRNo: '' }));
-        }
-      }
-    } else {
-      // CR too short or empty, clear error
-
-      setErrors((prev) => ({ ...prev, patientCRNo: '' }));
-      setCurrentCRNumber('');
-    }
-  }, [formData.cr_no, crExists, isCheckingCR, currentCRNumber]);
 
 
   const handleChange = (e) => {
@@ -289,16 +245,6 @@ const CreatePatient = () => {
       return;
     }
 
-    // Handle CR number validation
-    if (name === 'cr_no') {
-      setErrors((prev) => ({ ...prev, patientCRNo: '' }));
-      if (crValidationTimeout) clearTimeout(crValidationTimeout);
-      setCurrentCRNumber('');
-      if (value.length >= 3) {
-        setCrValidationTimeout(setTimeout(() => setCurrentCRNumber(value), 500));
-      }
-      return;
-    }
 
     // Clear field errors
     if (errors[name]) {
@@ -323,39 +269,7 @@ const CreatePatient = () => {
   const handlePatientChange = (e) => {
     const { name, value } = e.target;
     dispatch(updatePatientRegistrationForm({ [name]: value }));
-
-    // Clear any existing CR number error when user starts typing
-    if (name === 'cr_no') {
-      // Clear error immediately and force clear
-
-      setErrors((prev) => ({ ...prev, patientCRNo: '' }));
-
-      // Clear any existing timeout
-      if (crValidationTimeout) {
-        clearTimeout(crValidationTimeout);
-      }
-
-      // Reset current CR number to force new validation
-      setCurrentCRNumber('');
-
-      // Set current CR number for validation with debounce
-      if (value.length >= 3) {
-        const timeout = setTimeout(() => {
-          setCurrentCRNumber(value);
-        }, 500);
-        setCrValidationTimeout(timeout);
-      }
-    }
   };
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (crValidationTimeout) {
-        clearTimeout(crValidationTimeout);
-      }
-    };
-  }, [crValidationTimeout]);
 
   const validate = (step = 1) => {
     const newErrors = {};
@@ -370,13 +284,6 @@ const CreatePatient = () => {
     if (!patientSex) newErrors.patientSex = 'Sex is required';
     if (!patientAge) newErrors.patientAge = 'Age is required';
 
-    // CR number validation
-    if (patientCRNo) {
-      if (patientCRNo.length < 3) {
-        newErrors.patientCRNo = 'CR number must be at least 3 characters long';
-      }
-      // Note: Real-time CR validation is handled by validateCRNumber function
-    }
 
     // Step 1 specific validations (Out Patient Card)
     if (step === 1) {
@@ -404,13 +311,7 @@ const CreatePatient = () => {
     const patientName = (formData.name || '').trim();
     const patientSex = formData.sex || '';
     const patientAge = formData.age || '';
-    const patientCRNo = formData.cr_no || '';
-
-    // Don't submit while checking CR number
-    if (patientCRNo && isCheckingCR) {
-      toast.error('Please wait while we check the CR number...');
-      return;
-    }
+    const patientCRNo = (formData.cr_no || '').trim();
 
     try {
       // Validate required fields
@@ -425,6 +326,33 @@ const CreatePatient = () => {
       if (!patientAge) {
         toast.error('Patient age is required');
         return;
+      }
+
+      // Check if CR number already exists (if provided)
+      if (patientCRNo && patientCRNo.length >= 3) {
+        try {
+          const baseUrl = import.meta.env.VITE_API_URL || '/api';
+          const response = await fetch(`${baseUrl}/patients/cr/${encodeURIComponent(patientCRNo)}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : '',
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          });
+
+          // If patient exists (200 status), show error
+          if (response.ok) {
+            toast.error('CR number already registered');
+            return;
+          }
+          // If 404, patient doesn't exist, continue with submission
+          // Other errors will be handled by the catch block
+        } catch (checkError) {
+          // If there's an error checking (network issue, etc.), continue with submission
+          // The backend will catch duplicate CR numbers during creation
+          console.warn('Error checking CR number:', checkError);
+        }
       }
 
       const parseIntSafe = (val) => {
@@ -759,14 +687,7 @@ const CreatePatient = () => {
                             value={formData.cr_no || ''}
                             onChange={handleChange}
                             placeholder="Enter CR number"
-                            error={errors.patientCRNo}
-                            loading={isCheckingCR && formData.cr_no && formData.cr_no.length >= 3}
-                            className={`${errors.patientCRNo
-                              ? 'border-red-400/50 focus:border-red-500 focus:ring-red-500/50 bg-red-50/30'
-                              : formData.cr_no && formData.cr_no.length >= 3 && !isCheckingCR && !errors.patientCRNo
-                                ? 'border-green-400/50 focus:border-green-500 focus:ring-green-500/50 bg-green-50/30'
-                                : ''
-                              }`}
+                            className=""
                           />
 
                           <DatePicker
@@ -1077,14 +998,6 @@ const CreatePatient = () => {
                                 value={formData.cr_no || ''}
                                 onChange={handleChange}
                                 placeholder="Enter CR number"
-                                // error={errors.patientCRNo}
-                                loading={isCheckingCR && formData.cr_no && formData.cr_no.length >= 3}
-                                // className={`${errors.patientCRNo
-                                //   ? 'border-red-400/50 focus:border-red-500 focus:ring-red-500/50 bg-red-50/30'
-                                //   : formData.cr_no && formData.cr_no.length >= 3 && !isCheckingCR && !errors.patientCRNo
-                                //     ? 'border-green-400/50 focus:border-green-500 focus:ring-green-500/50 bg-green-50/30'
-                                //     : ''
-                                //   }`}
                                 disabled={true}
                                 className="disabled:bg-gray-200 disabled:cursor-not-allowed"
                               />

@@ -134,15 +134,6 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ['Patient'],
     }),
-    checkCRNumberExists: builder.query({
-      query: (crNo) => `/patients/cr/${crNo}`,
-      transformResponse: (response) => response.success, // true if patient exists
-      transformErrorResponse: (response) => {
-        // If 404, patient doesn't exist (return false)
-        // If other error, assume exists to be safe (return true)
-        return response.status === 404 ? false : true;
-      },
-    }),
     getPatientsStats: builder.query({
       query: () => '/patients/stats',
       providesTags: ['Stats'],
