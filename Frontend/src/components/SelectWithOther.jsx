@@ -22,6 +22,8 @@ export const SelectWithOther = ({
     const dropdownRef = useRef(null);
     const triggerRef = useRef(null);
     const customInputRef = useRef(null);
+    const scrollContainerRef = useRef(null);
+    const selectedOptionRef = useRef(null);
     const [menuStyle, setMenuStyle] = useState({ top: 0, left: 0, width: 0 });
   
     // Check if "others" or "other" is selected
@@ -78,6 +80,37 @@ export const SelectWithOther = ({
         }, 100);
       }
     }, [isOpen, shouldShowCustomInput]);
+
+    // Scroll selected option into view when dropdown opens
+    useEffect(() => {
+      if (isOpen && selectedOptionRef.current && scrollContainerRef.current) {
+        // Use double requestAnimationFrame to ensure DOM is fully rendered and positioned
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (selectedOptionRef.current && scrollContainerRef.current) {
+              const selectedElement = selectedOptionRef.current;
+              const container = scrollContainerRef.current;
+              
+              // Calculate scroll position to center the selected item
+              const containerHeight = container.clientHeight;
+              const selectedHeight = selectedElement.offsetHeight;
+              const selectedTop = selectedElement.offsetTop;
+              const containerScrollTop = container.scrollTop;
+              
+              // Calculate the position where selected item should be (centered)
+              const targetScrollTop = selectedTop - (containerHeight / 2) + (selectedHeight / 2);
+              
+              // Ensure we don't scroll beyond bounds
+              const maxScroll = container.scrollHeight - containerHeight;
+              const finalScrollTop = Math.max(0, Math.min(targetScrollTop, maxScroll));
+              
+              // Scroll to position
+              container.scrollTop = finalScrollTop;
+            }
+          });
+        });
+      }
+    }, [isOpen, selectProps.value]);
   
     const selectedOption = selectProps.options.find(opt => opt.value === selectProps.value);
   
@@ -127,12 +160,21 @@ export const SelectWithOther = ({
           zIndex: selectProps.dropdownZIndex || 999999,
         }}
       >
-        <div className="overflow-y-auto py-1" style={{ maxHeight: shouldShowCustomInput ? '200px' : '280px' }}>
+        <div 
+          ref={scrollContainerRef}
+          className="overflow-y-auto overflow-x-hidden py-1 scroll-smooth" 
+          style={{ 
+            maxHeight: shouldShowCustomInput ? '200px' : '280px',
+            scrollBehavior: 'smooth',
+            overscrollBehavior: 'contain'
+          }}
+        >
           {selectProps.options
             .filter(opt => opt.value !== 'others' && opt.value !== 'other')
             .map((option, index) => (
               <button
                 key={option.value}
+                ref={selectProps.value === option.value ? selectedOptionRef : null}
                 type="button"
                 onClick={() => handleSelect(option.value)}
                 className={`
@@ -145,7 +187,7 @@ export const SelectWithOther = ({
                   ${index !== 0 ? 'border-t border-gray-100' : ''}
                 `}
               >
-                <span className="flex-1">{option.label}</span>
+                <span className="flex-1 truncate">{option.label}</span>
                 {selectProps.value === option.value && (
                   <FiCheck className="h-5 w-5 text-primary-600 flex-shrink-0 ml-2" />
                 )}
@@ -158,6 +200,7 @@ export const SelectWithOther = ({
             .map((option) => (
               <button
                 key={option.value}
+                ref={isOthersSelected ? selectedOptionRef : null}
                 type="button"
                 onClick={() => handleSelect(option.value)}
                 className={`
@@ -170,7 +213,7 @@ export const SelectWithOther = ({
                   border-t border-gray-100
                 `}
               >
-                <span className="flex-1">{option.label}</span>
+                <span className="flex-1 truncate">{option.label}</span>
                 {isOthersSelected && (
                   <FiCheck className="h-5 w-5 text-primary-600 flex-shrink-0 ml-2" />
                 )}
@@ -238,6 +281,13 @@ export const SelectWithOther = ({
             type="button"
             onClick={() => !selectProps.disabled && setIsOpen(!isOpen)}
             disabled={selectProps.disabled}
+            title={
+              isOthersSelected && customInputValue
+                ? customInputValue
+                : selectedOption
+                  ? selectedOption.label
+                  : selectProps.placeholder
+            }
             className={`
               w-full px-4 py-3 pr-10
               bg-white border-2 rounded-xl
@@ -250,13 +300,16 @@ export const SelectWithOther = ({
               ${!selectProps.value ? 'text-gray-500' : 'text-gray-900'}
               ${isOpen ? 'border-primary-500 ring-2 ring-primary-500/20' : ''}
               ${selectProps.className}
+              overflow-hidden
             `}
           >
-            {isOthersSelected && customInputValue
-              ? customInputValue
-              : selectedOption
-                ? selectedOption.label
-                : selectProps.placeholder}
+            <span className="block truncate pr-2">
+              {isOthersSelected && customInputValue
+                ? customInputValue
+                : selectedOption
+                  ? selectedOption.label
+                  : selectProps.placeholder}
+            </span>
           </button>
   
           {/* Custom dropdown arrow */}

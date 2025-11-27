@@ -195,6 +195,7 @@ const Select = ({
           type="button"
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
+          title={selectedOption ? selectedOption.label : placeholder}
           className={`
             w-full px-3 py-2 pr-10
             backdrop-blur-md bg-white/60 border border-white/40 rounded-lg shadow-sm
@@ -207,9 +208,12 @@ const Select = ({
             ${!value ? 'text-gray-500' : 'text-gray-900'}
             ${isOpen ? 'border-primary-500 ring-2 ring-primary-500/50 bg-white/80' : ''}
             ${className}
+            overflow-hidden
           `}
         >
-          {selectedOption ? selectedOption.label : placeholder}
+          <span className="block truncate pr-2">
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
         </button>
 
         {/* Custom dropdown arrow */}
