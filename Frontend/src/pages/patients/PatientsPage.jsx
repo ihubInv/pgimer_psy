@@ -1443,21 +1443,22 @@ const PatientsPage = () => {
         return (
         <div className="space-y-2">
           <Badge 
-              variant={isComplex ? 'warning' : 'success'}
+              variant={ row.has_adl_file ? ' success ' : 'warning'}
             className={`${
-                isComplex
-                ? 'bg-gradient-to-r from-orange-100 to-yellow-100 text-orange-800 border-orange-200' 
+              !row.has_adl_file 
+                ? 'bg-gradient-to-r from-orange-100 to-yellow-100 text-orange-800 border-orange-200 gap-1`' 
                 : 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-200'
             }`}
           >
-              {statusText} 
+              {/* {statusText}  */}
+              Out Patient Intake Record
           </Badge>
           <div className="flex items-center gap-1">
             <div className={`w-2 h-2 rounded-full ${
               row.has_adl_file ? 'bg-green-500' : 'bg-gray-300'
             }`}></div>
             <span className="text-xs text-gray-600">
-              ADL: {row.has_adl_file ? 'Yes' : 'No'}
+               {row.has_adl_file ? 'Yes' : 'No'}
             </span>
           </div>
         </div>

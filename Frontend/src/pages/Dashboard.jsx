@@ -546,7 +546,7 @@ const Dashboard = () => {
               value={adlStats?.data?.stats?.total_files || 0}
               icon={FiFolder}
               colorClasses="from-purple-500 to-purple-600"
-              to="/adl-files"
+              // to="/adl-files"
               subtitle="Outpatient intake records"
             />
             <StatCard
@@ -918,7 +918,7 @@ const Dashboard = () => {
               value={activeADLFiles?.data?.files?.length || 0} 
               icon={FiFolder} 
               colorClasses="from-purple-500 to-purple-600"
-              to="/adl-files"
+              // to="/adl-files"
               subtitle="In progress"
             />
             <StatCard 
