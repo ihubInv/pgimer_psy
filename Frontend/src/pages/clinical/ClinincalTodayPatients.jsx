@@ -7,10 +7,12 @@ import {
 } from 'react-icons/fi';
 import { useGetAllPatientsQuery, useMarkVisitCompletedMutation } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
-import { useGetMyRoomQuery } from '../../features/rooms/roomsApiSlice';
+import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, roomsApiSlice } from '../../features/rooms/roomsApiSlice';
+import { useDispatch } from 'react-redux';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
-import RoomSelectionModal from '../../components/RoomSelectionModal';
+import Select from '../../components/Select';
+// Removed RoomSelectionModal - using inline card instead
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { isAdmin, isMWO, isJrSr, isSR, isJR } from '../../utils/constants';
@@ -260,17 +262,93 @@ const PatientRow = ({ patient, isNewPatient, navigate, onMarkCompleted }) => {
 const ClinicalTodayPatients = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [showRoomModal, setShowRoomModal] = useState(false);
   
   // Check if user is a doctor (Faculty, Admin, or Resident)
   const isDoctor = currentUser && (isAdmin(currentUser.role) || isSR(currentUser.role) || isJR(currentUser.role));
   
   // Get current room assignment
-  const { data: myRoomData, isLoading: isLoadingRoom } = useGetMyRoomQuery(undefined, {
+  const { data: myRoomData, isLoading: isLoadingRoom, refetch: refetchMyRoom } = useGetMyRoomQuery(undefined, {
     skip: !isDoctor,
   });
+  
+  // Room selection state and queries
+  const { data: roomsData, isLoading: isLoadingRooms, refetch: refetchRooms } = useGetAvailableRoomsQuery(undefined, {
+    skip: !isDoctor,
+  });
+  const [selectRoom, { isLoading: isSelectingRoom }] = useSelectRoomMutation();
+  
+  // Room selection form state
+  const [selectedRoom, setSelectedRoom] = useState('');
+  const [assignmentTime, setAssignmentTime] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Helper function to format date for datetime-local input (local timezone)
+  const formatLocalDateTime = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+  
+  // Initialize room selection form
+  useEffect(() => {
+    if (isDoctor && !isLoadingRoom && myRoomData) {
+      if (myRoomData.data?.current_room) {
+        setSelectedRoom(myRoomData.data.current_room);
+        if (myRoomData.data.room_assignment_time) {
+          const existingTime = new Date(myRoomData.data.room_assignment_time);
+          setAssignmentTime(formatLocalDateTime(existingTime));
+        } else {
+          setAssignmentTime(formatLocalDateTime(new Date()));
+        }
+      } else {
+        setSelectedRoom('');
+        setAssignmentTime(formatLocalDateTime(new Date()));
+      }
+    }
+  }, [isDoctor, isLoadingRoom, myRoomData]);
+  
+  // Handle room selection submit
+  const handleRoomSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!selectedRoom) {
+      toast.error('Please select a room');
+      return;
+    }
+    
+    if (!assignmentTime) {
+      toast.error('Please select assignment time');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    try {
+      const result = await selectRoom({
+        room_number: selectedRoom,
+        assignment_time: new Date(assignmentTime).toISOString(),
+      }).unwrap();
+      
+      toast.success(result.message || `Room ${selectedRoom} selected successfully!`);
+      
+      // Refetch room data and invalidate cache
+      await Promise.all([
+        refetchMyRoom(),
+        refetchRooms(),
+        dispatch(roomsApiSlice.util.invalidateTags(['Rooms', 'MyRoom']))
+      ]);
+    } catch (error) {
+      console.error('Room selection error:', error);
+      toast.error(error?.data?.message || 'Failed to select room');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   
   const [filters, setFilters] = useState({
     sex: '',
@@ -343,25 +421,32 @@ const ClinicalTodayPatients = () => {
     };
   }, [refetch]);
 
-  // Show room selection modal if doctor hasn't selected a room
-  useEffect(() => {
-    if (isDoctor && !isLoadingRoom && myRoomData && !myRoomData.data?.current_room) {
-      // Check if modal was already shown today (using localStorage)
-      const lastShown = localStorage.getItem('roomModalShown');
-      const today = new Date().toISOString().split('T')[0];
-      
-      if (lastShown !== today) {
-        setShowRoomModal(true);
+  // Room selection data
+  const rooms = roomsData?.data?.rooms || [];
+  const distribution = roomsData?.data?.distribution || {};
+  const occupiedRooms = roomsData?.data?.occupied_rooms || {};
+  
+  const roomOptions = rooms.map(room => ({
+    value: room,
+    label: `${room} (${distribution[room] || 0} patients)`,
+  }));
+  
+  // If no rooms available, add default rooms (but only if they're not occupied)
+  const allRoomOptions = [...roomOptions];
+  if (allRoomOptions.length === 0) {
+    for (let i = 1; i <= 10; i++) {
+      const roomName = `Room ${i}`;
+      if (!occupiedRooms[roomName]) {
+        allRoomOptions.push({
+          value: roomName,
+          label: `${roomName} (0 patients)`,
+        });
       }
     }
-  }, [isDoctor, isLoadingRoom, myRoomData]);
-
-  const handleRoomModalClose = () => {
-    setShowRoomModal(false);
-    // Mark as shown today
-    const today = new Date().toISOString().split('T')[0];
-    localStorage.setItem('roomModalShown', today);
-  };
+  }
+  
+  const allRoomsOccupied = allRoomOptions.length === 0 && Object.keys(occupiedRooms).length > 0;
+  const hasNoRoom = isDoctor && !isLoadingRoom && myRoomData && !myRoomData.data?.current_room;
   
 
 
@@ -569,15 +654,52 @@ const ClinicalTodayPatients = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Room Selection Modal */}
-      <RoomSelectionModal
-        isOpen={showRoomModal}
-        onClose={handleRoomModalClose}
-        currentUser={currentUser}
-      />
 
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-6 py-6">
       
+        {/* Current Room Assignment Card - Show if doctor has selected a room */}
+        {isDoctor && !isLoadingRoom && myRoomData?.data?.current_room && (
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                    <FiHome className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Current Room Assignment</p>
+                    <p className="text-lg font-semibold text-gray-800">
+                      Room: {myRoomData.data.current_room}
+                    </p>
+                    {myRoomData.data.room_assignment_time && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Assigned at: {new Date(myRoomData.data.room_assignment_time).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedRoom(myRoomData.data.current_room);
+                    if (myRoomData.data.room_assignment_time) {
+                      const existingTime = new Date(myRoomData.data.room_assignment_time);
+                      setAssignmentTime(formatLocalDateTime(existingTime));
+                    } else {
+                      setAssignmentTime(formatLocalDateTime(new Date()));
+                    }
+                    // Scroll to room selection card
+                    document.getElementById('room-selection-card')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="text-green-700 border-green-300 hover:bg-green-100"
+                >
+                  Change Room
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Patients List */}
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
@@ -590,19 +712,11 @@ const ClinicalTodayPatients = () => {
                   {filteredPatients.length}
                 </span>
               </h3>
-              {/* Show current room if doctor has one */}
+              {/* Show current room if doctor has one - simplified display since we have a card above */}
               {isDoctor && myRoomData?.data?.current_room && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg border border-blue-200">
                   <FiHome className="w-4 h-4" />
                   <span className="text-sm font-medium">Room: {myRoomData.data.current_room}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowRoomModal(true)}
-                    className="ml-2 text-xs px-2 py-1"
-                  >
-                    Change
-                  </Button>
                 </div>
               )}
                 <div className="flex items-center gap-4 text-sm">
@@ -623,7 +737,115 @@ const ClinicalTodayPatients = () => {
             </div>
           </div>
 
-          {filteredPatients.length === 0 ? (
+          {/* Room Selection Card - Show if doctor hasn't selected a room OR if no patients found */}
+          {(hasNoRoom || filteredPatients.length === 0) && isDoctor ? (
+            <div className="space-y-6">
+              {/* Room Selection Card */}
+              {hasNoRoom && (
+                <Card id="room-selection-card" className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
+                  <div className="p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
+                        <FiHome className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-800">Select Your Room</h3>
+                        <p className="text-sm text-gray-600">Please select the room you are sitting in today</p>
+                      </div>
+                    </div>
+                    
+                    <form onSubmit={handleRoomSubmit} className="space-y-4 mt-6">
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                          <FiHome className="w-4 h-4 text-blue-600" />
+                          Which room are you sitting in today? <span className="text-red-500">*</span>
+                        </label>
+                        {allRoomsOccupied ? (
+                          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-sm text-yellow-800">
+                              All rooms are currently assigned to other doctors. Please contact the administrator or wait for a room to become available.
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <Select
+                              name="room"
+                              value={selectedRoom}
+                              onChange={(e) => setSelectedRoom(e.target.value)}
+                              options={allRoomOptions}
+                              placeholder="Select room"
+                              searchable={true}
+                              disabled={isLoadingRooms || allRoomsOccupied}
+                              className="bg-white border-2 border-gray-300"
+                            />
+                            {selectedRoom && distribution[selectedRoom] !== undefined && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {distribution[selectedRoom]} patient(s) currently assigned to this room
+                              </p>
+                            )}
+                            {Object.keys(occupiedRooms).length > 0 && (
+                              <p className="text-xs text-gray-500 mt-1 italic">
+                                {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and are not shown.
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                          <FiClock className="w-4 h-4 text-blue-600" />
+                          What time did you start sitting in this room? <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={assignmentTime}
+                          onChange={(e) => setAssignmentTime(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                          required
+                        />
+                      </div>
+                      
+                      <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                        <Button
+                          type="submit"
+                          loading={isSubmitting || isSelectingRoom}
+                          disabled={isSubmitting || isSelectingRoom || !selectedRoom || !assignmentTime || allRoomsOccupied}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <FiCheck className="mr-2" />
+                          Select Room
+                        </Button>
+                      </div>
+                    </form>
+                    
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-xs text-blue-800">
+                        <strong>Note:</strong> Only one doctor can be assigned to each room. Rooms already assigned to other doctors are not shown.
+                        All unassigned patients in your selected room will be automatically assigned to you.
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+              
+              {/* No Patients Found Message */}
+              {filteredPatients.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
+                    <FiUsers className="w-12 h-12 text-gray-400" />
+                  </div>
+                  <p className="text-xl font-semibold text-gray-700 mb-2">No patients found</p>
+                  <p className="text-gray-500 text-center max-w-md">
+                    {Object.values(filters).some(f => f) 
+                      ? 'No patients match the current filters for today.'
+                      : 'No patients were registered or have visits scheduled for today.'
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : filteredPatients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
                 <FiUsers className="w-12 h-12 text-gray-400" />

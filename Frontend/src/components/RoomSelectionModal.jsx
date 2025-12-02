@@ -11,8 +11,19 @@ import { isAdmin, isSR, isJR } from '../utils/constants';
 
 const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
   const dispatch = useDispatch();
+  
+  // Helper function to format date for datetime-local input (local timezone)
+  const formatLocalDateTime = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+  
   const [selectedRoom, setSelectedRoom] = useState('');
-  const [assignmentTime, setAssignmentTime] = useState(new Date().toISOString().slice(0, 16));
+  const [assignmentTime, setAssignmentTime] = useState(formatLocalDateTime(new Date()));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: roomsData, isLoading: isLoadingRooms, refetch: refetchRooms } = useGetAvailableRoomsQuery(undefined, {
@@ -30,16 +41,21 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
     isJR(currentUser.role)
   );
 
-  // Set default time to current time
+  // Set default time to current time (local timezone) whenever modal opens
   useEffect(() => {
     if (isOpen) {
       const now = new Date();
-      const timeString = now.toISOString().slice(0, 16);
+      const timeString = formatLocalDateTime(now);
       setAssignmentTime(timeString);
       
       // If user already has a room, pre-select it
       if (myRoomData?.data?.current_room) {
         setSelectedRoom(myRoomData.data.current_room);
+        // If they have an existing assignment time, use it
+        if (myRoomData.data.room_assignment_time) {
+          const existingTime = new Date(myRoomData.data.room_assignment_time);
+          setAssignmentTime(formatLocalDateTime(existingTime));
+        }
       }
     }
   }, [isOpen, myRoomData]);
