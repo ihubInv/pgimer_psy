@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
+import { flushSync } from 'react-dom';
 import { toast } from 'react-toastify';
 import { useLoginMutation, useVerifyLoginOTPMutation } from '../features/auth/authApiSlice';
-import { setCredentials, setOTPRequired, selectOTPRequired, selectLoginData } from '../features/auth/authSlice';
+import { setCredentials, setOTPRequired, selectOTPRequired, selectLoginData, selectIsAuthenticated } from '../features/auth/authSlice';
 import {
   Eye,
   EyeOff,
@@ -25,6 +26,16 @@ const Login = () => {
   const dispatch = useDispatch();
   const otpRequired = useSelector(selectOTPRequired);
   const loginData = useSelector(selectLoginData);
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const pendingNavigationRef = useRef(false);
+  
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (isAuthenticated && pendingNavigationRef.current) {
+      pendingNavigationRef.current = false;
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -55,12 +66,24 @@ const Login = () => {
       // Check if accessToken is returned (direct login without OTP)
       if (result.data.accessToken || result.data.token) {
         // Direct login - accessToken received (new system) or token (legacy)
-        dispatch(setCredentials({
-          user: result.data.user,
-          token: result.data.accessToken || result.data.token,
-        }));
+        // Use flushSync to ensure state update is synchronous and React re-renders immediately
+        flushSync(() => {
+          dispatch(setCredentials({
+            user: result.data.user,
+            token: result.data.accessToken || result.data.token,
+          }));
+        });
+        
         toast.success('Login successful!');
-        navigate('/');
+        
+        // Mark that we're waiting for navigation
+        pendingNavigationRef.current = true;
+        
+        // Navigation will happen via useEffect when isAuthenticated becomes true
+        // If it's already true (shouldn't happen but safety check), navigate immediately
+        if (localStorage.getItem('token') && localStorage.getItem('user')) {
+          navigate('/', { replace: true });
+        }
       } else {
         // OTP required - store login data for OTP verification
         dispatch(setOTPRequired(result.data));
@@ -79,13 +102,25 @@ const Login = () => {
         otp: formData.otp,
       }).unwrap();
 
-      dispatch(setCredentials({
-        user: result.data.user,
-        token: result.data.accessToken || result.data.token,
-      }));
-      dispatch(setOTPRequired(false));
+      // Use flushSync to ensure state update is synchronous and React re-renders immediately
+      flushSync(() => {
+        dispatch(setCredentials({
+          user: result.data.user,
+          token: result.data.accessToken || result.data.token,
+        }));
+        dispatch(setOTPRequired(false));
+      });
+      
       toast.success('Login successful!');
-      navigate('/');
+      
+      // Mark that we're waiting for navigation
+      pendingNavigationRef.current = true;
+      
+      // Navigation will happen via useEffect when isAuthenticated becomes true
+      // If it's already true (shouldn't happen but safety check), navigate immediately
+      if (localStorage.getItem('token') && localStorage.getItem('user')) {
+        navigate('/', { replace: true });
+      }
     } catch (err) {
       toast.error(err?.data?.message || 'OTP verification failed');
     }
