@@ -1354,6 +1354,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   const [showProformaForm, setShowProformaForm] = useState(() => {
     // If there's a current visit proforma, don't show form initially
     // Otherwise, show form for new proforma
+    // For new patients, always show form initially
     return !currentVisitProforma;
   });
 
@@ -1375,6 +1376,15 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       setShowProformaForm(true);
     }
   }, [currentVisitProforma]);
+
+  // Ensure form is shown for new patients without history
+  useEffect(() => {
+    if (isNewPatientWithNoHistory && !currentVisitProforma) {
+      setShowProformaForm(true);
+      // Also ensure card is expanded for new patients
+      setExpandedCards(prev => ({ ...prev, clinical: true }));
+    }
+  }, [isNewPatientWithNoHistory, currentVisitProforma]);
 
   // Update showProformaForm when user explicitly edits a proforma
   useEffect(() => {
@@ -1414,12 +1424,15 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   // Debug logging to help troubleshoot ADL data (after all variables are defined)
   useEffect(() => {}, [adlData, patientAdlFiles.length, selectedProforma?.adl_file_id]);
 
-  // Auto-expand clinical card when selected proforma loads
+  // Auto-expand clinical card when selected proforma loads OR for new patients without proforma
   useEffect(() => {
     if (selectedProforma) {
       setExpandedCards(prev => ({ ...prev, clinical: true }));
+    } else if (!currentVisitProforma && isNewPatientWithNoHistory) {
+      // Auto-expand for new patients so they can see the form to create first proforma
+      setExpandedCards(prev => ({ ...prev, clinical: true }));
     }
-  }, [selectedProforma]);
+  }, [selectedProforma, currentVisitProforma, isNewPatientWithNoHistory]);
 
   // Initialize currentDoctorDecision from existing proformas or default (only once)
   useEffect(() => {
@@ -3473,10 +3486,26 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                 </div>
               ) : null}
 
-              {/* Show form if no current visit proforma exists OR if user is editing */}
-              {(!currentVisitProforma || showProformaForm) && (
+              {/* Show form if no current visit proforma exists OR if user is editing OR if new patient */}
+              {/* Always show for new patients without history */}
+              {(() => {
+                // Always show form for new patients without history
+                if (isNewPatientWithNoHistory) return true;
+                // Show form if no current visit proforma or user wants to edit
+                return showProformaForm || !currentVisitProforma;
+              })() && (
                 <div className={hasPastHistory && pastProformas.length > 0 ? "border-t border-gray-200 pt-6 mt-6" : ""}>
-                  {hasPastHistory && pastProformas.length > 0 && (
+                  {/* Show header for new patients or when adding new proforma */}
+                  {(!isExistingPatient || !hasPastHistory || pastProformas.length === 0) && !currentVisitProforma ? (
+                    <div className="mb-4">
+                      <h4 className="text-lg font-semibold text-gray-800">Walk-in Clinical Proforma</h4>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {!isExistingPatient 
+                          ? "Create the first walk-in clinical proforma for this new patient."
+                          : "Create a new walk-in clinical proforma for this visit."}
+                      </p>
+                    </div>
+                  ) : hasPastHistory && pastProformas.length > 0 ? (
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="text-lg font-semibold text-gray-800">New Walk-in Clinical Proforma</h4>
                       <Button
@@ -3489,10 +3518,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         Cancel
                       </Button>
                     </div>
-                  )}
+                  ) : null}
                   <EditClinicalProforma
-                    key={selectedProforma?.id || 'new-proforma'} // Force re-render when selectedProforma changes
-                    initialData={selectedProforma ? {
+                    key={selectedProforma?.id || `new-proforma-${patient?.id || Date.now()}`} // Force re-render when selectedProforma changes
+                    initialData={selectedProforma && selectedProforma.id ? {
             // Pass full existing proforma data if available
             ...selectedProforma,
             patient_id: selectedProforma.patient_id?.toString() || patient?.id?.toString() || '',
