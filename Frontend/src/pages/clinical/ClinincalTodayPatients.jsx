@@ -661,41 +661,21 @@ const ClinicalTodayPatients = () => {
         {isDoctor && !isLoadingRoom && myRoomData?.data?.current_room && (
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
             <div className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                    <FiHome className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Current Room Assignment</p>
-                    <p className="text-lg font-semibold text-gray-800">
-                      Room: {myRoomData.data.current_room}
-                    </p>
-                    {myRoomData.data.room_assignment_time && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Assigned at: {new Date(myRoomData.data.room_assignment_time).toLocaleString()}
-                      </p>
-                    )}
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                  <FiHome className="w-5 h-5 text-white" />
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedRoom(myRoomData.data.current_room);
-                    if (myRoomData.data.room_assignment_time) {
-                      const existingTime = new Date(myRoomData.data.room_assignment_time);
-                      setAssignmentTime(formatLocalDateTime(existingTime));
-                    } else {
-                      setAssignmentTime(formatLocalDateTime(new Date()));
-                    }
-                    // Scroll to room selection card
-                    document.getElementById('room-selection-card')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className="text-green-700 border-green-300 hover:bg-green-100"
-                >
-                  Change Room
-                </Button>
+                <div>
+                  <p className="text-sm text-gray-600">Current Room Assignment</p>
+                  <p className="text-lg font-semibold text-gray-800">
+                    Room: {myRoomData.data.current_room}
+                  </p>
+                  {myRoomData.data.room_assignment_time && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Assigned at: {new Date(myRoomData.data.room_assignment_time).toLocaleString()}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </Card>
