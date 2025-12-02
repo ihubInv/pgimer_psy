@@ -22,6 +22,7 @@ import {
 import { selectCurrentUser, logout } from '../features/auth/authSlice';
 import { isMWO } from '../utils/constants';
 import { apiSlice } from '../app/api/apiSlice';
+import { useSession } from '../contexts/SessionContext';
 import PGI_Logo from '../assets/PGI_Logo.png';
 
 // MWO Sidebar Navigation Component
@@ -140,13 +141,22 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
   const dispatch = useDispatch();
   const user = useSelector(selectCurrentUser);
   const navigate = useNavigate();
+  const { handleLogout: handleSessionLogout } = useSession();
 
-  const handleLogout = () => {
-    dispatch(logout());
-    dispatch(apiSlice.util.resetApiState());
-    onClose(); // Close sidebar on mobile after logout
-    navigate('/login', { replace: true });
-    setTimeout(() => window.location.replace('/login'), 0);
+  const handleLogout = async () => {
+    try {
+      // Use session context logout which properly calls API and clears state
+      await handleSessionLogout();
+    } catch (err) {
+      console.error('Logout error:', err);
+      // Even if API call fails, clear local state
+      dispatch(logout());
+    } finally {
+      dispatch(apiSlice.util.resetApiState());
+      onClose(); // Close sidebar on mobile after logout
+      navigate('/login', { replace: true });
+      setTimeout(() => window.location.replace('/login'), 100);
+    }
   };
 
   // Prevent body scroll when sidebar is open on mobile

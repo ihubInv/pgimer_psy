@@ -66,15 +66,15 @@ export const SessionProvider = ({ children }) => {
     }
   }, [token, updateActivity]);
 
-  // Idle timer hook — **2 minutes** timeout
+  // Idle timer hook — **10 minutes** timeout
   useIdleTimer({
-    timeout: 120 * 1000, // ⏳ 2 minutes
+    timeout: 600 * 1000, // ⏳ 10 minutes
     onIdle: handleSessionExpired,
     onActive: handleActive,
     enabled: !!token && !isSessionExpired
   });
 
-  // Auto refresh token before expiry (every 90 secs)
+  // Auto refresh token before expiry (every 8 minutes for 10-minute session)
   useEffect(() => {
     if (!token || isSessionExpired) return;
 
@@ -106,20 +106,20 @@ export const SessionProvider = ({ children }) => {
           handleSessionExpired();
         }
       }
-    }, 90000); // 🔁 90 seconds
+    }, 480000); // 🔁 8 minutes (refresh before 10-minute expiry)
 
     return () => clearInterval(refreshInterval);
   }, [token, refreshToken, dispatch, isSessionExpired, handleSessionExpired]);
 
-  // Every 30 seconds -> check session status
+  // Every 2 minutes -> check session status (for 10-minute session)
   useEffect(() => {
     if (!token || isSessionExpired) return;
 
     const interval = setInterval(async () => {
       const diff = Date.now() - lastActivityRef.current;
 
-      // Skip check if user is active (within 40 seconds)
-      if (diff < 40000) return;
+      // Skip check if user is active (within 5 minutes for 10-minute session)
+      if (diff < 300000) return; // 5 minutes
 
       try {
         const result = await refreshToken().unwrap();
@@ -140,13 +140,14 @@ export const SessionProvider = ({ children }) => {
           handleSessionExpired();
         }
       }
-    }, 30000);
+    }, 120000); // 2 minutes
 
     return () => clearInterval(interval);
   }, [token, refreshToken, dispatch, isSessionExpired, handleSessionExpired]);
 
   // Reset session expired state when user logs in (token changes from null to a value)
-  // This ensures the session expired popup disappears after successful login
+  // Clear session expired state when user logs out (token becomes null)
+  // This ensures the session expired popup disappears after login/logout
   useEffect(() => {
     if (token) {
       // User has a valid token (logged in) - ensure session expired state is reset
@@ -156,6 +157,12 @@ export const SessionProvider = ({ children }) => {
       }
       // Reset activity timestamp on login
       lastActivityRef.current = Date.now();
+    } else {
+      // User logged out - clear session expired state
+      if (isSessionExpired) {
+        setIsSessionExpired(false);
+        setIsUIFrozen(false);
+      }
     }
   }, [token, isSessionExpired]);
 

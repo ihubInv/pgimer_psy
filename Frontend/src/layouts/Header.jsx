@@ -3,20 +3,31 @@ import { useDispatch, useSelector } from 'react-redux';
 import { FiLogOut, FiUser, FiMenu } from 'react-icons/fi';
 import { logout, selectCurrentUser } from '../features/auth/authSlice';
 import { apiSlice } from '../app/api/apiSlice';
+import { useLogoutMutation } from '../features/auth/authApiSlice';
+import { useSession } from '../contexts/SessionContext';
 import PGI_Logo from '../assets/PGI_Logo.png';
 
 const Header = ({ onMenuClick, sidebarMinimized = false, sidebarOpen = false }) => {
   const dispatch = useDispatch();
   const user = useSelector(selectCurrentUser);
   const navigate = useNavigate();
+  const { handleLogout: handleSessionLogout } = useSession();
 
-  const handleLogout = () => {
-    dispatch(logout());
-    // Extra safety: clear RTK Query cache immediately and redirect
-    dispatch(apiSlice.util.resetApiState());
-    navigate('/login', { replace: true });
-    // Ensure full in-memory reset in rare cases
-    setTimeout(() => window.location.replace('/login'), 0);
+  const handleLogout = async () => {
+    try {
+      // Use session context logout which properly calls API and clears state
+      await handleSessionLogout();
+    } catch (err) {
+      console.error('Logout error:', err);
+      // Even if API call fails, clear local state
+      dispatch(logout());
+    } finally {
+      // Extra safety: clear RTK Query cache immediately and redirect
+      dispatch(apiSlice.util.resetApiState());
+      navigate('/login', { replace: true });
+      // Ensure full in-memory reset in rare cases
+      setTimeout(() => window.location.replace('/login'), 100);
+    }
   };
 
   return (

@@ -447,7 +447,7 @@ class SessionController {
 
   /**
    * Refresh access token
-   * Session expires if user inactive for 120 seconds (2 minutes)
+   * Session expires if user inactive for 600 seconds (10 minutes)
    */
   static async refreshToken(req, res) {
     try {
@@ -468,12 +468,12 @@ class SessionController {
         });
       }
 
-      // Check inactivity (120 seconds = 2 minutes)
+      // Check inactivity (600 seconds = 10 minutes)
       const lastActivity = new Date(tokenRecord.last_activity);
       const now = new Date();
       const inactiveSeconds = (now - lastActivity) / 1000;
 
-      if (inactiveSeconds > 120) {
+      if (inactiveSeconds > 600) {
         await tokenRecord.revoke();
 
         res.clearCookie('refreshToken', {
@@ -502,7 +502,7 @@ class SessionController {
       // Update activity
       await tokenRecord.updateActivity();
 
-      // Generate new access token (expires in 120 sec)
+      // Generate new access token (expires in 600 sec = 10 minutes)
       const accessToken = generateAccessToken({
         userId: user.id,
         email: user.email,
@@ -513,7 +513,7 @@ class SessionController {
         success: true,
         data: {
           accessToken,
-          expiresIn: 120 // 2 minutes
+          expiresIn: 600 // 10 minutes
         }
       });
 
@@ -601,7 +601,7 @@ class SessionController {
 
   /**
    * Get session info
-   * Session expires after 120 seconds (2 minutes) of inactivity
+   * Session expires after 600 seconds (10 minutes) of inactivity
    */
   static async getSessionInfo(req, res) {
     try {
@@ -622,9 +622,9 @@ class SessionController {
         });
       }
 
-      // Calculate expiry (120 sec = 2 minutes)
+      // Calculate expiry (600 sec = 10 minutes)
       const lastActivity = new Date(tokenRecord.last_activity);
-      const sessionExpiresAt = new Date(lastActivity.getTime() + 120 * 1000);
+      const sessionExpiresAt = new Date(lastActivity.getTime() + 600 * 1000);
       const now = new Date();
       const secondsUntilExpiry = Math.max(
         0,
