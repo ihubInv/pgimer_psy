@@ -1426,6 +1426,10 @@ router.get('/patient/:patient_id', authenticateToken, ClinicalController.getClin
  *       200:
  *         description: Options fetched
  */
+// Get all groups with their options
+router.get('/options', authenticateToken, ClinicalOptionsController.getAllGroups);
+
+// Get options for a specific group
 router.get('/options/:group', authenticateToken, ClinicalOptionsController.getGroup);
 
 /**
@@ -1451,11 +1455,46 @@ router.get('/options/:group', authenticateToken, ClinicalOptionsController.getGr
  *             properties:
  *               label:
  *                 type: string
+ *               display_order:
+ *                 type: integer
  *     responses:
  *       201:
  *         description: Option added
  */
 router.post('/options/:group', authenticateToken, ClinicalOptionsController.addOption);
+
+/**
+ * @swagger
+ * /api/clinical-proformas/options/{id}:
+ *   put:
+ *     summary: Update an option
+ *     tags: [Walk-in Clinical Proforma]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               label:
+ *                 type: string
+ *               display_order:
+ *                 type: integer
+ *               is_active:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Option updated
+ */
+router.put('/options/:id', authenticateToken, ClinicalOptionsController.updateOption);
 
 /**
  * @swagger

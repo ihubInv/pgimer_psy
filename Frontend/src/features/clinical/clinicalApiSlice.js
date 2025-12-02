@@ -2,27 +2,47 @@ import { apiSlice } from '../../app/api/apiSlice';
 
 export const clinicalApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
+    // Get all clinical options (all groups)
+    getAllClinicalOptions: builder.query({
+      query: () => `/clinical-proformas/options`,
+      providesTags: ['ClinicalOptions'],
+      transformResponse: (resp) => resp?.data || {},
+    }),
     // Dynamic options for clinical groups
     getClinicalOptions: builder.query({
       query: (group) => `/clinical-proformas/options/${group}`,
-      providesTags: (result, error, group) => [{ type: 'ClinicalOptions', id: group }],
+      providesTags: (result, error, group) => [{ type: 'ClinicalOptions', id: group }, 'ClinicalOptions'],
       transformResponse: (resp) => resp?.data?.options || [],
     }),
     addClinicalOption: builder.mutation({
-      query: ({ group, label }) => ({
+      query: ({ group, label, display_order }) => ({
         url: `/clinical-proformas/options/${group}`,
         method: 'POST',
-        body: { label },
+        body: { label, display_order },
       }),
-      invalidatesTags: (result, error, { group }) => [{ type: 'ClinicalOptions', id: group }],
+      invalidatesTags: (result, error, { group }) => [
+        { type: 'ClinicalOptions', id: group },
+        'ClinicalOptions'
+      ],
+    }),
+    updateClinicalOption: builder.mutation({
+      query: ({ id, label, display_order, is_active }) => ({
+        url: `/clinical-proformas/options/${id}`,
+        method: 'PUT',
+        body: { label, display_order, is_active },
+      }),
+      invalidatesTags: ['ClinicalOptions'],
     }),
     deleteClinicalOption: builder.mutation({
-      query: ({ group, label }) => ({
+      query: ({ group, label, id, hard_delete }) => ({
         url: `/clinical-proformas/options/${group}`,
         method: 'DELETE',
-        body: { label },
+        body: { label, id, hard_delete },
       }),
-      invalidatesTags: (result, error, { group }) => [{ type: 'ClinicalOptions', id: group }],
+      invalidatesTags: (result, error, { group }) => [
+        { type: 'ClinicalOptions', id: group },
+        'ClinicalOptions'
+      ],
     }),
     getAllClinicalProformas: builder.query({
       query: ({ page = 1, limit = 10, ...filters }) => ({
@@ -139,7 +159,9 @@ export const {
   useGetComplexCasesQuery,
   useGetCasesByDecisionQuery,
   useGetVisitTrendsQuery,
+  useGetAllClinicalOptionsQuery,
   useGetClinicalOptionsQuery,
   useAddClinicalOptionMutation,
+  useUpdateClinicalOptionMutation,
   useDeleteClinicalOptionMutation,
 } = clinicalApiSlice;

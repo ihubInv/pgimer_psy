@@ -5,8 +5,10 @@ import {
   useGetClinicalProformaByIdQuery,
   useUpdateClinicalProformaMutation,
   useCreateClinicalProformaMutation,
+  useGetAllClinicalOptionsQuery,
   useGetClinicalOptionsQuery,
   useAddClinicalOptionMutation,
+  useUpdateClinicalOptionMutation,
   useDeleteClinicalOptionMutation,
   useGetAllClinicalProformasQuery
 } from '../../features/clinical/clinicalApiSlice';
@@ -1124,7 +1126,11 @@ console.log("existingPrescriptionData", existingPrescriptionData);
   // Always show form, even if proforma not found - allow editing/creating
   // initialFormData will always have default values now
 
-  // Default options for checkbox groups
+  // Fetch all clinical options from database
+  const { data: allOptionsData, isLoading: isLoadingOptions } = useGetAllClinicalOptionsQuery();
+  
+  // Default options for checkbox groups - only used as fallback if database is completely empty
+  // These should be seeded into the database, not used directly
   const defaultOptions = {
     mood: ['Anxious', 'Sad', 'Cheerful', 'Agitated', 'Fearful', 'Irritable'],
     behaviour: ['Suspiciousness', 'Talking/Smiling to self', 'Hallucinatory behaviour', 'Increased goal-directed activity', 'Compulsions', 'Apathy', 'Anhedonia', 'Avolution', 'Stupor', 'Posturing', 'Stereotypy', 'Ambitendency', 'Disinhibition', 'Impulsivity', 'Anger outbursts', 'Suicide/self-harm attempts'],
@@ -1144,6 +1150,12 @@ console.log("existingPrescriptionData", existingPrescriptionData);
     mse_perception: ['Hallucinations - Auditory', 'Hallucinations - Visual', 'Hallucinations - Tactile', 'Hallucinations - Olfactory', 'Illusions', 'Depersonalization', 'Derealization'],
     mse_cognitive_function: ['Impaired', 'Not impaired'],
   };
+
+  // Use database options if available, otherwise fallback to defaults
+  // Only use defaults if database is completely empty (no groups at all)
+  const clinicalOptions = allOptionsData && Object.keys(allOptionsData).length > 0 
+    ? allOptionsData 
+    : defaultOptions;
 
   // Determine if this is embedded (has initialData prop) or standalone page
   const isEmbedded = !!propInitialData;
@@ -1348,18 +1360,18 @@ console.log("existingPrescriptionData", existingPrescriptionData);
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Complaints / History of Presenting Illness</h2>
                 <div className="space-y-6">
-                  <CheckboxGroup label="Mood" name="mood" value={formData.mood || []} onChange={handleChange} options={defaultOptions.mood} />
-                  <CheckboxGroup label="Behaviour" name="behaviour" value={formData.behaviour || []} onChange={handleChange} options={defaultOptions.behaviour} />
-                  <CheckboxGroup label="Speech" name="speech" value={formData.speech || []} onChange={handleChange} options={defaultOptions.speech} />
-                  <CheckboxGroup label="Thought" name="thought" value={formData.thought || []} onChange={handleChange} options={defaultOptions.thought} />
-                  <CheckboxGroup label="Perception" name="perception" value={formData.perception || []} onChange={handleChange} options={defaultOptions.perception} />
-                  <CheckboxGroup label="Somatic" name="somatic" value={formData.somatic || []} onChange={handleChange} options={defaultOptions.somatic} />
-                  <CheckboxGroup label="Bio-functions" name="bio_functions" value={formData.bio_functions || []} onChange={handleChange} options={defaultOptions.bio_functions} />
-                  <CheckboxGroup label="Adjustment" name="adjustment" value={formData.adjustment || []} onChange={handleChange} options={defaultOptions.adjustment} />
-                  <CheckboxGroup label="Cognitive Function" name="cognitive_function" value={formData.cognitive_function || []} onChange={handleChange} options={defaultOptions.cognitive_function} />
-                  <CheckboxGroup label="Fits" name="fits" value={formData.fits || []} onChange={handleChange} options={defaultOptions.fits} />
-                  <CheckboxGroup label="Sexual Problem" name="sexual_problem" value={formData.sexual_problem || []} onChange={handleChange} options={defaultOptions.sexual_problem} />
-                  <CheckboxGroup label="Substance Use" name="substance_use" value={formData.substance_use || []} onChange={handleChange} options={defaultOptions.substance_use} />
+                  <CheckboxGroup label="Mood" name="mood" value={formData.mood || []} onChange={handleChange} options={clinicalOptions.mood || []} />
+                  <CheckboxGroup label="Behaviour" name="behaviour" value={formData.behaviour || []} onChange={handleChange} options={clinicalOptions.behaviour || []} />
+                  <CheckboxGroup label="Speech" name="speech" value={formData.speech || []} onChange={handleChange} options={clinicalOptions.speech || []} />
+                  <CheckboxGroup label="Thought" name="thought" value={formData.thought || []} onChange={handleChange} options={clinicalOptions.thought || []} />
+                  <CheckboxGroup label="Perception" name="perception" value={formData.perception || []} onChange={handleChange} options={clinicalOptions.perception || []} />
+                  <CheckboxGroup label="Somatic" name="somatic" value={formData.somatic || []} onChange={handleChange} options={clinicalOptions.somatic || []} />
+                  <CheckboxGroup label="Bio-functions" name="bio_functions" value={formData.bio_functions || []} onChange={handleChange} options={clinicalOptions.bio_functions || []} />
+                  <CheckboxGroup label="Adjustment" name="adjustment" value={formData.adjustment || []} onChange={handleChange} options={clinicalOptions.adjustment || []} />
+                  <CheckboxGroup label="Cognitive Function" name="cognitive_function" value={formData.cognitive_function || []} onChange={handleChange} options={clinicalOptions.cognitive_function || []} />
+                  <CheckboxGroup label="Fits" name="fits" value={formData.fits || []} onChange={handleChange} options={clinicalOptions.fits || []} />
+                  <CheckboxGroup label="Sexual Problem" name="sexual_problem" value={formData.sexual_problem || []} onChange={handleChange} options={clinicalOptions.sexual_problem || []} />
+                  <CheckboxGroup label="Substance Use" name="substance_use" value={formData.substance_use || []} onChange={handleChange} options={clinicalOptions.substance_use || []} />
                 </div>
               </div>
 
@@ -1386,7 +1398,7 @@ console.log("existingPrescriptionData", existingPrescriptionData);
                     name="associated_medical_surgical"
                     value={formData.associated_medical_surgical || []}
                     onChange={handleChange}
-                    options={defaultOptions.associated_medical_surgical}
+                    options={clinicalOptions.associated_medical_surgical || []}
                   />
                 </div>
               </div>
@@ -1395,14 +1407,14 @@ console.log("existingPrescriptionData", existingPrescriptionData);
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Mental State Examination (MSE)</h2>
                 <div className="space-y-6">
-                  <CheckboxGroup label="Behaviour" name="mse_behaviour" value={formData.mse_behaviour || []} onChange={handleChange} options={defaultOptions.mse_behaviour} />
-                  <CheckboxGroup label="Affect & Mood" name="mse_affect" value={formData.mse_affect || []} onChange={handleChange} options={defaultOptions.mse_affect} />
+                  <CheckboxGroup label="Behaviour" name="mse_behaviour" value={formData.mse_behaviour || []} onChange={handleChange} options={clinicalOptions.mse_behaviour || []} />
+                  <CheckboxGroup label="Affect & Mood" name="mse_affect" value={formData.mse_affect || []} onChange={handleChange} options={clinicalOptions.mse_affect || []} />
                   <CheckboxGroup
                     label="Thought (Flow, Form, Content)"
                     name="mse_thought"
                     value={formData.mse_thought || []}
                     onChange={handleChange}
-                    options={[]}
+                    options={clinicalOptions.mse_thought || []}
                     rightInlineExtra={
                       <Input
                         name="mse_delusions"
@@ -1413,8 +1425,8 @@ console.log("existingPrescriptionData", existingPrescriptionData);
                       />
                     }
                   />
-                  <CheckboxGroup label="Perception" name="mse_perception" value={formData.mse_perception || []} onChange={handleChange} options={defaultOptions.mse_perception} />
-                  <CheckboxGroup label="Cognitive Functions" name="mse_cognitive_function" value={formData.mse_cognitive_function || []} onChange={handleChange} options={defaultOptions.mse_cognitive_function} />
+                  <CheckboxGroup label="Perception" name="mse_perception" value={formData.mse_perception || []} onChange={handleChange} options={clinicalOptions.mse_perception || []} />
+                  <CheckboxGroup label="Cognitive Functions" name="mse_cognitive_function" value={formData.mse_cognitive_function || []} onChange={handleChange} options={clinicalOptions.mse_cognitive_function || []} />
                 </div>
               </div>
 

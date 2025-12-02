@@ -34,7 +34,12 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
     };
   
     useEffect(() => {
-      setLocalOptions(Array.from(new Set([...(remoteOptions || []), ...(options || [])])));
+      // Prioritize remote options from database over hardcoded options prop
+      // This ensures deleted items don't reappear from the options prop
+      const mergedOptions = remoteOptions && remoteOptions.length > 0 
+        ? remoteOptions 
+        : (options || []);
+      setLocalOptions(Array.from(new Set(mergedOptions)));
     }, [remoteOptions, options]);
   
     const toggle = (opt) => {
@@ -43,13 +48,26 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
       onChange({ target: { name, value: next } });
     };
   
-    const handleDelete = (opt) => {
+    const handleDelete = async (opt) => {
+      // Remove from UI immediately
       setLocalOptions((prev) => prev.filter((o) => o !== opt));
       if (value.includes(opt)) {
         const next = value.filter((v) => v !== opt);
         onChange({ target: { name, value: next } });
       }
-      deleteOption({ group: name, label: opt }).catch(() => { });
+      // Hard delete from database (permanently remove)
+      try {
+        await deleteOption({ group: name, label: opt, hard_delete: true }).unwrap();
+      } catch (error) {
+        // If hard delete fails, try soft delete
+        try {
+          await deleteOption({ group: name, label: opt, hard_delete: false }).unwrap();
+        } catch (softError) {
+          console.error('Failed to delete option:', softError);
+          // Re-add to UI if deletion failed
+          setLocalOptions((prev) => [...prev, opt].sort());
+        }
+      }
     };
   
     const handleAddClick = () => setShowAdd(true);
