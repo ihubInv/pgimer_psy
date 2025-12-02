@@ -782,19 +782,73 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
     );
   }
 
+  // Helper function to format array values
+  const formatArrayValue = (value) => {
+    if (!value) return null;
+    
+    // If it's already an array, format it
+    if (Array.isArray(value)) {
+      if (value.length === 0) return null;
+      return value.join(', ');
+    }
+    
+    // If it's a string that looks like a JSON array, try to parse it
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      
+      // Check if it looks like a JSON array (starts with [ and ends with ])
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.join(', ');
+          }
+        } catch (e) {
+          // If parsing fails, return the original string
+        }
+      }
+      
+      // Check if it's a malformed JSON array with curly braces (starts with { and ends with })
+      // Example: {"Depressive","Suicidal","Obsessions"}
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          // Try to parse as JSON first
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.join(', ');
+          }
+        } catch (e) {
+          // If JSON.parse fails, try to extract values from malformed format
+          // Remove outer braces and split by comma
+          const innerContent = trimmed.slice(1, -1); // Remove { and }
+          // Extract quoted strings
+          const matches = innerContent.match(/"([^"]+)"/g);
+          if (matches && matches.length > 0) {
+            const values = matches.map(m => m.slice(1, -1)); // Remove quotes
+            return values.join(', ');
+          }
+        }
+      }
+    }
+    
+    // Return the value as is if it's not an array
+    return value;
+  };
+
   const InfoSection = ({ title, data }) => (
     <Card title={title} className="mb-6">
       <div className="space-y-4">
-        {Object.entries(data).map(([key, value]) => (
-          value && (
+        {Object.entries(data).map(([key, value]) => {
+          const formattedValue = formatArrayValue(value);
+          return formattedValue && (
             <div key={key}>
               <label className="text-sm font-medium text-gray-500 capitalize">
                 {key.replace(/_/g, ' ')}
               </label>
-              <p className="text-gray-900 mt-1 whitespace-pre-wrap">{value}</p>
+              <p className="text-gray-900 mt-1 whitespace-pre-wrap">{formattedValue}</p>
             </div>
-          )
-        ))}
+          );
+        })}
       </div>
     </Card>
   );
