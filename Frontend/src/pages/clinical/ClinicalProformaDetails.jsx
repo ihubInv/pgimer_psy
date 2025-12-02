@@ -1,9 +1,10 @@
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useRef } from 'react';
 import { toast } from 'react-toastify';
 import { FiEdit, FiTrash2, FiArrowLeft, FiPrinter, FiFileText, FiActivity } from 'react-icons/fi';
 import {
   useDeleteClinicalProformaMutation,
+  useGetClinicalProformaByIdQuery,
 } from '../../features/clinical/clinicalApiSlice';
 import { useGetADLFileByIdQuery } from '../../features/adl/adlApiSlice';
 import { useGetPatientFilesQuery } from '../../features/patients/patientFilesApiSlice';
@@ -14,14 +15,27 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import FilePreview from '../../components/FilePreview';
 import { formatDate } from '../../utils/formatters';
 import { getDoctorDecisionLabel } from '../../utils/enumMappings';
+import { useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
+import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
+import PatientClinicalHistory from '../../components/PatientClinicalHistory';
 
-const ClinicalProformaDetails = ({ proforma }) => {
+const ClinicalProformaDetails = ({ proforma: propProforma }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { id: routeId } = useParams(); // Get id from route params
   const returnTab = searchParams.get('returnTab'); // Get returnTab from URL
   
+  // Fetch proforma data if accessed via route (no prop provided)
+  const { data: proformaData, isLoading: isLoadingProforma, error: proformaError } = useGetClinicalProformaByIdQuery(
+    routeId,
+    { skip: !routeId || !!propProforma } // Skip if prop is provided or no routeId
+  );
+  
+  // Use prop if provided, otherwise use fetched data
+  const proforma = propProforma || proformaData?.data?.proforma;
+  
   // Get proforma ID
-  const id = proforma?.id;
+  const id = proforma?.id || routeId;
   
   // Delete mutation
   const [deleteProforma, { isLoading: isDeleting }] = useDeleteClinicalProformaMutation();
@@ -40,6 +54,21 @@ const ClinicalProformaDetails = ({ proforma }) => {
     skip: !patientId
   });
   const existingFiles = patientFilesData?.data?.files || [];
+
+  // Fetch patient visit history and clinical proformas to show history
+  const { data: visitHistoryData, isLoading: isLoadingVisitHistory } = useGetPatientVisitHistoryQuery(
+    patientId,
+    { skip: !patientId }
+  );
+  const { data: patientClinicalData } = useGetClinicalProformaByPatientIdQuery(
+    patientId,
+    { skip: !patientId }
+  );
+  const visitHistory = visitHistoryData || [];
+  const patientProformas = patientClinicalData?.data?.proformas || [];
+  // Filter out current proforma from history
+  const otherProformas = patientProformas.filter(p => p.id !== proforma?.id);
+  const hasHistory = visitHistory.length > 0 || otherProformas.length > 0;
 
   const handleDelete = async () => {
     if (!id) {
@@ -706,6 +735,32 @@ const ClinicalProformaDetails = ({ proforma }) => {
     };
   };
 
+  // Show loading state when fetching proforma via route
+  if (isLoadingProforma) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  // Show error state if proforma fetch failed
+  if (proformaError) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-500 mb-4">Failed to load clinical proforma</p>
+        <p className="text-gray-500 mb-4">{proformaError?.data?.message || 'An error occurred'}</p>
+        <Button 
+          className="mt-4" 
+          onClick={handleBack}
+        >
+          <FiArrowLeft className="mr-2" /> Back
+        </Button>
+      </div>
+    );
+  }
+
+  // Show not found if no proforma data
   if (!proforma) {
     return (
       <div className="text-center py-12">
@@ -746,6 +801,21 @@ const ClinicalProformaDetails = ({ proforma }) => {
 
   return (
     <div className="space-y-6">
+      {/* Patient Visit History Section - Show if patient has other visits/proformas */}
+      {hasHistory && (
+        <PatientClinicalHistory
+          patient={{
+            id: patientId,
+            name: proforma?.patient_name,
+            cr_no: proforma?.cr_no
+          }}
+          visitHistory={visitHistory}
+          clinicalProformas={otherProformas}
+          onAddNewProforma={() => navigate(`/patients/${patientId}?edit=true&mode=create`)}
+          isLoading={isLoadingVisitHistory}
+        />
+      )}
+
       {/* <div className="flex items-center justify-between no-print">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={handleBack}>

@@ -5,7 +5,7 @@ import {
   FiUser, FiPhone,  FiClock, FiEye,
   FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome
 } from 'react-icons/fi';
-import { useGetAllPatientsQuery, useMarkVisitCompletedMutation } from '../../features/patients/patientsApiSlice';
+import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
 import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, roomsApiSlice } from '../../features/rooms/roomsApiSlice';
 import { useDispatch } from 'react-redux';
@@ -18,7 +18,7 @@ import { selectCurrentUser } from '../../features/auth/authSlice';
 import { isAdmin, isMWO, isJrSr, isSR, isJR } from '../../utils/constants';
 
 // Component to check for existing proforma and render patient row
-const PatientRow = ({ patient, isNewPatient, navigate, onMarkCompleted }) => {
+const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkCompleted }) => {
   const [markCompleted, { isLoading: isMarkingCompleted }] = useMarkVisitCompletedMutation();
   const { data: proformaData, isLoading: isLoadingProformas, refetch: refetchProformas } = useGetClinicalProformaByPatientIdQuery(
     patient.id, 
@@ -28,6 +28,12 @@ const PatientRow = ({ patient, isNewPatient, navigate, onMarkCompleted }) => {
       refetchOnFocus: true,
       refetchOnReconnect: true,
     }
+  );
+  
+  // Fetch visit history to check for past visits
+  const { data: visitHistoryData } = useGetPatientVisitHistoryQuery(
+    patient.id,
+    { skip: !patient.id }
   );
   
   const handleMarkCompleted = async () => {
@@ -48,7 +54,7 @@ const PatientRow = ({ patient, isNewPatient, navigate, onMarkCompleted }) => {
     }
   };
   
-  // Check if patient has a proforma created today
+  // Helper function to convert date to IST date string (YYYY-MM-DD)
   const toISTDateString = (dateInput) => {
     try {
       if (!dateInput) return '';
@@ -59,6 +65,37 @@ const PatientRow = ({ patient, isNewPatient, navigate, onMarkCompleted }) => {
       return '';
     }
   };
+
+  // Check if patient was created today
+  const isPatientCreatedToday = () => {
+    if (!patient?.created_at) return false;
+    const todayDateString = toISTDateString(new Date());
+    const patientCreatedDate = toISTDateString(patient.created_at);
+    return patientCreatedDate && patientCreatedDate === todayDateString;
+  };
+
+  // Get visit history and proformas
+  const visitHistory = visitHistoryData?.visitHistory || [];
+  const proformas = proformaData?.data?.proformas || [];
+  
+  // Filter out today's visits from history to get only past visits
+  const todayDateString = toISTDateString(new Date());
+  const pastVisitHistory = visitHistory.filter(visit => {
+    const visitDate = toISTDateString(visit.visit_date);
+    return visitDate && visitDate !== todayDateString;
+  });
+  
+  // Filter out today's proformas to get only past proformas
+  const pastProformas = proformas.filter(proforma => {
+    const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
+    return proformaDate && proformaDate !== todayDateString;
+  });
+
+  // Check if patient has actual past history (not including today's visits/proformas)
+  const hasPastHistory = pastVisitHistory.length > 0 || pastProformas.length > 0;
+
+  // Determine if patient is truly new: created today AND has no past history
+  const isNewPatient = isPatientCreatedToday() && !hasPastHistory;
   
   // Check if visit is already completed
   const isCompleted = patient.visit_status === 'completed';
@@ -81,12 +118,8 @@ const PatientRow = ({ patient, isNewPatient, navigate, onMarkCompleted }) => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [patient.id, refetchProformas]);
 
-  const proformas = proformaData?.data?.proformas || [];
   const hasExistingProforma = proformas.length > 0;
   const latestProformaId = hasExistingProforma ? proformas[0].id : null;
-  
-  // Get today's date string in IST
-  const todayDateString = toISTDateString(new Date());
   
   // Check if patient has a proforma created today
   const hasProformaToday = proformas.some(proforma => {
@@ -122,6 +155,7 @@ const PatientRow = ({ patient, isNewPatient, navigate, onMarkCompleted }) => {
   };
 
   // Color coding: New patients = blue border, Existing patients = green border
+  // Use the calculated isNewPatient (based on created today AND no past history)
   const borderColor = isNewPatient 
     ? 'border-l-4 border-l-blue-500 bg-gradient-to-r from-blue-50/30 to-white' 
     : 'border-l-4 border-l-green-500 bg-gradient-to-r from-green-50/30 to-white';
@@ -144,7 +178,7 @@ const PatientRow = ({ patient, isNewPatient, navigate, onMarkCompleted }) => {
                     ? 'bg-blue-100 text-blue-700 border border-blue-200' 
                     : 'bg-green-100 text-green-700 border border-green-200'
                 }`}>
-                  {isNewPatient ? 'New' : 'Existing'}
+                  {isNewPatient ? 'New Patient' : 'Existing Patient'}
                 </span>
                 {patient.age_group && (
                   <span className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${getAgeGroupColor(patient.age_group)}`}>
@@ -510,15 +544,19 @@ const ClinicalTodayPatients = () => {
   });
   const deduplicatedApiPatients = Array.from(uniquePatientsMap.values());
 
-  // Helper function to determine if patient is new (created today) or existing (visit today)
-  const isNewPatient = (patient) => {
+  // Helper function to determine if patient is new (created today AND no past history)
+  // Note: This is a simplified check for the list view. The PatientRow component does a more detailed check
+  // by fetching visit history and proformas. For the list view, we use a basic check.
+  const isNewPatientBasic = (patient) => {
     if (!patient?.created_at) return false;
     const targetDate = toISTDateString(selectedDate || new Date());
     const patientCreatedDate = toISTDateString(patient.created_at);
     return patientCreatedDate && patientCreatedDate === targetDate;
   };
 
-  const isExistingPatient = (patient) => {
+  // For existing patient check: has visit today OR was not created today
+  // The PatientRow component will do a more accurate check using actual history data
+  const isExistingPatientBasic = (patient) => {
     const targetDate = toISTDateString(selectedDate || new Date());
     const hasVisitToday = patient?.has_visit_today === true ||
       (patient?.last_assigned_date && 
@@ -703,13 +741,13 @@ const ClinicalTodayPatients = () => {
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded-full bg-blue-500 border-2 border-blue-600"></div>
                     <span className="text-gray-600 font-medium">
-                      New ({todayPatients.filter(isNewPatient).length})
+                      New ({todayPatients.filter(isNewPatientBasic).length})
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded-full bg-green-500 border-2 border-green-600"></div>
                     <span className="text-gray-600 font-medium">
-                      Existing ({todayPatients.filter(isExistingPatient).length})
+                      Existing ({todayPatients.filter(isExistingPatientBasic).length})
                     </span>
                   </div>
                 </div>
@@ -844,7 +882,7 @@ const ClinicalTodayPatients = () => {
               <PatientRow 
                 key={patient.id} 
                 patient={patient} 
-                isNewPatient={isNewPatient(patient)}
+                isNewPatient={isNewPatientBasic(patient)}
                 navigate={navigate}
                 onMarkCompleted={handleMarkCompleted}
               />
@@ -858,9 +896,9 @@ const ClinicalTodayPatients = () => {
               <div className="text-sm text-gray-700 font-medium">
                 Showing <span className="font-semibold text-gray-900">{filteredPatients.length}</span> patient{filteredPatients.length !== 1 ? 's' : ''} for today
                 <span className="ml-3 text-gray-500">
-                  (<span className="text-blue-600 font-semibold">{todayPatients.filter(isNewPatient).length} new</span>
+                  (<span className="text-blue-600 font-semibold">{todayPatients.filter(isNewPatientBasic).length} new</span>
                   {' / '}
-                  <span className="text-green-600 font-semibold">{todayPatients.filter(isExistingPatient).length} existing</span>)
+                  <span className="text-green-600 font-semibold">{todayPatients.filter(isExistingPatientBasic).length} existing</span>)
                 </span>
               </div>
             </div>

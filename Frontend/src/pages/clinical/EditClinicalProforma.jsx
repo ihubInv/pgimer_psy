@@ -13,7 +13,8 @@ import {
   useGetAllClinicalProformasQuery
 } from '../../features/clinical/clinicalApiSlice';
 import { useGetADLFileByIdQuery, useGetAllADLFilesQuery,useUpdateADLFileMutation, useCreateADLFileMutation } from '../../features/adl/adlApiSlice';
-import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
+import { useGetPatientByIdQuery, useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
+import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
 import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
 import { useGetPatientFilesQuery, useUpdatePatientFilesMutation, useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
 import { useSelector } from 'react-redux';
@@ -36,6 +37,7 @@ import { CheckboxGroup } from '../../components/CheckboxGroup';
 import { ICD11CodeSelector } from '../../components/ICD11CodeSelector';
 import FileUpload from '../../components/FileUpload';
 import FilePreview from '../../components/FilePreview';
+import PatientClinicalHistory from '../../components/PatientClinicalHistory';
 
 
 
@@ -93,13 +95,49 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     { skip: !isComplexCase }
   );
 
-  // Fetch patient data - use patient_id from propInitialData or proforma
-  const patientId = propInitialData?.patient_id || proforma?.patient_id;
+  // Fetch patient data - use patient_id from propInitialData or proforma or URL
+  const patientId = propInitialData?.patient_id || proforma?.patient_id || patientIdFromUrl;
   const { data: patientData } = useGetPatientByIdQuery(
     patientId,
     { skip: !patientId }
   );
   const patient = patientData?.data?.patient;
+
+  // Fetch visit history and clinical proformas for existing patients in create mode
+  const isCreateMode = mode === 'create' || (!isUpdateMode && !propInitialData?.id);
+  const { data: visitHistoryData, isLoading: isLoadingVisitHistory } = useGetPatientVisitHistoryQuery(
+    patientId,
+    { skip: !patientId || !isCreateMode || !!propInitialData } // Skip if embedded (handled by parent)
+  );
+  const { data: patientClinicalData } = useGetClinicalProformaByPatientIdQuery(
+    patientId,
+    { skip: !patientId || !isCreateMode || !!propInitialData } // Skip if embedded (handled by parent)
+  );
+  const visitHistory = visitHistoryData || [];
+  const patientProformas = patientClinicalData?.data?.proformas || [];
+  const hasHistory = visitHistory.length > 0 || patientProformas.length > 0;
+
+  // State to control showing history vs form
+  const [showProformaForm, setShowProformaForm] = useState(() => {
+    // If embedded (has propInitialData), always show form
+    if (propInitialData) return true;
+    // Otherwise show form directly initially, will update when data loads
+    return true;
+  });
+
+  // Update showProformaForm when history data loads
+  useEffect(() => {
+    if (!propInitialData && isCreateMode) {
+      // If we have history data and haven't shown form yet, show history first
+      if (hasHistory && showProformaForm) {
+        setShowProformaForm(false);
+      }
+      // If no history and we're showing history, switch to form
+      else if (!hasHistory && !showProformaForm && !isLoadingVisitHistory) {
+        setShowProformaForm(true);
+      }
+    }
+  }, [hasHistory, isCreateMode, propInitialData, isLoadingVisitHistory, showProformaForm]);
 
   const { data: existingAdlFileData } = useGetAllADLFilesQuery({});
   console.log("existingAdlFile", existingAdlFileData);
@@ -1160,59 +1198,28 @@ console.log("existingPrescriptionData", existingPrescriptionData);
   // Determine if this is embedded (has initialData prop) or standalone page
   const isEmbedded = !!propInitialData;
 
+  // For standalone create mode with existing patient history, show history first
+  const shouldShowHistory = !isEmbedded && isCreateMode && !showProformaForm && hasHistory;
+
   const formContent = (
     <>
-      <form onSubmit={handleSubmitClinicalProforma}>
-        <Card className={isEmbedded ? "shadow-lg border-0 bg-white" : "mb-8 shadow-xl border-0 bg-white/80 backdrop-blur-sm"}>
-          {/* Collapsible Header */}
-          <div
-            className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            <div 
-              className="flex items-center gap-4 cursor-pointer flex-1"
-              onClick={() => toggleCard('clinicalProforma')}
-            >
-              <div className="p-3 bg-green-100 rounded-lg">
-                <FiClipboard className="h-6 w-6 text-green-600" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900"> Walk-in Clinical Proforma</h3>
-                {patient && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {patient.name || 'N/A'} - {patient.cr_no || 'N/A'}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePrintSection('Walk-in Clinical Proforma');
-                }}
-                className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Print Walk-in Clinical Proforma"
-              >
-                <FiPrinter className="w-4 h-4 text-blue-600" />
-              </Button>
-              <div 
-                className="cursor-pointer"
-                onClick={() => toggleCard('clinicalProforma')}
-              >
-                {expandedCards.clinicalProforma ? (
-                  <FiChevronUp className="h-6 w-6 text-gray-500" />
-                ) : (
-                  <FiChevronDown className="h-6 w-6 text-gray-500" />
-                )}
-              </div>
-            </div>
-          </div>
+      {/* Show patient history first if in standalone create mode and patient has history */}
+      {shouldShowHistory && (
+        <PatientClinicalHistory
+          patient={patient}
+          visitHistory={visitHistory}
+          clinicalProformas={patientProformas}
+          onAddNewProforma={() => setShowProformaForm(true)}
+          isLoading={isLoadingVisitHistory}
+        />
+      )}
 
-          {expandedCards.clinicalProforma && (
-            <div ref={printSectionRef} className="p-6 space-y-6">
+      {/* Show proforma form */}
+      {showProformaForm && (
+        <form onSubmit={handleSubmitClinicalProforma}>
+          {isEmbedded ? (
+            // When embedded, render form content directly without Card wrapper
+            <div ref={printSectionRef} className="space-y-6">
               {/* {!isEmbedded && <h1 className="text-3xl font-bold text-gray-900 mb-6">Edit Walk-in Clinical Proforma</h1>} */}
 
               {/* Basic Information Section */}
@@ -1622,9 +1629,440 @@ console.log("existingPrescriptionData", existingPrescriptionData);
                 </Button>
               </div>
             </div>
+          ) : (
+            // When standalone, render with Card wrapper
+            <Card className="mb-8 shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+            {/* Collapsible Header */}
+            <div
+              className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              <div 
+                className="flex items-center gap-4 cursor-pointer flex-1"
+                onClick={() => toggleCard('clinicalProforma')}
+              >
+                <div className="p-3 bg-green-100 rounded-lg">
+                  <FiClipboard className="h-6 w-6 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900"> Walk-in Clinical Proforma</h3>
+                  {patient && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {patient.name || 'N/A'} - {patient.cr_no || 'N/A'}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePrintSection('Walk-in Clinical Proforma');
+                  }}
+                  className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                  title="Print Walk-in Clinical Proforma"
+                >
+                  <FiPrinter className="w-4 h-4 text-blue-600" />
+                </Button>
+                <div 
+                  className="cursor-pointer"
+                  onClick={() => toggleCard('clinicalProforma')}
+                >
+                  {expandedCards.clinicalProforma ? (
+                    <FiChevronUp className="h-6 w-6 text-gray-500" />
+                  ) : (
+                    <FiChevronDown className="h-6 w-6 text-gray-500" />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {expandedCards.clinicalProforma && (
+              <div ref={printSectionRef} className="p-6 space-y-6">
+                {/* Basic Information Section */}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <DatePicker
+                      label="Date"
+                      name="date"
+                      value={formData.date || ''}
+                      onChange={handleChange}
+                      defaultToday={true}
+                    />
+                    <Input
+                      label="Patient Name"
+                      value={patient.name || ''}
+                      onChange={handleChange}
+                    />
+                    <Input
+                      label="Age"
+                      value={patient.age || ''}
+                      onChange={handleChange}
+                    />
+                    <Input
+                      label="Sex"
+                      value={patient.sex || ''}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
+
+                {/* Informant Section */}
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Informant</h2>
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-3">
+                      {[
+                        { v: true, t: 'Present' },
+                        { v: false, t: 'Absent' },
+                      ].map(({ v, t }) => (
+                        <label key={t} className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${formData.informant_present === v ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-gray-200 bg-white hover:bg-gray-50'
+                          }`}>
+                          <input
+                            type="radio"
+                            name="informant_present"
+                            checked={formData.informant_present === v}
+                            onChange={() => handleChange({ target: { name: 'informant_present', value: v } })}
+                            className="h-4 w-4 text-primary-600"
+                          />
+                          <span className="font-medium">{t}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Nature of information</h2>
+                    <div className="flex flex-wrap gap-3">
+                      {['Reliable', 'Unreliable', 'Adequate', 'Inadequate'].map((opt) => (
+                        <label key={opt} className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${formData.nature_of_information === opt ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-gray-200 bg-white hover:bg-gray-50'
+                          }`}>
+                          <input
+                            type="radio"
+                            name="nature_of_information"
+                            value={opt}
+                            checked={formData.nature_of_information === opt}
+                            onChange={handleChange}
+                            className="h-4 w-4 text-primary-600"
+                          />
+                          <span className="font-medium">{opt}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Onset Duration</h2>
+                        <div className="flex flex-wrap gap-3">
+                          {[{ v: '<1_week', t: '1. < 1 week' }, { v: '1w_1m', t: '2. 1 week – 1 month' }, { v: '>1_month', t: '3. > 1 month' }, { v: 'not_known', t: '4. Not known' }].map(({ v, t }) => (
+                            <label key={v} className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${formData.onset_duration === v ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-gray-200 bg-white hover:bg-gray-50'
+                              }`}>
+                              <input
+                                type="radio"
+                                name="onset_duration"
+                                value={v}
+                                checked={formData.onset_duration === v}
+                                onChange={handleChange}
+                                className="h-4 w-4 text-primary-600"
+                              />
+                              <span className="font-medium">{t}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Course</h2>
+                        <div className="flex flex-wrap gap-3">
+                          {['Continuous', 'Episodic', 'Fluctuating', 'Deteriorating', 'Improving'].map((opt) => (
+                            <label key={opt} className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${formData.course === opt ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-gray-200 bg-white hover:bg-gray-50'
+                              }`}>
+                              <input
+                                type="radio"
+                                name="course"
+                                value={opt}
+                                checked={formData.course === opt}
+                                onChange={handleChange}
+                                className="h-4 w-4 text-primary-600"
+                              />
+                              <span className="font-medium">{opt}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <Textarea
+                      label="Precipitating Factor"
+                      name="precipitating_factor"
+                      value={formData.precipitating_factor}
+                      onChange={handleChange}
+                      rows={3}
+                    />
+                    <Input
+                      label="Total Duration of Illness"
+                      name="illness_duration"
+                      value={formData.illness_duration}
+                      onChange={handleChange}
+                    />
+                    <Input
+                      label="Current Episode Duration / Worsening Since"
+                      name="current_episode_since"
+                      value={formData.current_episode_since}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
+
+                {/* Complaints / History of Presenting Illness */}
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Complaints / History of Presenting Illness</h2>
+                  <div className="space-y-6">
+                    <CheckboxGroup label="Mood" name="mood" value={formData.mood || []} onChange={handleChange} options={clinicalOptions.mood || []} />
+                    <CheckboxGroup label="Behaviour" name="behaviour" value={formData.behaviour || []} onChange={handleChange} options={clinicalOptions.behaviour || []} />
+                    <CheckboxGroup label="Speech" name="speech" value={formData.speech || []} onChange={handleChange} options={clinicalOptions.speech || []} />
+                    <CheckboxGroup label="Thought" name="thought" value={formData.thought || []} onChange={handleChange} options={clinicalOptions.thought || []} />
+                    <CheckboxGroup label="Perception" name="perception" value={formData.perception || []} onChange={handleChange} options={clinicalOptions.perception || []} />
+                    <CheckboxGroup label="Somatic" name="somatic" value={formData.somatic || []} onChange={handleChange} options={clinicalOptions.somatic || []} />
+                    <CheckboxGroup label="Bio-functions" name="bio_functions" value={formData.bio_functions || []} onChange={handleChange} options={clinicalOptions.bio_functions || []} />
+                    <CheckboxGroup label="Adjustment" name="adjustment" value={formData.adjustment || []} onChange={handleChange} options={clinicalOptions.adjustment || []} />
+                    <CheckboxGroup label="Cognitive Function" name="cognitive_function" value={formData.cognitive_function || []} onChange={handleChange} options={clinicalOptions.cognitive_function || []} />
+                    <CheckboxGroup label="Fits" name="fits" value={formData.fits || []} onChange={handleChange} options={clinicalOptions.fits || []} />
+                    <CheckboxGroup label="Sexual Problem" name="sexual_problem" value={formData.sexual_problem || []} onChange={handleChange} options={clinicalOptions.sexual_problem || []} />
+                    <CheckboxGroup label="Substance Use" name="substance_use" value={formData.substance_use || []} onChange={handleChange} options={clinicalOptions.substance_use || []} />
+                  </div>
+                </div>
+
+                {/* Additional History */}
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Additional History</h2>
+                  <div className="space-y-4">
+                    <Textarea
+                      label="Past Psychiatric History"
+                      name="past_history"
+                      value={formData.past_history}
+                      onChange={handleChange}
+                      rows={4}
+                    />
+                    <Textarea
+                      label="Family History"
+                      name="family_history"
+                      value={formData.family_history}
+                      onChange={handleChange}
+                      rows={4}
+                    />
+                    <CheckboxGroup
+                      label="Associated Medical/Surgical Illness"
+                      name="associated_medical_surgical"
+                      value={formData.associated_medical_surgical || []}
+                      onChange={handleChange}
+                      options={clinicalOptions.associated_medical_surgical || []}
+                    />
+                  </div>
+                </div>
+
+                {/* Mental State Examination (MSE) */}
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Mental State Examination (MSE)</h2>
+                  <div className="space-y-6">
+                    <CheckboxGroup label="Behaviour" name="mse_behaviour" value={formData.mse_behaviour || []} onChange={handleChange} options={clinicalOptions.mse_behaviour || []} />
+                    <CheckboxGroup label="Affect & Mood" name="mse_affect" value={formData.mse_affect || []} onChange={handleChange} options={clinicalOptions.mse_affect || []} />
+                    <CheckboxGroup
+                      label="Thought (Flow, Form, Content)"
+                      name="mse_thought"
+                      value={formData.mse_thought || []}
+                      onChange={handleChange}
+                      options={clinicalOptions.mse_thought || []}
+                      rightInlineExtra={
+                        <Input
+                          name="mse_delusions"
+                          value={formData.mse_delusions}
+                          onChange={handleChange}
+                          placeholder="Delusions / Ideas of (optional)"
+                          className="max-w-xs"
+                        />
+                      }
+                    />
+                    <CheckboxGroup label="Perception" name="mse_perception" value={formData.mse_perception || []} onChange={handleChange} options={clinicalOptions.mse_perception || []} />
+                    <CheckboxGroup label="Cognitive Functions" name="mse_cognitive_function" value={formData.mse_cognitive_function || []} onChange={handleChange} options={clinicalOptions.mse_cognitive_function || []} />
+                  </div>
+                </div>
+
+                {/* General Physical Examination */}
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">General Physical Examination</h2>
+                  <div className="space-y-4">
+                    <Textarea
+                      label="GPE Findings"
+                      name="gpe"
+                      value={formData.gpe}
+                      onChange={handleChange}
+                      rows={4}
+                      placeholder="BP, Pulse, Weight, BMI, General appearance, Systemic examination..."
+                    />
+                  </div>
+                </div>
+
+                {/* Diagnosis & Management */}
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Diagnosis & Management</h2>
+                  <div className="space-y-4">
+                    <Textarea
+                      label="Diagnosis"
+                      name="diagnosis"
+                      value={formData.diagnosis}
+                      onChange={handleChange}
+                      rows={3}
+                      placeholder="Primary and secondary diagnoses..."
+                    />
+                    <ICD11CodeSelector
+                      value={formData.icd_code}
+                      onChange={handleChange}
+                      error={errors.icd_code}
+                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <Textarea
+                        label="Disposal & Referral"
+                        name="disposal"
+                        value={formData.disposal}
+                        onChange={handleChange}
+                        rows={2}
+                        placeholder="Admission, discharge, follow-up..."
+                      />
+                      <DatePicker
+                        icon={<FiCalendar className="w-4 h-4" />}
+                        label="Workup Appointment"
+                        name="workup_appointment"
+                        value={formData.workup_appointment}
+                        onChange={handleChange}
+                        defaultToday={true}
+                      />
+                      <Textarea
+                        label="Referred To"
+                        name="referred_to"
+                        value={formData.referred_to}
+                        onChange={handleChange}
+                        rows={2}
+                        placeholder="Other departments or specialists..."
+                      />
+                      <Textarea
+                        label="Treatment Prescribed"
+                        name="treatment_prescribed"
+                        value={formData.treatment_prescribed}
+                        onChange={handleChange}
+                        rows={4}
+                        placeholder="Treatment details..."
+                      />
+                      <div>
+                        <Select
+                          label="Doctor Decision"
+                          name="doctor_decision"
+                          value={formData.doctor_decision}
+                          onChange={handleChange}
+                          options={DOCTOR_DECISION}
+                          required
+                          disabled={isAlreadyComplex}
+                          title={isAlreadyComplex ? "Cannot change from Instantly Requires Detailed Work-Up to Requires Detailed Workup on Next Follow-Up" : ""}
+                        />
+                        {isAlreadyComplex && (
+                          <p className="mt-1 text-xs text-amber-600 flex items-center gap-1">
+                            <FiAlertCircle className="w-3 h-3" />
+                            This case is already marked as Instantly Requires Detailed Work-Up and cannot be changed back to Requires Detailed Workup on Next Follow-Up.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Patient Documents & Files Section */}
+                {patientId && (
+                  <div className="space-y-6 pt-6 border-t border-gray-200">
+                    <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                      <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
+                        <FiFileText className="w-5 h-5 text-purple-600" />
+                      </div>
+                      Patient Documents & Files
+                    </h4>
+
+                    {/* File Upload Component */}
+                    <div className="mb-6">
+                      <FileUpload
+                        files={selectedFiles}
+                        onFilesChange={setSelectedFiles}
+                        maxFiles={20}
+                        maxSizeMB={10}
+                        patientId={patientId}
+                        disabled={!patientId}
+                      />
+                    </div>
+
+                    {/* Existing Files Preview */}
+                    {existingFiles && existingFiles.length > 0 && (
+                      <div className="mt-6">
+                        <h5 className="text-lg font-semibold text-gray-800 mb-4">
+                          Existing Files ({existingFiles.filter(file => !filesToRemove.includes(file)).length})
+                        </h5>
+                        <FilePreview
+                          files={existingFiles.filter(file => !filesToRemove.includes(file))}
+                          onDelete={canEditFiles ? (filePath) => {
+                            setFilesToRemove(prev => {
+                              if (!prev.includes(filePath)) {
+                                return [...prev, filePath];
+                              }
+                              return prev;
+                            });
+                          } : undefined}
+                          canDelete={canEditFiles}
+                          baseUrl={import.meta.env.VITE_API_URL || 'http://localhost:2025/api'}
+                        />
+                      </div>
+                    )}
+                    {existingFiles && existingFiles.length === 0 && (
+                      <div className="mt-6 text-center py-4 text-gray-500">
+                        <p>No files uploaded yet</p>
+                      </div>
+                    )}
+
+                    {/* Files to be removed indicator */}
+                    {filesToRemove.length > 0 && (
+                      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800">
+                          <strong>{filesToRemove.length}</strong> file(s) will be removed when you save.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Submit Button */}
+                <div className="flex justify-end gap-3 pt-6 border-t">
+                  <Button
+                    type="button"
+                    onClick={() => navigate(-1)}
+                    className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg shadow-green-500/30 px-4 py-2 rounded-md transition-all duration-200 hover:from-green-600 hover:to-green-700 hover:shadow-xl hover:shadow-green-500/40"
+                  >
+                    <FiArrowLeft className="w-4 h-4" />
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    loading={isUpdating || isUploadingFiles}
+                    disabled={isUpdating || isUploadingFiles}
+                    className="bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30"
+                  >
+                    <FiSave className="w-4 h-4" />
+                    {(isUpdating || isCreating || isUploadingFiles)
+                      ? 'Saving...'
+                      : isUpdateMode || proforma?.id
+                        ? 'Update Walk-in Clinical Proforma'
+                        : 'Create Walk-in Clinical Proforma'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
           )}
-        </Card>
-      </form>
+        </form>
+      )}
     </>
   );
 

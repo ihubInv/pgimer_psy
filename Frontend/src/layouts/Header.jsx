@@ -20,12 +20,12 @@ const Header = ({ onMenuClick, sidebarMinimized = false, sidebarOpen = false }) 
     } catch (err) {
       console.error('Logout error:', err);
       // Even if API call fails, clear local state
-      dispatch(logout());
+    dispatch(logout());
     } finally {
-      // Extra safety: clear RTK Query cache immediately and redirect
-      dispatch(apiSlice.util.resetApiState());
-      navigate('/login', { replace: true });
-      // Ensure full in-memory reset in rare cases
+    // Extra safety: clear RTK Query cache immediately and redirect
+    dispatch(apiSlice.util.resetApiState());
+    navigate('/login', { replace: true });
+    // Ensure full in-memory reset in rare cases
       setTimeout(() => window.location.replace('/login'), 100);
     }
   };

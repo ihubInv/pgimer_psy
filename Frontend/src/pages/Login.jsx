@@ -68,10 +68,10 @@ const Login = () => {
         // Direct login - accessToken received (new system) or token (legacy)
         // Use flushSync to ensure state update is synchronous and React re-renders immediately
         flushSync(() => {
-          dispatch(setCredentials({
-            user: result.data.user,
-            token: result.data.accessToken || result.data.token,
-          }));
+        dispatch(setCredentials({
+          user: result.data.user,
+          token: result.data.accessToken || result.data.token,
+        }));
         });
         
         toast.success('Login successful!');
@@ -104,11 +104,11 @@ const Login = () => {
 
       // Use flushSync to ensure state update is synchronous and React re-renders immediately
       flushSync(() => {
-        dispatch(setCredentials({
-          user: result.data.user,
-          token: result.data.accessToken || result.data.token,
-        }));
-        dispatch(setOTPRequired(false));
+      dispatch(setCredentials({
+        user: result.data.user,
+        token: result.data.accessToken || result.data.token,
+      }));
+      dispatch(setOTPRequired(false));
       });
       
       toast.success('Login successful!');

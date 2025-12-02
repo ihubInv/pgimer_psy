@@ -156,6 +156,14 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         { type: 'PatientVisit', id: patientId }
       ],
     }),
+    getPatientVisitHistory: builder.query({
+      query: (patientId) => `/patients/${patientId}/visits`,
+      providesTags: (result, error, patientId) => [
+        { type: 'Patient', id: patientId },
+        { type: 'PatientVisit', id: patientId }
+      ],
+      transformResponse: (resp) => resp?.data?.visitHistory || [],
+    }),
     markVisitCompleted: builder.mutation({
       query: ({ patient_id, visit_date }) => ({
         url: `/patients/${patient_id}/visits/complete`,
@@ -240,6 +248,7 @@ export const {
   useGetPatientsStatsQuery,
   useGetAgeDistributionQuery,
   useGetPatientVisitCountQuery,
+  useGetPatientVisitHistoryQuery,
   useMarkVisitCompletedMutation,
   useUploadPatientFilesMutation,
   useGetPatientFilesQuery,

@@ -1115,6 +1115,41 @@ router.get('/decision-stats', authenticateToken, ClinicalController.getCasesByDe
  */
 router.get('/visit-trends', authenticateToken, ClinicalController.getVisitTrends);
 
+// Dynamic clinical options routes - MUST be before /:id route to avoid route conflicts
+/**
+ * @swagger
+ * /api/clinical-proformas/options:
+ *   get:
+ *     summary: Get all clinical option groups with their options
+ *     tags: [Walk-in Clinical Proforma]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All groups and options fetched
+ */
+router.get('/options', authenticateToken, ClinicalOptionsController.getAllGroups);
+
+/**
+ * @swagger
+ * /api/clinical-proformas/options/{group}:
+ *   get:
+ *     summary: Get options for a clinical group
+ *     tags: [Walk-in Clinical Proforma]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: group
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Options fetched
+ */
+router.get('/options/:group', authenticateToken, ClinicalOptionsController.getGroup);
+
 /**
  * @swagger
  * /api/clinical-proformas/{id}:
@@ -1406,31 +1441,6 @@ router.delete('/:id', authenticateToken, validateId, ClinicalController.deleteCl
  *         description: Server error
  */
 router.get('/patient/:patient_id', authenticateToken, ClinicalController.getClinicalProformaByPatientId);
-
-// Dynamic clinical options
-/**
- * @swagger
- * /api/clinical-proformas/options/{group}:
- *   get:
- *     summary: Get options for a clinical group
- *     tags: [Walk-in Clinical Proforma]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: group
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Options fetched
- */
-// Get all groups with their options
-router.get('/options', authenticateToken, ClinicalOptionsController.getAllGroups);
-
-// Get options for a specific group
-router.get('/options/:group', authenticateToken, ClinicalOptionsController.getGroup);
 
 /**
  * @swagger

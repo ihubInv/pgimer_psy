@@ -150,11 +150,11 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
     } catch (err) {
       console.error('Logout error:', err);
       // Even if API call fails, clear local state
-      dispatch(logout());
+    dispatch(logout());
     } finally {
-      dispatch(apiSlice.util.resetApiState());
-      onClose(); // Close sidebar on mobile after logout
-      navigate('/login', { replace: true });
+    dispatch(apiSlice.util.resetApiState());
+    onClose(); // Close sidebar on mobile after logout
+    navigate('/login', { replace: true });
       setTimeout(() => window.location.replace('/login'), 100);
     }
   };
