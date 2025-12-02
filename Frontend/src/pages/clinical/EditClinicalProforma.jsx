@@ -140,20 +140,19 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   }, [hasHistory, isCreateMode, propInitialData, isLoadingVisitHistory, showProformaForm]);
 
   const { data: existingAdlFileData } = useGetAllADLFilesQuery({});
-  console.log("existingAdlFile", existingAdlFileData);
+  // console.log("existingAdlFile", existingAdlFileData);
 
   const existingAdlFile = existingAdlFileData?.data?.files?.find(f => f.patient_id === patient?.id && f.clinical_proforma_id === proforma?.id);
   // const adlFile = adlFileData?.data?.adlFile || adlFileData?.data?.file;
-console.log("existingAdlFile", existingAdlFile);
-console.log("existingAdlFileData", existingAdlFileData);
+
 
   const { data: existingPrescriptionData } = useGetAllPrescriptionQuery({});
-  console.log("existingPrescriptionData", existingPrescriptionData);
+  // console.log("existingPrescriptionData", existingPrescriptionData);
 
   const existingPrescription = existingPrescriptionData?.data?.prescriptions?.find(p => p.patient_id === patient?.id && p.clinical_proforma_id === proforma?.id);
   // const prescription = prescriptionData?.data?.prescription;
 console.log("existingPrescription", existingPrescription);
-console.log("existingPrescriptionData", existingPrescriptionData);
+// console.log("existingPrescriptionData", existingPrescriptionData);
   // Fetch doctors list
   const { data: doctorsData } = useGetDoctorsQuery({ page: 1, limit: 100 });
   const doctors = doctorsData?.data?.doctors || [];
@@ -255,7 +254,10 @@ console.log("existingPrescriptionData", existingPrescriptionData);
         workup_appointment: formatDate(propInitialData.workup_appointment),
         referred_to: getValue(propInitialData.referred_to),
         treatment_prescribed: getValue(propInitialData.treatment_prescribed),
-        doctor_decision: getValue(propInitialData.doctor_decision, 'simple_case'),
+        // If case is already complex (has ADL file), always use 'complex_case', otherwise use provided value or default to 'simple_case'
+        doctor_decision: (propInitialData?.doctor_decision === 'complex_case' && (propInitialData?.adl_file_id !== null && propInitialData?.adl_file_id !== undefined && propInitialData?.adl_file_id !== 0 && propInitialData?.adl_file_id !== '')) 
+          ? 'complex_case' 
+          : getValue(propInitialData.doctor_decision, 'simple_case'),
         // case_severity: getValue(propInitialData.case_severity),
         // requires_adl_file: propInitialData.requires_adl_file ?? false,
         // adl_reasoning: getValue(propInitialData.adl_reasoning),
@@ -853,7 +855,13 @@ console.log("existingPrescriptionData", existingPrescriptionData);
     e.preventDefault();
 
     // Prevent changing from complex case to simple case
-    if (isAlreadyComplex && formData.doctor_decision !== 'complex_case') {
+    // Only block if the user actually changed from complex_case to something else
+    const originalDecision = proforma?.doctor_decision || propInitialData?.doctor_decision;
+    const isChangingFromComplexToSimple = originalDecision === 'complex_case' && 
+                                          formData.doctor_decision === 'simple_case' &&
+                                          isAlreadyComplex;
+    
+    if (isChangingFromComplexToSimple) {
       toast.error('Cannot change from Instantly Requires Detailed Work-Up to Requires Detailed Workup on Next Follow-Up. The case must remain complex.');
       setFormData(prev => ({ ...prev, doctor_decision: 'complex_case' }));
       return;

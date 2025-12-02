@@ -18,7 +18,7 @@ import Button from '../../components/Button';
 import DatePicker from '../../components/CustomDatePicker';
 import FileUpload from '../../components/FileUpload';
 import FilePreview from '../../components/FilePreview';
-import {  formatDateForDatePicker } from '../../utils/formatters';
+import { formatDateForDatePicker, formatDate } from '../../utils/formatters';
 import { useGetClinicalProformaByIdQuery } from '../../features/clinical/clinicalApiSlice';
 import {
   MARITAL_STATUS, FAMILY_TYPE_OPTIONS, LOCALITY_OPTIONS, RELIGION_OPTIONS, SEX_OPTIONS,
@@ -1251,7 +1251,9 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     patient?.id,
     { skip: !patient?.id }
   );
-  const visitHistory = visitHistoryData?.visitHistory || [];
+  // Extract visit history from API response
+  // The API returns { success: true, data: { patient: ..., visitHistory: [...] } }
+  const visitHistory = visitHistoryData?.visitHistory || visitHistoryData?.data?.visitHistory || [];
 
   // Helper function to convert date to IST date string (YYYY-MM-DD)
   const toISTDateString = (dateInput) => {
@@ -1283,8 +1285,12 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   });
   
   const pastVisitHistory = visitHistory.filter(visit => {
+    if (!visit) return false;
     const visitDate = toISTDateString(visit.visit_date);
-    return visitDate && visitDate !== todayDateString;
+    // Include all visits that are not today's visits (any date that's not today)
+    // Also include visits without a date (they should be considered past)
+    if (!visitDate) return true; // Include visits without date as past
+    return visitDate !== todayDateString;
   });
   
   // Separate today's proformas (current visit) from past proformas
@@ -1294,8 +1300,12 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   });
   
   const pastProformas = patientProformas.filter(proforma => {
+    if (!proforma) return false;
     const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
-    return proformaDate && proformaDate !== todayDateString;
+    // Include all proformas that are not today's proformas
+    // Also include proformas without a date (they should be considered past)
+    if (!proformaDate) return true; // Include proformas without date as past
+    return proformaDate !== todayDateString;
   });
 
   // Get the latest proforma for current visit (most recent today's proforma)
@@ -3213,188 +3223,232 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
           {expandedCards.clinical && (
             <div className="p-6 space-y-6">
-              {/* Current Visit Section - Show today's proforma if exists */}
-              {currentVisitProforma && !showProformaForm && (
-                <div className="space-y-4">
-                  <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
-                      Current Visit
-                    </span>
-                    <span className="text-sm text-gray-500 font-normal">
-                      {formatDate(currentVisitProforma.visit_date || currentVisitProforma.created_at)}
-                    </span>
-                  </h4>
-                  
-                  <div className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50/30 hover:border-blue-400 hover:shadow-md transition-all">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            currentVisitProforma.visit_type === 'first_visit' 
-                              ? 'bg-purple-100 text-purple-800' 
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {currentVisitProforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
-                          </span>
-                          {currentVisitProforma.doctor_decision && (
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              currentVisitProforma.doctor_decision === 'complex_case' 
-                                ? 'bg-red-100 text-red-800' 
-                                : 'bg-green-100 text-green-800'
-                            }`}>
-                              {currentVisitProforma.doctor_decision === 'complex_case' 
-                                ? 'Complex Case' 
-                                : 'Simple Case'}
-                            </span>
-                          )}
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                          {currentVisitProforma.doctor_name && (
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <FiUser className="w-4 h-4" />
-                              <span><span className="font-medium text-gray-800">Doctor:</span> {currentVisitProforma.doctor_name}</span>
-                            </div>
-                          )}
-                          {currentVisitProforma.room_no && (
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <FiHome className="w-4 h-4" />
-                              <span><span className="font-medium text-gray-800">Room:</span> {currentVisitProforma.room_no}</span>
-                            </div>
-                          )}
-                          {currentVisitProforma.diagnosis && (
-                            <div className="flex items-start gap-2 text-sm text-gray-600 md:col-span-2">
-                              <FiFileText className="w-4 h-4 mt-0.5" />
-                              <span><span className="font-medium text-gray-800">Diagnosis:</span> {currentVisitProforma.diagnosis}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+              {/* Current Visit and Past Visit History - Show in parallel */}
+              {(currentVisitProforma && !showProformaForm) || (hasPastHistory && pastProformas.length > 0) ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Current Visit Section - Show today's proforma if exists */}
+                  {currentVisitProforma && !showProformaForm && (
+                    <div className="space-y-4">
+                      <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                        <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+                          Current Visit
+                        </span>
+                        <span className="text-sm text-gray-500 font-normal">
+                          {formatDate(currentVisitProforma.visit_date || currentVisitProforma.created_at)}
+                        </span>
+                      </h4>
                       
-                      <div className="flex items-center gap-2 ml-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/clinical/${currentVisitProforma.id}`)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
-                        >
-                          <FiEye className="w-3.5 h-3.5" />
-                          View
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedProformaId(currentVisitProforma.id.toString());
-                            setShowProformaForm(true);
-                          }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
-                        >
-                          <FiEdit3 className="w-3.5 h-3.5" />
-                          Edit
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Past Visit History Section - Show if patient has past proformas */}
-              {hasPastHistory && pastProformas.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <h4 className="text-lg font-semibold text-gray-800">Past Visit History</h4>
-                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                      {pastProformas.length} {pastProformas.length === 1 ? 'Visit' : 'Visits'}
-                    </span>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {[...pastProformas].sort((a, b) => {
-                      // Sort by date, most recent first
-                      const dateA = new Date(a.visit_date || a.created_at || 0);
-                      const dateB = new Date(b.visit_date || b.created_at || 0);
-                      return dateB - dateA;
-                    }).map((proforma, index) => {
-                      const visitDate = proforma.visit_date 
-                        ? new Date(proforma.visit_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                        : 'Date not available';
-                      
-                      // Determine visit status (completed if proforma exists, otherwise scheduled)
-                      const visitStatus = 'completed'; // Past proformas are considered completed
-                      
-                      return (
-                        <div
-                          key={proforma.id || index}
-                          className="border border-gray-200 rounded-lg p-4 hover:border-green-300 hover:shadow-md transition-all bg-white"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                <div className="flex items-center gap-2">
-                                  <FiCalendar className="w-4 h-4 text-gray-500" />
-                                  <span className="font-semibold text-gray-900">
-                                    {visitDate}
-                                  </span>
-                                </div>
+                      <div className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50/30 hover:border-blue-400 hover:shadow-md transition-all">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2 flex-wrap">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                currentVisitProforma.visit_type === 'first_visit' 
+                                  ? 'bg-purple-100 text-purple-800' 
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {currentVisitProforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
+                              </span>
+                              {currentVisitProforma.doctor_decision && (
                                 <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  proforma.visit_type === 'first_visit' 
-                                    ? 'bg-purple-100 text-purple-800' 
-                                    : 'bg-blue-100 text-blue-800'
+                                  currentVisitProforma.doctor_decision === 'complex_case' 
+                                    ? 'bg-red-100 text-red-800' 
+                                    : 'bg-green-100 text-green-800'
                                 }`}>
-                                  {proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
+                                  {currentVisitProforma.doctor_decision === 'complex_case' 
+                                    ? 'Complex Case' 
+                                    : 'Simple Case'}
                                 </span>
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  visitStatus === 'completed' 
-                                    ? 'bg-green-100 text-green-800'
-                                    : visitStatus === 'in_progress'
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {visitStatus}
-                                </span>
-                              </div>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                                {proforma.doctor_name && (
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                                    <FiUser className="w-4 h-4" />
-                                    <span><span className="font-medium text-gray-800">Doctor:</span> {proforma.doctor_name}</span>
-                                  </div>
-                                )}
-                                {proforma.room_no && (
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                                    <FiHome className="w-4 h-4" />
-                                    <span><span className="font-medium text-gray-800">Room:</span> {proforma.room_no}</span>
-                                  </div>
-                                )}
-                                {proforma.diagnosis && (
-                                  <div className="flex items-start gap-2 text-sm text-gray-600 md:col-span-2">
-                                    <FiFileText className="w-4 h-4 mt-0.5" />
-                                    <span><span className="font-medium text-gray-800">Diagnosis:</span> {proforma.diagnosis}</span>
-                                  </div>
-                                )}
-                              </div>
+                              )}
                             </div>
                             
-                            <div className="flex items-center gap-2 ml-4">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => navigate(`/clinical/${proforma.id}`)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
-                              >
-                                <FiEye className="w-3.5 h-3.5" />
-                                View
-                              </Button>
+                            <div className="grid grid-cols-1 gap-3 mt-3">
+                              {currentVisitProforma.doctor_name && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <FiUser className="w-4 h-4" />
+                                  <span><span className="font-medium text-gray-800">Doctor:</span> {currentVisitProforma.doctor_name}</span>
+                                </div>
+                              )}
+                              {currentVisitProforma.room_no && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <FiHome className="w-4 h-4" />
+                                  <span><span className="font-medium text-gray-800">Room:</span> {currentVisitProforma.room_no}</span>
+                                </div>
+                              )}
+                              {currentVisitProforma.diagnosis && (
+                                <div className="flex items-start gap-2 text-sm text-gray-600">
+                                  <FiFileText className="w-4 h-4 mt-0.5" />
+                                  <span><span className="font-medium text-gray-800">Diagnosis:</span> {currentVisitProforma.diagnosis}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
+                          
+                          <div className="flex items-center gap-2 ml-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate(`/clinical/${currentVisitProforma.id}`)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                            >
+                              <FiEye className="w-3.5 h-3.5" />
+                              View
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedProformaId(currentVisitProforma.id.toString());
+                                setShowProformaForm(true);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                            >
+                              <FiEdit3 className="w-3.5 h-3.5" />
+                              Edit
+                            </Button>
+                          </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Past Visit History Section - Show past visits and proformas */}
+                  {hasPastHistory && (pastProformas.length > 0 || pastVisitHistory.length > 0) && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <h4 className="text-lg font-semibold text-gray-800">Past Visit History</h4>
+                        <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                          {pastProformas.length + pastVisitHistory.length} {pastProformas.length + pastVisitHistory.length === 1 ? 'Visit' : 'Visits'}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                        {/* Combine and sort all past visits and proformas by date */}
+                        {(() => {
+                          // Combine all past visits and proformas
+                          const allPastItems = [
+                            ...pastProformas.map(p => ({ ...p, isProforma: true })),
+                            ...pastVisitHistory.map(v => ({ ...v, isProforma: false }))
+                          ];
+                          
+                          // Sort by date, most recent first
+                          const sortedItems = allPastItems.sort((a, b) => {
+                            const dateA = new Date(a.visit_date || a.created_at || 0);
+                            const dateB = new Date(b.visit_date || b.created_at || 0);
+                            return dateB - dateA;
+                          });
+                          
+                          // Debug log to see what we're displaying
+                          console.log('[PatientDetailsEdit] Past history items:', {
+                            allVisitHistoryCount: visitHistory.length,
+                            allProformasCount: patientProformas.length,
+                            pastProformasCount: pastProformas.length,
+                            pastVisitHistoryCount: pastVisitHistory.length,
+                            totalItems: sortedItems.length,
+                            todayDateString: todayDateString,
+                            items: sortedItems.map(item => ({
+                              id: item.id,
+                              date: item.visit_date || item.created_at,
+                              isProforma: item.isProforma,
+                              visitDate: toISTDateString(item.visit_date || item.created_at)
+                            }))
+                          });
+                          
+                          return sortedItems;
+                        })().map((item, index) => {
+                          const visitDate = formatDate(item.visit_date || item.created_at);
+                          const visitStatus = item.visit_status || (item.isProforma ? 'completed' : 'scheduled');
+                          const isProforma = item.isProforma;
+                          
+                          return (
+                            <div
+                              key={item.id || index}
+                              className="border border-gray-200 rounded-lg p-4 hover:border-green-300 hover:shadow-md transition-all bg-white"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                      <FiCalendar className="w-4 h-4 text-gray-500" />
+                                      <span className="font-semibold text-gray-900">
+                                        {visitDate}
+                                      </span>
+                                    </div>
+                                    {(item.visit_type || (item.isProforma && item.visit_type)) && (
+                                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                        (item.visit_type === 'first_visit' || item.visit_type === 'First Visit') 
+                                          ? 'bg-purple-100 text-purple-800' 
+                                          : 'bg-blue-100 text-blue-800'
+                                      }`}>
+                                        {item.visit_type === 'first_visit' || item.visit_type === 'First Visit' ? 'First Visit' : 'Follow-up'}
+                                      </span>
+                                    )}
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                      visitStatus === 'completed' 
+                                        ? 'bg-green-100 text-green-800'
+                                        : visitStatus === 'in_progress'
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {visitStatus}
+                                    </span>
+                                    {isProforma && (
+                                      <span className="px-2 py-1 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                                        Clinical Proforma
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-1 gap-3 mt-3">
+                                    {item.doctor_name && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <FiUser className="w-4 h-4" />
+                                        <span><span className="font-medium text-gray-800">Doctor:</span> {item.doctor_name}</span>
+                                      </div>
+                                    )}
+                                    {item.room_no && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <FiHome className="w-4 h-4" />
+                                        <span><span className="font-medium text-gray-800">Room:</span> {item.room_no}</span>
+                                      </div>
+                                    )}
+                                    {item.diagnosis && (
+                                      <div className="flex items-start gap-2 text-sm text-gray-600">
+                                        <FiFileText className="w-4 h-4 mt-0.5" />
+                                        <span><span className="font-medium text-gray-800">Diagnosis:</span> {item.diagnosis}</span>
+                                      </div>
+                                    )}
+                                    {item.notes && !item.diagnosis && (
+                                      <div className="flex items-start gap-2 text-sm text-gray-600">
+                                        <FiFileText className="w-4 h-4 mt-0.5" />
+                                        <span><span className="font-medium text-gray-800">Notes:</span> {item.notes}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-2 ml-4">
+                                  {isProforma && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => navigate(`/clinical/${item.id}`)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                                    >
+                                      <FiEye className="w-3.5 h-3.5" />
+                                      View
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              ) : null}
 
               {/* Show form if no current visit proforma exists OR if user is editing */}
               {(!currentVisitProforma || showProformaForm) && (

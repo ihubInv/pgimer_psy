@@ -87,11 +87,11 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
       }
       
       const fullUrl = `${baseUrlWithoutApi}${relativePath}`;
-      console.log('[FilePreview] Converted absolute path to URL:', {
-        original: filePath,
-        relative: relativePath,
-        fullUrl: fullUrl
-      });
+      // console.log('[FilePreview] Converted absolute path to URL:', {
+      //   original: filePath,
+      //   relative: relativePath,
+      //   fullUrl: fullUrl
+      // });
       return fullUrl;
     }
     
@@ -193,9 +193,9 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
   };
 
   // Debug logging
-  console.log('[FilePreview] Rendering files:', files?.length || 0, 'files');
+  // console.log('[FilePreview] Rendering files:', files?.length || 0, 'files');
   if (files && files.length > 0) {
-    console.log('[FilePreview] File paths:', files);
+    // console.log('[FilePreview] File paths:', files);
   }
 
   if (!files || files.length === 0) {
@@ -223,14 +223,14 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
             const fileName = actualPath.split('/').pop();
             const fileUrl = getFileUrl(actualPath);
             
-            console.log('[FilePreview] Rendering file:', {
-              index,
-              original: filePath,
-              actualPath,
-              fileName,
-              fileUrl,
-              fileType
-            });
+            // console.log('[FilePreview] Rendering file:', {
+            //   index,
+            //   original: filePath,
+            //   actualPath,
+            //   fileName,
+            //   fileUrl,
+            //   fileType
+            // });
 
             return {
               actualPath,
@@ -282,7 +282,7 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
                       }
                     }}
                     onLoad={() => {
-                      console.log('[FilePreview] Image loaded successfully:', String(fileUrl || ''));
+                      // console.log('[FilePreview] Image loaded successfully:', String(fileUrl || ''));
                     }}
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
