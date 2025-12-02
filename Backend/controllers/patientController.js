@@ -193,6 +193,15 @@ class PatientController {
       if (patientData.mobile_no && patientData.contact_number) {
         delete patientData.mobile_no;
       }
+
+      // Auto-assign room if PSWO (Psychiatric Welfare Officer) and room not manually specified
+      const isPSWO = req.user.role === 'Psychiatric Welfare Officer';
+      if (isPSWO && !patientData.assigned_room) {
+        const { autoAssignRoom } = require('../utils/roomAssignment');
+        const assignedRoom = await autoAssignRoom();
+        patientData.assigned_room = assignedRoom;
+        console.log(`[patientController] Auto-assigned room ${assignedRoom} for PSWO user ${req.user.id}`);
+      }
       
       const patient = await Patient.create(patientData);
 

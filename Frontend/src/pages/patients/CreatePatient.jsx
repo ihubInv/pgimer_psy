@@ -27,7 +27,7 @@ import {
   MARITAL_STATUS, FAMILY_TYPE_OPTIONS, LOCALITY_OPTIONS, RELIGION_OPTIONS, SEX_OPTIONS,
   AGE_GROUP_OPTIONS, OCCUPATION_OPTIONS, EDUCATION_OPTIONS,
   MOBILITY_OPTIONS, REFERRED_BY_OPTIONS, UNIT_DAYS_OPTIONS,
-   isSR, isJR, HEAD_RELATIONSHIP_OPTIONS, CATEGORY_OPTIONS
+   isSR, isJR, HEAD_RELATIONSHIP_OPTIONS, CATEGORY_OPTIONS, isMWO
 } from '../../utils/constants';
 
 
@@ -44,6 +44,7 @@ const CreatePatient = () => {
   const [createPatientFiles] = useCreatePatientFilesMutation();
   const { data: usersData } = useGetDoctorsQuery({ page: 1, limit: 100 });
   const token = useSelector(selectCurrentToken);
+  const currentUser = useSelector(selectCurrentUser);
   const [errors, setErrors] = useState({});
   const [expandedPatientDetails, setExpandedPatientDetails] = useState(true);
   const [currentStep, setCurrentStep] = useState(1); // 1 for Out Patient Card, 2 for remaining sections
@@ -1678,15 +1679,31 @@ const CreatePatient = () => {
                               />
 
 
-                              <IconInput
-                                icon={<FiHome className="w-4 h-4" />}
-                                label="Assigned Room"
-                                name="assigned_room"
-                                value={formData.assigned_room || ''}
-                                onChange={handleChange}
-                                placeholder="Enter assigned room"
-                                className="bg-gradient-to-r from-teal-50 to-cyan-50"
-                              />
+                              <div className="space-y-2">
+                                <IconInput
+                                  icon={<FiHome className="w-4 h-4" />}
+                                  label={
+                                    <span>
+                                      Assigned Room
+                                      {isMWO(currentUser?.role) && (
+                                        <span className="ml-2 text-xs text-gray-500 font-normal">
+                                          (Auto-assigned if left empty)
+                                        </span>
+                                      )}
+                                    </span>
+                                  }
+                                  name="assigned_room"
+                                  value={formData.assigned_room || ''}
+                                  onChange={handleChange}
+                                  placeholder={isMWO(currentUser?.role) ? "Leave empty for auto-assignment" : "Enter assigned room"}
+                                  className="bg-gradient-to-r from-teal-50 to-cyan-50"
+                                />
+                                {isMWO(currentUser?.role) && (
+                                  <p className="text-xs text-gray-500 italic">
+                                    Rooms are automatically distributed equally. You can manually select a specific room if needed.
+                                  </p>
+                                )}
+                              </div>
                         </div>
 
                         {/* File Upload Section */}

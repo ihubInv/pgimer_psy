@@ -3,15 +3,17 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiPhone,  FiClock, FiEye,
-  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck
+  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome
 } from 'react-icons/fi';
 import { useGetAllPatientsQuery, useMarkVisitCompletedMutation } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
+import { useGetMyRoomQuery } from '../../features/rooms/roomsApiSlice';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
+import RoomSelectionModal from '../../components/RoomSelectionModal';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
-import { isAdmin, isMWO, isJrSr } from '../../utils/constants';
+import { isAdmin, isMWO, isJrSr, isSR, isJR } from '../../utils/constants';
 
 // Component to check for existing proforma and render patient row
 const PatientRow = ({ patient, isNewPatient, navigate, onMarkCompleted }) => {
@@ -260,6 +262,15 @@ const ClinicalTodayPatients = () => {
   const location = useLocation();
   const currentUser = useSelector(selectCurrentUser);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showRoomModal, setShowRoomModal] = useState(false);
+  
+  // Check if user is a doctor (Faculty, Admin, or Resident)
+  const isDoctor = currentUser && (isAdmin(currentUser.role) || isSR(currentUser.role) || isJR(currentUser.role));
+  
+  // Get current room assignment
+  const { data: myRoomData, isLoading: isLoadingRoom } = useGetMyRoomQuery(undefined, {
+    skip: !isDoctor,
+  });
   
   const [filters, setFilters] = useState({
     sex: '',
@@ -331,6 +342,26 @@ const ClinicalTodayPatients = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [refetch]);
+
+  // Show room selection modal if doctor hasn't selected a room
+  useEffect(() => {
+    if (isDoctor && !isLoadingRoom && myRoomData && !myRoomData.data?.current_room) {
+      // Check if modal was already shown today (using localStorage)
+      const lastShown = localStorage.getItem('roomModalShown');
+      const today = new Date().toISOString().split('T')[0];
+      
+      if (lastShown !== today) {
+        setShowRoomModal(true);
+      }
+    }
+  }, [isDoctor, isLoadingRoom, myRoomData]);
+
+  const handleRoomModalClose = () => {
+    setShowRoomModal(false);
+    // Mark as shown today
+    const today = new Date().toISOString().split('T')[0];
+    localStorage.setItem('roomModalShown', today);
+  };
   
 
 
@@ -538,6 +569,13 @@ const ClinicalTodayPatients = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Room Selection Modal */}
+      <RoomSelectionModal
+        isOpen={showRoomModal}
+        onClose={handleRoomModalClose}
+        currentUser={currentUser}
+      />
+
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-6 py-6">
       
 
@@ -552,6 +590,21 @@ const ClinicalTodayPatients = () => {
                   {filteredPatients.length}
                 </span>
               </h3>
+              {/* Show current room if doctor has one */}
+              {isDoctor && myRoomData?.data?.current_room && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg border border-blue-200">
+                  <FiHome className="w-4 h-4" />
+                  <span className="text-sm font-medium">Room: {myRoomData.data.current_room}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowRoomModal(true)}
+                    className="ml-2 text-xs px-2 py-1"
+                  >
+                    Change
+                  </Button>
+                </div>
+              )}
                 <div className="flex items-center gap-4 text-sm">
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded-full bg-blue-500 border-2 border-blue-600"></div>

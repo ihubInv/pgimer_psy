@@ -17,6 +17,8 @@ class User {
     this.last_login = data.last_login;
     this.created_at = data.created_at;
     this.updated_at = data.updated_at;
+    this.current_room = data.current_room || null;
+    this.room_assignment_time = data.room_assignment_time || null;
   }
 
   // Create a new user
@@ -64,7 +66,16 @@ class User {
         return null;
       }
 
-      return new User(result.rows[0]);
+      const userData = result.rows[0];
+      // Ensure new fields are included even if they're null
+      if (userData.current_room === undefined) {
+        userData.current_room = null;
+      }
+      if (userData.room_assignment_time === undefined) {
+        userData.room_assignment_time = null;
+      }
+
+      return new User(userData);
     } catch (error) {
       throw error;
     }
@@ -378,6 +389,51 @@ class User {
     }
   }
 
+  // Assign room to doctor
+  async assignRoom(roomNumber, assignmentTime = null) {
+    try {
+      const timeToUse = assignmentTime || new Date().toISOString();
+      const result = await db.query(
+        `UPDATE users 
+         SET current_room = $1, room_assignment_time = $2, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $3 
+         RETURNING current_room, room_assignment_time`,
+        [roomNumber, timeToUse, this.id]
+      );
+
+      if (result.rows.length > 0) {
+        this.current_room = result.rows[0].current_room;
+        this.room_assignment_time = result.rows[0].room_assignment_time;
+      }
+
+      return this;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Clear room assignment
+  async clearRoom() {
+    try {
+      const result = await db.query(
+        `UPDATE users 
+         SET current_room = NULL, room_assignment_time = NULL, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $1 
+         RETURNING current_room, room_assignment_time`,
+        [this.id]
+      );
+
+      if (result.rows.length > 0) {
+        this.current_room = null;
+        this.room_assignment_time = null;
+      }
+
+      return this;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   // Convert to JSON (exclude sensitive data)
   toJSON() {
     return {
@@ -387,6 +443,8 @@ class User {
       mobile: this.mobile,
       email: this.email,
       two_factor_enabled: this.two_factor_enabled,
+      current_room: this.current_room,
+      room_assignment_time: this.room_assignment_time,
       created_at: this.created_at
     };
   }

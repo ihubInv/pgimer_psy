@@ -497,6 +497,175 @@ class UserController {
     }
   }
 
+  // Select room for doctor (Faculty/Admin/Resident)
+  static async selectRoom(req, res) {
+    try {
+      const { room_number, assignment_time } = req.body;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      // Only allow Faculty, Admin, or Resident to select rooms
+      const allowedRoles = ['Faculty', 'Admin', 'Resident'];
+      if (!allowedRoles.includes(userRole)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only Faculty, Admin, or Resident doctors can select rooms'
+        });
+      }
+
+      if (!room_number || room_number.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: 'Room number is required'
+        });
+      }
+
+      const assignmentTime = assignment_time || new Date().toISOString();
+
+      // Get user and assign room
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Ensure user has an ID
+      if (!user.id) {
+        console.error('User object missing ID:', user);
+        return res.status(500).json({
+          success: false,
+          message: 'Invalid user data'
+        });
+      }
+
+      // Assign room to doctor
+      await user.assignRoom(room_number.trim(), assignmentTime);
+
+      // Auto-assign all patients in this room to this doctor
+      const { assignPatientsToDoctor } = require('../utils/roomAssignment');
+      const assignmentResult = await assignPatientsToDoctor(
+        userId,
+        room_number.trim(),
+        assignmentTime
+      );
+
+      res.json({
+        success: true,
+        message: `Room ${room_number} selected successfully. ${assignmentResult.assigned} patient(s) assigned to you.`,
+        data: {
+          room: room_number.trim(),
+          assignment_time: assignmentTime,
+          patients_assigned: assignmentResult.assigned,
+          patients: assignmentResult.patients
+        }
+      });
+    } catch (error) {
+      console.error('Select room error:', error);
+      console.error('Error stack:', error.stack);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        constraint: error.constraint,
+        table: error.table,
+        column: error.column
+      });
+      res.status(500).json({
+        success: false,
+        message: 'Failed to select room',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? {
+          code: error.code,
+          detail: error.detail,
+          constraint: error.constraint,
+          table: error.table,
+          column: error.column
+        } : undefined
+      });
+    }
+  }
+
+  // Get available rooms
+  static async getAvailableRooms(req, res) {
+    try {
+      const { getAvailableRooms, getRoomDistribution } = require('../utils/roomAssignment');
+      const rooms = await getAvailableRooms();
+      const distribution = await getRoomDistribution();
+
+      res.json({
+        success: true,
+        data: {
+          rooms,
+          distribution
+        }
+      });
+    } catch (error) {
+      console.error('Get available rooms error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get available rooms',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  // Get current user's room assignment
+  static async getMyRoom(req, res) {
+    try {
+      const user = await User.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          current_room: user.current_room,
+          room_assignment_time: user.room_assignment_time
+        }
+      });
+    } catch (error) {
+      console.error('Get my room error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get room assignment',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  // Clear room assignment
+  static async clearRoom(req, res) {
+    try {
+      const user = await User.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      await user.clearRoom();
+
+      res.json({
+        success: true,
+        message: 'Room assignment cleared successfully'
+      });
+    } catch (error) {
+      console.error('Clear room error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to clear room assignment',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
   // Get doctors (JR/SR) - Accessible to all authenticated users
   static async getDoctors(req, res) {
     try {

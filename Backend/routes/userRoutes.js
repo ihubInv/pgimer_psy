@@ -824,6 +824,91 @@ router.post('/disable-2fa', authenticateToken, UserController.disable2FA);
  */
 router.get('/doctors', authenticateToken, UserController.getDoctors);
 
+// Room assignment routes
+/**
+ * @swagger
+ * /api/users/rooms/available:
+ *   get:
+ *     summary: Get available rooms
+ *     description: Get list of all available rooms and their patient distribution
+ *     tags: [Room Management]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Available rooms retrieved successfully
+ */
+router.get('/rooms/available', authenticateToken, UserController.getAvailableRooms);
+
+/**
+ * @swagger
+ * /api/users/rooms/my-room:
+ *   get:
+ *     summary: Get current user's room assignment
+ *     description: Get the room currently assigned to the logged-in doctor
+ *     tags: [Room Management]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Room assignment retrieved successfully
+ */
+router.get('/rooms/my-room', authenticateToken, UserController.getMyRoom);
+
+/**
+ * @swagger
+ * /api/users/rooms/select:
+ *   post:
+ *     summary: Select room for doctor
+ *     description: |
+ *       Allows Faculty, Admin, or Resident doctors to select their room for the day.
+ *       Automatically assigns all patients in that room to the doctor.
+ *     tags: [Room Management]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - room_number
+ *             properties:
+ *               room_number:
+ *                 type: string
+ *                 description: Room number to select
+ *                 example: "Room 1"
+ *               assignment_time:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Time when doctor started sitting in the room (ISO format)
+ *                 example: "2025-01-15T10:00:00.000Z"
+ *     responses:
+ *       200:
+ *         description: Room selected successfully
+ *       400:
+ *         description: Invalid request
+ *       403:
+ *         description: Only Faculty, Admin, or Resident can select rooms
+ */
+router.post('/rooms/select', authenticateToken, UserController.selectRoom);
+
+/**
+ * @swagger
+ * /api/users/rooms/clear:
+ *   post:
+ *     summary: Clear room assignment
+ *     description: Clear the current room assignment for the logged-in doctor
+ *     tags: [Room Management]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Room assignment cleared successfully
+ */
+router.post('/rooms/clear', authenticateToken, UserController.clearRoom);
+
 // Admin-only routes
 /**
  * @swagger
