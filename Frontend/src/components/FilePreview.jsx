@@ -20,8 +20,47 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
     }
     
     // Get base URL and remove /api if present
+    // For file URLs, we need the backend server URL (not the frontend dev server)
     const apiUrl = baseUrl || import.meta.env.VITE_API_URL || 'http://localhost:2025/api';
-    const baseUrlWithoutApi = apiUrl.replace(/\/api$/, ''); // Remove /api if present
+    
+    // Extract the backend server URL from the API URL
+    // API URL format: http://host:port/api -> we need http://host:port
+    let baseUrlWithoutApi = apiUrl.replace(/\/api$/, ''); // Remove /api if present
+    
+    // If the API URL contains a port, use it; otherwise, try to determine backend port
+    // In development, frontend is on 8001, backend is on 8002
+    // In production, they might be on the same server
+    if (!baseUrlWithoutApi || baseUrlWithoutApi === '/' || baseUrlWithoutApi.startsWith('/')) {
+      // Extract hostname and port from API URL
+      const apiUrlMatch = apiUrl.match(/http[s]?:\/\/([^\/]+)/);
+      if (apiUrlMatch) {
+        const hostAndPort = apiUrlMatch[1];
+        // If API URL doesn't have a port, try to determine backend port
+        if (!hostAndPort.includes(':')) {
+          // Check if we're in development (frontend on 8001, backend on 8002)
+          const currentPort = window.location.port;
+          if (currentPort === '8001') {
+            // Frontend dev server, backend is on 8002
+            baseUrlWithoutApi = `http://${hostAndPort}:8002`;
+          } else {
+            // Production or other setup, use same host
+            baseUrlWithoutApi = `http://${hostAndPort}`;
+          }
+        } else {
+          baseUrlWithoutApi = `http://${hostAndPort}`;
+        }
+      } else {
+        // Fallback: use current hostname with backend port
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname;
+        const currentPort = window.location.port;
+        if (currentPort === '8001') {
+          baseUrlWithoutApi = `${protocol}//${hostname}:8002`; // Backend port
+        } else {
+          baseUrlWithoutApi = `${protocol}//${hostname}${currentPort ? `:${currentPort}` : ''}`;
+        }
+      }
+    }
     
     // Handle absolute file system paths (e.g., /var/www/pgimer_psy/Backend/uploads/...)
     // Extract the relative path from the absolute path
@@ -70,10 +109,22 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
       return fullUrl;
     }
     
-    // If it starts with /, it might be a path like /patient_files/...
+    // If it starts with /, check if it's a path that needs /uploads prefix
     if (filePath.startsWith('/')) {
-      // Check if it's a patient_files path that needs /uploads prefix
+      // If it's already a full path starting with /uploads, use it
+      if (filePath.startsWith('/uploads/')) {
+        const fullUrl = `${baseUrlWithoutApi}${filePath}`;
+        return fullUrl;
+      }
+      // If it's a patient_files path, it should already include /uploads prefix
+      // But if it doesn't, add it
       if (filePath.startsWith('/patient_files/') || filePath.startsWith('/patients/')) {
+        // Check if it already has /uploads prefix
+        if (!filePath.startsWith('/uploads/')) {
+          const fullUrl = `${baseUrlWithoutApi}/uploads${filePath}`;
+          console.log('[FilePreview] Added /uploads prefix to /patient_files path:', fullUrl, 'from path:', filePath);
+          return fullUrl;
+        }
         const fullUrl = `${baseUrlWithoutApi}${filePath}`;
         console.log('[FilePreview] Constructed URL from /patient_files path:', fullUrl, 'from path:', filePath);
         return fullUrl;

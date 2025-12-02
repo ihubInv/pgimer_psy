@@ -11,6 +11,10 @@ export default defineConfig({
         target: 'http://122.186.76.102:8002', // ✅ Backend server IP and port
         changeOrigin: true,
       },
+      '/uploads': {
+        target: 'http://122.186.76.102:8002', // ✅ Proxy /uploads to backend
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -107,9 +107,44 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser()); // Parse cookies for refresh tokens
 
-// Serve uploaded files statically
+// Serve uploaded files statically - MUST be before API routes
 const path = require('path');
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const uploadsPath = path.join(__dirname, 'uploads');
+console.log('[Server] Serving static files from:', uploadsPath);
+
+// Explicitly handle /uploads route before any other middleware
+app.use('/uploads', (req, res, next) => {
+  // Log static file requests for debugging
+  console.log('[Server] Static file request:', req.path);
+  next();
+}, express.static(uploadsPath, {
+  setHeaders: (res, filePath) => {
+    // Set proper content type based on file extension
+    const ext = path.extname(filePath).toLowerCase();
+    const contentTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.txt': 'text/plain'
+    };
+    if (contentTypes[ext]) {
+      res.setHeader('Content-Type', contentTypes[ext]);
+    }
+    // Set CORS headers for static files
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+  },
+  // Don't redirect, serve files directly
+  redirect: false,
+  // Enable index file serving if needed
+  index: false
+}));
 
 // Request logging middleware
 app.use((req, res, next) => {
