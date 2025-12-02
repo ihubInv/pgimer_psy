@@ -5,15 +5,17 @@ import Modal from './Modal';
 import Button from './Button';
 import Select from './Select';
 import DatePicker from './CustomDatePicker';
-import { useGetAvailableRoomsQuery, useSelectRoomMutation, useGetMyRoomQuery } from '../features/rooms/roomsApiSlice';
+import { useGetAvailableRoomsQuery, useSelectRoomMutation, useGetMyRoomQuery, roomsApiSlice } from '../features/rooms/roomsApiSlice';
+import { useDispatch } from 'react-redux';
 import { isAdmin, isSR, isJR } from '../utils/constants';
 
 const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
+  const dispatch = useDispatch();
   const [selectedRoom, setSelectedRoom] = useState('');
   const [assignmentTime, setAssignmentTime] = useState(new Date().toISOString().slice(0, 16));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: roomsData, isLoading: isLoadingRooms } = useGetAvailableRoomsQuery(undefined, {
+  const { data: roomsData, isLoading: isLoadingRooms, refetch: refetchRooms } = useGetAvailableRoomsQuery(undefined, {
     skip: !isOpen,
   });
   const { data: myRoomData, refetch: refetchMyRoom } = useGetMyRoomQuery(undefined, {
@@ -63,7 +65,14 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
       }).unwrap();
 
       toast.success(result.message || `Room ${selectedRoom} selected successfully!`);
-      await refetchMyRoom();
+      
+      // Refetch room data and invalidate cache so other doctors see updated availability
+      await Promise.all([
+        refetchMyRoom(),
+        refetchRooms(),
+        dispatch(roomsApiSlice.util.invalidateTags(['Rooms', 'MyRoom']))
+      ]);
+      
       onClose();
     } catch (error) {
       console.error('Room selection error:', error);
@@ -77,23 +86,31 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
     return null;
   }
 
-  const rooms = roomsData?.data?.rooms || [];
+  const rooms = roomsData?.data?.rooms || []; // These are only available (unoccupied) rooms
   const distribution = roomsData?.data?.distribution || {};
+  const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
   const roomOptions = rooms.map(room => ({
     value: room,
     label: `${room} (${distribution[room] || 0} patients)`,
   }));
 
-  // If no rooms available, add default rooms
+  // If no rooms available, add default rooms (but only if they're not occupied)
   if (roomOptions.length === 0) {
     for (let i = 1; i <= 10; i++) {
-      roomOptions.push({
-        value: `Room ${i}`,
-        label: `Room ${i} (0 patients)`,
-      });
+      const roomName = `Room ${i}`;
+      // Only add if not occupied
+      if (!occupiedRooms[roomName]) {
+        roomOptions.push({
+          value: roomName,
+          label: `${roomName} (0 patients)`,
+        });
+      }
     }
   }
+  
+  // Show message if all rooms are occupied
+  const allRoomsOccupied = roomOptions.length === 0 && Object.keys(occupiedRooms).length > 0;
 
   return (
     <Modal
@@ -107,7 +124,10 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
         <div className="space-y-4">
           <p className="text-sm text-gray-600 mb-4">
             Please select the room you are sitting in today and the time you started.
-            All patients assigned to this room will be automatically assigned to you.
+            All unassigned patients in this room will be automatically assigned to you.
+            <span className="block mt-1 text-xs text-orange-600 font-medium">
+              Note: Only one doctor can be assigned to each room. Rooms already assigned to other doctors are not shown.
+            </span>
           </p>
 
           {/* Room Selection */}
@@ -116,20 +136,35 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
               <FiHome className="w-4 h-4 text-primary-600" />
               Which room are you sitting in today? <span className="text-red-500">*</span>
             </label>
-            <Select
-              name="room"
-              value={selectedRoom}
-              onChange={(e) => setSelectedRoom(e.target.value)}
-              options={roomOptions}
-              placeholder="Select room"
-              searchable={true}
-              disabled={isLoadingRooms}
-              className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
-            />
-            {selectedRoom && distribution[selectedRoom] !== undefined && (
-              <p className="text-xs text-gray-500 mt-1">
-                {distribution[selectedRoom]} patient(s) currently assigned to this room
-              </p>
+            {allRoomsOccupied ? (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  All rooms are currently assigned to other doctors. Please contact the administrator or wait for a room to become available.
+                </p>
+              </div>
+            ) : (
+              <>
+                <Select
+                  name="room"
+                  value={selectedRoom}
+                  onChange={(e) => setSelectedRoom(e.target.value)}
+                  options={roomOptions}
+                  placeholder="Select room"
+                  searchable={true}
+                  disabled={isLoadingRooms || allRoomsOccupied}
+                  className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
+                />
+                {selectedRoom && distribution[selectedRoom] !== undefined && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {distribution[selectedRoom]} patient(s) currently assigned to this room
+                  </p>
+                )}
+                {Object.keys(occupiedRooms).length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1 italic">
+                    {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and are not shown.
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -176,7 +211,7 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
           <Button
             type="submit"
             loading={isSubmitting || isSelectingRoom}
-            disabled={isSubmitting || isSelectingRoom || !selectedRoom || !assignmentTime}
+            disabled={isSubmitting || isSelectingRoom || !selectedRoom || !assignmentTime || allRoomsOccupied}
             className="bg-[#0ea5e9] hover:bg-[#0284c7]"
           >
             <FiCheck className="mr-2" />

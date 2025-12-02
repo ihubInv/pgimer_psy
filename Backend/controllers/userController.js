@@ -4,6 +4,7 @@ const LoginOTP = require('../models/LoginOTP');
 const RefreshToken = require('../models/RefreshToken');
 const { sendEmail } = require('../config/email');
 const { generateAccessToken, getDeviceInfo, getIpAddress } = require('../utils/tokenUtils');
+const db = require('../config/database');
 
 class UserController {
   // Register a new user
@@ -521,6 +522,18 @@ class UserController {
       }
 
       const assignmentTime = assignment_time || new Date().toISOString();
+      const roomNumber = room_number.trim();
+
+      // Check if room is already occupied by another doctor (exclude current user to allow re-selection)
+      const { isRoomOccupied } = require('../utils/roomAssignment');
+      const roomStatus = await isRoomOccupied(roomNumber, userId);
+      
+      if (roomStatus.occupied) {
+        return res.status(409).json({
+          success: false,
+          message: `Room ${roomNumber} is already assigned to Dr. ${roomStatus.doctor.name}. Only one doctor can be assigned to a room.`
+        });
+      }
 
       // Get user and assign room
       const user = await User.findById(userId);
@@ -540,22 +553,27 @@ class UserController {
         });
       }
 
+      // If user already has a different room assigned, clear it first
+      if (user.current_room && user.current_room !== roomNumber) {
+        await user.clearRoom();
+      }
+
       // Assign room to doctor
-      await user.assignRoom(room_number.trim(), assignmentTime);
+      await user.assignRoom(roomNumber, assignmentTime);
 
       // Auto-assign all patients in this room to this doctor
       const { assignPatientsToDoctor } = require('../utils/roomAssignment');
       const assignmentResult = await assignPatientsToDoctor(
         userId,
-        room_number.trim(),
+        roomNumber,
         assignmentTime
       );
 
       res.json({
         success: true,
-        message: `Room ${room_number} selected successfully. ${assignmentResult.assigned} patient(s) assigned to you.`,
+        message: `Room ${roomNumber} selected successfully. ${assignmentResult.assigned} patient(s) assigned to you.`,
         data: {
-          room: room_number.trim(),
+          room: roomNumber,
           assignment_time: assignmentTime,
           patients_assigned: assignmentResult.assigned,
           patients: assignmentResult.patients
@@ -590,15 +608,44 @@ class UserController {
   // Get available rooms
   static async getAvailableRooms(req, res) {
     try {
-      const { getAvailableRooms, getRoomDistribution } = require('../utils/roomAssignment');
-      const rooms = await getAvailableRooms();
+      const { getAvailableRooms, getRoomDistribution, getOccupiedRooms } = require('../utils/roomAssignment');
+      const rooms = await getAvailableRooms(true); // Exclude occupied rooms
       const distribution = await getRoomDistribution();
+      const occupiedRooms = await getOccupiedRooms();
+      
+      // Get doctor info for occupied rooms
+      const today = new Date().toISOString().slice(0, 10);
+      const occupiedRoomsArray = Array.from(occupiedRooms);
+      let occupiedRoomsInfo = {};
+      
+      if (occupiedRoomsArray.length > 0) {
+        // Query each room individually to avoid array parameter issues
+        for (const room of occupiedRoomsArray) {
+          const occupiedResult = await db.query(
+            `SELECT current_room, id, name 
+             FROM users 
+             WHERE current_room = $1
+               AND DATE(room_assignment_time) = $2
+             LIMIT 1`,
+            [room, today]
+          );
+          
+          if (occupiedResult.rows.length > 0) {
+            const row = occupiedResult.rows[0];
+            occupiedRoomsInfo[row.current_room] = {
+              doctor_id: row.id,
+              doctor_name: row.name
+            };
+          }
+        }
+      }
 
       res.json({
         success: true,
         data: {
-          rooms,
-          distribution
+          rooms, // Only available (unoccupied) rooms
+          distribution,
+          occupied_rooms: occupiedRoomsInfo // Info about which rooms are taken and by whom
         }
       });
     } catch (error) {
