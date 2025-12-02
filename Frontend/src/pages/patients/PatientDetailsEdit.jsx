@@ -1275,23 +1275,43 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     return patientCreatedDate && patientCreatedDate === todayDateString;
   };
 
-  // Filter out today's visits from history to get only past visits
+  // Get today's date string for filtering
   const todayDateString = toISTDateString(new Date());
   
-  // Get today's visits (current visit)
+  // First, determine if patient is existing (has past history or not created today)
+  // This needs to be calculated before filtering to avoid circular dependency
+  const hasAnyPastVisits = visitHistory.some(visit => {
+    if (!visit) return false;
+    const visitDate = toISTDateString(visit.visit_date);
+    return visitDate && visitDate !== todayDateString;
+  });
+  
+  const hasAnyPastProformas = patientProformas.some(proforma => {
+    if (!proforma) return false;
+    const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
+    return proformaDate && proformaDate !== todayDateString;
+  });
+  
+  // Patient is existing if: not created today OR has past visits/proformas
+  const isExistingPatient = !isNewPatientToday() || hasAnyPastVisits || hasAnyPastProformas;
+  
+  // Get today's visits (current visit) - for display in current visit section
   const todayVisitHistory = visitHistory.filter(visit => {
     const visitDate = toISTDateString(visit.visit_date);
     return visitDate && visitDate === todayDateString;
   });
   
-  const pastVisitHistory = visitHistory.filter(visit => {
-    if (!visit) return false;
-    const visitDate = toISTDateString(visit.visit_date);
-    // Include all visits that are not today's visits (any date that's not today)
-    // Also include visits without a date (they should be considered past)
-    if (!visitDate) return true; // Include visits without date as past
-    return visitDate !== todayDateString;
-  });
+  // For existing patients, show ALL visits in history (including today's) from registration date
+  // For new patients, only show past visits (exclude today's)
+  const pastVisitHistory = isExistingPatient 
+    ? visitHistory.filter(visit => visit !== null && visit !== undefined) // Show all visits for existing patients from registration
+    : visitHistory.filter(visit => {
+        if (!visit) return false;
+        const visitDate = toISTDateString(visit.visit_date);
+        // For new patients, exclude today's visits from past history
+        if (!visitDate) return true; // Include visits without date as past
+        return visitDate !== todayDateString;
+      });
   
   // Separate today's proformas (current visit) from past proformas
   const todayProformas = patientProformas.filter(proforma => {
@@ -1299,14 +1319,17 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     return proformaDate && proformaDate === todayDateString;
   });
   
-  const pastProformas = patientProformas.filter(proforma => {
-    if (!proforma) return false;
-    const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
-    // Include all proformas that are not today's proformas
-    // Also include proformas without a date (they should be considered past)
-    if (!proformaDate) return true; // Include proformas without date as past
-    return proformaDate !== todayDateString;
-  });
+  // For existing patients, show ALL proformas in history (including today's) from registration date
+  // For new patients, only show past proformas (exclude today's)
+  const pastProformas = isExistingPatient
+    ? patientProformas.filter(proforma => proforma !== null && proforma !== undefined) // Show all proformas for existing patients from registration
+    : patientProformas.filter(proforma => {
+        if (!proforma) return false;
+        const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
+        // For new patients, exclude today's proformas from past history
+        if (!proformaDate) return true; // Include proformas without date as past
+        return proformaDate !== todayDateString;
+      });
 
   // Get the latest proforma for current visit (most recent today's proforma)
   const currentVisitProforma = todayProformas.length > 0 
@@ -1323,11 +1346,9 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   // Check if patient is new (created today) and has no past history
   const isNewPatientWithNoHistory = isNewPatientToday() && !hasPastHistory;
 
-  // Determine if patient is today's patient or existing patient
+  // Determine if patient is today's patient
   // Today's patient: created today OR has visit/proforma today
-  // Existing patient: has past history (not created today OR has past visits/proformas)
   const isTodaysPatient = isNewPatientToday() || todayProformas.length > 0 || todayVisitHistory.length > 0;
-  const isExistingPatient = hasPastHistory || (!isNewPatientToday() && patientProformas.length > 0);
 
   // State to control showing form (only show if no current visit proforma or editing)
   const [showProformaForm, setShowProformaForm] = useState(() => {
@@ -3223,8 +3244,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
           {expandedCards.clinical && (
             <div className="p-6 space-y-6">
-              {/* Current Visit and Past Visit History - Show in parallel */}
-              {(currentVisitProforma && !showProformaForm) || (hasPastHistory && pastProformas.length > 0) ? (
+              {/* Current Visit and Past Visit History - Show in parallel for existing patients */}
+              {isExistingPatient && ((currentVisitProforma && !showProformaForm) || (hasPastHistory && (pastProformas.length > 0 || pastVisitHistory.length > 0))) ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Current Visit Section - Show today's proforma if exists */}
                   {currentVisitProforma && !showProformaForm && (
@@ -3316,22 +3337,24 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                   {hasPastHistory && (pastProformas.length > 0 || pastVisitHistory.length > 0) && (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3">
-                        <h4 className="text-lg font-semibold text-gray-800">Past Visit History</h4>
+                        <h4 className="text-lg font-semibold text-gray-800">
+                          {isExistingPatient ? 'All Visit History' : 'Past Visit History'}
+                        </h4>
                         <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
                           {pastProformas.length + pastVisitHistory.length} {pastProformas.length + pastVisitHistory.length === 1 ? 'Visit' : 'Visits'}
                         </span>
                       </div>
                       
                       <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                        {/* Combine and sort all past visits and proformas by date */}
+                        {/* Combine and sort all visits and proformas by date (from registration to now) */}
                         {(() => {
-                          // Combine all past visits and proformas
+                          // Combine all visits and proformas (for existing patients, includes all from registration date)
                           const allPastItems = [
                             ...pastProformas.map(p => ({ ...p, isProforma: true })),
                             ...pastVisitHistory.map(v => ({ ...v, isProforma: false }))
                           ];
                           
-                          // Sort by date, most recent first
+                          // Sort by date, most recent first (showing all visits from registration date to now)
                           const sortedItems = allPastItems.sort((a, b) => {
                             const dateA = new Date(a.visit_date || a.created_at || 0);
                             const dateB = new Date(b.visit_date || b.created_at || 0);
@@ -3339,7 +3362,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                           });
                           
                           // Debug log to see what we're displaying
-                          console.log('[PatientDetailsEdit] Past history items:', {
+                          console.log('[PatientDetailsEdit] All visit history (from registration):', {
                             allVisitHistoryCount: visitHistory.length,
                             allProformasCount: patientProformas.length,
                             pastProformasCount: pastProformas.length,
