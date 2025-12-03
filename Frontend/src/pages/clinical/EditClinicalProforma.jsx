@@ -989,21 +989,27 @@ console.log("existingPrescription", existingPrescription);
       // ==============================
       try {
         // Determine if we're editing an existing performa or creating a new visit
-        // Only update if:
-        // 1. propInitialData has an id (explicitly editing a specific performa via Edit button), OR
-        // 2. We're in standalone update mode with a specific performa id from URL
-        // Otherwise, ALWAYS CREATE a new performa for the visit
-        const isEditingSpecificProforma = (propInitialData?.id) || (isUpdateMode && id && proforma?.id);
+        // CRITICAL RULE: Only update if propInitialData has an id (explicitly editing a specific past visit performa for corrections)
+        // For existing patients with pre-filled data (no id), ALWAYS CREATE a new record
+        // This ensures:
+        // 1. New patients → blank form → creates new record
+        // 2. Existing patients → pre-filled form (reference) → creates new record (old data unchanged)
+        // 3. Past visit corrections → form with id → updates that specific record
+        const isEditingSpecificProforma = propInitialData?.id && (isUpdateMode || (propInitialData?.id && id && proforma?.id));
         
         if (isEditingSpecificProforma) {
-          // Update existing performa (only for corrections/edits of a specific record)
+          // Update existing performa (ONLY for corrections/edits of a specific past visit record)
+          // This is the ONLY case where we update - when explicitly editing a past visit
           const performaIdToUpdate = propInitialData?.id || proforma?.id;
           const updateData = { ...proformaData, id: performaIdToUpdate };
           const result = await updateProforma(updateData).unwrap();
           savedProforma = result?.data?.proforma || proforma;
           toast.success("Clinical proforma updated successfully!");
         } else {
-          // CREATE NEW performa for this visit (default behavior)
+          // CREATE NEW performa for this visit (default behavior for all new visits)
+          // This applies to:
+          // - New patients (blank form)
+          // - Existing patients (pre-filled form from last visit - creates new record)
           // This ensures each visit creates a new immutable record
           // Old performas remain untouched as historical records
           const result = await createProforma(proformaData).unwrap();

@@ -1365,6 +1365,16 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       })[0]
     : null;
 
+  // Get the last visit's proforma for pre-filling form (for existing patients)
+  // This is used as reference only - will create a NEW record when submitted
+  const lastVisitProforma = trulyPastProformas.length > 0
+    ? trulyPastProformas.sort((a, b) => {
+        const dateA = new Date(a.visit_date || a.created_at || 0);
+        const dateB = new Date(b.visit_date || b.created_at || 0);
+        return dateB - dateA; // Most recent first
+      })[0]
+    : null;
+
   // Check if patient has actual past history (not including today's visits/proformas)
   const hasPastHistory = pastVisitHistory.length > 0 || pastProformas.length > 0;
 
@@ -3286,145 +3296,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
           {expandedCards.clinical && (
             <div className="p-6 space-y-6">
-              {/* All Visit History Section - Show first, before current visit form */}
-              {hasPastHistory && (pastProformas.length > 0 || pastVisitHistory.length > 0) && (
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <h4 className="text-lg font-semibold text-gray-800">
-                          {isExistingPatient ? 'All Visit History' : 'Past Visit History'}
-                        </h4>
-                        <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                          {pastProformas.length + pastVisitHistory.length} {pastProformas.length + pastVisitHistory.length === 1 ? 'Visit' : 'Visits'}
-                        </span>
-                      </div>
-                      
-                      <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                        {/* Combine and sort all visits and proformas by date (from registration to now) */}
-                        {(() => {
-                          // Combine all visits and proformas (for existing patients, includes all from registration date)
-                          const allPastItems = [
-                            ...pastProformas.map(p => ({ ...p, isProforma: true })),
-                            ...pastVisitHistory.map(v => ({ ...v, isProforma: false }))
-                          ];
-                          
-                          // Sort by date, most recent first (showing all visits from registration date to now)
-                          const sortedItems = allPastItems.sort((a, b) => {
-                            const dateA = new Date(a.visit_date || a.created_at || 0);
-                            const dateB = new Date(b.visit_date || b.created_at || 0);
-                            return dateB - dateA;
-                          });
-                          
-                          // Debug log to see what we're displaying
-                          console.log('[PatientDetailsEdit] All visit history (from registration):', {
-                            allVisitHistoryCount: visitHistory.length,
-                            allProformasCount: patientProformas.length,
-                            pastProformasCount: pastProformas.length,
-                            pastVisitHistoryCount: pastVisitHistory.length,
-                            totalItems: sortedItems.length,
-                            todayDateString: todayDateString,
-                            items: sortedItems.map(item => ({
-                              id: item.id,
-                              date: item.visit_date || item.created_at,
-                              isProforma: item.isProforma,
-                              visitDate: toISTDateString(item.visit_date || item.created_at)
-                            }))
-                          });
-                          
-                          return sortedItems;
-                        })().map((item, index) => {
-                          const visitDate = formatDate(item.visit_date || item.created_at);
-                          const visitStatus = item.visit_status || (item.isProforma ? 'completed' : 'scheduled');
-                          const isProforma = item.isProforma;
-                          
-                          return (
-                            <div
-                              key={item.id || index}
-                              className="border border-gray-200 rounded-lg p-4 hover:border-green-300 hover:shadow-md transition-all bg-white"
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                    <div className="flex items-center gap-2">
-                                      <FiCalendar className="w-4 h-4 text-gray-500" />
-                                      <span className="font-semibold text-gray-900">
-                                        {visitDate}
-                                      </span>
-                                    </div>
-                                    {(item.visit_type || (item.isProforma && item.visit_type)) && (
-                                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                        (item.visit_type === 'first_visit' || item.visit_type === 'First Visit') 
-                                          ? 'bg-purple-100 text-purple-800' 
-                                          : 'bg-blue-100 text-blue-800'
-                                      }`}>
-                                        {item.visit_type === 'first_visit' || item.visit_type === 'First Visit' ? 'First Visit' : 'Follow-up'}
-                                      </span>
-                                    )}
-                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                      visitStatus === 'completed' 
-                                        ? 'bg-green-100 text-green-800'
-                                        : visitStatus === 'in_progress'
-                                        ? 'bg-yellow-100 text-yellow-800'
-                                        : 'bg-gray-100 text-gray-800'
-                                    }`}>
-                                      {visitStatus}
-                                    </span>
-                                    {isProforma && (
-                                      <span className="px-2 py-1 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                                        Clinical Proforma
-                                      </span>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="grid grid-cols-1 gap-3 mt-3">
-                                    {item.doctor_name && (
-                                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                                        <FiUser className="w-4 h-4" />
-                                        <span><span className="font-medium text-gray-800">Doctor:</span> {item.doctor_name}</span>
-                                      </div>
-                                    )}
-                                    {item.room_no && (
-                                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                                        <FiHome className="w-4 h-4" />
-                                        <span><span className="font-medium text-gray-800">Room:</span> {item.room_no}</span>
-                                      </div>
-                                    )}
-                                    {item.diagnosis && (
-                                      <div className="flex items-start gap-2 text-sm text-gray-600">
-                                        <FiFileText className="w-4 h-4 mt-0.5" />
-                                        <span><span className="font-medium text-gray-800">Diagnosis:</span> {item.diagnosis}</span>
-                                      </div>
-                                    )}
-                                    {item.notes && !item.diagnosis && (
-                                      <div className="flex items-start gap-2 text-sm text-gray-600">
-                                        <FiFileText className="w-4 h-4 mt-0.5" />
-                                        <span><span className="font-medium text-gray-800">Notes:</span> {item.notes}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                                
-                                <div className="flex items-center gap-2 ml-4">
-                                  {isProforma && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => navigate(`/clinical/${item.id}`)}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
-                                    >
-                                      <FiEye className="w-3.5 h-3.5" />
-                                      View
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-              {/* Current Visit Section - Show today's proforma if exists, after history */}
+              {/* Current Visit Section - Show today's proforma if exists */}
               {currentVisitProforma && !showProformaForm && (
                 <div className="space-y-4 border-t border-gray-200 pt-6">
                   <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -3512,7 +3384,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                 </div>
               )}
 
-              {/* Current Visit Form - Show after history, if no current visit proforma exists OR if user is editing OR if new patient */}
+              {/* Current Visit Form - Show if no current visit proforma exists OR if user is editing OR if new patient */}
               {/* Always show for new patients without history */}
               {(() => {
                 // Always show form for new patients without history
@@ -3520,7 +3392,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                 // Show form if no current visit proforma or user wants to edit
                 return showProformaForm || !currentVisitProforma;
               })() && (
-                <div className={(hasPastHistory && (pastProformas.length > 0 || pastVisitHistory.length > 0)) || (currentVisitProforma && !showProformaForm) ? "border-t border-gray-200 pt-6 mt-6" : ""}>
+                <div className={currentVisitProforma && !showProformaForm ? "border-t border-gray-200 pt-6 mt-6" : ""}>
                   {/* Show header for new patients or when adding new proforma */}
                   {(!isExistingPatient || !hasPastHistory || pastProformas.length === 0) && !currentVisitProforma ? (
                     <div className="mb-4">
@@ -3532,17 +3404,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                       </p>
                     </div>
                   ) : hasPastHistory && pastProformas.length > 0 ? (
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="mb-4">
                       <h4 className="text-lg font-semibold text-gray-800">New Walk-in Clinical Proforma</h4>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowProformaForm(false)}
-                        className="text-gray-600 hover:text-gray-800"
-                      >
-                        <FiX className="w-4 h-4 mr-1" />
-                        Cancel
-                      </Button>
                     </div>
                   ) : null}
                   <EditClinicalProforma
@@ -3552,6 +3415,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                     // 2. Current visit "Edit" = Create New (blank form, no old data)
                     // 3. Never load current visit performa data - always create fresh
                     initialData={selectedProforma && selectedProforma.id && isEditingPastProforma ? {
+            // CASE 1: Editing a PAST visit performa (corrections only) - includes id for update
             // Pass full existing proforma data if available
             ...selectedProforma,
             patient_id: selectedProforma.patient_id?.toString() || patient?.id?.toString() || '',
@@ -3574,16 +3438,94 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
             treatment_prescribed: selectedProforma.treatment_prescribed || '',
             mse_delusions: selectedProforma.mse_delusions || '',
             adl_reasoning: selectedProforma.adl_reasoning || '',
+          } : lastVisitProforma && !isNewPatientWithNoHistory ? {
+            // CASE 2: Existing patient - Pre-fill with last visit's data (as reference only)
+            // CRITICAL: Do NOT include id - this ensures a NEW record is created on submit
+            // This data is shown as reference, but any edits will create a new visit record
+            patient_id: patient?.id?.toString() || '',
+            visit_date: new Date().toISOString().split('T')[0], // Always use today's date for new visit
+            visit_type: 'follow_up', // Existing patients are always follow-ups
+            room_no: patient?.room_no || lastVisitProforma.room_no || '',
+            assigned_doctor: patient?.assigned_doctor_id?.toString() || lastVisitProforma.assigned_doctor?.toString() || '',
+            informant_present: lastVisitProforma.informant_present ?? true,
+            nature_of_information: lastVisitProforma.nature_of_information || '',
+            onset_duration: lastVisitProforma.onset_duration || '',
+            course: lastVisitProforma.course || '',
+            precipitating_factor: lastVisitProforma.precipitating_factor || '',
+            illness_duration: lastVisitProforma.illness_duration || '',
+            current_episode_since: lastVisitProforma.current_episode_since || '',
+            mood: lastVisitProforma.mood || [],
+            behaviour: lastVisitProforma.behaviour || [],
+            speech: lastVisitProforma.speech || [],
+            thought: lastVisitProforma.thought || [],
+            perception: lastVisitProforma.perception || [],
+            somatic: lastVisitProforma.somatic || [],
+            bio_functions: lastVisitProforma.bio_functions || [],
+            adjustment: lastVisitProforma.adjustment || [],
+            cognitive_function: lastVisitProforma.cognitive_function || [],
+            fits: lastVisitProforma.fits || [],
+            sexual_problem: lastVisitProforma.sexual_problem || [],
+            substance_use: lastVisitProforma.substance_use || [],
+            past_history: lastVisitProforma.past_history || '',
+            family_history: lastVisitProforma.family_history || '',
+            associated_medical_surgical: lastVisitProforma.associated_medical_surgical || [],
+            mse_behaviour: lastVisitProforma.mse_behaviour || [],
+            mse_affect: lastVisitProforma.mse_affect || [],
+            mse_thought: lastVisitProforma.mse_thought || '',
+            mse_delusions: lastVisitProforma.mse_delusions || '',
+            mse_perception: lastVisitProforma.mse_perception || [],
+            mse_cognitive_function: lastVisitProforma.mse_cognitive_function || [],
+            gpe: lastVisitProforma.gpe || '',
+            diagnosis: lastVisitProforma.diagnosis || '',
+            icd_code: lastVisitProforma.icd_code || '',
+            disposal: lastVisitProforma.disposal || '',
+            workup_appointment: lastVisitProforma.workup_appointment || '',
+            referred_to: lastVisitProforma.referred_to || '',
+            treatment_prescribed: lastVisitProforma.treatment_prescribed || '',
+            doctor_decision: lastVisitProforma.doctor_decision || 'simple_case',
+            // NOTE: No id field - this ensures a NEW record is created on submit
           } : {
-            // Default data for NEW visit - always creates a new performa record
-            // CRITICAL: This ensures each visit creates a new immutable record
+            // CASE 3: New patient (no past history) - Blank form (same UI structure)
             patient_id: patient?.id?.toString() || '',
             visit_date: new Date().toISOString().split('T')[0],
-            // Determine visit type: 'first_visit' if no past history, otherwise 'follow_up'
-            visit_type: (hasPastHistory || pastProformas.length > 0 || pastVisitHistory.length > 0) ? 'follow_up' : 'first_visit',
+            visit_type: 'first_visit',
             room_no: patient?.room_no || '',
             assigned_doctor: patient?.assigned_doctor_id?.toString() || '',
             informant_present: true,
+            nature_of_information: '',
+            onset_duration: '',
+            course: '',
+            precipitating_factor: '',
+            illness_duration: '',
+            current_episode_since: '',
+            mood: [],
+            behaviour: [],
+            speech: [],
+            thought: [],
+            perception: [],
+            somatic: [],
+            bio_functions: [],
+            adjustment: [],
+            cognitive_function: [],
+            fits: [],
+            sexual_problem: [],
+            substance_use: [],
+            past_history: '',
+            family_history: '',
+            associated_medical_surgical: [],
+            mse_behaviour: [],
+            mse_affect: [],
+            mse_thought: '',
+            mse_delusions: '',
+            mse_perception: [],
+            mse_cognitive_function: [],
+            gpe: '',
+            diagnosis: '',
+            icd_code: '',
+            disposal: '',
+            workup_appointment: '',
+            referred_to: '',
+            treatment_prescribed: '',
             doctor_decision: 'simple_case',
           }}
           onFormDataChange={(formData) => {
