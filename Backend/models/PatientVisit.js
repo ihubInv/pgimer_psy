@@ -169,6 +169,48 @@ class PatientVisit {
       throw error;
     }
   }
+
+  // Auto-complete all incomplete visits from previous days
+  // This should be called at the start of each day to mark old visits as completed
+  static async autoCompleteOldVisits() {
+    try {
+      // Use CURRENT_DATE from database (which respects the database timezone)
+      // This ensures we're comparing dates correctly regardless of server timezone
+      // Find all visits that are:
+      // 1. Not completed (status is 'scheduled' or 'in_progress')
+      // 2. Visit date is before today (using database CURRENT_DATE)
+      const result = await db.query(
+        `UPDATE patient_visits 
+         SET visit_status = 'completed', 
+             updated_at = CURRENT_TIMESTAMP,
+             notes = COALESCE(
+               CASE 
+                 WHEN notes IS NULL OR notes = '' THEN 'Auto-completed at start of new day'
+                 ELSE notes || E'\\nAuto-completed at start of new day'
+               END,
+               'Auto-completed at start of new day'
+             )
+         WHERE visit_date < CURRENT_DATE
+           AND visit_status IN ('scheduled', 'in_progress')
+         RETURNING id, patient_id, visit_date, visit_status`
+      );
+
+      const completedCount = result.rows?.length || 0;
+      
+      if (completedCount > 0) {
+        console.log(`[PatientVisit.autoCompleteOldVisits] ✅ Auto-completed ${completedCount} visit(s) from previous days`);
+      }
+
+      return {
+        success: true,
+        completedCount,
+        visits: result.rows || []
+      };
+    } catch (error) {
+      console.error('[PatientVisit.autoCompleteOldVisits] Error:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = PatientVisit;

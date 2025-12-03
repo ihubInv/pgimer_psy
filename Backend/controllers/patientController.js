@@ -319,6 +319,15 @@ class PatientController {
   // Get all patients with pagination and filters
   static async getAllPatients(req, res) {
     try {
+      // Auto-complete old visits from previous days (runs silently in background)
+      // This ensures that when a new day starts, all incomplete visits from previous days are marked as completed
+      try {
+        await PatientVisit.autoCompleteOldVisits();
+      } catch (autoCompleteError) {
+        // Log error but don't fail the request - auto-completion is a background task
+        console.error('[getAllPatients] Auto-complete old visits error (non-fatal):', autoCompleteError);
+      }
+
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const filters = {};
