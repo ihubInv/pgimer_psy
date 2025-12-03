@@ -173,9 +173,9 @@ const PatientsPage = () => {
 
       if (!patient) {
         toast.error('Patient data not found');
-        return;
-      }
-
+      return;
+    }
+    
       // Define complete header sets for each sheet (same as handleExportAll)
       const patientDetailsHeaders = {
         'Patient ID': 'N/A',
@@ -738,8 +738,13 @@ const PatientsPage = () => {
   };
 
   const handleExportAll = async () => {
+    let progressToastId = null;
+    
     try {
-      toast.info('Loading all patients\' Past History data for export...');
+      // Show initial loading toast
+      progressToastId = toast.loading('Loading all patients\' Past History data for export...', {
+        autoClose: false,
+      });
       
       const baseUrl = import.meta.env.VITE_API_URL || '/api';
       const todayDateString = toISTDateString(new Date());
@@ -768,9 +773,18 @@ const PatientsPage = () => {
       }
 
       if (!allPatients || allPatients.length === 0) {
+        toast.dismiss(progressToastId);
         toast.warning('No patients found to export');
         return;
       }
+
+      // Update toast with total count
+      toast.update(progressToastId, {
+        render: `Processing patients' Past History data for export... (0/${allPatients.length} patients)`,
+        type: 'info',
+        isLoading: true,
+        autoClose: false,
+      });
 
       // Helper function to build headers from constants
       const buildHeadersFromConstants = (constantArray, additionalHeaders = {}) => {
@@ -898,7 +912,15 @@ const PatientsPage = () => {
 
         if (!patientId) continue;
 
-        toast.info(`Processing patient ${i + 1} of ${allPatients.length}: ${patient.name || patient.cr_no || 'Unknown'}`);
+        // Update progress toast every 5 patients or on the last patient
+        if ((i + 1) % 5 === 0 || i === allPatients.length - 1) {
+          toast.update(progressToastId, {
+            render: `Processing patients' Past History data for export... (${i + 1}/${allPatients.length} patients)`,
+            type: 'info',
+            isLoading: true,
+            autoClose: false,
+          });
+        }
 
         // Helper function to populate row data from constants (same as in handleExport)
         const populateRowFromConstants = (row, constantArray, data, specialMappings = {}) => {
@@ -1224,9 +1246,15 @@ const PatientsPage = () => {
       // Write file
       XLSX.writeFile(wb, filename);
       
+      // Dismiss progress toast and show success
+      toast.dismiss(progressToastId);
       toast.success(`Successfully exported ${allPatients.length} patients' Past History data to Excel`);
     } catch (err) {
       console.error('Export error:', err);
+      // Dismiss progress toast and show error
+      if (progressToastId) {
+        toast.dismiss(progressToastId);
+      }
       toast.error(err?.message || 'Failed to export patients\' Past History data');
     }
   };
@@ -2756,7 +2784,7 @@ const PatientsPage = () => {
                   disabled={filteredPatients.length === 0 && (!data?.data?.patients || data.data.patients.length === 0)}
                 >
                   <FiDownload className="mr-2" />
-                  Export 
+                  Export
                 </Button>
               </div>
             </div>
