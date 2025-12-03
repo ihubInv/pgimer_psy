@@ -1307,32 +1307,51 @@ const PatientsPage = () => {
         return;
       }
 
+      // Get today's date string for filtering Past History
+      const todayDateString = toISTDateString(new Date());
+
       // Get clinical proforma data (may be empty array)
-      let clinicalProformas = [];
+      let allClinicalProformas = [];
       if (clinicalResponse.ok) {
         try {
           const clinicalResult = await clinicalResponse.json();
-          clinicalProformas = clinicalResult?.data?.proformas || clinicalResult?.data || [];
+          allClinicalProformas = clinicalResult?.data?.proformas || clinicalResult?.data || [];
         } catch (e) {
           console.warn('Could not parse clinical proforma data:', e);
         }
       }
 
+      // Filter to only Past History (not today's visits)
+      const clinicalProformas = allClinicalProformas.filter(proforma => {
+        if (!proforma) return false;
+        const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
+        if (!proformaDate) return true; // Include proformas without date as past
+        return proformaDate !== todayDateString;
+      });
+
       // Get ADL file data (may be empty array)
-      let adlFiles = [];
+      let allAdlFiles = [];
       if (adlResponse.ok) {
         try {
           const adlResult = await adlResponse.json();
           const files = adlResult?.data?.adlFiles || adlResult?.data?.files || adlResult?.data || [];
           // Ensure it's always an array
-          adlFiles = Array.isArray(files) ? files : [];
+          allAdlFiles = Array.isArray(files) ? files : [];
         } catch (e) {
           console.warn('Could not parse ADL file data:', e);
-          adlFiles = [];
+          allAdlFiles = [];
         }
       }
 
-      // Fetch prescriptions for all clinical proformas
+      // Filter to only Past History (not today's ADL files)
+      const adlFiles = allAdlFiles.filter(adl => {
+        if (!adl) return false;
+        const adlDate = toISTDateString(adl.file_created_date || adl.created_at);
+        if (!adlDate) return true; // Include ADL files without date as past
+        return adlDate !== todayDateString;
+      });
+
+      // Fetch prescriptions for past clinical proformas only
       let allPrescriptions = [];
       if (clinicalProformas && clinicalProformas.length > 0) {
         const prescriptionPromises = clinicalProformas.slice(0, 10).map(proforma => 
@@ -1371,6 +1390,9 @@ const PatientsPage = () => {
         }
       }
 
+      // Check if there's any Past History data
+      const hasPastHistory = clinicalProformas.length > 0 || adlFiles.length > 0 || allPrescriptions.length > 0;
+
       // Convert logo to base64 for embedding in print
       let logoBase64 = '';
       try {
@@ -1386,7 +1408,15 @@ const PatientsPage = () => {
       }
 
       // Create print content with all data
-      const printContent = generatePrintContent(patient, clinicalProformas, adlFiles, allPrescriptions, logoBase64);
+      // If Past History exists, print it; otherwise print only Patient Details
+      const printContent = generatePrintContent(
+        patient, 
+        hasPastHistory ? clinicalProformas : [], 
+        hasPastHistory ? adlFiles : [], 
+        hasPastHistory ? allPrescriptions : [], 
+        logoBase64,
+        hasPastHistory // Pass flag to indicate if Past History should be shown
+      );
       
       // Create a new window for printing
       const printWindow = window.open('', '_blank');
@@ -1412,7 +1442,7 @@ const PatientsPage = () => {
   };
 
   // Generate print-friendly HTML content
-  const generatePrintContent = (patient, clinicalProformas = [], adlFiles = [], prescriptions = [], logoBase64 = '') => {
+  const generatePrintContent = (patient, clinicalProformas = [], adlFiles = [], prescriptions = [], logoBase64 = '', showPastHistory = true) => {
     const formatValue = (value) => {
       if (value === null || value === undefined || value === '') return 'N/A';
       if (typeof value === 'boolean') return value ? 'Yes' : 'No';
@@ -1982,7 +2012,7 @@ const PatientsPage = () => {
     ` : ''}
   </div>
 
-  ${clinicalProformas && clinicalProformas.length > 0 ? `
+  ${showPastHistory && clinicalProformas && clinicalProformas.length > 0 ? `
   <div class="section">
     <div class="section-title">Walk-in Clinical Proforma (${clinicalProformas.length} visit${clinicalProformas.length > 1 ? 's' : ''})</div>
     ${clinicalProformas.map((proforma, index) => `
@@ -2255,7 +2285,7 @@ const PatientsPage = () => {
   </div>
   ` : ''}
 
-  ${adlFiles && Array.isArray(adlFiles) && adlFiles.length > 0 ? `
+  ${showPastHistory && adlFiles && Array.isArray(adlFiles) && adlFiles.length > 0 ? `
   <div class="section">
     <div class="section-title">Out Patient Intake Record (${adlFiles.length} file${adlFiles.length > 1 ? 's' : ''})</div>
     ${adlFiles.map((adl, index) => `
@@ -2456,59 +2486,74 @@ const PatientsPage = () => {
   </div>
   ` : ''}
 
-  ${prescriptions && prescriptions.length > 0 ? `
-  <div class="section">
-    <div class="section-title">Prescription History (${prescriptions.length} prescription${prescriptions.length > 1 ? 's' : ''})</div>
-    ${prescriptions.map((prescription, index) => {
+  ${showPastHistory && prescriptions && prescriptions.length > 0 ? (() => {
+    // Group prescriptions by visit date and visit type
+    const groupedPrescriptions = {};
+    prescriptions.forEach(prescription => {
       const visitDate = prescription.visit_date ? formatDate(prescription.visit_date) : 'Unknown Date';
+      const visitType = prescription.visit_type || '';
+      const key = `${visitDate}_${visitType}`;
+      if (!groupedPrescriptions[key]) {
+        groupedPrescriptions[key] = {
+          visitDate,
+          visitType,
+          prescriptions: []
+        };
+      }
+      groupedPrescriptions[key].prescriptions.push(prescription);
+    });
+    
+    // Convert to array and sort by visit date (newest first)
+    const groupedArray = Object.values(groupedPrescriptions).sort((a, b) => {
+      const dateA = new Date(a.visitDate);
+      const dateB = new Date(b.visitDate);
+      return dateB - dateA;
+    });
+    
+    return `
+  <div class="section">
+    <div class="section-title">PRESCRIPTION HISTORY</div>
+    ${groupedArray.map((group, groupIndex) => {
+      const visitTypeDisplay = group.visitType ? ` (${formatValue(group.visitType)})` : '';
       return `
-      <div style="margin-bottom: ${index < prescriptions.length - 1 ? '15px' : '0'}; padding: 18px; border: 2px solid #f59e0b; border-radius: 8px; background: linear-gradient(to bottom, #fffbeb, #ffffff); box-shadow: 0 2px 4px rgba(245, 158, 11, 0.1);">
-        <h3 style="margin: 0 0 18px 0; font-size: 13pt; font-weight: bold; color: #d97706; border-bottom: 2px solid #f59e0b; padding-bottom: 10px; background: linear-gradient(to right, #fef3c7, #fffbeb); padding: 10px; margin: -18px -18px 18px -18px; border-radius: 6px 6px 0 0;">
-          Prescription ${index + 1} - Visit Date: ${visitDate}${prescription.visit_type ? ` (${formatValue(prescription.visit_type)})` : ''}
-        </h3>
-        <div class="info-grid">
-          ${prescription.medication_name ? `
-          <div class="info-item">
-            <div class="info-label">Medication Name</div>
-            <div class="info-value">${formatValue(prescription.medication_name)}</div>
-          </div>
-          ` : ''}
-          ${prescription.dosage ? `
-          <div class="info-item">
-            <div class="info-label">Dosage</div>
-            <div class="info-value">${formatValue(prescription.dosage)}</div>
-          </div>
-          ` : ''}
-          ${prescription.frequency ? `
-          <div class="info-item">
-            <div class="info-label">Frequency</div>
-            <div class="info-value">${formatValue(prescription.frequency)}</div>
-          </div>
-          ` : ''}
-          ${prescription.duration ? `
-          <div class="info-item">
-            <div class="info-label">Duration</div>
-            <div class="info-value">${formatValue(prescription.duration)}</div>
-          </div>
-          ` : ''}
-          ${prescription.instructions ? `
-          <div class="info-item full-width">
-            <div class="info-label">Instructions</div>
-            <div class="info-value">${formatValue(prescription.instructions)}</div>
-          </div>
-          ` : ''}
-          ${prescription.created_at ? `
-          <div class="info-item">
-            <div class="info-label">Prescribed On</div>
-            <div class="info-value">${formatDateTime(prescription.created_at)}</div>
-          </div>
-          ` : ''}
+        <div style="margin-bottom: ${groupIndex < groupedArray.length - 1 ? '30px' : '0'};">
+          <h3 style="margin: 0 0 15px 0; font-size: 12pt; font-weight: bold; color: #d97706; padding-bottom: 8px; border-bottom: 2px solid #f59e0b;">
+            PRESCRIPTION - Visit Date: ${group.visitDate}${visitTypeDisplay}
+          </h3>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+              <tr style="background: linear-gradient(to bottom, #f59e0b, #d97706); color: #ffffff;">
+                <th style="border: 1px solid #cbd5e1; padding: 12px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px;">Medicine</th>
+                <th style="border: 1px solid #cbd5e1; padding: 12px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px;">Dosage</th>
+                <th style="border: 1px solid #cbd5e1; padding: 12px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px;">When</th>
+                <th style="border: 1px solid #cbd5e1; padding: 12px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px;">Frequency</th>
+                <th style="border: 1px solid #cbd5e1; padding: 12px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px;">Duration</th>
+                <th style="border: 1px solid #cbd5e1; padding: 12px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px;">Qty</th>
+                <th style="border: 1px solid #cbd5e1; padding: 12px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px;">Details</th>
+                <th style="border: 1px solid #cbd5e1; padding: 12px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px;">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${group.prescriptions.map((prescription, pIdx) => `
+              <tr style="background: ${pIdx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                <td style="border: 1px solid #cbd5e1; padding: 10px; font-size: 9pt; color: #1e293b;">${formatValue(prescription.medicine || prescription.medication_name)}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px; font-size: 9pt; color: #1e293b;">${formatValue(prescription.dosage)}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px; font-size: 9pt; color: #1e293b;">${formatValue(prescription.when_to_take)}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px; font-size: 9pt; color: #1e293b;">${formatValue(prescription.frequency)}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px; font-size: 9pt; color: #1e293b;">${formatValue(prescription.duration)}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px; font-size: 9pt; color: #1e293b;">${formatValue(prescription.quantity || prescription.qty)}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px; font-size: 9pt; color: #1e293b;">${formatValue(prescription.details || prescription.instructions)}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px; font-size: 9pt; color: #1e293b;">${formatValue(prescription.notes)}</td>
+              </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
-      </div>
-      `;
+        `;
     }).join('')}
   </div>
-  ` : ''}
+    `;
+  })() : ''}
 
   <div class="footer">
     <p><strong>Generated on:</strong> ${new Date().toLocaleString('en-IN', { 
