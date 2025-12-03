@@ -900,7 +900,7 @@ const ClinicalTodayPatients = () => {
               )}
               
               {/* No Patients Found Message */}
-              {filteredPatients.length === 0 && (
+              {/* {filteredPatients.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20">
                   <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
                     <FiUsers className="w-12 h-12 text-gray-400" />
@@ -913,7 +913,7 @@ const ClinicalTodayPatients = () => {
                     }
                   </p>
                 </div>
-              )}
+              )} */}
             </div>
           ) : filteredPatients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
