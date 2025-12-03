@@ -3,10 +3,13 @@ const db = require('../config/database');
 /**
  * Get all rooms that are already assigned to doctors today
  * Returns a set of room numbers that are taken
+ * Uses CURRENT_DATE from database to ensure consistency with IST timezone
  */
 async function getOccupiedRooms() {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    // Use CURRENT_DATE from database to ensure consistency with IST timezone
+    const todayResult = await db.query('SELECT CURRENT_DATE as today');
+    const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
     
     const result = await db.query(
       `SELECT DISTINCT current_room 
@@ -110,10 +113,14 @@ async function getRoomDistribution() {
 /**
  * Get room distribution count for TODAY's patients only
  * Returns a map of room -> patient count for today
+ * Uses CURRENT_DATE from database to ensure consistency with IST timezone
  */
 async function getTodayRoomDistribution() {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    // Use CURRENT_DATE from database to ensure consistency with IST timezone
+    // This matches the approach used in getAllPatients and other controllers
+    const todayResult = await db.query('SELECT CURRENT_DATE as today');
+    const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
     
     const result = await db.query(
       `SELECT assigned_room, COUNT(*) as patient_count
@@ -131,7 +138,7 @@ async function getTodayRoomDistribution() {
       distribution[row.assigned_room] = parseInt(row.patient_count, 10);
     });
 
-    console.log(`[getTodayRoomDistribution] Distribution for ${today}:`, distribution);
+    console.log(`[getTodayRoomDistribution] Distribution for ${today} (IST):`, distribution);
     
     return distribution;
   } catch (error) {

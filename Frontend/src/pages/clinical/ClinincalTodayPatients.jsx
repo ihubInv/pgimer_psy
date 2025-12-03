@@ -7,7 +7,7 @@ import {
 } from 'react-icons/fi';
 import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
-import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, roomsApiSlice } from '../../features/rooms/roomsApiSlice';
+import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice } from '../../features/rooms/roomsApiSlice';
 import { useDispatch } from 'react-redux';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
@@ -303,9 +303,13 @@ const ClinicalTodayPatients = () => {
   // Check if user is a doctor (Faculty, Admin, or Resident)
   const isDoctor = currentUser && (isAdmin(currentUser.role) || isSR(currentUser.role) || isJR(currentUser.role));
   
-  // Get current room assignment
+  // Get current room assignment - with polling to auto-refresh when new day starts
   const { data: myRoomData, isLoading: isLoadingRoom, refetch: refetchMyRoom } = useGetMyRoomQuery(undefined, {
     skip: !isDoctor,
+    pollingInterval: 60000, // Poll every 60 seconds to detect new day and room assignment changes
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
   });
   
   // Room selection state and queries
@@ -313,6 +317,7 @@ const ClinicalTodayPatients = () => {
     skip: !isDoctor,
   });
   const [selectRoom, { isLoading: isSelectingRoom }] = useSelectRoomMutation();
+  const [clearRoom, { isLoading: isClearingRoom }] = useClearRoomMutation();
   
   // Room selection form state
   const [selectedRoom, setSelectedRoom] = useState('');
@@ -329,13 +334,51 @@ const ClinicalTodayPatients = () => {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
   
-  // Initialize room selection form
+  // Helper function to check if room assignment is from today (IST)
+  const isRoomAssignmentFromToday = (roomData) => {
+    if (!roomData?.data?.room_assignment_time) return false;
+    
+    const assignmentDate = new Date(roomData.data.room_assignment_time);
+    const today = new Date();
+    
+    // Compare dates (YYYY-MM-DD) in IST timezone
+    const assignmentDateStr = assignmentDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    
+    return assignmentDateStr === todayStr;
+  };
+  
+  // Automatically clear room assignment if it's from a previous day
   useEffect(() => {
-    if (isDoctor && !isLoadingRoom && myRoomData) {
-      if (myRoomData.data?.current_room) {
-        setSelectedRoom(myRoomData.data.current_room);
-        if (myRoomData.data.room_assignment_time) {
-          const existingTime = new Date(myRoomData.data.room_assignment_time);
+    if (isDoctor && !isLoadingRoom && myRoomData?.data?.current_room) {
+      const isFromToday = isRoomAssignmentFromToday(myRoomData);
+      if (!isFromToday) {
+        // Room assignment is from a previous day, clear it automatically
+        clearRoom()
+          .unwrap()
+          .then(() => {
+            console.log('Room assignment cleared automatically - assignment was from a previous day');
+            refetchMyRoom();
+          })
+          .catch((error) => {
+            console.error('Failed to clear room assignment:', error);
+          });
+      }
+    }
+  }, [isDoctor, isLoadingRoom, myRoomData, clearRoom, refetchMyRoom]);
+  
+  // Get valid room data (only if from today)
+  const validRoomData = myRoomData && isRoomAssignmentFromToday(myRoomData) 
+    ? myRoomData 
+    : null;
+  
+  // Initialize room selection form - only use room data if it's from today
+  useEffect(() => {
+    if (isDoctor && !isLoadingRoom) {
+      if (validRoomData?.data?.current_room) {
+        setSelectedRoom(validRoomData.data.current_room);
+        if (validRoomData.data.room_assignment_time) {
+          const existingTime = new Date(validRoomData.data.room_assignment_time);
           setAssignmentTime(formatLocalDateTime(existingTime));
         } else {
           setAssignmentTime(formatLocalDateTime(new Date()));
@@ -345,7 +388,7 @@ const ClinicalTodayPatients = () => {
         setAssignmentTime(formatLocalDateTime(new Date()));
       }
     }
-  }, [isDoctor, isLoadingRoom, myRoomData]);
+  }, [isDoctor, isLoadingRoom, validRoomData]);
   
   // Handle room selection submit
   const handleRoomSubmit = async (e) => {
@@ -456,13 +499,13 @@ const ClinicalTodayPatients = () => {
     };
   }, [refetch]);
 
-  // Room selection data
+  // Room selection data - use today's distribution only (not historical)
   const rooms = roomsData?.data?.rooms || [];
-  const distribution = roomsData?.data?.distribution || {};
+  const distribution = roomsData?.data?.distribution_today || {}; // Use today's distribution only
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
   const roomOptions = rooms.map(room => {
-    const totalPatients = distribution[room] || 0;
+    const totalPatients = distribution[room] || 0; // This now shows only today's patients
     return {
       value: room,
       label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''})`,
@@ -484,7 +527,7 @@ const ClinicalTodayPatients = () => {
   }
   
   const allRoomsOccupied = allRoomOptions.length === 0 && Object.keys(occupiedRooms).length > 0;
-  const hasNoRoom = isDoctor && !isLoadingRoom && myRoomData && !myRoomData.data?.current_room;
+  const hasNoRoom = isDoctor && !isLoadingRoom && (!validRoomData || !validRoomData.data?.current_room);
   
 
 
@@ -699,8 +742,8 @@ const ClinicalTodayPatients = () => {
 
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-6 py-6">
       
-        {/* Current Room Assignment Card - Show if doctor has selected a room */}
-        {isDoctor && !isLoadingRoom && myRoomData?.data?.current_room && (
+        {/* Current Room Assignment Card - Show if doctor has selected a room TODAY */}
+        {isDoctor && !isLoadingRoom && validRoomData?.data?.current_room && validRoomData.data.current_room !== null && validRoomData.data.current_room !== '' && (
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
             <div className="p-4">
               <div className="flex items-center gap-3">
@@ -710,11 +753,11 @@ const ClinicalTodayPatients = () => {
                 <div>
                   <p className="text-sm text-gray-600">Current Room Assignment</p>
                   <p className="text-lg font-semibold text-gray-800">
-                    Room: {myRoomData.data.current_room}
+                    Room: {validRoomData.data.current_room}
                   </p>
-                  {myRoomData.data.room_assignment_time && (
+                  {validRoomData.data.room_assignment_time && (
                     <p className="text-xs text-gray-500 mt-1">
-                      Assigned at: {new Date(myRoomData.data.room_assignment_time).toLocaleString()}
+                      Assigned at: {new Date(validRoomData.data.room_assignment_time).toLocaleString()}
                     </p>
                   )}
                 </div>
@@ -735,10 +778,10 @@ const ClinicalTodayPatients = () => {
                 </span>
               </h3>
               {/* Show current room if doctor has one - simplified display since we have a card above */}
-              {isDoctor && myRoomData?.data?.current_room && (
+              {isDoctor && validRoomData?.data?.current_room && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg border border-blue-200">
                   <FiHome className="w-4 h-4" />
-                  <span className="text-sm font-medium">Room: {myRoomData.data.current_room}</span>
+                  <span className="text-sm font-medium">Room: {validRoomData.data.current_room}</span>
                 </div>
               )}
                 <div className="flex items-center gap-4 text-sm">
@@ -807,7 +850,7 @@ const ClinicalTodayPatients = () => {
                             />
                             {selectedRoom && distribution[selectedRoom] !== undefined && (
                               <p className="text-xs text-gray-500 mt-1">
-                                {distribution[selectedRoom]} patient{distribution[selectedRoom] !== 1 ? 's' : ''} assigned to this room (total)
+                                {distribution[selectedRoom]} patient{distribution[selectedRoom] !== 1 ? 's' : ''} assigned to this room today
                               </p>
                             )}
                             {Object.keys(occupiedRooms).length > 0 && (
