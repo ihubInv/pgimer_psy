@@ -410,7 +410,7 @@ const CreatePrescription = ({
       if (returnTab) {
         navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
       } else if (patientId) {
-        navigate(`/patients/${patientId}?tab=prescriptions`);
+        navigate(`/patients/${patientId}`);
       } else {
         navigate(-1);
       }
@@ -1370,7 +1370,7 @@ const CreatePrescription = ({
                 if (returnTab) {
                   navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
                 } else if (patientId) {
-                  navigate(`/patients/${patientId}?tab=prescriptions`);
+                  navigate(`/patients/${patientId}`);
                 } else {
                   navigate(-1);
                 }
