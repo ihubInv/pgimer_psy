@@ -243,7 +243,7 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/patients/${patient.id}?edit=false`)}
+              onClick={() => navigate(`/patients/${patient.id}?edit=false&mode=view`)}
               className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all hover:shadow-sm"
             >
               <FiEye className="w-3.5 h-3.5" />

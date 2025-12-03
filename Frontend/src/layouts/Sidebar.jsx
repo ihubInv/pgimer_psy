@@ -334,25 +334,30 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                     // "Today's Patients" should be active when:
                     // - On Today's Patients page itself
                     // - On patient detail page with edit=true&mode=create (creating new proforma from Today's Patients)
+                    // - On patient detail page with edit=false&mode=view (viewing from Today's Patients)
                     // - On Create Proforma page
                     // - On Prescribe Medication page
                     const isPatientDetailPage = location.startsWith('/patients/') && location !== '/patients/new' && location !== '/patients/select';
                     const isCreateMode = editParam === 'true' && modeParam === 'create';
+                    const isViewMode = editParam === 'false' && modeParam === 'view';
                     
                     isActive = location === item.to || 
                                location === '/clinical/new' ||
                                location.startsWith('/prescriptions') ||
-                               (isPatientDetailPage && isCreateMode);
+                               (isPatientDetailPage && (isCreateMode || isViewMode));
                   } else if (item.to === '/patients') {
                     // "Patients" tab should be active when:
                     // - On /patients page
-                    // - On patient detail page with edit=true (without mode=create)
+                    // - On patient detail page with edit=true (without mode=create) - editing patient
+                    // - On patient detail page with edit=false (without mode=view) - viewing from All Patients
                     // - On patient detail page without edit params
                     const isPatientDetailPage = location.startsWith('/patients/') && location !== '/patients/new' && location !== '/patients/select';
                     const isEditMode = editParam === 'true' && modeParam !== 'create';
+                    const isViewFromAllPatients = editParam === 'false' && modeParam !== 'view';
+                    const hasNoEditParams = !editParam;
                     
                     isActive = location === item.to || 
-                               (isPatientDetailPage && (isEditMode || !editParam));
+                               (isPatientDetailPage && (isEditMode || isViewFromAllPatients || hasNoEditParams));
                   } else {
                     // For other routes, use standard matching
                     isActive = location === item.to || location.startsWith(item.to + '/');
