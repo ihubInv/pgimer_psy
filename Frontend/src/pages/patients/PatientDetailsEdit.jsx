@@ -106,11 +106,28 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     prescription: true
   });
 
+  // State to track which individual visits are expanded within each card
+  const [expandedVisits, setExpandedVisits] = useState({});
+
   const togglePastHistoryCard = (cardName) => {
     setExpandedPastHistoryCards(prev => ({
       ...prev,
       [cardName]: !prev[cardName]
     }));
+  };
+
+  const toggleVisit = (cardType, visitId) => {
+    const key = `${cardType}-${visitId}`;
+    setExpandedVisits(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const isVisitExpanded = (cardType, visitId) => {
+    const key = `${cardType}-${visitId}`;
+    // Default to expanded (true) if not set
+    return expandedVisits[key] !== false;
   };
 
   const toggleCard = (cardName) => {
@@ -3965,35 +3982,57 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                           </div>
                           {expandedPastHistoryCards.clinicalProforma && (
                             <div className="p-6">
-                              <div className="space-y-6">
+                              <div className="space-y-4">
                                 {sortedProformas.map((proforma, index) => {
                                   const visitNumber = index + 1;
                                   const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                                  const visitId = proforma.id || `proforma-${index}`;
+                                  const isExpanded = isVisitExpanded('clinicalProforma', visitId);
                                   return (
-                                    <div key={proforma.id || `proforma-${index}`} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
-                                      <div className="mb-3">
-                                        <h5 className="text-md font-semibold text-gray-800 flex items-center gap-2">
-                                          <FiHash className="h-4 w-4 text-green-600" />
-                                          Visit {visitNumber} - Walk-in Clinical Proforma
-                                        </h5>
-                                        <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                    <Card key={visitId} className="border border-gray-200 shadow-sm">
+                                      <div
+                                        className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                                        onClick={() => toggleVisit('clinicalProforma', visitId)}
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <div className="p-2 bg-green-100 rounded-lg">
+                                            <FiHash className="h-4 w-4 text-green-600" />
+                                          </div>
+                                          <div>
+                                            <h5 className="text-md font-semibold text-gray-800">
+                                              Visit {visitNumber} - Walk-in Clinical Proforma
+                                            </h5>
+                                            <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {isExpanded ? (
+                                            <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                          ) : (
+                                            <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                          )}
+                                        </div>
                                       </div>
-                                      {isEditMode ? (
-                                        // Editable form when edit=true
-                                        <EditClinicalProforma
-                                          key={proforma.id}
-                                          initialData={{
-                                            ...proforma,
-                                            patient_id: proforma.patient_id?.toString() || patient?.id?.toString() || '',
-                                            visit_date: proforma.visit_date ? (proforma.visit_date.includes('T') ? proforma.visit_date.split('T')[0] : proforma.visit_date) : new Date().toISOString().split('T')[0],
-                                            assigned_doctor: proforma.assigned_doctor?.toString() || patient?.assigned_doctor_id?.toString() || '',
-                                          }}
-                                        />
-                                      ) : (
-                                        // View-only when not in edit mode
-                                        <ClinicalProformaDetails proforma={proforma} />
+                                      {isExpanded && (
+                                        <div className="p-4">
+                                          {isEditMode ? (
+                                            // Editable form when edit=true
+                                            <EditClinicalProforma
+                                              key={proforma.id}
+                                              initialData={{
+                                                ...proforma,
+                                                patient_id: proforma.patient_id?.toString() || patient?.id?.toString() || '',
+                                                visit_date: proforma.visit_date ? (proforma.visit_date.includes('T') ? proforma.visit_date.split('T')[0] : proforma.visit_date) : new Date().toISOString().split('T')[0],
+                                                assigned_doctor: proforma.assigned_doctor?.toString() || patient?.assigned_doctor_id?.toString() || '',
+                                              }}
+                                            />
+                                          ) : (
+                                            // View-only when not in edit mode
+                                            <ClinicalProformaDetails proforma={proforma} />
+                                          )}
+                                        </div>
                                       )}
-                                    </div>
+                                    </Card>
                                   );
                                 })}
                               </div>
@@ -4024,36 +4063,58 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                             </div>
                             {expandedPastHistoryCards.intakeRecord && (
                               <div className="p-6">
-                                <div className="space-y-6">
+                                <div className="space-y-4">
                                   {sortedProformas.map((proforma, index) => {
                                     const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === proforma.id);
                                     if (!adlFile) return null;
                                     
                                     const visitNumber = index + 1;
                                     const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                                    const visitId = adlFile.id || adlFile.adl_file_id || adlFile.adlFileId || `adl-${index}`;
+                                    const isExpanded = isVisitExpanded('intakeRecord', visitId);
                                     return (
-                                      <div key={proforma.id || `adl-${index}`} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
-                                        <div className="mb-3">
-                                          <h5 className="text-md font-semibold text-gray-800 flex items-center gap-2">
-                                            <FiHash className="h-4 w-4 text-orange-600" />
-                                            Visit {visitNumber} - Out Patient Intake Record
-                                          </h5>
-                                          <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                      <Card key={visitId} className="border border-gray-200 shadow-sm">
+                                        <div
+                                          className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                                          onClick={() => toggleVisit('intakeRecord', visitId)}
+                                        >
+                                          <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-orange-100 rounded-lg">
+                                              <FiHash className="h-4 w-4 text-orange-600" />
+                                            </div>
+                                            <div>
+                                              <h5 className="text-md font-semibold text-gray-800">
+                                                Visit {visitNumber} - Out Patient Intake Record
+                                              </h5>
+                                              <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            {isExpanded ? (
+                                              <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                            ) : (
+                                              <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                            )}
+                                          </div>
                                         </div>
-                                        {isEditMode ? (
-                                          // Editable form when edit=true
-                                          <EditADL
-                                            key={adlFile.id}
-                                            adlFileId={adlFile.id || adlFile.adl_file_id || adlFile.adlFileId}
-                                            isEmbedded={true}
-                                            patientId={patient?.id?.toString()}
-                                            clinicalProformaId={proforma.id?.toString()}
-                                          />
-                                        ) : (
-                                          // View-only when not in edit mode
-                                          <ViewADL adlFiles={adlFile} />
+                                        {isExpanded && (
+                                          <div className="p-4">
+                                            {isEditMode ? (
+                                              // Editable form when edit=true
+                                              <EditADL
+                                                key={adlFile.id}
+                                                adlFileId={adlFile.id || adlFile.adl_file_id || adlFile.adlFileId}
+                                                isEmbedded={true}
+                                                patientId={patient?.id?.toString()}
+                                                clinicalProformaId={proforma.id?.toString()}
+                                              />
+                                            ) : (
+                                              // View-only when not in edit mode
+                                              <ViewADL adlFiles={adlFile} />
+                                            )}
+                                          </div>
                                         )}
-                                      </div>
+                                      </Card>
                                     );
                                   })}
                                 </div>
@@ -4084,34 +4145,56 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                           </div>
                           {expandedPastHistoryCards.prescription && (
                             <div className="p-6">
-                              <div className="space-y-6">
+                              <div className="space-y-4">
                                 {sortedProformas.map((proforma, index) => {
                                   const visitNumber = index + 1;
                                   const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                                  const visitId = proforma.id || `prescription-${index}`;
+                                  const isExpanded = isVisitExpanded('prescription', visitId);
                                   return (
-                                    <div key={proforma.id || `prescription-${index}`} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
-                                      <div className="mb-3">
-                                        <h5 className="text-md font-semibold text-gray-800 flex items-center gap-2">
-                                          <FiHash className="h-4 w-4 text-amber-600" />
-                                          Visit {visitNumber} - Prescription
-                                        </h5>
-                                        <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                    <Card key={visitId} className="border border-gray-200 shadow-sm">
+                                      <div
+                                        className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                                        onClick={() => toggleVisit('prescription', visitId)}
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <div className="p-2 bg-amber-100 rounded-lg">
+                                            <FiHash className="h-4 w-4 text-amber-600" />
+                                          </div>
+                                          <div>
+                                            <h5 className="text-md font-semibold text-gray-800">
+                                              Visit {visitNumber} - Prescription
+                                            </h5>
+                                            <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {isExpanded ? (
+                                            <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                          ) : (
+                                            <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                          )}
+                                        </div>
                                       </div>
-                                      {isEditMode ? (
-                                        // Editable form when edit=true
-                                        <PrescriptionEdit
-                                          proforma={proforma}
-                                          index={index}
-                                          patientId={patient?.id}
-                                        />
-                                      ) : (
-                                        // View-only when not in edit mode
-                                        <PrescriptionView 
-                                          clinicalProformaId={proforma.id}
-                                          patientId={patient?.id}
-                                        />
+                                      {isExpanded && (
+                                        <div className="p-4">
+                                          {isEditMode ? (
+                                            // Editable form when edit=true
+                                            <PrescriptionEdit
+                                              proforma={proforma}
+                                              index={index}
+                                              patientId={patient?.id}
+                                            />
+                                          ) : (
+                                            // View-only when not in edit mode
+                                            <PrescriptionView 
+                                              clinicalProformaId={proforma.id}
+                                              patientId={patient?.id}
+                                            />
+                                          )}
+                                        </div>
                                       )}
-                                    </div>
+                                    </Card>
                                   );
                                 })}
                               </div>
