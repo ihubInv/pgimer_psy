@@ -28,6 +28,7 @@ import {
 import EditClinicalProforma from '../clinical/EditClinicalProforma';
 import EditADL from '../adl/EditADL';
 import PrescriptionEdit from '../PrescribeMedication/PrescriptionEdit';
+import CreatePrescription from '../PrescribeMedication/CreatePrescription';
 import PrescriptionView from '../PrescribeMedication/PrescriptionView';
 import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
 import ViewADL from '../adl/ViewADL';
@@ -42,6 +43,8 @@ import PGI_Logo from '../../assets/PGI_Logo.png';
 const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, adlData, usersData, userRole, onSave, onCancel }) => {
   const [searchParams] = useSearchParams();
   const mode = searchParams.get('mode'); // Check for 'create' mode
+  const isEdit = searchParams.get('edit') === 'true'; // Check for 'edit' mode
+  const isCreateMode = mode === 'create'; // Check if mode is 'create'
   const [currentDoctorDecision, setCurrentDoctorDecision] = useState(null);
   const [occupationOther, setOccupationOther] = useState(''); // Custom occupation value
   const [familyTypeOther, setFamilyTypeOther] = useState(''); // Custom family type value
@@ -95,21 +98,25 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     pastHistory: false
   });
 
-  // State to track which visit cards are expanded in Past History
-  const [expandedVisits, setExpandedVisits] = useState({});
+  // State to track which Past History sub-cards are expanded
+  const [expandedPastHistoryCards, setExpandedPastHistoryCards] = useState({
+    patientDetails: true,
+    clinicalProforma: true,
+    intakeRecord: true,
+    prescription: true
+  });
 
-  const toggleCard = (cardName) => {
-    setExpandedCards(prev => ({
+  const togglePastHistoryCard = (cardName) => {
+    setExpandedPastHistoryCards(prev => ({
       ...prev,
       [cardName]: !prev[cardName]
     }));
   };
 
-  // Toggle individual visit card in Past History
-  const toggleVisitCard = (visitId) => {
-    setExpandedVisits(prev => ({
+  const toggleCard = (cardName) => {
+    setExpandedCards(prev => ({
       ...prev,
-      [visitId]: !prev[visitId]
+      [cardName]: !prev[cardName]
     }));
   };
 
@@ -3683,26 +3690,26 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
           {expandedCards.prescriptions && (
             <div ref={prescriptionPrintRef} className="p-6">
-              {patientProformas.length > 0 ? (
+              {/* Check URL params for edit mode */}
+              {isEdit && isCreateMode ? (
+                // Show CreatePrescription with empty fields when ?edit=true&mode=create
+                <CreatePrescription
+                  patientId={patient?.id}
+                  clinicalProformaId={currentVisitProforma?.id}
+                  returnTab={null}
+                  currentUser={currentUser}
+                />
+              ) : patientProformas.length > 0 ? (
+                // Show all proformas with PrescriptionEdit (both normal view and edit=true without mode=create)
                 <div className="space-y-6">
                   {patientProformas.map((proforma, index) => (
                     <React.Fragment key={proforma.id || index}>
-                      {/* <PrescriptionCard
-                      key={proforma.id || index}
-                      proforma={proforma}
-                      index={index}
-                      patientId={patient?.id}
-                    /> */}
                       <PrescriptionEdit
                         proforma={proforma}
                         index={index}
                         patientId={patient?.id}
                       />
-
-
                     </React.Fragment>
-
-
                   ))}
                 </div>
               ) : (
@@ -3728,7 +3735,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         </Card>
       )}
 
-      {/* Card 4: Past History - View-only display of all past visits */}
+      {/* Card 4: Past History - View-only display organized by card type */}
       {(canViewPrescriptions || canViewClinicalProforma) && (
         <Card className="shadow-lg border-0 bg-white">
           <div
@@ -3763,133 +3770,358 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
           </div>
 
           {expandedCards.pastHistory && (
-            <div className="p-6">
+            <div className="p-6 space-y-4">
               {trulyPastProformas.length > 0 ? (
-                <div className="space-y-8">
+                <>
                   {/* Sort past proformas by visit date (oldest first - chronological order) */}
-                  {trulyPastProformas
-                    .sort((a, b) => {
+                  {(() => {
+                    const sortedProformas = trulyPastProformas.sort((a, b) => {
                       const dateA = new Date(a.visit_date || a.created_at || 0);
                       const dateB = new Date(b.visit_date || b.created_at || 0);
                       return dateA - dateB; // Oldest first (chronological order)
-                    })
-                    .map((proforma, index) => {
-                    const visitNumber = index + 1; // Visit 1 is oldest, Visit N is most recent
-                    const visitDate = formatDate(proforma.visit_date || proforma.created_at);
-                    const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === proforma.id);
-                    const visitId = proforma.id || `visit-${index}`;
-                    const isVisitExpanded = expandedVisits[visitId] || false;
-                    
+                    });
+
+                    // Check if any ADL files exist
+                    const hasAdlFiles = sortedProformas.some(proforma => 
+                      patientAdlFiles.some(adl => adl.clinical_proforma_id === proforma.id)
+                    );
+
+                    // Determine if we're in edit mode for past history
+                    const isEditMode = isEdit;
+
                     return (
-                      <Card key={visitId} className="shadow-md border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
-                        {/* Visit Header - Clickable to expand/collapse */}
-                        <div 
-                          className="mb-4 pb-4 border-b-2 border-purple-300 cursor-pointer hover:bg-purple-100/50 transition-colors rounded-t-lg p-2 -m-2 mb-2"
-                          onClick={() => toggleVisitCard(visitId)}
-                        >
-                          <div className="flex items-center justify-between">
+                      <>
+                        {/* 1. Patient Details Card - Show once only, expandable/collapsible */}
+                        <Card className="shadow-md border-2 border-blue-200">
+                          <div
+                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                            onClick={() => togglePastHistoryCard('patientDetails')}
+                          >
                             <div className="flex items-center gap-3">
-                              <div className="p-2 bg-purple-600 rounded-lg">
-                                <FiHash className="h-5 w-5 text-white" />
+                              <div className="p-2 bg-blue-100 rounded-lg">
+                                <FiUser className="h-5 w-5 text-blue-600" />
                               </div>
-                              <div>
-                                <h4 className="text-xl font-bold text-gray-900">
-                                  Visit {visitNumber}
-                                </h4>
-                                <p className="text-sm text-gray-600 mt-1">
-                                  {visitDate}
-                                </p>
-                              </div>
+                              <h4 className="text-lg font-bold text-gray-900">Patient Details</h4>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500">
-                                {isVisitExpanded ? 'Minimize' : 'Expand'}
-                              </span>
-                              {isVisitExpanded ? (
-                                <FiChevronUp className="h-6 w-6 text-purple-600" />
+                              {expandedPastHistoryCards.patientDetails ? (
+                                <FiChevronUp className="h-5 w-5 text-gray-500" />
                               ) : (
-                                <FiChevronDown className="h-6 w-6 text-purple-600" />
+                                <FiChevronDown className="h-5 w-5 text-gray-500" />
                               )}
                             </div>
                           </div>
-                        </div>
-
-                        {/* Visit Content - Collapsible */}
-                        {isVisitExpanded && (
-                          <div className="space-y-6 animate-in fade-in duration-300">
-                          {/* Patient Details Card */}
-                          <div className="bg-white rounded-lg p-4 border border-gray-200">
-                            <h5 className="text-md font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                              <FiUser className="h-5 w-5 text-blue-600" />
-                              Patient Details
-                            </h5>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              <div>
-                                <label className="text-xs font-medium text-gray-500">Patient Name</label>
-                                <p className="text-sm font-semibold text-gray-900 mt-1">{patient?.name || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <label className="text-xs font-medium text-gray-500">CR No</label>
-                                <p className="text-sm text-gray-900 mt-1">{patient?.cr_no || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <label className="text-xs font-medium text-gray-500">PSY No</label>
-                                <p className="text-sm text-gray-900 mt-1">{patient?.psy_no || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <label className="text-xs font-medium text-gray-500">Visit Date</label>
-                                <p className="text-sm text-gray-900 mt-1">{visitDate}</p>
-                              </div>
-                              <div>
-                                <label className="text-xs font-medium text-gray-500">Visit Type</label>
-                                <p className="text-sm text-gray-900 mt-1">
-                                  {proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-xs font-medium text-gray-500">Room Number</label>
-                                <p className="text-sm text-gray-900 mt-1">{proforma.room_no || 'N/A'}</p>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Walk-in Clinical Proforma Card */}
-                          <div className="bg-white rounded-lg p-4 border border-gray-200">
-                            <h5 className="text-md font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                              <FiFileText className="h-5 w-5 text-green-600" />
-                              Walk-in Clinical Proforma
-                            </h5>
-                            <ClinicalProformaDetails proforma={proforma} />
-                          </div>
-
-                          {/* Out Patient Intake Record (ADL) Card - Only if exists */}
-                          {adlFile && (
-                            <div className="bg-white rounded-lg p-4 border border-gray-200">
-                              <h5 className="text-md font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                                <FiFolder className="h-5 w-5 text-orange-600" />
-                                Out Patient Intake Record
-                              </h5>
-                              <ViewADL adlFiles={adlFile} />
+                          {expandedPastHistoryCards.patientDetails && (
+                            <div className="p-6">
+                              {isEditMode ? (
+                                // Editable form fields when edit=true
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">Patient Name</label>
+                                    <input
+                                      type="text"
+                                      value={formData.name || ''}
+                                      onChange={handleChange}
+                                      name="name"
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">CR No</label>
+                                    <input
+                                      type="text"
+                                      value={formData.cr_no || ''}
+                                      onChange={handleChange}
+                                      name="cr_no"
+                                      disabled
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">PSY No</label>
+                                    <input
+                                      type="text"
+                                      value={formData.psy_no || ''}
+                                      onChange={handleChange}
+                                      name="psy_no"
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">Age</label>
+                                    <input
+                                      type="text"
+                                      value={formData.age || ''}
+                                      onChange={handleChange}
+                                      name="age"
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">Sex</label>
+                                    <Select
+                                      name="sex"
+                                      value={formData.sex || ''}
+                                      onChange={handleChange}
+                                      options={SEX_OPTIONS}
+                                      placeholder="Select sex"
+                                      searchable={true}
+                                      className="mt-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">Assigned Room</label>
+                                    <input
+                                      type="text"
+                                      value={formData.assigned_room || ''}
+                                      onChange={handleChange}
+                                      name="assigned_room"
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900"
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                // View-only fields when not in edit mode
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">Patient Name</label>
+                                    <input
+                                      type="text"
+                                      value={patient?.name || ''}
+                                      disabled
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">CR No</label>
+                                    <input
+                                      type="text"
+                                      value={patient?.cr_no || ''}
+                                      disabled
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">PSY No</label>
+                                    <input
+                                      type="text"
+                                      value={patient?.psy_no || ''}
+                                      disabled
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">Age</label>
+                                    <input
+                                      type="text"
+                                      value={patient?.age || ''}
+                                      disabled
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">Sex</label>
+                                    <input
+                                      type="text"
+                                      value={patient?.sex || ''}
+                                      disabled
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-gray-500">Assigned Room</label>
+                                    <input
+                                      type="text"
+                                      value={patient?.assigned_room || ''}
+                                      disabled
+                                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                    />
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
+                        </Card>
 
-                          {/* Prescription Card */}
-                          <div className="bg-white rounded-lg p-4 border border-gray-200">
-                            <h5 className="text-md font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                              <FiPackage className="h-5 w-5 text-amber-600" />
-                              Prescription
-                            </h5>
-                            <PrescriptionView 
-                              clinicalProformaId={proforma.id}
-                              patientId={patient?.id}
-                            />
+                        {/* 2. Walk-in Clinical Proforma Card - Show all visit-wise proformas, expandable/collapsible */}
+                        <Card className="shadow-md border-2 border-green-200">
+                          <div
+                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                            onClick={() => togglePastHistoryCard('clinicalProforma')}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-green-100 rounded-lg">
+                                <FiFileText className="h-5 w-5 text-green-600" />
+                              </div>
+                              <h4 className="text-lg font-bold text-gray-900">Walk-in Clinical Proforma</h4>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {expandedPastHistoryCards.clinicalProforma ? (
+                                <FiChevronUp className="h-5 w-5 text-gray-500" />
+                              ) : (
+                                <FiChevronDown className="h-5 w-5 text-gray-500" />
+                              )}
+                            </div>
                           </div>
-                          </div>
+                          {expandedPastHistoryCards.clinicalProforma && (
+                            <div className="p-6">
+                              <div className="space-y-6">
+                                {sortedProformas.map((proforma, index) => {
+                                  const visitNumber = index + 1;
+                                  const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                                  return (
+                                    <div key={proforma.id || `proforma-${index}`} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
+                                      <div className="mb-3">
+                                        <h5 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+                                          <FiHash className="h-4 w-4 text-green-600" />
+                                          Visit {visitNumber} - Walk-in Clinical Proforma
+                                        </h5>
+                                        <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                      </div>
+                                      {isEditMode ? (
+                                        // Editable form when edit=true
+                                        <EditClinicalProforma
+                                          key={proforma.id}
+                                          initialData={{
+                                            ...proforma,
+                                            patient_id: proforma.patient_id?.toString() || patient?.id?.toString() || '',
+                                            visit_date: proforma.visit_date ? (proforma.visit_date.includes('T') ? proforma.visit_date.split('T')[0] : proforma.visit_date) : new Date().toISOString().split('T')[0],
+                                            assigned_doctor: proforma.assigned_doctor?.toString() || patient?.assigned_doctor_id?.toString() || '',
+                                          }}
+                                        />
+                                      ) : (
+                                        // View-only when not in edit mode
+                                        <ClinicalProformaDetails proforma={proforma} />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </Card>
+
+                        {/* 3. Out Patient Intake Record Card - Only if ADL files exist, expandable/collapsible */}
+                        {hasAdlFiles && (
+                          <Card className="shadow-md border-2 border-orange-200">
+                            <div
+                              className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                              onClick={() => togglePastHistoryCard('intakeRecord')}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-orange-100 rounded-lg">
+                                  <FiFolder className="h-5 w-5 text-orange-600" />
+                                </div>
+                                <h4 className="text-lg font-bold text-gray-900">Out Patient Intake Record</h4>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {expandedPastHistoryCards.intakeRecord ? (
+                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                ) : (
+                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                )}
+                              </div>
+                            </div>
+                            {expandedPastHistoryCards.intakeRecord && (
+                              <div className="p-6">
+                                <div className="space-y-6">
+                                  {sortedProformas.map((proforma, index) => {
+                                    const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === proforma.id);
+                                    if (!adlFile) return null;
+                                    
+                                    const visitNumber = index + 1;
+                                    const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                                    return (
+                                      <div key={proforma.id || `adl-${index}`} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
+                                        <div className="mb-3">
+                                          <h5 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+                                            <FiHash className="h-4 w-4 text-orange-600" />
+                                            Visit {visitNumber} - Out Patient Intake Record
+                                          </h5>
+                                          <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                        </div>
+                                        {isEditMode ? (
+                                          // Editable form when edit=true
+                                          <EditADL
+                                            key={adlFile.id}
+                                            adlFileId={adlFile.id || adlFile.adl_file_id || adlFile.adlFileId}
+                                            isEmbedded={true}
+                                            patientId={patient?.id?.toString()}
+                                            clinicalProformaId={proforma.id?.toString()}
+                                          />
+                                        ) : (
+                                          // View-only when not in edit mode
+                                          <ViewADL adlFiles={adlFile} />
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </Card>
                         )}
-                      </Card>
+
+                        {/* 4. Prescription Card - Show all visit-wise prescriptions, expandable/collapsible */}
+                        <Card className="shadow-md border-2 border-amber-200">
+                          <div
+                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                            onClick={() => togglePastHistoryCard('prescription')}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-amber-100 rounded-lg">
+                                <FiPackage className="h-5 w-5 text-amber-600" />
+                              </div>
+                              <h4 className="text-lg font-bold text-gray-900">Prescription</h4>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {expandedPastHistoryCards.prescription ? (
+                                <FiChevronUp className="h-5 w-5 text-gray-500" />
+                              ) : (
+                                <FiChevronDown className="h-5 w-5 text-gray-500" />
+                              )}
+                            </div>
+                          </div>
+                          {expandedPastHistoryCards.prescription && (
+                            <div className="p-6">
+                              <div className="space-y-6">
+                                {sortedProformas.map((proforma, index) => {
+                                  const visitNumber = index + 1;
+                                  const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                                  return (
+                                    <div key={proforma.id || `prescription-${index}`} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
+                                      <div className="mb-3">
+                                        <h5 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+                                          <FiHash className="h-4 w-4 text-amber-600" />
+                                          Visit {visitNumber} - Prescription
+                                        </h5>
+                                        <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                      </div>
+                                      {isEditMode ? (
+                                        // Editable form when edit=true
+                                        <PrescriptionEdit
+                                          proforma={proforma}
+                                          index={index}
+                                          patientId={patient?.id}
+                                        />
+                                      ) : (
+                                        // View-only when not in edit mode
+                                        <PrescriptionView 
+                                          clinicalProformaId={proforma.id}
+                                          patientId={patient?.id}
+                                        />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </Card>
+                      </>
                     );
-                  })}
-                </div>
+                  })()}
+                </>
               ) : (
                 <div className="text-center py-12">
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 max-w-2xl mx-auto">
