@@ -1358,20 +1358,21 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     return !currentVisitProforma;
   });
 
-  // State for selected proforma to edit (default to current visit proforma if exists)
+  // State for selected proforma to edit (only for past visit corrections, not current visit)
+  // CRITICAL: Never auto-select current visit proforma - "Edit" on current visit = Create New
   const [selectedProformaId, setSelectedProformaId] = useState(() => {
-    // Default to current visit proforma if exists, otherwise null
-    return currentVisitProforma?.id?.toString() || null;
+    // Always start with null - never auto-select current visit proforma
+    return null;
   });
 
-  // Update selectedProformaId when currentVisitProforma changes (after data loads)
+  // Update showProformaForm when currentVisitProforma changes (after data loads)
   useEffect(() => {
     if (currentVisitProforma?.id) {
-      // If current visit proforma exists, set it as selected but don't show form initially
-      setSelectedProformaId(currentVisitProforma.id.toString());
+      // If current visit proforma exists, don't show form initially
+      // User must click "Create New" to open blank form
       setShowProformaForm(false);
     } else {
-      // If no current visit proforma, clear selection and show form for new proforma
+      // If no current visit proforma, show form for new proforma
       setSelectedProformaId(null);
       setShowProformaForm(true);
     }
@@ -1386,20 +1387,23 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     }
   }, [isNewPatientWithNoHistory, currentVisitProforma]);
 
-  // Update showProformaForm when user explicitly edits a proforma
+  // Update showProformaForm when user explicitly edits a past proforma (corrections only)
   useEffect(() => {
-    // If selectedProformaId is set and matches current visit proforma, user wants to edit
-    if (selectedProformaId && currentVisitProforma && selectedProformaId === currentVisitProforma.id?.toString()) {
-      // Form will be shown when user clicks Edit button
-    }
-    // If selectedProformaId is set but doesn't match current visit, user is editing a past proforma
-    else if (selectedProformaId && (!currentVisitProforma || selectedProformaId !== currentVisitProforma.id?.toString())) {
+    // CRITICAL: Only allow editing past visit performas (corrections)
+    // Current visit "Edit" button creates new performa (handled in button onClick)
+    // If selectedProformaId is set, it means user is correcting a past performa
+    if (selectedProformaId && (!currentVisitProforma || selectedProformaId !== currentVisitProforma.id?.toString())) {
+      // User is editing a past performa (correction) - show form with that data
       setShowProformaForm(true);
     }
   }, [selectedProformaId, currentVisitProforma]);
 
 
-  // Fetch selected proforma data for editing
+  // Fetch selected proforma data for editing (ONLY for past visit corrections, not current visit)
+  // CRITICAL: Only fetch if selectedProformaId is set AND it's NOT the current visit proforma
+  const isEditingPastProforma = selectedProformaId && 
+    (!currentVisitProforma || selectedProformaId !== currentVisitProforma.id?.toString());
+  
   const {
     data: selectedProformaData,
     isLoading: isLoadingSelectedProforma,
@@ -1407,7 +1411,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   } = useGetClinicalProformaByIdQuery(
     selectedProformaId,
     {
-      skip: !selectedProformaId,
+      skip: !isEditingPastProforma, // Only fetch for past performa corrections, never for current visit
       refetchOnMountOrArgChange: true // Always refetch when ID changes
     }
   );
@@ -3257,97 +3261,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
           {expandedCards.clinical && (
             <div className="p-6 space-y-6">
-              {/* Current Visit and Past Visit History - Show in parallel for existing patients */}
-              {isExistingPatient && ((currentVisitProforma && !showProformaForm) || (hasPastHistory && (pastProformas.length > 0 || pastVisitHistory.length > 0))) ? (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Current Visit Section - Show today's proforma if exists */}
-                  {currentVisitProforma && !showProformaForm && (
-                    <div className="space-y-4">
-                      <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                        <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
-                          Current Visit
-                        </span>
-                        <span className="text-sm text-gray-500 font-normal">
-                          {formatDate(currentVisitProforma.visit_date || currentVisitProforma.created_at)}
-                        </span>
-                      </h4>
-                      
-                      <div className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50/30 hover:border-blue-400 hover:shadow-md transition-all">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2 flex-wrap">
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                currentVisitProforma.visit_type === 'first_visit' 
-                                  ? 'bg-purple-100 text-purple-800' 
-                                  : 'bg-blue-100 text-blue-800'
-                              }`}>
-                                {currentVisitProforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
-                              </span>
-                              {currentVisitProforma.doctor_decision && (
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  currentVisitProforma.doctor_decision === 'complex_case' 
-                                    ? 'bg-red-100 text-red-800' 
-                                    : 'bg-green-100 text-green-800'
-                                }`}>
-                                  {currentVisitProforma.doctor_decision === 'complex_case' 
-                                    ? 'Complex Case' 
-                                    : 'Simple Case'}
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div className="grid grid-cols-1 gap-3 mt-3">
-                              {currentVisitProforma.doctor_name && (
-                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                  <FiUser className="w-4 h-4" />
-                                  <span><span className="font-medium text-gray-800">Doctor:</span> {currentVisitProforma.doctor_name}</span>
-                                </div>
-                              )}
-                              {currentVisitProforma.room_no && (
-                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                  <FiHome className="w-4 h-4" />
-                                  <span><span className="font-medium text-gray-800">Room:</span> {currentVisitProforma.room_no}</span>
-                                </div>
-                              )}
-                              {currentVisitProforma.diagnosis && (
-                                <div className="flex items-start gap-2 text-sm text-gray-600">
-                                  <FiFileText className="w-4 h-4 mt-0.5" />
-                                  <span><span className="font-medium text-gray-800">Diagnosis:</span> {currentVisitProforma.diagnosis}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 ml-4">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => navigate(`/clinical/${currentVisitProforma.id}`)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
-                            >
-                              <FiEye className="w-3.5 h-3.5" />
-                              View
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedProformaId(currentVisitProforma.id.toString());
-                                setShowProformaForm(true);
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
-                            >
-                              <FiEdit3 className="w-3.5 h-3.5" />
-                              Edit
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Past Visit History Section - Show past visits and proformas */}
-                  {hasPastHistory && (pastProformas.length > 0 || pastVisitHistory.length > 0) && (
+              {/* All Visit History Section - Show first, before current visit form */}
+              {hasPastHistory && (pastProformas.length > 0 || pastVisitHistory.length > 0) && (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3">
                         <h4 className="text-lg font-semibold text-gray-800">
@@ -3483,10 +3398,96 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                       </div>
                     </div>
                   )}
-                </div>
-              ) : null}
 
-              {/* Show form if no current visit proforma exists OR if user is editing OR if new patient */}
+              {/* Current Visit Section - Show today's proforma if exists, after history */}
+              {currentVisitProforma && !showProformaForm && (
+                <div className="space-y-4 border-t border-gray-200 pt-6">
+                  <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+                      Current Visit
+                    </span>
+                    <span className="text-sm text-gray-500 font-normal">
+                      {formatDate(currentVisitProforma.visit_date || currentVisitProforma.created_at)}
+                    </span>
+                  </h4>
+                  
+                  <div className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50/30 hover:border-blue-400 hover:shadow-md transition-all">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            currentVisitProforma.visit_type === 'first_visit' 
+                              ? 'bg-purple-100 text-purple-800' 
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {currentVisitProforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
+                          </span>
+                          {currentVisitProforma.doctor_decision && (
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              currentVisitProforma.doctor_decision === 'complex_case' 
+                                ? 'bg-red-100 text-red-800' 
+                                : 'bg-green-100 text-green-800'
+                            }`}>
+                              {currentVisitProforma.doctor_decision === 'complex_case' 
+                                ? 'Complex Case' 
+                                : 'Simple Case'}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-3 mt-3">
+                          {currentVisitProforma.doctor_name && (
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <FiUser className="w-4 h-4" />
+                              <span><span className="font-medium text-gray-800">Doctor:</span> {currentVisitProforma.doctor_name}</span>
+                            </div>
+                          )}
+                          {currentVisitProforma.room_no && (
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <FiHome className="w-4 h-4" />
+                              <span><span className="font-medium text-gray-800">Room:</span> {currentVisitProforma.room_no}</span>
+                            </div>
+                          )}
+                          {currentVisitProforma.diagnosis && (
+                            <div className="flex items-start gap-2 text-sm text-gray-600">
+                              <FiFileText className="w-4 h-4 mt-0.5" />
+                              <span><span className="font-medium text-gray-800">Diagnosis:</span> {currentVisitProforma.diagnosis}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/clinical/${currentVisitProforma.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                        >
+                          <FiEye className="w-3.5 h-3.5" />
+                          View
+                        </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                // CRITICAL: "Edit" on current visit = Create New (don't load old data)
+                                // Clear selectedProformaId to ensure blank form opens
+                                setSelectedProformaId(null);
+                                setShowProformaForm(true);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                            >
+                              <FiEdit3 className="w-3.5 h-3.5" />
+                              Create New
+                            </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Current Visit Form - Show after history, if no current visit proforma exists OR if user is editing OR if new patient */}
               {/* Always show for new patients without history */}
               {(() => {
                 // Always show form for new patients without history
@@ -3494,7 +3495,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                 // Show form if no current visit proforma or user wants to edit
                 return showProformaForm || !currentVisitProforma;
               })() && (
-                <div className={hasPastHistory && pastProformas.length > 0 ? "border-t border-gray-200 pt-6 mt-6" : ""}>
+                <div className={(hasPastHistory && (pastProformas.length > 0 || pastVisitHistory.length > 0)) || (currentVisitProforma && !showProformaForm) ? "border-t border-gray-200 pt-6 mt-6" : ""}>
                   {/* Show header for new patients or when adding new proforma */}
                   {(!isExistingPatient || !hasPastHistory || pastProformas.length === 0) && !currentVisitProforma ? (
                     <div className="mb-4">
@@ -3521,7 +3522,11 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                   ) : null}
                   <EditClinicalProforma
                     key={selectedProforma?.id || `new-proforma-${patient?.id || Date.now()}`} // Force re-render when selectedProforma changes
-                    initialData={selectedProforma && selectedProforma.id ? {
+                    // CRITICAL RULES:
+                    // 1. Only pass initialData with id when editing a PAST visit performa (corrections)
+                    // 2. Current visit "Edit" = Create New (blank form, no old data)
+                    // 3. Never load current visit performa data - always create fresh
+                    initialData={selectedProforma && selectedProforma.id && isEditingPastProforma ? {
             // Pass full existing proforma data if available
             ...selectedProforma,
             patient_id: selectedProforma.patient_id?.toString() || patient?.id?.toString() || '',
@@ -3545,10 +3550,12 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
             mse_delusions: selectedProforma.mse_delusions || '',
             adl_reasoning: selectedProforma.adl_reasoning || '',
           } : {
-            // Default data for new proforma
+            // Default data for NEW visit - always creates a new performa record
+            // CRITICAL: This ensures each visit creates a new immutable record
             patient_id: patient?.id?.toString() || '',
             visit_date: new Date().toISOString().split('T')[0],
-            visit_type: 'first_visit',
+            // Determine visit type: 'first_visit' if no past history, otherwise 'follow_up'
+            visit_type: (hasPastHistory || pastProformas.length > 0 || pastVisitHistory.length > 0) ? 'follow_up' : 'first_visit',
             room_no: patient?.room_no || '',
             assigned_doctor: patient?.assigned_doctor_id?.toString() || '',
             informant_present: true,

@@ -984,16 +984,28 @@ console.log("existingPrescription", existingPrescription);
 
       // ==============================
       // TRY–CATCH #1: Create or Update Proforma
+      // CRITICAL RULE: Each new patient visit MUST create a NEW performa record
+      // Only update when explicitly editing a specific existing performa (corrections only)
       // ==============================
       try {
-        if (proforma?.id) {
-          // Update existing proforma
-          const updateData = { ...proformaData, id: proforma.id };
+        // Determine if we're editing an existing performa or creating a new visit
+        // Only update if:
+        // 1. propInitialData has an id (explicitly editing a specific performa via Edit button), OR
+        // 2. We're in standalone update mode with a specific performa id from URL
+        // Otherwise, ALWAYS CREATE a new performa for the visit
+        const isEditingSpecificProforma = (propInitialData?.id) || (isUpdateMode && id && proforma?.id);
+        
+        if (isEditingSpecificProforma) {
+          // Update existing performa (only for corrections/edits of a specific record)
+          const performaIdToUpdate = propInitialData?.id || proforma?.id;
+          const updateData = { ...proformaData, id: performaIdToUpdate };
           const result = await updateProforma(updateData).unwrap();
           savedProforma = result?.data?.proforma || proforma;
           toast.success("Clinical proforma updated successfully!");
         } else {
-          // Create new proforma
+          // CREATE NEW performa for this visit (default behavior)
+          // This ensures each visit creates a new immutable record
+          // Old performas remain untouched as historical records
           const result = await createProforma(proformaData).unwrap();
           savedProforma = result?.data?.clinical_proforma;
           toast.success("Clinical proforma created successfully!");

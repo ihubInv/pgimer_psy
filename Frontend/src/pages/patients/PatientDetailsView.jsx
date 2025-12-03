@@ -2823,9 +2823,121 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
           {expandedCards.clinical && (
             <div className="p-6">
               {patientProformas.length > 0 ? (
-                <>
-                <ClinicalProformaDetails proforma={patientProformas[0]} />
-                </>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <h4 className="text-lg font-semibold text-gray-800">All Walk-in Clinical Proformas</h4>
+                    <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                      {patientProformas.length} {patientProformas.length === 1 ? 'Record' : 'Records'}
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                    {patientProformas.map((proforma, index) => {
+                      // Ensure we have a valid ID - try multiple possible ID fields
+                      const proformaId = proforma?.id || proforma?.clinical_proforma_id || proforma?.proforma_id;
+                      
+                      // Skip rendering if no valid ID
+                      if (!proformaId) {
+                        console.warn('[PatientDetailsView] Proforma missing ID:', proforma, index);
+                        return null;
+                      }
+                      
+                      // Create navigation handler with the specific proforma ID
+                      const handleViewClick = (e) => {
+                        e.stopPropagation(); // Prevent triggering the parent onClick
+                        const targetId = proformaId;
+                        console.log('[PatientDetailsView] Navigating to proforma:', targetId, 'from record:', proforma);
+                        navigate(`/clinical/${targetId}${returnTab ? `?returnTab=${returnTab}` : ''}`);
+                      };
+                      
+                      const handleCardClick = () => {
+                        const targetId = proformaId;
+                        console.log('[PatientDetailsView] Card clicked, navigating to proforma:', targetId, 'from record:', proforma);
+                        navigate(`/clinical/${targetId}${returnTab ? `?returnTab=${returnTab}` : ''}`);
+                      };
+                      
+                      return (
+                        <div
+                          key={proformaId || `proforma-${index}`}
+                          className="border border-gray-200 rounded-lg p-4 hover:border-green-300 hover:shadow-md transition-all cursor-pointer bg-white"
+                          onClick={handleCardClick}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                  <FiCalendar className="w-4 h-4 text-gray-500" />
+                                  <span className="font-semibold text-gray-900">
+                                    {formatDate(proforma.visit_date || proforma.created_at)}
+                                  </span>
+                                </div>
+                                {proforma.visit_type && (
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    proforma.visit_type === 'first_visit' 
+                                      ? 'bg-purple-100 text-purple-800' 
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
+                                  </span>
+                                )}
+                                {proforma.doctor_decision && (
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    proforma.doctor_decision === 'complex_case' 
+                                      ? 'bg-red-100 text-red-800' 
+                                      : 'bg-green-100 text-green-800'
+                                  }`}>
+                                    {proforma.doctor_decision === 'complex_case' 
+                                      ? 'Complex Case' 
+                                      : 'Simple Case'}
+                                  </span>
+                                )}
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                                {proforma.doctor_name && (
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <FiUser className="w-4 h-4" />
+                                    <span><span className="font-medium text-gray-800">Doctor:</span> {proforma.doctor_name}</span>
+                                  </div>
+                                )}
+                                {proforma.room_no && (
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <FiMapPin className="w-4 h-4" />
+                                    <span><span className="font-medium text-gray-800">Room:</span> {proforma.room_no}</span>
+                                  </div>
+                                )}
+                                {proforma.diagnosis && (
+                                  <div className="flex items-start gap-2 text-sm text-gray-600 md:col-span-2">
+                                    <FiFileText className="w-4 h-4 mt-0.5" />
+                                    <span><span className="font-medium text-gray-800">Diagnosis:</span> {proforma.diagnosis}</span>
+                                  </div>
+                                )}
+                                {proforma.icd_code && (
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <FiFileText className="w-4 h-4" />
+                                    <span><span className="font-medium text-gray-800">ICD Code:</span> {proforma.icd_code}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2 ml-4">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleViewClick}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                              >
+                                <FiFileText className="w-3.5 h-3.5" />
+                                View
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <FiFileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
