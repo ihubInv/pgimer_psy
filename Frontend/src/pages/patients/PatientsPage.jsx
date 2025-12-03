@@ -2510,7 +2510,7 @@ const PatientsPage = () => {
       return dateB - dateA;
     });
     
-    return `
+      return `
   <div class="section">
     <div class="section-title">PRESCRIPTION HISTORY</div>
     ${groupedArray.map((group, groupIndex) => {
@@ -2519,7 +2519,7 @@ const PatientsPage = () => {
         <div style="margin-bottom: ${groupIndex < groupedArray.length - 1 ? '30px' : '0'};">
           <h3 style="margin: 0 0 15px 0; font-size: 12pt; font-weight: bold; color: #d97706; padding-bottom: 8px; border-bottom: 2px solid #f59e0b;">
             PRESCRIPTION - Visit Date: ${group.visitDate}${visitTypeDisplay}
-          </h3>
+        </h3>
           <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
             <thead>
               <tr style="background: linear-gradient(to bottom, #f59e0b, #d97706); color: #ffffff;">
@@ -2548,8 +2548,8 @@ const PatientsPage = () => {
               `).join('')}
             </tbody>
           </table>
-        </div>
-        `;
+      </div>
+      `;
     }).join('')}
   </div>
     `;
