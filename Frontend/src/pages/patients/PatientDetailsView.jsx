@@ -296,6 +296,12 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
   const clinicalProformaPrintRef = useRef(null);
   const adlPrintRef = useRef(null);
   const prescriptionPrintRef = useRef(null);
+  
+  // Past History print refs
+  const pastHistoryPatientDetailsPrintRef = useRef(null);
+  const pastHistoryClinicalProformaPrintRef = useRef(null);
+  const pastHistoryADLPrintRef = useRef(null);
+  const pastHistoryPrescriptionPrintRef = useRef(null);
 
   // Hide submit buttons, Add buttons, and disable checkboxes in embedded clinical proforma view
   useEffect(() => {
@@ -2123,6 +2129,326 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
     }
   };
 
+  // Print handlers for Past History cards
+  const handlePrintPastHistoryPatientDetails = async () => {
+    // Ensure card is expanded first
+    if (!expandedPastHistoryCards.patientDetails) {
+      togglePastHistoryCard('patientDetails');
+      // Wait a bit for the DOM to update
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (!pastHistoryPatientDetailsPrintRef.current) {
+      toast.error('Please expand the Patient Details section first');
+      console.error('Print ref not available for Patient Details');
+      return;
+    }
+
+    try {
+      let logoBase64 = '';
+      try {
+        const logoResponse = await fetch(PGI_Logo);
+        const logoBlob = await logoResponse.blob();
+        const logoReader = new FileReader();
+        logoBase64 = await new Promise((resolve) => {
+          logoReader.onloadend = () => resolve(logoReader.result);
+          logoReader.readAsDataURL(logoBlob);
+        });
+      } catch (e) {
+        console.warn('Could not load logo for print:', e);
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error('Please allow pop-ups to print this section');
+        return;
+      }
+
+      const sectionElement = pastHistoryPatientDetailsPrintRef.current;
+      const printContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Patient Details - Past History</title>
+            <style>
+              @page { margin: 20mm; size: A4; }
+              body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .logo { max-width: 100px; height: auto; }
+              h1 { color: #1e40af; margin: 10px 0; }
+              .section { margin-bottom: 30px; }
+              .field { margin-bottom: 15px; }
+              .label { font-weight: bold; color: #374151; font-size: 12pt; }
+              .value { color: #1f2937; font-size: 11pt; margin-top: 5px; }
+              button, .no-print { display: none !important; }
+              @media print {
+                body { padding: 0; }
+                .section { page-break-inside: avoid; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="logo" />` : ''}
+              <h1>Patient Details - Past History</h1>
+            </div>
+            ${sectionElement.innerHTML}
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+          toast.success('Print dialog opened');
+        }, 500);
+      };
+    } catch (error) {
+      console.error('Print error:', error);
+      toast.error('Failed to print Patient Details. Please try again.');
+    }
+  };
+
+  const handlePrintPastHistoryClinicalProforma = async () => {
+    // Ensure card is expanded first
+    if (!expandedPastHistoryCards.clinicalProforma) {
+      togglePastHistoryCard('clinicalProforma');
+      // Wait a bit for the DOM to update
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (!pastHistoryClinicalProformaPrintRef.current) {
+      toast.error('Please expand the Walk-in Clinical Proforma section first');
+      console.error('Print ref not available for Clinical Proforma');
+      return;
+    }
+
+    try {
+      let logoBase64 = '';
+      try {
+        const logoResponse = await fetch(PGI_Logo);
+        const logoBlob = await logoResponse.blob();
+        const logoReader = new FileReader();
+        logoBase64 = await new Promise((resolve) => {
+          logoReader.onloadend = () => resolve(logoReader.result);
+          logoReader.readAsDataURL(logoBlob);
+        });
+      } catch (e) {
+        console.warn('Could not load logo for print:', e);
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error('Please allow pop-ups to print this section');
+        return;
+      }
+
+      const sectionElement = pastHistoryClinicalProformaPrintRef.current;
+      const printContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Walk-in Clinical Proforma - Past History</title>
+            <style>
+              @page { margin: 20mm; size: A4; }
+              body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .logo { max-width: 100px; height: auto; }
+              h1 { color: #059669; margin: 10px 0; }
+              .section { margin-bottom: 30px; }
+              button, .no-print { display: none !important; }
+              @media print {
+                body { padding: 0; }
+                .section { page-break-inside: avoid; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="logo" />` : ''}
+              <h1>Walk-in Clinical Proforma - Past History</h1>
+            </div>
+            ${sectionElement.innerHTML}
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+          toast.success('Print dialog opened');
+        }, 500);
+      };
+    } catch (error) {
+      console.error('Print error:', error);
+      toast.error('Failed to print Walk-in Clinical Proforma. Please try again.');
+    }
+  };
+
+  const handlePrintPastHistoryADL = async () => {
+    // Ensure card is expanded first
+    if (!expandedPastHistoryCards.intakeRecord) {
+      togglePastHistoryCard('intakeRecord');
+      // Wait a bit for the DOM to update
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (!pastHistoryADLPrintRef.current) {
+      toast.error('Please expand the Out Patient Intake Record section first');
+      console.error('Print ref not available for ADL');
+      return;
+    }
+
+    try {
+      let logoBase64 = '';
+      try {
+        const logoResponse = await fetch(PGI_Logo);
+        const logoBlob = await logoResponse.blob();
+        const logoReader = new FileReader();
+        logoBase64 = await new Promise((resolve) => {
+          logoReader.onloadend = () => resolve(logoReader.result);
+          logoReader.readAsDataURL(logoBlob);
+        });
+      } catch (e) {
+        console.warn('Could not load logo for print:', e);
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error('Please allow pop-ups to print this section');
+        return;
+      }
+
+      const sectionElement = pastHistoryADLPrintRef.current;
+      const printContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Out Patient Intake Record - Past History</title>
+            <style>
+              @page { margin: 20mm; size: A4; }
+              body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .logo { max-width: 100px; height: auto; }
+              h1 { color: #ea580c; margin: 10px 0; }
+              .section { margin-bottom: 30px; }
+              button, .no-print { display: none !important; }
+              @media print {
+                body { padding: 0; }
+                .section { page-break-inside: avoid; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="logo" />` : ''}
+              <h1>Out Patient Intake Record - Past History</h1>
+            </div>
+            ${sectionElement.innerHTML}
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+          toast.success('Print dialog opened');
+        }, 500);
+      };
+    } catch (error) {
+      console.error('Print error:', error);
+      toast.error('Failed to print Out Patient Intake Record. Please try again.');
+    }
+  };
+
+  const handlePrintPastHistoryPrescription = async () => {
+    // Ensure card is expanded first
+    if (!expandedPastHistoryCards.prescription) {
+      togglePastHistoryCard('prescription');
+      // Wait a bit for the DOM to update
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (!pastHistoryPrescriptionPrintRef.current) {
+      toast.error('Please expand the Prescription section first');
+      console.error('Print ref not available for Prescription');
+      return;
+    }
+
+    try {
+      let logoBase64 = '';
+      try {
+        const logoResponse = await fetch(PGI_Logo);
+        const logoBlob = await logoResponse.blob();
+        const logoReader = new FileReader();
+        logoBase64 = await new Promise((resolve) => {
+          logoReader.onloadend = () => resolve(logoReader.result);
+          logoReader.readAsDataURL(logoBlob);
+        });
+      } catch (e) {
+        console.warn('Could not load logo for print:', e);
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error('Please allow pop-ups to print this section');
+        return;
+      }
+
+      const sectionElement = pastHistoryPrescriptionPrintRef.current;
+      const printContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Prescription - Past History</title>
+            <style>
+              @page { margin: 20mm; size: A4; }
+              body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .logo { max-width: 100px; height: auto; }
+              h1 { color: #d97706; margin: 10px 0; }
+              .section { margin-bottom: 30px; }
+              button, .no-print { display: none !important; }
+              @media print {
+                body { padding: 0; }
+                .section { page-break-inside: avoid; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="logo" />` : ''}
+              <h1>Prescription - Past History</h1>
+            </div>
+            ${sectionElement.innerHTML}
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+          toast.success('Print dialog opened');
+        }, 500);
+      };
+    } catch (error) {
+      console.error('Print error:', error);
+      toast.error('Failed to print Prescription. Please try again.');
+    }
+  };
+
   // Note: canViewPrescriptions is now determined by filled_by_role above
 
   return (
@@ -2145,19 +2471,6 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handlePrintPatientDetails();
-              }}
-                className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title="Print Patient Details"
-            >
-              <FiPrinter className="w-4 h-4 text-blue-600" />
-            </Button>
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('patient')}
@@ -2912,19 +3225,6 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePrintClinicalProforma();
-                }}
-                className="h-9 w-9 p-0 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border border-green-200 hover:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Print Walk-in Clinical Proforma"
-              >
-                <FiPrinter className="w-4 h-4 text-green-600" />
-              </Button>
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('clinical')}
@@ -3036,19 +3336,6 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePrintADL();
-                }}
-                className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Print Out-Patient Intake Record"
-              >
-                <FiPrinter className="w-4 h-4 text-purple-600" />
-              </Button>
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('adl')}
@@ -3102,19 +3389,6 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePrintPrescription();
-                }}
-                className="h-9 w-9 p-0 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Print Prescription History"
-              >
-                <FiPrinter className="w-4 h-4 text-amber-600" />
-              </Button>
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('prescriptions')}
@@ -3203,25 +3477,45 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                         {/* 1. Patient Details Card - Show once only, expandable/collapsible */}
                         <Card className="shadow-md border-2 border-blue-200">
                           <div
-                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                            onClick={() => togglePastHistoryCard('patientDetails')}
+                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center gap-3">
+                            <div 
+                              className="flex items-center gap-3 cursor-pointer flex-1"
+                              onClick={() => togglePastHistoryCard('patientDetails')}
+                            >
                               <div className="p-2 bg-blue-100 rounded-lg">
                                 <FiUser className="h-5 w-5 text-blue-600" />
                               </div>
                               <h4 className="text-lg font-bold text-gray-900">Patient Details</h4>
                             </div>
                             <div className="flex items-center gap-2">
-                              {expandedPastHistoryCards.patientDetails ? (
-                                <FiChevronUp className="h-5 w-5 text-gray-500" />
-                              ) : (
-                                <FiChevronDown className="h-5 w-5 text-gray-500" />
-                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePrintPastHistoryPatientDetails();
+                                }}
+                                className="h-8 w-8 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                                title="Print Patient Details - Past History"
+                              >
+                                <FiPrinter className="w-3.5 h-3.5 text-blue-600" />
+                              </Button>
+                              <div 
+                                className="cursor-pointer"
+                                onClick={() => togglePastHistoryCard('patientDetails')}
+                              >
+                                {expandedPastHistoryCards.patientDetails ? (
+                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                ) : (
+                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                )}
+                              </div>
                             </div>
                           </div>
                           {expandedPastHistoryCards.patientDetails && (
-            <div className="p-6">
+            <div ref={pastHistoryPatientDetailsPrintRef} className="p-6">
                               {/* View-only fields */}
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <div>
@@ -3286,25 +3580,45 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                         {/* 2. Walk-in Clinical Proforma Card - Show all visit-wise proformas, expandable/collapsible */}
                         <Card className="shadow-md border-2 border-green-200">
                           <div
-                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                            onClick={() => togglePastHistoryCard('clinicalProforma')}
+                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center gap-3">
+                            <div 
+                              className="flex items-center gap-3 cursor-pointer flex-1"
+                              onClick={() => togglePastHistoryCard('clinicalProforma')}
+                            >
                               <div className="p-2 bg-green-100 rounded-lg">
                                 <FiFileText className="h-5 w-5 text-green-600" />
                               </div>
                               <h4 className="text-lg font-bold text-gray-900">Walk-in Clinical Proforma</h4>
                             </div>
                             <div className="flex items-center gap-2">
-                              {expandedPastHistoryCards.clinicalProforma ? (
-                                <FiChevronUp className="h-5 w-5 text-gray-500" />
-                              ) : (
-                                <FiChevronDown className="h-5 w-5 text-gray-500" />
-                              )}
-                </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePrintPastHistoryClinicalProforma();
+                                }}
+                                className="h-8 w-8 p-0 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border border-green-200 hover:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                                title="Print Walk-in Clinical Proforma - Past History"
+                              >
+                                <FiPrinter className="w-3.5 h-3.5 text-green-600" />
+                              </Button>
+                              <div 
+                                className="cursor-pointer"
+                                onClick={() => togglePastHistoryCard('clinicalProforma')}
+                              >
+                                {expandedPastHistoryCards.clinicalProforma ? (
+                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                ) : (
+                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                )}
+                              </div>
+                            </div>
                           </div>
                           {expandedPastHistoryCards.clinicalProforma && (
-                            <div className="p-6">
+                            <div ref={pastHistoryClinicalProformaPrintRef} className="p-6">
                               <div className="space-y-4">
                                 {sortedProformas.map((proforma, index) => {
                                   const visitNumber = index + 1;
@@ -3354,25 +3668,45 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                         {hasAdlFiles && (
                           <Card className="shadow-md border-2 border-orange-200">
                             <div
-                              className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                              onClick={() => togglePastHistoryCard('intakeRecord')}
+                              className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors"
                             >
-                              <div className="flex items-center gap-3">
+                              <div 
+                                className="flex items-center gap-3 cursor-pointer flex-1"
+                                onClick={() => togglePastHistoryCard('intakeRecord')}
+                              >
                                 <div className="p-2 bg-orange-100 rounded-lg">
                                   <FiFolder className="h-5 w-5 text-orange-600" />
                                 </div>
                                 <h4 className="text-lg font-bold text-gray-900">Out Patient Intake Record</h4>
                               </div>
                               <div className="flex items-center gap-2">
-                                {expandedPastHistoryCards.intakeRecord ? (
-                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
-                                ) : (
-                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
-                                )}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePrintPastHistoryADL();
+                                  }}
+                                  className="h-8 w-8 p-0 bg-gradient-to-r from-orange-50 to-amber-50 hover:from-orange-100 hover:to-amber-100 border border-orange-200 hover:border-orange-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                                  title="Print Out Patient Intake Record - Past History"
+                                >
+                                  <FiPrinter className="w-3.5 h-3.5 text-orange-600" />
+                                </Button>
+                                <div 
+                                  className="cursor-pointer"
+                                  onClick={() => togglePastHistoryCard('intakeRecord')}
+                                >
+                                  {expandedPastHistoryCards.intakeRecord ? (
+                                    <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                  ) : (
+                                    <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                  )}
+                                </div>
                               </div>
                             </div>
                             {expandedPastHistoryCards.intakeRecord && (
-                              <div className="p-6">
+                              <div ref={pastHistoryADLPrintRef} className="p-6">
                                 <div className="space-y-4">
                                   {sortedProformas.map((proforma, index) => {
                                     const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === proforma.id);
@@ -3425,25 +3759,45 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                         {/* 4. Prescription Card - Show all visit-wise prescriptions, expandable/collapsible */}
                         <Card className="shadow-md border-2 border-amber-200">
                           <div
-                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                            onClick={() => togglePastHistoryCard('prescription')}
+                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center gap-3">
+                            <div 
+                              className="flex items-center gap-3 cursor-pointer flex-1"
+                              onClick={() => togglePastHistoryCard('prescription')}
+                            >
                               <div className="p-2 bg-amber-100 rounded-lg">
                                 <FiPackage className="h-5 w-5 text-amber-600" />
                               </div>
                               <h4 className="text-lg font-bold text-gray-900">Prescription</h4>
                             </div>
                             <div className="flex items-center gap-2">
-                              {expandedPastHistoryCards.prescription ? (
-                                <FiChevronUp className="h-5 w-5 text-gray-500" />
-                              ) : (
-                                <FiChevronDown className="h-5 w-5 text-gray-500" />
-                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePrintPastHistoryPrescription();
+                                }}
+                                className="h-8 w-8 p-0 bg-gradient-to-r from-amber-50 to-yellow-50 hover:from-amber-100 hover:to-yellow-100 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                                title="Print Prescription - Past History"
+                              >
+                                <FiPrinter className="w-3.5 h-3.5 text-amber-600" />
+                              </Button>
+                              <div 
+                                className="cursor-pointer"
+                                onClick={() => togglePastHistoryCard('prescription')}
+                              >
+                                {expandedPastHistoryCards.prescription ? (
+                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                ) : (
+                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                )}
+                              </div>
                             </div>
                           </div>
                           {expandedPastHistoryCards.prescription && (
-                            <div className="p-6">
+                            <div ref={pastHistoryPrescriptionPrintRef} className="p-6">
                               <div className="space-y-4">
                                 {sortedProformas.map((proforma, index) => {
                                   const visitNumber = index + 1;
