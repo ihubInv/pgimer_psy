@@ -91,7 +91,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
   // Card expand/collapse state - initialize with false, will auto-expand when data loads
   const [expandedCards, setExpandedCards] = useState({
-    patient: true,
+    patient: false,
     clinical: false,
     adl: false,
     prescriptions: false,
@@ -100,10 +100,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
   // State to track which Past History sub-cards are expanded
   const [expandedPastHistoryCards, setExpandedPastHistoryCards] = useState({
-    patientDetails: true,
-    clinicalProforma: true,
-    intakeRecord: true,
-    prescription: true
+    patientDetails: false,
+    clinicalProforma: false,
+    intakeRecord: false,
+    prescription: false
   });
 
   // State to track which individual visits are expanded within each card
@@ -126,8 +126,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
   const isVisitExpanded = (cardType, visitId) => {
     const key = `${cardType}-${visitId}`;
-    // Default to expanded (true) if not set
-    return expandedVisits[key] !== false;
+    // Default to minimized (false) if not set
+    return expandedVisits[key] === true;
   };
 
   const toggleCard = (cardName) => {
@@ -1514,19 +1514,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   const canViewADLFile = canViewAllSections && hasAdlFiles;
   const isSelectedComplexCase = selectedProforma?.doctor_decision === 'complex_case' && selectedProforma?.adl_file_id;
 
-  // Auto-expand ADL card when ADL files exist
-  useEffect(() => {
-    if (hasAdlFiles) {
-      setExpandedCards(prev => ({ ...prev, adl: true }));
-    }
-  }, [hasAdlFiles]);
-
-  // Auto-expand prescription card when proformas exist
-  useEffect(() => {
-    if (patientProformas.length > 0) {
-      setExpandedCards(prev => ({ ...prev, prescriptions: true }));
-    }
-  }, [patientProformas.length]);
+  // Removed auto-expand logic - cards now default to collapsed (false)
+  // ADL and Prescription cards will remain collapsed by default
 
   
 
