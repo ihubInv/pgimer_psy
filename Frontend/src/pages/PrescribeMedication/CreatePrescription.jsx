@@ -78,6 +78,10 @@ const CreatePrescription = ({
   const [templateDescription, setTemplateDescription] = useState('');
   const [rowIndexToSave, setRowIndexToSave] = useState(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [showDetailsNotesModal, setShowDetailsNotesModal] = useState(false);
+  const [detailsNotesRowIndex, setDetailsNotesRowIndex] = useState(null);
+  const [detailsNotesField, setDetailsNotesField] = useState(null); // 'details' or 'notes'
+  const [detailsNotesValue, setDetailsNotesValue] = useState('');
 
   // Fetch existing prescriptions when clinicalProformaId is provided
   const { 
@@ -1257,12 +1261,21 @@ const CreatePrescription = ({
                           <FiFileText className="w-3 h-3 inline mr-1" />
                           Details
                         </label>
-                        <input
-                          value={row.details || ''}
-                          onChange={(e) => updatePrescriptionCell(idx, 'details', e.target.value)}
-                          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white hover:border-green-300 text-sm"
-                          placeholder="Additional details"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDetailsNotesRowIndex(idx);
+                            setDetailsNotesField('details');
+                            setDetailsNotesValue(row.details || '');
+                            setShowDetailsNotesModal(true);
+                          }}
+                          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white hover:border-green-300 text-sm text-left min-h-[38px] flex items-center justify-between"
+                        >
+                          <span className={row.details ? 'text-gray-900' : 'text-gray-400'}>
+                            {row.details || 'Click to add details'}
+                          </span>
+                          <FiFileText className="w-4 h-4 text-gray-400" />
+                        </button>
                       </div>
 
                       {/* Notes Field */}
@@ -1271,12 +1284,21 @@ const CreatePrescription = ({
                           <FiFileText className="w-3 h-3 inline mr-1" />
                           Notes
                         </label>
-                        <input
-                          value={row.notes || ''}
-                          onChange={(e) => updatePrescriptionCell(idx, 'notes', e.target.value)}
-                          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white hover:border-green-300 text-sm"
-                          placeholder="Notes"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDetailsNotesRowIndex(idx);
+                            setDetailsNotesField('notes');
+                            setDetailsNotesValue(row.notes || '');
+                            setShowDetailsNotesModal(true);
+                          }}
+                          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white hover:border-green-300 text-sm text-left min-h-[38px] flex items-center justify-between"
+                        >
+                          <span className={row.notes ? 'text-gray-900' : 'text-gray-400'}>
+                            {row.notes || 'Click to add notes'}
+                          </span>
+                          <FiFileText className="w-4 h-4 text-gray-400" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1493,6 +1515,64 @@ const CreatePrescription = ({
               onClick={() => setShowLoadTemplateModal(false)}
             >
               Close
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Details/Notes Modal */}
+      <Modal
+        isOpen={showDetailsNotesModal}
+        onClose={() => {
+          setShowDetailsNotesModal(false);
+          setDetailsNotesRowIndex(null);
+          setDetailsNotesField(null);
+          setDetailsNotesValue('');
+        }}
+        title={detailsNotesField === 'details' ? 'Add Details' : 'Add Notes'}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {detailsNotesField === 'details' ? 'Details' : 'Notes'}
+            </label>
+            <textarea
+              value={detailsNotesValue}
+              onChange={(e) => setDetailsNotesValue(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 resize-none"
+              placeholder={detailsNotesField === 'details' ? 'Enter additional details...' : 'Enter notes...'}
+              rows={6}
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowDetailsNotesModal(false);
+                setDetailsNotesRowIndex(null);
+                setDetailsNotesField(null);
+                setDetailsNotesValue('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (detailsNotesRowIndex !== null && detailsNotesField) {
+                  updatePrescriptionCell(detailsNotesRowIndex, detailsNotesField, detailsNotesValue);
+                  setShowDetailsNotesModal(false);
+                  setDetailsNotesRowIndex(null);
+                  setDetailsNotesField(null);
+                  setDetailsNotesValue('');
+                }
+              }}
+              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+            >
+              Save
             </Button>
           </div>
         </div>
