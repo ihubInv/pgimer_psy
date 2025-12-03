@@ -41,7 +41,7 @@ import PatientClinicalHistory from '../../components/PatientClinicalHistory';
 
 
 
-const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: propOnUpdate = null, onFormDataChange = null }) => {
+const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: propOnUpdate = null, onFormDataChange = null, hideFileUpload = false }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -1581,16 +1581,18 @@ console.log("existingPrescription", existingPrescription);
                   </h4>
 
                   {/* File Upload Component */}
-                  <div className="mb-6">
-                    <FileUpload
-                      files={selectedFiles}
-                      onFilesChange={setSelectedFiles}
-                      maxFiles={20}
-                      maxSizeMB={10}
-                      patientId={patientId}
-                      disabled={!patientId}
-                    />
-                  </div>
+                  {!hideFileUpload && (
+                    <div className="mb-6">
+                      <FileUpload
+                        files={selectedFiles}
+                        onFilesChange={setSelectedFiles}
+                        maxFiles={20}
+                        maxSizeMB={10}
+                        patientId={patientId}
+                        disabled={!patientId}
+                      />
+                    </div>
+                  )}
 
                   {/* Existing Files Preview */}
                   {existingFiles && existingFiles.length > 0 && (
@@ -1632,14 +1634,14 @@ console.log("existingPrescription", existingPrescription);
 
               {/* Submit Button */}
               <div className="flex justify-end gap-3 pt-6 border-t">
-                <Button
+                {/* <Button
                   type="button"
                   onClick={() => navigate(-1)}
                   className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg shadow-green-500/30 px-4 py-2 rounded-md transition-all duration-200 hover:from-green-600 hover:to-green-700 hover:shadow-xl hover:shadow-green-500/40"
                 >
                   <FiArrowLeft className="w-4 h-4" />
                   Cancel
-                </Button>
+                </Button> */}
                 <Button
                   type="submit"
                   loading={isUpdating || isUploadingFiles}
@@ -2010,16 +2012,18 @@ console.log("existingPrescription", existingPrescription);
                   </h4>
 
                   {/* File Upload Component */}
-                  <div className="mb-6">
-                    <FileUpload
-                      files={selectedFiles}
-                      onFilesChange={setSelectedFiles}
-                      maxFiles={20}
-                      maxSizeMB={10}
-                      patientId={patientId}
-                      disabled={!patientId}
-                    />
-                  </div>
+                  {!hideFileUpload && (
+                    <div className="mb-6">
+                      <FileUpload
+                        files={selectedFiles}
+                        onFilesChange={setSelectedFiles}
+                        maxFiles={20}
+                        maxSizeMB={10}
+                        patientId={patientId}
+                        disabled={!patientId}
+                      />
+                    </div>
+                  )}
 
                   {/* Existing Files Preview */}
                   {existingFiles && existingFiles.length > 0 && (

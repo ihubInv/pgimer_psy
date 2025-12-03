@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../../components/Card';
-import { formatDate } from '../../utils/formatters';
+import { formatDate, formatDateForDatePicker } from '../../utils/formatters';
 import {
   getFileStatusLabel, getCaseSeverityLabel,formatDateTime
 } from '../../utils/enumMappings';
@@ -11,18 +11,19 @@ import {
   FiCalendar, FiGlobe, FiFileText, FiHash, FiClock,
   FiHeart, FiBookOpen, FiTrendingUp, FiShield,
   FiNavigation,  FiEdit3, FiSave, FiX, FiLayers, 
-  FiFolder, FiChevronDown, FiChevronUp, FiPackage,  FiDownload, FiPrinter
+  FiFolder, FiChevronDown, FiChevronUp, FiPackage,  FiDownload, FiPrinter, FiEye
 } from 'react-icons/fi';
 import Button from '../../components/Button';
+import { IconInput } from '../../components/IconInput';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx-js-style';
 
 import { useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
-import { useGetPatientFilesQuery } from '../../features/patients/patientFilesApiSlice';
+import { useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
 import ViewADL from '../adl/ViewADL';
 import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
 import PrescriptionView from '../PrescribeMedication/PrescriptionView';
-import FilePreview from '../../components/FilePreview';
+import EditClinicalProforma from '../clinical/EditClinicalProforma';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useSelector } from 'react-redux';
 import PGI_Logo from '../../assets/PGI_Logo.png';
@@ -36,20 +37,6 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
   const [searchParams] = useSearchParams();
   const returnTab = searchParams.get('returnTab');
   
-  // Fetch patient files for preview
-  const { data: patientFilesData, refetch: refetchFiles } = useGetPatientFilesQuery(patient?.id, {
-    skip: !patient?.id,
-    refetchOnMountOrArgChange: true
-  });
-  const existingFiles = patientFilesData?.data?.files || [];
-  
-  // Debug: Log files data
-  useEffect(() => {
-    if (patientFilesData) {
-      console.log('[PatientDetailsView] Patient files data:', patientFilesData);
-      console.log('[PatientDetailsView] Existing files:', existingFiles);
-    }
-  }, [patientFilesData, existingFiles]);
 
   // Merge patient and formData to ensure all fields are available with proper fallbacks
   // This ensures data is available immediately even if formData hasn't loaded yet
@@ -117,7 +104,18 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
     clinical: false,
     adl: false,
     prescriptions: false,
-    files: false
+    pastHistory: false
+  });
+
+  // State to track which individual visits are expanded within each card
+  const [expandedVisits, setExpandedVisits] = useState({});
+  
+  // State for past history cards
+  const [expandedPastHistoryCards, setExpandedPastHistoryCards] = useState({
+    patientDetails: false,
+    clinicalProforma: false,
+    intakeRecord: false,
+    prescription: false
   });
 
 
@@ -130,6 +128,38 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
       ...prev,
       [cardName]: !prev[cardName]
     }));
+  };
+
+  const togglePastHistoryCard = (cardName) => {
+    setExpandedPastHistoryCards(prev => ({
+      ...prev,
+      [cardName]: !prev[cardName]
+    }));
+  };
+
+  const toggleVisit = (cardType, visitId) => {
+    const key = `${cardType}-${visitId}`;
+    setExpandedVisits(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const isVisitExpanded = (cardType, visitId) => {
+    const key = `${cardType}-${visitId}`;
+    return expandedVisits[key] === true;
+  };
+
+  // Helper function to convert date to IST date string (YYYY-MM-DD)
+  const toISTDateString = (dateInput) => {
+    try {
+      if (!dateInput) return '';
+      const d = new Date(dateInput);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+    } catch (_) {
+      return '';
+    }
   };
 
 
@@ -147,6 +177,38 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
   const patientProformas = Array.isArray(clinicalData?.data?.proformas)
     ? clinicalData.data.proformas
     : [];
+
+  // Fetch patient visit history
+  const { data: visitHistoryData } = useGetPatientVisitHistoryQuery(
+    patient?.id,
+    { skip: !patient?.id }
+  );
+  const visitHistory = visitHistoryData || [];
+
+  // Get today's date string for filtering
+  const todayDateString = toISTDateString(new Date());
+
+  // For Past History card: exclude today's proformas (only show truly past visits)
+  const trulyPastProformas = useMemo(() => {
+    return patientProformas.filter(proforma => {
+      if (!proforma) return false;
+      const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
+      if (!proformaDate) return true; // Include proformas without date as past
+      return proformaDate !== todayDateString;
+    });
+  }, [patientProformas, todayDateString]);
+
+  // Get the last visit proforma (most recent one)
+  const lastVisitProforma = useMemo(() => {
+    if (patientProformas.length === 0) return null;
+    // Sort by visit_date or created_at, most recent first
+    const sorted = [...patientProformas].sort((a, b) => {
+      const dateA = new Date(a.visit_date || a.created_at || 0);
+      const dateB = new Date(b.visit_date || b.created_at || 0);
+      return dateB - dateA; // Most recent first
+    });
+    return sorted[0];
+  }, [patientProformas]);
 
  
   const proformaIds = useMemo(() => {
@@ -234,6 +296,103 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
   const clinicalProformaPrintRef = useRef(null);
   const adlPrintRef = useRef(null);
   const prescriptionPrintRef = useRef(null);
+
+  // Hide submit buttons, Add buttons, and disable checkboxes in embedded clinical proforma view
+  useEffect(() => {
+    if (expandedCards.clinical && clinicalProformaPrintRef.current) {
+      const form = clinicalProformaPrintRef.current.querySelector('form');
+      if (form) {
+        // Hide submit button section (last div with flex justify-end)
+        const allDivs = form.querySelectorAll('div.flex.justify-end');
+        allDivs.forEach(div => {
+          const hasSubmitButton = div.querySelector('button[type="submit"]');
+          if (hasSubmitButton) {
+            div.style.display = 'none';
+          }
+        });
+        // Also hide any submit buttons directly
+        const submitButtons = form.querySelectorAll('button[type="submit"]');
+        submitButtons.forEach(btn => {
+          btn.style.display = 'none';
+        });
+        // Hide cancel buttons, Add buttons, and cross (X) buttons
+        const allButtons = form.querySelectorAll('button');
+        allButtons.forEach(btn => {
+          const text = btn.textContent?.trim() || '';
+          // Check for buttons with X icon or cross symbol
+          const svg = btn.querySelector('svg');
+          let hasXIcon = false;
+          if (svg) {
+            const svgPaths = svg.querySelectorAll('path');
+            svgPaths.forEach(path => {
+              const d = path.getAttribute('d') || '';
+              // Common X icon path patterns
+              if (d.includes('M18 6L6 18') || 
+                  d.includes('M6 6l12 12') || 
+                  d.includes('M6 18L18 6') ||
+                  d.includes('M6 6 L18 18') ||
+                  d.includes('M18 6 L6 18')) {
+                hasXIcon = true;
+              }
+            });
+            const svgClass = svg.className?.toString().toLowerCase() || '';
+            if (svgClass.includes('x') || svgClass.includes('close') || svgClass.includes('times')) {
+              hasXIcon = true;
+            }
+          }
+          const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+          const title = (btn.getAttribute('title') || '').toLowerCase();
+          const className = (btn.className || '').toLowerCase();
+          const isCloseButton = ariaLabel.includes('close') || 
+                               ariaLabel.includes('remove') || 
+                               ariaLabel.includes('delete') ||
+                               ariaLabel.includes('clear') ||
+                               title.includes('close') ||
+                               title.includes('remove') ||
+                               title.includes('delete') ||
+                               title.includes('clear') ||
+                               className.includes('close') ||
+                               className.includes('remove') ||
+                               className.includes('delete') ||
+                               className.includes('clear') ||
+                               className.includes('times');
+          
+          // Hide buttons that match any of these criteria
+          if (text === 'Cancel' || 
+              text.includes('Create') || 
+              text.includes('Update') || 
+              text.includes('Saving') || 
+              text.includes('Add') || 
+              text === '+ Add' || 
+              text === '×' || 
+              text === '✕' ||
+              text === 'X' ||
+              hasXIcon ||
+              isCloseButton) {
+            btn.style.display = 'none';
+          }
+        });
+        // Disable all checkboxes
+        const checkboxes = form.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+          checkbox.disabled = true;
+          checkbox.style.cursor = 'not-allowed';
+        });
+        // Disable all radio buttons
+        const radioButtons = form.querySelectorAll('input[type="radio"]');
+        radioButtons.forEach(radio => {
+          radio.disabled = true;
+          radio.style.cursor = 'not-allowed';
+        });
+        // Disable all text inputs and textareas
+        const textInputs = form.querySelectorAll('input[type="text"], input[type="number"], textarea, select');
+        textInputs.forEach(input => {
+          input.disabled = true;
+          input.style.cursor = 'not-allowed';
+        });
+      }
+    }
+  }, [expandedCards.clinical, lastVisitProforma]);
 
   // Print functionality for Patient Details section
   const handlePrintPatientDetails = async () => {
@@ -1967,29 +2126,22 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
   // Note: canViewPrescriptions is now determined by filled_by_role above
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-400/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-400/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-      </div>
-
-      <div className="relative z-10 space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6">
       {/* Card 1: Patient Details */}
-        <Card className="relative shadow-2xl border border-white/40 bg-white/70 backdrop-blur-2xl rounded-3xl overflow-hidden">
-
+        <Card className="shadow-lg border-0 bg-white">
         <div
-          className="flex items-center justify-between cursor-pointer p-6 border-b border-white/30 backdrop-blur-sm bg-white/30 hover:bg-white/40 transition-all duration-300"
+            className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <div 
+              className="flex items-center gap-4 cursor-pointer flex-1"
           onClick={() => toggleCard('patient')}
         >
-          <div className="flex items-center gap-4">
-            <div className="p-3 backdrop-blur-md bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-xl border border-white/30 shadow-lg">
+              <div className="p-3 bg-blue-100 rounded-lg">
               <FiUser className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <h3 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Patient Details</h3>
-              <p className="text-sm text-gray-600 mt-1">{patient.name} - {patient.cr_no || 'N/A'}</p>
+                <h3 className="text-xl font-bold text-gray-900">Patient Details</h3>
+                <p className="text-sm text-gray-500 mt-1">{patient?.name || 'New Patient'} - {patient?.cr_no || 'N/A'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -2001,194 +2153,164 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                 e.stopPropagation();
                 handlePrintPatientDetails();
               }}
-              className="h-8 w-8 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
               title="Print Patient Details"
             >
               <FiPrinter className="w-4 h-4 text-blue-600" />
             </Button>
+              <div 
+                className="cursor-pointer"
+                onClick={() => toggleCard('patient')}
+              >
             {expandedCards.patient ? (
               <FiChevronUp className="h-6 w-6 text-gray-500" />
             ) : (
               <FiChevronDown className="h-6 w-6 text-gray-500" />
             )}
+              </div>
           </div>
         </div>
 
         {expandedCards.patient && (
-          <div className="p-6">
+          <div ref={patientDetailsPrintRef} className="p-6">
             <form>
               {/* Quick Entry Section with Glassmorphism */}
-              <div ref={patientDetailsPrintRef} className="relative mb-8">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 rounded-3xl blur-xl"></div>
-
+              <div className="relative mb-8">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 rounded-3xl blur-xl pointer-events-none"></div>
                 <Card
                   title={
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-lg">
-
                         <FiEdit3 className="w-6 h-6 text-indigo-600" />
                       </div>
                       <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">OUT PATIENT CARD</span>
                     </div>
                   }
-                  actions={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleExportPatient}
-                      className="px-6 lg:px-8 py-3 bg-green-50 backdrop-blur-md border border-green-200 hover:bg-green-100 hover:border-green-300 text-green-700 font-semibold shadow-sm hover:shadow-md transition-all duration-200"
-                    >
-                      <FiDownload className="mr-2" />
-                      Export to Excel
-                    </Button>
-                  }
                   className="relative mb-8 shadow-2xl border border-white/30 bg-white/70 backdrop-blur-xl rounded-3xl overflow-hidden">
                   <div className="space-y-8">
                     {/* First Row - Basic Info */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiHash className="w-4 h-4 text-primary-600" />
-                            CR No.
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.cr_no || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiCalendar className="w-4 h-4 text-primary-600" />
-                            Date
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.date ? formatDate(displayData.date) : 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiUser className="w-4 h-4 text-primary-600" />
-                            Name
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.name || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiPhone className="w-4 h-4 text-primary-600" />
-                            Mobile No.
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.contact_number || 'N/A'}</p>
-                        </div>
-                      </div>
+                      <IconInput
+                        icon={<FiHash className="w-4 h-4" />}
+                        label="CR No."
+                        name="cr_no"
+                        value={displayData.cr_no || ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
+                      <IconInput
+                        icon={<FiCalendar className="w-4 h-4" />}
+                        label="Date"
+                        name="date"
+                        value={displayData.date ? formatDate(displayData.date) : ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
+                      <IconInput
+                        icon={<FiUser className="w-4 h-4" />}
+                        label="Name"
+                        name="name"
+                        value={displayData.name || ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
+                      <IconInput
+                        icon={<FiPhone className="w-4 h-4" />}
+                        label="Mobile No."
+                        name="contact_number"
+                        value={displayData.contact_number || ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
                     </div>
 
                     {/* Second Row - Age, Sex, Category, Father's Name */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiClock className="w-4 h-4 text-primary-600" />
-                            Age
+                      <IconInput
+                        icon={<FiClock className="w-4 h-4" />}
+                        label="Age"
+                        name="age"
+                        value={displayData.age || ''}
+                        type="number"
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                          Sex
                           </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.age || 'N/A'}</p>
+                        <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
+                          {displayData.sex || 'N/A'}
                       </div>
                       </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="text-sm font-semibold text-gray-700 mb-2 block">Sex</label>
-                          <p className="text-base font-medium text-gray-900">{displayData.sex || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
                           <FiShield className="w-4 h-4 text-primary-600" />
                           Category
                         </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.category || 'N/A'}</p>
+                        <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
+                          {displayData.category || 'N/A'}
                       </div>
                       </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiUsers className="w-4 h-4 text-primary-600" />
-                            Father's Name
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.father_name || 'N/A'}</p>
-                        </div>
-                      </div>
+                      <IconInput
+                        icon={<FiUsers className="w-4 h-4" />}
+                        label="Father's Name"
+                        name="father_name"
+                        value={displayData.father_name || ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
                     </div>
                     {/* Fourth Row - Department, Unit/Consit, Room No., Serial No. */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiLayers className="w-4 h-4 text-primary-600" />
-                            Department
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.department || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiUsers className="w-4 h-4 text-primary-600" />
-                            Unit/Consit
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.unit_consit || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiHome className="w-4 h-4 text-primary-600" />
-                            Room No.
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.room_no || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiHash className="w-4 h-4 text-primary-600" />
-                            Serial No.
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.serial_no || 'N/A'}</p>
-                        </div>
-                      </div>
+                      <IconInput
+                        icon={<FiLayers className="w-4 h-4" />}
+                        label="Department"
+                        name="department"
+                        value={displayData.department || ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
+                      <IconInput
+                        icon={<FiUsers className="w-4 h-4" />}
+                        label="Unit/Consit"
+                        name="unit_consit"
+                        value={displayData.unit_consit || ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
+                      <IconInput
+                        icon={<FiHome className="w-4 h-4" />}
+                        label="Room No."
+                        name="room_no"
+                        value={displayData.room_no || ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
+                      <IconInput
+                        icon={<FiHash className="w-4 h-4" />}
+                        label="Serial No."
+                        name="serial_no"
+                        value={displayData.serial_no || ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
                     </div>
 
                     {/* Fifth Row - File No., Unit Days */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                            <FiFileText className="w-4 h-4 text-primary-600" />
-                            File No.
-                          </label>
-                          <p className="text-base font-medium text-gray-900">{displayData.file_no || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                          <label className="text-sm font-semibold text-gray-700 mb-2 block">Unit Days</label>
-                          <p className="text-base font-medium text-gray-900">{displayData.unit_days || 'N/A'}</p>
+                      <IconInput
+                        icon={<FiFileText className="w-4 h-4" />}
+                        label="File No."
+                        name="file_no"
+                        value={displayData.file_no || ''}
+                        disabled={true}
+                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                      />
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-800">Unit Days</label>
+                        <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
+                          {displayData.unit_days || 'N/A'}
                         </div>
                       </div>
                     </div>
@@ -2204,73 +2326,62 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
 
                       <div className="space-y-6">
                         {/* Address Line */}
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiHome className="w-4 h-4 text-primary-600" />
-                              Address Line (House No., Street, Locality)
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.address_line || 'N/A'}</p>
-                          </div>
-                        </div>
+                        <IconInput
+                          icon={<FiHome className="w-4 h-4" />}
+                          label="Address Line (House No., Street, Locality)"
+                          name="address_line"
+                          value={displayData.address_line || ''}
+                          disabled={true}
+                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                        />
 
                         {/* Location Fields */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                            <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                <FiGlobe className="w-4 h-4 text-primary-600" />
-                                Country
-                              </label>
-                              <p className="text-base font-medium text-gray-900">{displayData.country || 'N/A'}</p>
-                            </div>
-                          </div>
-                          <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                            <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                <FiMapPin className="w-4 h-4 text-primary-600" />
-                                State
-                              </label>
-                              <p className="text-base font-medium text-gray-900">{displayData.state || 'N/A'}</p>
-                            </div>
-                          </div>
-                          <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                            <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                <FiLayers className="w-4 h-4 text-primary-600" />
-                                District
-                              </label>
-                              <p className="text-base font-medium text-gray-900">{displayData.district || 'N/A'}</p>
-                            </div>
-                          </div>
-                          <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                            <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                <FiHome className="w-4 h-4 text-primary-600" />
-                                City/Town/Village
-                              </label>
-                              <p className="text-base font-medium text-gray-900">{displayData.city || 'N/A'}</p>
-                            </div>
-                          </div>
+                          <IconInput
+                            icon={<FiGlobe className="w-4 h-4" />}
+                            label="Country"
+                            name="country"
+                            value={displayData.country || ''}
+                            disabled={true}
+                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                          />
+                          <IconInput
+                            icon={<FiMapPin className="w-4 h-4" />}
+                            label="State"
+                            name="state"
+                            value={displayData.state || ''}
+                            disabled={true}
+                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                          />
+                          <IconInput
+                            icon={<FiLayers className="w-4 h-4" />}
+                            label="District"
+                            name="district"
+                            value={displayData.district || ''}
+                            disabled={true}
+                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                          />
+                          <IconInput
+                            icon={<FiHome className="w-4 h-4" />}
+                            label="City/Town/Village"
+                            name="city"
+                            value={displayData.city || ''}
+                            disabled={true}
+                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                          />
                         </div>
 
                         {/* Pin Code Row */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                            <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                <FiHash className="w-4 h-4 text-primary-600" />
-                                Pin Code
-                              </label>
-                              <p className="text-base font-medium text-gray-900">{displayData.pin_code || 'N/A'}</p>
-                            </div>
-                          </div>
+                          <IconInput
+                            icon={<FiHash className="w-4 h-4" />}
+                            label="Pin Code"
+                            name="pin_code"
+                            value={displayData.pin_code || ''}
+                            type="number"
+                            disabled={true}
+                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                          />
                         </div>
                       </div>
                     </div>
@@ -2280,7 +2391,7 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
 
               {/* Basic Information with Glassmorphism */}
               <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 rounded-3xl blur-xl"></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 rounded-3xl blur-xl pointer-events-none"></div>
                 <Card
                   title={
                     <div className="flex items-center gap-3">
@@ -2296,78 +2407,64 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                     {/* Patient Identification */}
                     <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiCalendar className="w-4 h-4 text-primary-600" />
-                              Seen in Walk-in-on
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.seen_in_walk_in_on ? formatDate(displayData.seen_in_walk_in_on) : 'N/A'}</p>
+                        <IconInput
+                          icon={<FiCalendar className="w-4 h-4" />}
+                          label="Seen in Walk-in-on"
+                          name="seen_in_walk_in_on"
+                          value={displayData.seen_in_walk_in_on ? formatDate(displayData.seen_in_walk_in_on) : ''}
+                          disabled={true}
+                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                        />
+                        <IconInput
+                          icon={<FiCalendar className="w-4 h-4" />}
+                          label="Worked up on"
+                          name="worked_up_on"
+                          value={displayData.worked_up_on ? formatDate(displayData.worked_up_on) : ''}
+                          disabled={true}
+                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                        />
+                        <IconInput
+                          icon={<FiHash className="w-4 h-4" />}
+                          label="CR No."
+                          name="cr_no"
+                          value={displayData.cr_no || ''}
+                          disabled={true}
+                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                        />
+                        <IconInput
+                          icon={<FiFileText className="w-4 h-4" />}
+                          label="Psy. No."
+                          name="psy_no"
+                          value={displayData.psy_no || ''}
+                          disabled={true}
+                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                        />
+                        <IconInput
+                          icon={<FiHeart className="w-4 h-4" />}
+                          label="Special Clinic No."
+                          name="special_clinic_no"
+                          value={displayData.special_clinic_no || ''}
+                          disabled={true}
+                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                        />
+                        <IconInput
+                          icon={<FiUser className="w-4 h-4" />}
+                          label="Name"
+                          name="name"
+                          value={displayData.name || ''}
+                          disabled={true}
+                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                        />
+                        <div className="space-y-2">
+                          <label className="text-sm font-semibold text-gray-800">Sex</label>
+                          <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
+                            {displayData.sex || 'N/A'}
                         </div>
                         </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiCalendar className="w-4 h-4 text-primary-600" />
-                              Worked up on
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.worked_up_on ? formatDate(displayData.worked_up_on) : 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiHash className="w-4 h-4 text-primary-600" />
-                              CR No.
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.cr_no || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiFileText className="w-4 h-4 text-primary-600" />
-                              Psy. No.
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.psy_no || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiHeart className="w-4 h-4 text-primary-600" />
-                              Special Clinic No.
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.special_clinic_no || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiUser className="w-4 h-4 text-primary-600" />
-                              Name
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.name || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Sex</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.sex || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Age Group</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.age_group || 'N/A'}</p>
+                        <div className="space-y-2">
+                          <label className="text-sm font-semibold text-gray-800">Age Group</label>
+                          <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
+                            {displayData.age_group || 'N/A'}
                           </div>
                         </div>
                         <div className="relative">
@@ -2780,22 +2877,38 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
 
       {/* Card 2: Walk-in Clinical Proforma - Show only if filled_by_role is Admin, JR, or SR */}
       {canViewClinicalProforma && (
-        <Card className="relative shadow-2xl border border-white/40 bg-white/70 backdrop-blur-2xl rounded-3xl overflow-hidden">
+        <Card className="shadow-lg border-0 bg-white">
           <div
-            className="flex items-center justify-between cursor-pointer p-6 border-b border-white/30 backdrop-blur-sm bg-white/30 hover:bg-white/40 transition-all duration-300"
+            className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <div 
+              className="flex items-center gap-4 cursor-pointer flex-1"
             onClick={() => toggleCard('clinical')}
           >
-            <div className="flex items-center gap-4">
-              <div className="p-3 backdrop-blur-md bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-xl border border-white/30 shadow-lg">
+              <div className="p-3 bg-green-100 rounded-lg">
                 <FiFileText className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <h3 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Walk-in Clinical Proforma</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  {patientProformas.length > 0
-                    ? `${patientProformas.length} record${patientProformas.length > 1 ? 's' : ''} found`
+                <h3 className="text-xl font-bold text-gray-900">Walk-in Clinical Proforma</h3>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <p className="text-sm text-gray-500">
+                    {lastVisitProforma
+                      ? `Last visit: ${formatDate(lastVisitProforma.visit_date || lastVisitProforma.created_at)}`
                     : 'No clinical records'}
                 </p>
+                  {lastVisitProforma && lastVisitProforma.visit_type && (
+                    <>
+                      <span className="text-gray-400">•</span>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        lastVisitProforma.visit_type === 'first_visit' 
+                          ? 'bg-purple-100 text-purple-800' 
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {lastVisitProforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -2807,135 +2920,87 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                   e.stopPropagation();
                   handlePrintClinicalProforma();
                 }}
-                className="h-8 w-8 p-0 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border border-green-200 hover:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                className="h-9 w-9 p-0 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border border-green-200 hover:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
                 title="Print Walk-in Clinical Proforma"
               >
                 <FiPrinter className="w-4 h-4 text-green-600" />
               </Button>
+              <div 
+                className="cursor-pointer"
+                onClick={() => toggleCard('clinical')}
+              >
               {expandedCards.clinical ? (
                 <FiChevronUp className="h-6 w-6 text-gray-500" />
               ) : (
                 <FiChevronDown className="h-6 w-6 text-gray-500" />
               )}
+              </div>
             </div>
           </div>
 
           {expandedCards.clinical && (
-            <div className="p-6">
-              {patientProformas.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 mb-4">
-                    <h4 className="text-lg font-semibold text-gray-800">All Walk-in Clinical Proformas</h4>
-                    <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                      {patientProformas.length} {patientProformas.length === 1 ? 'Record' : 'Records'}
+            <div className="p-6 space-y-6">
+              {/* Last Visit Section - Show full proforma form */}
+              {lastVisitProforma ? (
+                <div className="space-y-4 border-t border-gray-200 pt-6">
+                  <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+                      Last Visit
                     </span>
-                  </div>
+                    <span className="text-sm text-gray-500 font-normal">
+                      {formatDate(lastVisitProforma.visit_date || lastVisitProforma.created_at)}
+                                  </span>
+                  </h4>
                   
-                  <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                    {patientProformas.map((proforma, index) => {
-                      // Ensure we have a valid ID - try multiple possible ID fields
-                      const proformaId = proforma?.id || proforma?.clinical_proforma_id || proforma?.proforma_id;
-                      
-                      // Skip rendering if no valid ID
-                      if (!proformaId) {
-                        console.warn('[PatientDetailsView] Proforma missing ID:', proforma, index);
-                        return null;
-                      }
-                      
-                      // Create navigation handler with the specific proforma ID
-                      const handleViewClick = (e) => {
-                        e.stopPropagation(); // Prevent triggering the parent onClick
-                        const targetId = proformaId;
-                        console.log('[PatientDetailsView] Navigating to proforma:', targetId, 'from record:', proforma);
-                        navigate(`/clinical/${targetId}${returnTab ? `?returnTab=${returnTab}` : ''}`);
-                      };
-                      
-                      const handleCardClick = () => {
-                        const targetId = proformaId;
-                        console.log('[PatientDetailsView] Card clicked, navigating to proforma:', targetId, 'from record:', proforma);
-                        navigate(`/clinical/${targetId}${returnTab ? `?returnTab=${returnTab}` : ''}`);
-                      };
-                      
-                      return (
-                        <div
-                          key={proformaId || `proforma-${index}`}
-                          className="border border-gray-200 rounded-lg p-4 hover:border-green-300 hover:shadow-md transition-all cursor-pointer bg-white"
-                          onClick={handleCardClick}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                <div className="flex items-center gap-2">
-                                  <FiCalendar className="w-4 h-4 text-gray-500" />
-                                  <span className="font-semibold text-gray-900">
-                                    {formatDate(proforma.visit_date || proforma.created_at)}
-                                  </span>
-                                </div>
-                                {proforma.visit_type && (
-                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                    proforma.visit_type === 'first_visit' 
-                                      ? 'bg-purple-100 text-purple-800' 
-                                      : 'bg-blue-100 text-blue-800'
-                                  }`}>
-                                    {proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
-                                  </span>
-                                )}
-                                {proforma.doctor_decision && (
-                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                    proforma.doctor_decision === 'complex_case' 
-                                      ? 'bg-red-100 text-red-800' 
-                                      : 'bg-green-100 text-green-800'
-                                  }`}>
-                                    {proforma.doctor_decision === 'complex_case' 
-                                      ? 'Complex Case' 
-                                      : 'Simple Case'}
-                                  </span>
-                                )}
-                              </div>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                                {proforma.doctor_name && (
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                                    <FiUser className="w-4 h-4" />
-                                    <span><span className="font-medium text-gray-800">Doctor:</span> {proforma.doctor_name}</span>
-                                  </div>
-                                )}
-                                {proforma.room_no && (
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                                    <FiMapPin className="w-4 h-4" />
-                                    <span><span className="font-medium text-gray-800">Room:</span> {proforma.room_no}</span>
-                                  </div>
-                                )}
-                                {proforma.diagnosis && (
-                                  <div className="flex items-start gap-2 text-sm text-gray-600 md:col-span-2">
-                                    <FiFileText className="w-4 h-4 mt-0.5" />
-                                    <span><span className="font-medium text-gray-800">Diagnosis:</span> {proforma.diagnosis}</span>
-                                  </div>
-                                )}
-                                {proforma.icd_code && (
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                                    <FiFileText className="w-4 h-4" />
-                                    <span><span className="font-medium text-gray-800">ICD Code:</span> {proforma.icd_code}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-2 ml-4">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleViewClick}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
-                              >
-                                <FiFileText className="w-3.5 h-3.5" />
-                                View
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  {/* Show clinical proforma form with all fields */}
+                  <div ref={clinicalProformaPrintRef} className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50/30 clinical-proforma-view">
+                    <EditClinicalProforma
+                      key={`view-proforma-${lastVisitProforma?.id || Date.now()}`}
+                      initialData={{
+                        ...lastVisitProforma,
+                        patient_id: lastVisitProforma.patient_id?.toString() || patient?.id?.toString() || '',
+                        visit_date: lastVisitProforma.visit_date ? (lastVisitProforma.visit_date.includes('T') ? lastVisitProforma.visit_date.split('T')[0] : lastVisitProforma.visit_date) : new Date().toISOString().split('T')[0],
+                        assigned_doctor: lastVisitProforma.assigned_doctor?.toString() || patient?.assigned_doctor_id?.toString() || '',
+                        onset_duration: lastVisitProforma.onset_duration || '',
+                        course: lastVisitProforma.course || '',
+                        precipitating_factor: lastVisitProforma.precipitating_factor || '',
+                        illness_duration: lastVisitProforma.illness_duration || '',
+                        current_episode_since: lastVisitProforma.current_episode_since || '',
+                        past_history: lastVisitProforma.past_history || '',
+                        family_history: lastVisitProforma.family_history || '',
+                        gpe: lastVisitProforma.gpe || '',
+                        diagnosis: lastVisitProforma.diagnosis || '',
+                        icd_code: lastVisitProforma.icd_code || '',
+                        disposal: lastVisitProforma.disposal || '',
+                        workup_appointment: lastVisitProforma.workup_appointment || '',
+                        referred_to: lastVisitProforma.referred_to || '',
+                        treatment_prescribed: lastVisitProforma.treatment_prescribed || '',
+                        mse_delusions: lastVisitProforma.mse_delusions || '',
+                        adl_reasoning: lastVisitProforma.adl_reasoning || '',
+                        mood: lastVisitProforma.mood || [],
+                        behaviour: lastVisitProforma.behaviour || [],
+                        speech: lastVisitProforma.speech || [],
+                        thought: lastVisitProforma.thought || [],
+                        perception: lastVisitProforma.perception || [],
+                        somatic: lastVisitProforma.somatic || [],
+                        bio_functions: lastVisitProforma.bio_functions || [],
+                        adjustment: lastVisitProforma.adjustment || [],
+                        cognitive_function: lastVisitProforma.cognitive_function || [],
+                        fits: lastVisitProforma.fits || [],
+                        sexual_problem: lastVisitProforma.sexual_problem || [],
+                        substance_use: lastVisitProforma.substance_use || [],
+                        associated_medical_surgical: lastVisitProforma.associated_medical_surgical || [],
+                        mse_behaviour: lastVisitProforma.mse_behaviour || [],
+                        mse_affect: lastVisitProforma.mse_affect || [],
+                        mse_thought: lastVisitProforma.mse_thought || [],
+                        mse_perception: lastVisitProforma.mse_perception || [],
+                        mse_cognitive_function: lastVisitProforma.mse_cognitive_function || [],
+                        informant_present: lastVisitProforma.informant_present ?? true,
+                        nature_of_information: lastVisitProforma.nature_of_information || '',
+                      }}
+                      onUpdate={() => {}}
+                      hideFileUpload={true}
+                    />
                   </div>
                 </div>
               ) : (
@@ -2950,18 +3015,20 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
       )}
       {/* Card 3: Additional Details (ADL File) - Show card even if empty, as long as user has permission */}
       {canViewADLFile && (
-        <Card className="relative shadow-2xl border border-white/40 bg-white/70 backdrop-blur-2xl rounded-3xl overflow-hidden">
+        <Card className="shadow-lg border-0 bg-white">
           <div
-            className="flex items-center justify-between cursor-pointer p-6 border-b border-white/30 backdrop-blur-sm bg-white/30 hover:bg-white/40 transition-all duration-300"
+            className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <div 
+              className="flex items-center gap-4 cursor-pointer flex-1"
             onClick={() => toggleCard('adl')}
           >
-            <div className="flex items-center gap-4">
-              <div className="p-3 backdrop-blur-md bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl border border-white/30 shadow-lg">
+              <div className="p-3 bg-purple-100 rounded-lg">
                 <FiFolder className="h-6 w-6 text-purple-600" />
               </div>
               <div>
-                <h3 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Out Patient Intake Record</h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <h3 className="text-xl font-bold text-gray-900">Out Patient Intake Record</h3>
+                <p className="text-sm text-gray-500 mt-1">
                   {patientAdlFiles.length > 0
                     ? `${patientAdlFiles.length} file${patientAdlFiles.length > 1 ? 's' : ''} found`
                     : 'No Out Patient Intake Record files'}
@@ -2977,16 +3044,21 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                   e.stopPropagation();
                   handlePrintADL();
                 }}
-                className="h-8 w-8 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
                 title="Print Out-Patient Intake Record"
               >
                 <FiPrinter className="w-4 h-4 text-purple-600" />
               </Button>
+              <div 
+                className="cursor-pointer"
+                onClick={() => toggleCard('adl')}
+              >
               {expandedCards.adl ? (
                 <FiChevronUp className="h-6 w-6 text-gray-500" />
               ) : (
                 <FiChevronDown className="h-6 w-6 text-gray-500" />
               )}
+              </div>
             </div>
           </div>
 
@@ -3009,18 +3081,20 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
 
       {/* Card 4: Prescription History - Show only if current user is Admin, JR, or SR */}
       {canViewPrescriptions && (
-        <Card className="relative shadow-2xl border border-white/40 bg-white/70 backdrop-blur-2xl rounded-3xl overflow-hidden">
+        <Card className="shadow-lg border-0 bg-white">
           <div
-            className="flex items-center justify-between cursor-pointer p-6 border-b border-white/30 backdrop-blur-sm bg-white/30 hover:bg-white/40 transition-all duration-300"
+            className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <div 
+              className="flex items-center gap-4 cursor-pointer flex-1"
             onClick={() => toggleCard('prescriptions')}
           >
-            <div className="flex items-center gap-4">
-              <div className="p-3 backdrop-blur-md bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-xl border border-white/30 shadow-lg">
+              <div className="p-3 bg-amber-100 rounded-lg">
                 <FiPackage className="h-6 w-6 text-amber-600" />
               </div>
               <div>
-                <h3 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Prescription History</h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <h3 className="text-xl font-bold text-gray-900">Prescription History</h3>
+                <p className="text-sm text-gray-500 mt-1">
                   {allPrescriptions.length > 0
                     ? `${allPrescriptions.length} prescription${allPrescriptions.length > 1 ? 's' : ''} across ${Object.keys(prescriptionsByVisit).length} visit${Object.keys(prescriptionsByVisit).length > 1 ? 's' : ''}`
                     : 'No prescriptions found'}
@@ -3036,16 +3110,21 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                   e.stopPropagation();
                   handlePrintPrescription();
                 }}
-                className="h-8 w-8 p-0 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                className="h-9 w-9 p-0 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
                 title="Print Prescription History"
               >
                 <FiPrinter className="w-4 h-4 text-amber-600" />
               </Button>
+              <div 
+                className="cursor-pointer"
+                onClick={() => toggleCard('prescriptions')}
+              >
               {expandedCards.prescriptions ? (
                 <FiChevronUp className="h-6 w-6 text-gray-500" />
               ) : (
                 <FiChevronDown className="h-6 w-6 text-gray-500" />
               )}
+              </div>
             </div>
           </div>
 
@@ -3068,33 +3147,33 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
         </Card>
       )}
 
-      {/* Patient Documents & Files Preview Section */}
-      {patient?.id && (
+      {/* Card 5: Past History - View-only display organized by card type */}
+      {(canViewPrescriptions || canViewClinicalProforma) && (
         <Card className="shadow-lg border-0 bg-white">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
           >
             <div 
               className="flex items-center gap-4 cursor-pointer flex-1"
-              onClick={() => toggleCard('files')}
+              onClick={() => toggleCard('pastHistory')}
             >
               <div className="p-3 bg-purple-100 rounded-lg">
-                <FiFileText className="h-6 w-6 text-purple-600" />
+                <FiClock className="h-6 w-6 text-purple-600" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900">Patient Documents & Files</h3>
+                <h3 className="text-xl font-bold text-gray-900">Past History</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  {existingFiles && existingFiles.length > 0
-                    ? `${existingFiles.length} file${existingFiles.length > 1 ? 's' : ''} uploaded`
-                    : 'No files uploaded'}
+                  {trulyPastProformas.length > 0 
+                    ? `${trulyPastProformas.length} past visit${trulyPastProformas.length > 1 ? 's' : ''} - View only`
+                    : 'No past visits - View only'}
                 </p>
               </div>
             </div>
             <div 
               className="cursor-pointer"
-              onClick={() => toggleCard('files')}
+              onClick={() => toggleCard('pastHistory')}
             >
-              {expandedCards.files ? (
+              {expandedCards.pastHistory ? (
                 <FiChevronUp className="h-6 w-6 text-gray-500" />
               ) : (
                 <FiChevronDown className="h-6 w-6 text-gray-500" />
@@ -3102,69 +3181,337 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
             </div>
           </div>
 
-          {expandedCards.files && (
+          {expandedCards.pastHistory && (
+            <div className="p-6 space-y-4">
+              {trulyPastProformas.length > 0 ? (
+                <>
+                  {/* Sort past proformas by visit date (oldest first - chronological order) */}
+                  {(() => {
+                    const sortedProformas = [...trulyPastProformas].sort((a, b) => {
+                      const dateA = new Date(a.visit_date || a.created_at || 0);
+                      const dateB = new Date(b.visit_date || b.created_at || 0);
+                      return dateA - dateB; // Oldest first (chronological order)
+                    });
+
+                    // Check if any ADL files exist
+                    const hasAdlFiles = sortedProformas.some(proforma => 
+                      patientAdlFiles.some(adl => adl.clinical_proforma_id === proforma.id)
+                    );
+
+                    return (
+                      <>
+                        {/* 1. Patient Details Card - Show once only, expandable/collapsible */}
+                        <Card className="shadow-md border-2 border-blue-200">
+                          <div
+                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                            onClick={() => togglePastHistoryCard('patientDetails')}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-blue-100 rounded-lg">
+                                <FiUser className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <h4 className="text-lg font-bold text-gray-900">Patient Details</h4>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {expandedPastHistoryCards.patientDetails ? (
+                                <FiChevronUp className="h-5 w-5 text-gray-500" />
+                              ) : (
+                                <FiChevronDown className="h-5 w-5 text-gray-500" />
+                              )}
+                            </div>
+                          </div>
+                          {expandedPastHistoryCards.patientDetails && (
             <div className="p-6">
-              {existingFiles && existingFiles.length > 0 ? (
-                <FilePreview
-                  files={existingFiles}
-                  canDelete={false}
-                  baseUrl={import.meta.env.VITE_API_URL || 'http://localhost:2025/api'}
-                />
+                              {/* View-only fields */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div>
+                                  <label className="text-xs font-medium text-gray-500">Patient Name</label>
+                                  <input
+                                    type="text"
+                                    value={patient?.name || ''}
+                                    disabled
+                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-medium text-gray-500">CR No</label>
+                                  <input
+                                    type="text"
+                                    value={patient?.cr_no || ''}
+                                    disabled
+                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-medium text-gray-500">PSY No</label>
+                                  <input
+                                    type="text"
+                                    value={patient?.psy_no || ''}
+                                    disabled
+                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-medium text-gray-500">Age</label>
+                                  <input
+                                    type="text"
+                                    value={patient?.age || ''}
+                                    disabled
+                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-medium text-gray-500">Sex</label>
+                                  <input
+                                    type="text"
+                                    value={patient?.sex || ''}
+                                    disabled
+                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-medium text-gray-500">Assigned Room</label>
+                                  <input
+                                    type="text"
+                                    value={patient?.assigned_room || ''}
+                                    disabled
+                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </Card>
+
+                        {/* 2. Walk-in Clinical Proforma Card - Show all visit-wise proformas, expandable/collapsible */}
+                        <Card className="shadow-md border-2 border-green-200">
+                          <div
+                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                            onClick={() => togglePastHistoryCard('clinicalProforma')}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-green-100 rounded-lg">
+                                <FiFileText className="h-5 w-5 text-green-600" />
+                              </div>
+                              <h4 className="text-lg font-bold text-gray-900">Walk-in Clinical Proforma</h4>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {expandedPastHistoryCards.clinicalProforma ? (
+                                <FiChevronUp className="h-5 w-5 text-gray-500" />
+                              ) : (
+                                <FiChevronDown className="h-5 w-5 text-gray-500" />
+                              )}
+                </div>
+                          </div>
+                          {expandedPastHistoryCards.clinicalProforma && (
+                            <div className="p-6">
+                              <div className="space-y-4">
+                                {sortedProformas.map((proforma, index) => {
+                                  const visitNumber = index + 1;
+                                  const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                                  const visitId = proforma.id || `proforma-${index}`;
+                                  const isExpanded = isVisitExpanded('clinicalProforma', visitId);
+                                  return (
+                                    <Card key={visitId} className="border border-gray-200 shadow-sm">
+                                      <div
+                                        className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                                        onClick={() => toggleVisit('clinicalProforma', visitId)}
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <div className="p-2 bg-green-100 rounded-lg">
+                                            <FiHash className="h-4 w-4 text-green-600" />
+                                          </div>
+                                          <div>
+                                            <h5 className="text-md font-semibold text-gray-800">
+                                              Visit {visitNumber} - Walk-in Clinical Proforma
+                                            </h5>
+                                            <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {isExpanded ? (
+                                            <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                          ) : (
+                                            <FiChevronDown className="h-5 w-5 text-gray-500" />
+              )}
+            </div>
+                                      </div>
+                                      {isExpanded && (
+                                        <div className="p-4">
+                                          {/* View-only when not in edit mode */}
+                                          <ClinicalProformaDetails proforma={proforma} />
+                                        </div>
+          )}
+        </Card>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </Card>
+
+                        {/* 3. Out Patient Intake Record Card - Only if ADL files exist, expandable/collapsible */}
+                        {hasAdlFiles && (
+                          <Card className="shadow-md border-2 border-orange-200">
+                            <div
+                              className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                              onClick={() => togglePastHistoryCard('intakeRecord')}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-orange-100 rounded-lg">
+                                  <FiFolder className="h-5 w-5 text-orange-600" />
+                                </div>
+                                <h4 className="text-lg font-bold text-gray-900">Out Patient Intake Record</h4>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {expandedPastHistoryCards.intakeRecord ? (
+                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                ) : (
+                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                )}
+                              </div>
+                            </div>
+                            {expandedPastHistoryCards.intakeRecord && (
+                              <div className="p-6">
+                                <div className="space-y-4">
+                                  {sortedProformas.map((proforma, index) => {
+                                    const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === proforma.id);
+                                    if (!adlFile) return null;
+                                    
+                                    const visitNumber = index + 1;
+                                    const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                                    const visitId = adlFile.id || adlFile.adl_file_id || adlFile.adlFileId || `adl-${index}`;
+                                    const isExpanded = isVisitExpanded('intakeRecord', visitId);
+                                    return (
+                                      <Card key={visitId} className="border border-gray-200 shadow-sm">
+                                        <div
+                                          className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                                          onClick={() => toggleVisit('intakeRecord', visitId)}
+                                        >
+                                          <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-orange-100 rounded-lg">
+                                              <FiHash className="h-4 w-4 text-orange-600" />
+                                            </div>
+                                            <div>
+                                              <h5 className="text-md font-semibold text-gray-800">
+                                                Visit {visitNumber} - Out Patient Intake Record
+                                              </h5>
+                                              <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            {isExpanded ? (
+                                              <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                            ) : (
+                                              <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                            )}
+                                          </div>
+                                        </div>
+                                        {isExpanded && (
+                                          <div className="p-4">
+                                            {/* View-only when not in edit mode */}
+                                            <ViewADL adlFiles={adlFile} />
+                                          </div>
+                                        )}
+                                      </Card>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </Card>
+                        )}
+
+                        {/* 4. Prescription Card - Show all visit-wise prescriptions, expandable/collapsible */}
+                        <Card className="shadow-md border-2 border-amber-200">
+                          <div
+                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                            onClick={() => togglePastHistoryCard('prescription')}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-amber-100 rounded-lg">
+                                <FiPackage className="h-5 w-5 text-amber-600" />
+                              </div>
+                              <h4 className="text-lg font-bold text-gray-900">Prescription</h4>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {expandedPastHistoryCards.prescription ? (
+                                <FiChevronUp className="h-5 w-5 text-gray-500" />
+                              ) : (
+                                <FiChevronDown className="h-5 w-5 text-gray-500" />
+                              )}
+                            </div>
+                          </div>
+                          {expandedPastHistoryCards.prescription && (
+                            <div className="p-6">
+                              <div className="space-y-4">
+                                {sortedProformas.map((proforma, index) => {
+                                  const visitNumber = index + 1;
+                                  const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                                  const visitId = proforma.id || `prescription-${index}`;
+                                  const isExpanded = isVisitExpanded('prescription', visitId);
+                                  return (
+                                    <Card key={visitId} className="border border-gray-200 shadow-sm">
+                                      <div
+                                        className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                                        onClick={() => toggleVisit('prescription', visitId)}
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <div className="p-2 bg-amber-100 rounded-lg">
+                                            <FiHash className="h-4 w-4 text-amber-600" />
+</div>
+                                          <div>
+                                            <h5 className="text-md font-semibold text-gray-800">
+                                              Visit {visitNumber} - Prescription
+                                            </h5>
+                                            <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
+      </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {isExpanded ? (
+                                            <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                          ) : (
+                                            <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                          )}
+                                        </div>
+                                      </div>
+                                      {isExpanded && (
+                                        <div className="p-4">
+                                          {/* View-only when not in edit mode */}
+                                          <PrescriptionView 
+                                            clinicalProformaId={proforma.id}
+                                            patientId={patient?.id}
+                                          />
+                                        </div>
+                                      )}
+                                    </Card>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </Card>
+                      </>
+                    );
+                  })()}
+                </>
               ) : (
-                <div className="text-center py-12 text-gray-500">
-                  <FiFileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                  <p className="text-base">No files uploaded</p>
-                  <p className="text-sm text-gray-400 mt-1">Files will appear here once uploaded</p>
+                <div className="text-center py-12">
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 max-w-2xl mx-auto">
+                    <FiClock className="h-12 w-12 mx-auto mb-4 text-purple-500" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      No Past History Found
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      This patient has no past visit records. Past visit history will appear here once additional visits are recorded.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
           )}
         </Card>
       )}
-
-{isResident || isFaculty || isJrSrUser || isAdminUser &&<div className="flex mt-4 flex-col sm:flex-row justify-end gap-4">
-
-<Button
-  type="button"
-  variant="outline"
-  onClick={(() => navigate('/patients'))}
-  className="px-6 lg:px-8 py-3 bg-white/60 backdrop-blur-md border border-white/30 hover:bg-white/80 hover:border-gray-300/50 text-gray-800 font-semibold shadow-sm hover:shadow-md transition-all duration-200"
->
-  <FiX className="mr-2" />
-  Cancel
-</Button>
-<Button
-  type="button"
-  onClick={() => {
-    if (returnTab) {
-      navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
-    } else {
-      navigate("/patients");
-    }
-  }}
-  className="px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
->
-  <FiSave className="mr-2" />
-Print All
-</Button>
-<Button
-  type="submit"
-  onClick={() => {
-    if (returnTab) {
-      navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
-    } else {
-      navigate("/patients");
-    }
-  }}
-  className="px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
->
-  <FiSave className="mr-2" />
-  View All Patient
-</Button>
-</div>
-
-}
-      </div>
     </div>
   );
 };

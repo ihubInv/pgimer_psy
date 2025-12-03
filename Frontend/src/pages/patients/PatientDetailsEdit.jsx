@@ -3225,7 +3225,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                     </div>
 
                     <div className="flex flex-col sm:flex-row justify-end gap-4 mt-6">
-                      <Button
+                      {/* <Button
                         type="button"
                         variant="outline"
                         onClick={onCancel || (() => navigate('/patients'))}
@@ -3233,7 +3233,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                       >
                         <FiX className="mr-2" />
                         Cancel
-                      </Button>
+                      </Button> */}
                       <Button
                         type="submit"
                         loading={isLoading }

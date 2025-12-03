@@ -1051,7 +1051,7 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                   className="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <FiSave className="w-4 h-4" />
-                  {isSaving ? 'Saving...' : (mode === 'create' || !isUpdateMode) ? '  Update Prescriptions' : 'Create Prescriptions'}
+                  {isSaving ? 'Saving...' : (mode === 'create' || !isUpdateMode) ? 'Create Prescriptions' : 'Update Prescriptions'}
                 </Button>
               )}
             </div>
