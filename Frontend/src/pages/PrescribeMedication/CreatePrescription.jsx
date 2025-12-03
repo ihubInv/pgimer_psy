@@ -1,18 +1,23 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { createPortal } from 'react-dom';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
 import { useCreatePrescriptionMutation, useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
+import { useGetAllMedicinesQuery } from '../../features/medicines/medicineApiSlice';
+import { useGetAllPrescriptionTemplatesQuery, useCreatePrescriptionTemplateMutation } from '../../features/prescriptionTemplates/prescriptionTemplateApiSlice';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
-import { FiPackage, FiUser, FiSave, FiX, FiPlus, FiTrash2, FiHome, FiUserCheck, FiCalendar, FiFileText, FiClock, FiPrinter, FiSearch, FiDroplet, FiActivity } from 'react-icons/fi';
+import Select from '../../components/Select';
+import Modal from '../../components/Modal';
+import { FiPackage, FiUser, FiSave, FiX, FiPlus, FiTrash2, FiHome, FiUserCheck, FiCalendar, FiFileText, FiClock, FiPrinter, FiSearch, FiDroplet, FiActivity, FiBookmark, FiDownload } from 'react-icons/fi';
 import PGI_Logo from '../../assets/PGI_Logo.png';
-import medicinesData from '../../assets/psychiatric_meds_india.json';
 import { 
   PRESCRIPTION_FORM,
+  PRESCRIPTION_OPTIONS,
   DOSAGE_OPTIONS,
   WHEN_OPTIONS,
   FREQUENCY_OPTIONS,
@@ -63,6 +68,14 @@ const CreatePrescription = ({
   );
 
   const [createPrescription, { isLoading: isSavingPrescriptions }] = useCreatePrescriptionMutation();
+  
+  // Template functionality
+  const { data: templatesData, isLoading: isLoadingTemplates } = useGetAllPrescriptionTemplatesQuery({ is_active: true });
+  const [createPrescriptionTemplate, { isLoading: isSavingTemplate }] = useCreatePrescriptionTemplateMutation();
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [showLoadTemplateModal, setShowLoadTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
 
   // Fetch existing prescriptions when clinicalProformaId is provided
   const { 
@@ -172,79 +185,84 @@ const CreatePrescription = ({
     }
   }, [existingPrescriptions, clinicalProformaId, hasPopulatedPrescriptions, setPrescriptions]);
 
-  // Flatten medicines data for autocomplete
+  // Fetch medicines from API
+  const { data: medicinesApiData, isLoading: isLoadingMedicines, error: medicinesError } = useGetAllMedicinesQuery({
+    limit: 1000,
+    is_active: true
+  });
+
+  // Flatten medicines data for autocomplete from API
   const allMedicines = useMemo(() => {
-    const medicines = [];
-    const data = medicinesData.psychiatric_medications;
+    if (!medicinesApiData) return [];
     
-    // Helper function to extract medicines from nested structure
-    const extractMedicines = (obj, path = '') => {
-      if (Array.isArray(obj)) {
-        obj.forEach(med => {
-          // Add generic name
-          medicines.push({
-            name: med.name,
-            displayName: med.name,
-            type: 'generic',
-            brands: med.brands || [],
-            strengths: med.strengths || []
-          });
-          // Add brand names
-          if (med.brands && Array.isArray(med.brands)) {
-            med.brands.forEach(brand => {
-              medicines.push({
-                name: brand,
-                displayName: `${brand} (${med.name})`,
-                type: 'brand',
-                genericName: med.name,
-                strengths: med.strengths || []
-              });
-            });
-          }
-        });
-      } else if (typeof obj === 'object' && obj !== null) {
-        Object.values(obj).forEach(value => {
-          extractMedicines(value, path);
-        });
-      }
-    };
+    // API returns: { success: true, data: { medicines: [...], pagination: {...} } }
+    const medicines = medicinesApiData?.data?.medicines || medicinesApiData?.data || [];
     
-    extractMedicines(data);
-    // Remove duplicates and sort
-    const uniqueMedicines = Array.from(
-      new Map(medicines.map(m => [m.name.toLowerCase(), m])).values()
-    );
-    return uniqueMedicines.sort((a, b) => a.name.localeCompare(b.name));
-  }, []);
+    if (!Array.isArray(medicines) || medicines.length === 0) {
+      return [];
+    }
+    
+    return medicines.map(med => ({
+      name: med.name,
+      displayName: med.name,
+      category: med.category,
+      id: med.id
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [medicinesApiData]);
+  
+  // Debug: Log medicines data
+  useEffect(() => {
+    if (medicinesApiData) {
+      console.log('[CreatePrescription] Medicines data received:', {
+        hasData: !!medicinesApiData,
+        medicines: allMedicines.length
+      });
+    }
+    if (medicinesError) {
+      console.error('[CreatePrescription] Medicines API error:', medicinesError);
+    }
+  }, [medicinesApiData, medicinesError, allMedicines.length]);
 
   // Medicine autocomplete state for each row
   const [medicineSuggestions, setMedicineSuggestions] = useState({});
-  const [filteredSuggestions, setFilteredSuggestions] = useState({}); // Filtered suggestions for dropdown search
-  const [dropdownSearchTerm, setDropdownSearchTerm] = useState({}); // Search term within dropdown
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState({});
   const [showSuggestions, setShowSuggestions] = useState({});
-  const [suggestionPositions, setSuggestionPositions] = useState({});
+  const [dropdownPositions, setDropdownPositions] = useState({});
   const inputRefs = useRef({});
-  const dropdownSearchRefs = useRef({});
+  
+  // Update dropdown positions on scroll/resize when dropdowns are open
+  useEffect(() => {
+    const updatePositions = () => {
+      const openDropdowns = Object.keys(showSuggestions).filter(idx => showSuggestions[idx]);
+      if (openDropdowns.length === 0) return;
+      
+      openDropdowns.forEach(idx => {
+        const input = inputRefs.current[`medicine-${idx}`];
+        if (input) {
+          const rect = input.getBoundingClientRect();
+          setDropdownPositions(prev => ({
+            ...prev,
+            [idx]: {
+              top: rect.bottom + 4,
+              left: rect.left,
+              width: rect.width
+            }
+          }));
+        }
+      });
+    };
+    
+    window.addEventListener('scroll', updatePositions, true);
+    window.addEventListener('resize', updatePositions);
+    return () => {
+      window.removeEventListener('scroll', updatePositions, true);
+      window.removeEventListener('resize', updatePositions);
+    };
+  }, [showSuggestions]);
 
   const addPrescriptionRow = () => {
     setPrescriptions((prev) => ([...prev, { medicine: '', dosage: '', when: '', frequency: '', duration: '', qty: '', details: '', notes: '' }]));
   };
-
-  // Optimized medicine filter function
-  const filterMedicines = useMemo(() => {
-    const filter = (searchTerm) => {
-      if (!searchTerm || searchTerm.trim().length === 0) return [];
-      
-      const term = searchTerm.toLowerCase().trim();
-      return allMedicines.filter(med => 
-        med.name.toLowerCase().includes(term) ||
-        med.displayName.toLowerCase().includes(term) ||
-        (med.genericName && med.genericName.toLowerCase().includes(term))
-      );
-    };
-    return filter;
-  }, [allMedicines]);
 
   const updatePrescriptionCell = (rowIdx, field, value) => {
     setPrescriptions((prev) => prev.map((r, i) => i === rowIdx ? { ...r, [field]: value } : r));
@@ -252,47 +270,29 @@ const CreatePrescription = ({
     // Handle medicine autocomplete
     if (field === 'medicine') {
       const searchTerm = value.toLowerCase().trim();
-      if (searchTerm.length > 0) {
-        const filtered = filterMedicines(value);
+      
+      if (searchTerm.length > 0 && allMedicines.length > 0) {
+        // Filter medicines based on name or category
+        const filtered = allMedicines.filter(med =>
+          med.name.toLowerCase().includes(searchTerm) ||
+          (med.category && med.category.toLowerCase().includes(searchTerm))
+        ).slice(0, 20); // Show up to 20 suggestions
+        
         setMedicineSuggestions(prev => ({ ...prev, [rowIdx]: filtered }));
-        // Initialize dropdown search term with current input value if not set
-        if (!dropdownSearchTerm[rowIdx] || dropdownSearchTerm[rowIdx] === '') {
-          setDropdownSearchTerm(prev => ({ ...prev, [rowIdx]: value }));
-          // Use the filtered results directly when initializing
-          setFilteredSuggestions(prev => ({ ...prev, [rowIdx]: filtered }));
-        } else {
-          // Filter suggestions based on dropdown search if it exists
-          const dropdownSearch = dropdownSearchTerm[rowIdx]?.toLowerCase().trim() || '';
-          const finalFiltered = dropdownSearch 
-            ? filtered.filter(med => 
-                med.name.toLowerCase().includes(dropdownSearch) ||
-                med.displayName.toLowerCase().includes(dropdownSearch) ||
-                (med.genericName && med.genericName.toLowerCase().includes(dropdownSearch))
-              )
-            : filtered;
-          setFilteredSuggestions(prev => ({ ...prev, [rowIdx]: finalFiltered }));
-        }
-        setShowSuggestions(prev => ({ ...prev, [rowIdx]: true }));
+        setShowSuggestions(prev => ({ ...prev, [rowIdx]: filtered.length > 0 }));
         setActiveSuggestionIndex(prev => ({ ...prev, [rowIdx]: -1 }));
         
-        // Calculate position for dropdown
+        // Calculate position for portal dropdown
         setTimeout(() => {
           const input = inputRefs.current[`medicine-${rowIdx}`];
           if (input) {
             const rect = input.getBoundingClientRect();
-            const dropdownHeight = 280; // Height for 4 items + search box
-            const spaceAbove = rect.top;
-            const spaceBelow = window.innerHeight - rect.bottom;
-            
-            // Position above if there's enough space, otherwise position below
-            const positionAbove = spaceAbove > dropdownHeight || spaceAbove > spaceBelow;
-            
-            setSuggestionPositions(prev => ({
+            setDropdownPositions(prev => ({
               ...prev,
               [rowIdx]: {
-                top: positionAbove ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+                top: rect.bottom + 4,
                 left: rect.left,
-                width: Math.max(rect.width, 400) // Minimum width for better UX
+                width: rect.width
               }
             }));
           }
@@ -300,29 +300,8 @@ const CreatePrescription = ({
       } else {
         setShowSuggestions(prev => ({ ...prev, [rowIdx]: false }));
         setMedicineSuggestions(prev => ({ ...prev, [rowIdx]: [] }));
-        setFilteredSuggestions(prev => ({ ...prev, [rowIdx]: [] }));
-        setDropdownSearchTerm(prev => ({ ...prev, [rowIdx]: '' }));
       }
     }
-  };
-
-  // Handle dropdown search input
-  const handleDropdownSearch = (rowIdx, value) => {
-    setDropdownSearchTerm(prev => ({ ...prev, [rowIdx]: value }));
-    const searchTerm = value.toLowerCase().trim();
-    const baseSuggestions = medicineSuggestions[rowIdx] || [];
-    
-    if (searchTerm.length > 0) {
-      const filtered = baseSuggestions.filter(med => 
-        med.name.toLowerCase().includes(searchTerm) ||
-        med.displayName.toLowerCase().includes(searchTerm) ||
-        (med.genericName && med.genericName.toLowerCase().includes(searchTerm))
-      );
-      setFilteredSuggestions(prev => ({ ...prev, [rowIdx]: filtered }));
-    } else {
-      setFilteredSuggestions(prev => ({ ...prev, [rowIdx]: baseSuggestions }));
-    }
-    setActiveSuggestionIndex(prev => ({ ...prev, [rowIdx]: -1 }));
   };
 
   const selectMedicine = (rowIdx, medicine) => {
@@ -331,18 +310,15 @@ const CreatePrescription = ({
     ));
     setShowSuggestions(prev => ({ ...prev, [rowIdx]: false }));
     setMedicineSuggestions(prev => ({ ...prev, [rowIdx]: [] }));
-    setFilteredSuggestions(prev => ({ ...prev, [rowIdx]: [] }));
-    setDropdownSearchTerm(prev => ({ ...prev, [rowIdx]: '' }));
   };
 
   const handleMedicineKeyDown = (e, rowIdx) => {
-    const suggestions = filteredSuggestions[rowIdx] || medicineSuggestions[rowIdx] || [];
+    const suggestions = medicineSuggestions[rowIdx] || [];
     const currentIndex = activeSuggestionIndex[rowIdx] || -1;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const maxIndex = Math.min(3, suggestions.length - 1); // Limit to 4 visible items
-      const nextIndex = currentIndex < maxIndex ? currentIndex + 1 : currentIndex;
+      const nextIndex = currentIndex < suggestions.length - 1 ? currentIndex + 1 : currentIndex;
       setActiveSuggestionIndex(prev => ({ ...prev, [rowIdx]: nextIndex }));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -449,6 +425,73 @@ const CreatePrescription = ({
 
     // Trigger print
     window.print();
+  };
+
+  // Save current prescriptions as template
+  const handleSaveAsTemplate = async () => {
+    // Filter out empty prescriptions
+    const validPrescriptions = prescriptions.filter(p => p.medicine && p.medicine.trim());
+    
+    if (validPrescriptions.length === 0) {
+      toast.error('Please add at least one medication with a valid medicine name');
+      return;
+    }
+
+    if (!templateName.trim()) {
+      toast.error('Please enter a template name');
+      return;
+    }
+
+    try {
+      const templateData = {
+        name: templateName.trim(),
+        description: templateDescription.trim() || null,
+        prescription: validPrescriptions.map(p => ({
+          medicine: p.medicine.trim(),
+          dosage: p.dosage?.trim() || null,
+          when: p.when?.trim() || null,
+          frequency: p.frequency?.trim() || null,
+          duration: p.duration?.trim() || null,
+          qty: p.qty?.trim() || null,
+          details: p.details?.trim() || null,
+          notes: p.notes?.trim() || null,
+        }))
+      };
+
+      await createPrescriptionTemplate(templateData).unwrap();
+      toast.success('Template saved successfully!');
+      setShowSaveTemplateModal(false);
+      setTemplateName('');
+      setTemplateDescription('');
+    } catch (error) {
+      console.error('Error saving template:', error);
+      toast.error(error?.data?.message || 'Failed to save template. Please try again.');
+    }
+  };
+
+  // Load template into prescriptions (appends to existing)
+  const handleLoadTemplate = (template) => {
+    if (!template.prescription || !Array.isArray(template.prescription) || template.prescription.length === 0) {
+      toast.error('Template has no valid prescriptions');
+      return;
+    }
+
+    // Map template prescription to form format
+    const loadedPrescriptions = template.prescription.map(p => ({
+      medicine: p.medicine || '',
+      dosage: p.dosage || '',
+      when: p.when_to_take || p.when || '',
+      frequency: p.frequency || '',
+      duration: p.duration || '',
+      qty: p.quantity || p.qty || '',
+      details: p.details || '',
+      notes: p.notes || ''
+    }));
+
+    // Append to existing prescriptions instead of replacing
+    setPrescriptions(prev => [...prev, ...loadedPrescriptions]);
+    toast.success(`Template "${template.name}" loaded successfully! ${loadedPrescriptions.length} medication(s) added.`);
+    // Keep modal open so user can load more templates
   };
 
 
@@ -917,49 +960,46 @@ const CreatePrescription = ({
                         </div>
                       </td>
                       {/* Medicine Field - Special handling with autocomplete */}
-                      <td className="px-4 py-3" style={{ position: 'relative', overflow: 'visible', zIndex: showSuggestions[idx] ? 1000 : 'auto' }}>
-                        <div style={{ position: 'relative', overflow: 'visible' }}>
+                      <td className="px-4 py-3">
+                        <div className="relative w-full">
                           <div className="relative">
-                            <FiDroplet className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                            <FiDroplet className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                             <input
                               ref={(el) => { inputRefs.current[`medicine-${idx}`] = el; }}
                               value={row.medicine}
                               onChange={(e) => updatePrescriptionCell(idx, 'medicine', e.target.value)}
                               onKeyDown={(e) => handleMedicineKeyDown(e, idx)}
                               onFocus={() => {
-                                if (row.medicine && row.medicine.trim().length > 0) {
-                                  const filtered = filterMedicines(row.medicine);
-                                  setMedicineSuggestions(prev => ({ ...prev, [idx]: filtered }));
-                                  setFilteredSuggestions(prev => ({ ...prev, [idx]: filtered }));
-                                  setDropdownSearchTerm(prev => ({ ...prev, [idx]: row.medicine }));
-                                  setShowSuggestions(prev => ({ ...prev, [idx]: true }));
+                                // Show suggestions when focused, even if input is empty
+                                if (allMedicines.length > 0) {
+                                  if (row.medicine && row.medicine.trim().length > 0) {
+                                    const searchTerm = row.medicine.toLowerCase().trim();
+                                    const filtered = allMedicines.filter(med =>
+                                      med.name.toLowerCase().includes(searchTerm) ||
+                                      (med.category && med.category.toLowerCase().includes(searchTerm))
+                                    ).slice(0, 20);
+                                    setMedicineSuggestions(prev => ({ ...prev, [idx]: filtered }));
+                                    setShowSuggestions(prev => ({ ...prev, [idx]: filtered.length > 0 }));
+                                  } else {
+                                    // Show all medicines when input is empty and focused
+                                    const topMedicines = allMedicines.slice(0, 20);
+                                    setMedicineSuggestions(prev => ({ ...prev, [idx]: topMedicines }));
+                                    setShowSuggestions(prev => ({ ...prev, [idx]: true }));
+                                  }
                                   
-                                  // Calculate position
+                                  // Calculate position for portal dropdown
                                   setTimeout(() => {
                                     const input = inputRefs.current[`medicine-${idx}`];
                                     if (input) {
                                       const rect = input.getBoundingClientRect();
-                                      const dropdownHeight = 280;
-                                      const spaceAbove = rect.top;
-                                      const spaceBelow = window.innerHeight - rect.bottom;
-                                      const positionAbove = spaceAbove > dropdownHeight || spaceAbove > spaceBelow;
-                                      
-                                      setSuggestionPositions(prev => ({
+                                      setDropdownPositions(prev => ({
                                         ...prev,
                                         [idx]: {
-                                          top: positionAbove ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+                                          top: rect.bottom + 4,
                                           left: rect.left,
-                                          width: Math.max(rect.width, 400)
+                                          width: rect.width
                                         }
                                       }));
-                                      // Focus dropdown search after a brief delay
-                                      setTimeout(() => {
-                                        const searchInput = dropdownSearchRefs.current[`search-${idx}`];
-                                        if (searchInput) {
-                                          searchInput.focus();
-                                          searchInput.select();
-                                        }
-                                      }, 100);
                                     }
                                   }, 0);
                                 }
@@ -974,148 +1014,51 @@ const CreatePrescription = ({
                               autoComplete="off"
                             />
                           </div>
-                          {showSuggestions[idx] && (filteredSuggestions[idx] || medicineSuggestions[idx]) && (filteredSuggestions[idx] || medicineSuggestions[idx]).length > 0 && (
-                            <div 
-                              className="fixed bg-white border-2 border-green-200 rounded-xl shadow-2xl overflow-hidden"
-                              style={{ 
-                                zIndex: 10000,
-                                top: suggestionPositions[idx]?.top ? `${suggestionPositions[idx].top}px` : 'auto',
-                                left: suggestionPositions[idx]?.left ? `${suggestionPositions[idx].left}px` : 'auto',
-                                width: suggestionPositions[idx]?.width ? `${suggestionPositions[idx].width}px` : '400px',
-                                minWidth: '400px',
-                                maxWidth: '500px'
+                          {/* Dropdown using portal to render in document.body (like Select component) */}
+                          {showSuggestions[idx] && medicineSuggestions[idx] && Array.isArray(medicineSuggestions[idx]) && medicineSuggestions[idx].length > 0 && dropdownPositions[idx] && createPortal(
+                            <div
+                              style={{
+                                position: 'fixed',
+                                top: `${dropdownPositions[idx].top}px`,
+                                left: `${dropdownPositions[idx].left}px`,
+                                width: `${dropdownPositions[idx].width}px`,
+                                zIndex: 999999,
                               }}
                             >
-                              {/* Search box inside dropdown */}
-                              <div className="p-2 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-200">
-                                <div className="relative">
-                                  <input
-                                    ref={(el) => { dropdownSearchRefs.current[`search-${idx}`] = el; }}
-                                    type="text"
-                                    value={dropdownSearchTerm[idx] || ''}
-                                    onChange={(e) => handleDropdownSearch(idx, e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Escape') {
-                                        setShowSuggestions(prev => ({ ...prev, [idx]: false }));
-                                      } else if (e.key === 'ArrowDown') {
-                                        e.preventDefault();
-                                        setActiveSuggestionIndex(prev => ({ ...prev, [idx]: 0 }));
-                                        // Focus first item for keyboard navigation
-                                        setTimeout(() => {
-                                          const firstItem = document.querySelector(`[data-medicine-item="${idx}-0"]`);
-                                          if (firstItem) {
-                                            firstItem.scrollIntoView({ block: 'nearest' });
-                                          }
-                                        }, 0);
-                                      } else if (e.key === 'Enter') {
-                                        // If there's an active suggestion, select it
-                                        const activeIdx = activeSuggestionIndex[idx];
-                                        const suggestions = filteredSuggestions[idx] || medicineSuggestions[idx] || [];
-                                        if (activeIdx >= 0 && suggestions[activeIdx]) {
-                                          e.preventDefault();
-                                          selectMedicine(idx, suggestions[activeIdx]);
-                                        }
-                                      }
-                                    }}
-                                    className="w-full px-3 py-2 pl-9 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
-                                    placeholder="🔍 Search medicines..."
-                                    autoComplete="off"
-                                  />
-                                  <svg 
-                                    className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-green-600" 
-                                    fill="none" 
-                                    stroke="currentColor" 
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                  </svg>
-                                </div>
-                                {(filteredSuggestions[idx] || medicineSuggestions[idx])?.length > 0 && (
-                                  <p className="text-xs text-gray-600 mt-1 px-1">
-                                    {(filteredSuggestions[idx] || medicineSuggestions[idx]).length} result{(filteredSuggestions[idx] || medicineSuggestions[idx]).length !== 1 ? 's' : ''}
-                                  </p>
-                                )}
-                              </div>
-                              
-                              {/* Medicine list - Show max 4 items initially (~200px), scroll if more */}
-                              <div 
-                                className="max-h-[200px] overflow-y-auto custom-scrollbar" 
-                                style={{ maxHeight: '200px' }}
-                                data-dropdown-row={idx}
+                              <div
+                                className="bg-white border-2 border-green-200 rounded-lg shadow-2xl overflow-hidden"
+                                style={{
+                                  maxHeight: '280px',
+                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+                                }}
                               >
-                                {(filteredSuggestions[idx] || medicineSuggestions[idx]).map((med, medIdx) => (
-                                  <div
-                                    key={`${med.name}-${medIdx}`}
-                                    data-medicine-item={`${idx}-${medIdx}`}
-                                    onClick={() => selectMedicine(idx, med)}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onMouseEnter={() => setActiveSuggestionIndex(prev => ({ ...prev, [idx]: medIdx }))}
-                                    className={`px-4 py-3 cursor-pointer transition-all duration-150 border-b border-gray-100 last:border-b-0 ${
-                                      activeSuggestionIndex[idx] === medIdx 
-                                        ? 'bg-gradient-to-r from-green-100 to-emerald-50 border-l-4 border-l-green-500 shadow-sm' 
-                                        : 'hover:bg-gray-50'
-                                    }`}
-                                  >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-semibold text-gray-900 text-sm">{med.name}</span>
-                                          {med.type === 'brand' && (
-                                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">
-                                              Brand
-                                            </span>
-                                          )}
-                                          {med.type === 'generic' && (
-                                            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded font-medium">
-                                              Generic
-                                            </span>
-                                          )}
-                                        </div>
-                                        {med.displayName !== med.name && (
-                                          <div className="text-xs text-gray-600 mt-0.5 truncate">
-                                            {med.displayName}
-                                          </div>
-                                        )}
-                                        {med.strengths && med.strengths.length > 0 && (
-                                          <div className="text-xs text-gray-500 mt-1 flex items-center gap-1 flex-wrap">
-                                            <span className="font-medium">Strengths:</span>
-                                            <span className="text-green-600">{med.strengths.slice(0, 3).join(', ')}</span>
-                                            {med.strengths.length > 3 && (
-                                              <span className="text-gray-400">+{med.strengths.length - 3} more</span>
-                                            )}
-                                          </div>
+                                <div className="overflow-y-auto max-h-[280px] custom-scrollbar">
+                                  {medicineSuggestions[idx].map((med, medIdx) => (
+                                    <div
+                                      key={`${med.name}-${medIdx}`}
+                                      onClick={() => selectMedicine(idx, med)}
+                                      onMouseDown={(e) => e.preventDefault()}
+                                      onMouseEnter={() => setActiveSuggestionIndex(prev => ({ ...prev, [idx]: medIdx }))}
+                                      className={`px-4 py-3 cursor-pointer transition-all duration-150 border-b border-gray-100 last:border-b-0 ${
+                                        activeSuggestionIndex[idx] === medIdx 
+                                          ? 'bg-gradient-to-r from-green-100 to-emerald-50 border-l-4 border-l-green-500' 
+                                          : 'hover:bg-green-50/50'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="font-semibold text-gray-900 text-sm">{med.name}</div>
+                                        {med.category && (
+                                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
+                                            {med.category.replace('_', ' ')}
+                                          </span>
                                         )}
                                       </div>
-                                      {activeSuggestionIndex[idx] === medIdx && (
-                                        <svg 
-                                          className="w-5 h-5 text-green-600 flex-shrink-0" 
-                                          fill="none" 
-                                          stroke="currentColor" 
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                      )}
                                     </div>
-                                  </div>
-                                ))}
-                                {(filteredSuggestions[idx] || medicineSuggestions[idx]).length === 0 && (
-                                  <div className="px-4 py-6 text-center text-gray-500 text-sm">
-                                    <p>No medicines found</p>
-                                    <p className="text-xs mt-1">Try a different search term</p>
-                                  </div>
-                                )}
-                              </div>
-                              
-                              {/* Scroll indicator */}
-                              {(filteredSuggestions[idx] || medicineSuggestions[idx]).length > 4 && (
-                                <div className="px-4 py-2 bg-gradient-to-r from-gray-50 to-slate-50 border-t border-gray-200 text-center">
-                                  <p className="text-xs text-gray-600 font-medium">
-                                    <span className="text-green-600">{(filteredSuggestions[idx] || medicineSuggestions[idx]).length}</span> results • Scroll to see more
-                                  </p>
+                                  ))}
                                 </div>
-                              )}
-                            </div>
+                              </div>
+                            </div>,
+                            document.body
                           )}
                         </div>
                       </td>
@@ -1143,22 +1086,36 @@ const CreatePrescription = ({
                           duration: 'durationOptions',
                           qty: 'quantityOptions'
                         };
+                        const isSelectField = ['dosage', 'frequency', 'duration', 'qty'].includes(field.value);
+                        
                         return (
                           <td key={field.value} className="px-4 py-3">
-                            <div className="relative">
-                              {fieldIcons[field.value] && (
-                                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                                  {fieldIcons[field.value]}
-                                </div>
-                              )}
-                              <input
+                            {isSelectField ? (
+                              <Select
+                                name={`${field.value}-${idx}`}
                                 value={row[field.value] || ''}
                                 onChange={(e) => updatePrescriptionCell(idx, field.value, e.target.value)}
-                                className={`w-full border-2 border-gray-200 rounded-lg px-3 py-2 ${fieldIcons[field.value] ? 'pl-10' : 'pl-3'} focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white hover:border-green-300`}
+                                options={PRESCRIPTION_OPTIONS[field.value === 'qty' ? 'QUANTITY' : field.value.toUpperCase()] || []}
                                 placeholder={placeholders[field.value] || field.label}
-                                list={datalistIds[field.value]}
+                                searchable={true}
+                                className="bg-white border-2 border-gray-200"
                               />
-                            </div>
+                            ) : (
+                              <div className="relative">
+                                {fieldIcons[field.value] && (
+                                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                                    {fieldIcons[field.value]}
+                                  </div>
+                                )}
+                                <input
+                                  value={row[field.value] || ''}
+                                  onChange={(e) => updatePrescriptionCell(idx, field.value, e.target.value)}
+                                  className={`w-full border-2 border-gray-200 rounded-lg px-3 py-2 ${fieldIcons[field.value] ? 'pl-10' : 'pl-3'} focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white hover:border-green-300`}
+                                  placeholder={placeholders[field.value] || field.label}
+                                  list={datalistIds[field.value]}
+                                />
+                              </div>
+                            )}
                           </td>
                         );
                       })}
@@ -1220,23 +1177,45 @@ const CreatePrescription = ({
 
             {/* Action Buttons */}
             <div className="flex items-center justify-between pt-4 pb-2 px-6 bg-gradient-to-r from-gray-50 to-slate-50 border-t-2 border-gray-200">
-              <Button
-                type="button"
-                onClick={addPrescriptionRow}
-                variant="outline"
-                className="flex items-center gap-2 bg-white hover:bg-green-50 border-2 border-green-300 hover:border-green-500 text-green-700 hover:text-green-800 font-medium shadow-sm transition-all duration-200"
-              >
-                <FiPlus className="w-5 h-5" />
-                Add Medicine
-              </Button>
-              <button 
-                type="button" 
-                onClick={clearAllPrescriptions} 
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-red-50 border-2 border-gray-300 hover:border-red-300 rounded-lg transition-all duration-200 shadow-sm"
-              >
-                <FiTrash2 className="w-4 h-4" />
-                Clear All
-              </button>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={addPrescriptionRow}
+                  variant="outline"
+                  className="flex items-center gap-2 bg-white hover:bg-green-50 border-2 border-green-300 hover:border-green-500 text-green-700 hover:text-green-800 font-medium shadow-sm transition-all duration-200"
+                >
+                  <FiPlus className="w-5 h-5" />
+                  Add Medicine
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setShowLoadTemplateModal(true)}
+                  variant="outline"
+                  className="flex items-center gap-2 bg-white hover:bg-blue-50 border-2 border-blue-300 hover:border-blue-500 text-blue-700 hover:text-blue-800 font-medium shadow-sm transition-all duration-200"
+                >
+                  <FiDownload className="w-4 h-4" />
+                  Load Template
+                </Button>
+              </div>
+              <div className="flex items-center gap-3">
+                <button 
+                  type="button" 
+                  onClick={clearAllPrescriptions} 
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-red-50 border-2 border-gray-300 hover:border-red-300 rounded-lg transition-all duration-200 shadow-sm"
+                >
+                  <FiTrash2 className="w-4 h-4" />
+                  Clear All
+                </button>
+                <Button
+                  type="button"
+                  onClick={() => setShowSaveTemplateModal(true)}
+                  variant="outline"
+                  className="flex items-center gap-2 bg-white hover:bg-purple-50 border-2 border-purple-300 hover:border-purple-500 text-purple-700 hover:text-purple-800 font-medium shadow-sm transition-all duration-200"
+                >
+                  <FiBookmark className="w-4 h-4" />
+                  Save as Template
+                </Button>
+              </div>
             </div>
           </Card>
 
@@ -1280,6 +1259,125 @@ const CreatePrescription = ({
           </div>
         </Card>
       </div>
+
+      {/* Save Template Modal */}
+      <Modal
+        isOpen={showSaveTemplateModal}
+        onClose={() => {
+          setShowSaveTemplateModal(false);
+          setTemplateName('');
+          setTemplateDescription('');
+        }}
+        title="Save as Template"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Template Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              placeholder="e.g., Common Antidepressants"
+              maxLength={255}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description (Optional)
+            </label>
+            <textarea
+              value={templateDescription}
+              onChange={(e) => setTemplateDescription(e.target.value)}
+              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              placeholder="Brief description of this template..."
+              rows={3}
+              maxLength={1000}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowSaveTemplateModal(false);
+                setTemplateName('');
+                setTemplateDescription('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveAsTemplate}
+              disabled={isSavingTemplate || !templateName.trim()}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50"
+            >
+              {isSavingTemplate ? 'Saving...' : 'Save Template'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Load Template Modal */}
+      <Modal
+        isOpen={showLoadTemplateModal}
+        onClose={() => setShowLoadTemplateModal(false)}
+        title="Load Template"
+      >
+        <p className="text-sm text-gray-600 mb-4">
+          Click on a template to add its medications to your current prescription. You can load multiple templates.
+        </p>
+        <div className="space-y-4">
+          {isLoadingTemplates ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+              <p className="mt-2 text-sm text-gray-500">Loading templates...</p>
+            </div>
+          ) : templatesData?.data?.templates?.length > 0 ? (
+            <div className="max-h-96 overflow-y-auto space-y-2">
+              {templatesData.data.templates.map((template) => (
+                <div
+                  key={template.id}
+                  onClick={() => handleLoadTemplate(template)}
+                  className="p-4 border-2 border-gray-200 rounded-lg hover:border-purple-400 hover:bg-purple-50 cursor-pointer transition-all duration-200"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900">{template.name}</h3>
+                      {template.description && (
+                        <p className="text-sm text-gray-600 mt-1">{template.description}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-2">
+                        {Array.isArray(template.prescription) ? template.prescription.length : 0} medication(s)
+                        {template.creator_name && ` • Created by ${template.creator_name}`}
+                      </p>
+                    </div>
+                    <FiDownload className="w-5 h-5 text-purple-600 flex-shrink-0 ml-3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <FiBookmark className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+              <p className="text-gray-500">No templates available</p>
+              <p className="text-sm text-gray-400 mt-1">Save a prescription as a template to get started</p>
+            </div>
+          )}
+          <div className="flex justify-end pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowLoadTemplateModal(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      </Modal>
  
     </>
   );

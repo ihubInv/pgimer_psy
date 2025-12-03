@@ -10,12 +10,12 @@ import {
   FiNavigation,  FiEdit3, FiSave, FiX, FiLayers, 
   FiChevronDown, FiChevronUp, FiArrowRight, 
 } from 'react-icons/fi';
-import {  useAssignPatientMutation, useCreatePatientCompleteMutation, useUpdatePatientMutation } from '../../features/patients/patientsApiSlice';
+import {  useCreatePatientCompleteMutation, useUpdatePatientMutation } from '../../features/patients/patientsApiSlice';
 import { useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
-import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
 import { updatePatientRegistrationForm, resetPatientRegistrationForm, selectPatientRegistrationForm } from '../../features/form/formSlice';
 import { useCreateClinicalProformaMutation } from '../../features/clinical/clinicalApiSlice';
+import { useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
 import { SelectWithOther } from '../../components/SelectWithOther';
 import { IconInput } from '../../components/IconInput';
 import Card from '../../components/Card';
@@ -38,11 +38,10 @@ const CreatePatient = () => {
   const dispatch = useDispatch();
   const formData = useSelector(selectPatientRegistrationForm);
   const [createRecord, { isLoading }] = useCreatePatientCompleteMutation();
-  const [assignPatient, { isLoading: isAssigning }] = useAssignPatientMutation();
   const [updatePatient, { isLoading: isUpdating }] = useUpdatePatientMutation();
   const [createProforma] = useCreateClinicalProformaMutation();
   const [createPatientFiles] = useCreatePatientFilesMutation();
-  const { data: usersData } = useGetDoctorsQuery({ page: 1, limit: 100 });
+  const { data: roomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
   const token = useSelector(selectCurrentToken);
   const currentUser = useSelector(selectCurrentUser);
   const [errors, setErrors] = useState({});
@@ -558,12 +557,7 @@ const CreatePatient = () => {
         return isNaN(parsed) ? null : parsed;
       };
 
-      const assignedDoctor = usersData?.data?.users?.find(
-        user => user.id === parseInt(formData.assigned_doctor_id, 10)
-      );
-
       const currentUser = JSON.parse(localStorage.getItem("user"));
-      const assignedDoctorName = assignedDoctor ? assignedDoctor.name : 'Unknown Doctor';
 
       // Step 2: Update patient with remaining data
       const step2PatientData = {
@@ -645,8 +639,6 @@ const CreatePatient = () => {
 
         // Assignment
         assigned_room: formData.assigned_room || null,
-        assigned_doctor_id: formData.assigned_doctor_id || null,
-        assigned_doctor_name: assignedDoctorName || null,
       };
 
       // Update patient with step 2 data
@@ -656,21 +648,6 @@ const CreatePatient = () => {
       }).unwrap();
 
       toast.success('Patient information updated successfully!');
-
-      // Step 2: Assign doctor if selected
-      const doctorId = formData.assigned_doctor_id
-      if (doctorId) {
-        try {
-          await assignPatient({
-            patient_id: patientId,
-            assigned_doctor_id: doctorId,
-            room_no: formData.assigned_room || ''
-          }).unwrap();
-          toast.success('Patient assigned to doctor successfully!');
-        } catch (err) {
-          console.error('Error assigning patient to doctor:', err);
-        }
-      }
 
       // Upload files if any are selected
       if (selectedFiles && selectedFiles.length > 0) {
@@ -1661,33 +1638,15 @@ const CreatePatient = () => {
                             />
                           </div>
 
-                          <Select
-                                name="assigned_doctor_id"
-                                label="Assigned Doctor"
-                                value={formData.assigned_doctor_id}
-                                onChange={handlePatientChange}
-                                options={(usersData?.data?.users || [])
-                                  .map(u => ({
-                                    value: String(u.id),
-                                    label: `${u.name} - ${isJR(u.role) ? 'Resident' : isSR(u.role) ? 'Faculty' : u.role}`
-                                  }))}
-                                placeholder="Select doctor (optional)"
-                                searchable={true}
-                                className="bg-gradient-to-r from-violet-50 to-purple-50"
-                                containerClassName="relative z-[9999]"
-                                dropdownZIndex={2147483647}
-                              />
-
-
                               <div className="space-y-2">
-                                <IconInput
+                                <Select
                                   icon={<FiHome className="w-4 h-4" />}
                                   label={
                                     <span>
                                       Assigned Room
                                       {isMWO(currentUser?.role) && (
                                         <span className="ml-2 text-xs text-gray-500 font-normal">
-                                          (Auto-assigned if left empty)
+                                          (Auto-assigned if not selected)
                                         </span>
                                       )}
                                     </span>
@@ -1695,12 +1654,19 @@ const CreatePatient = () => {
                                   name="assigned_room"
                                   value={formData.assigned_room || ''}
                                   onChange={handleChange}
-                                  placeholder={isMWO(currentUser?.role) ? "Leave empty for auto-assignment" : "Enter assigned room"}
+                                  options={(roomsData?.data?.rooms || [])
+                                    .filter(room => room.is_active)
+                                    .map(room => ({
+                                      value: room.room_number,
+                                      label: room.room_number + (room.description ? ` - ${room.description}` : '')
+                                    }))}
+                                  placeholder={isMWO(currentUser?.role) ? "Select room or leave empty for auto-assignment" : "Select room"}
+                                  searchable={true}
                                   className="bg-gradient-to-r from-teal-50 to-cyan-50"
                                 />
                                 {isMWO(currentUser?.role) && (
                                   <p className="text-xs text-gray-500 italic">
-                                    Rooms are automatically distributed equally. You can manually select a specific room if needed.
+                                    If no room is selected, the patient will be automatically assigned to an active room using round-robin distribution. When a doctor selects a room, all patients in that room will be assigned to that doctor.
                                   </p>
                                 )}
                               </div>

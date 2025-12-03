@@ -18,6 +18,7 @@ import {
   FiCalendar,
   FiChevronLeft,
   FiChevronRight,
+  FiMapPin,
 } from 'react-icons/fi';
 import { selectCurrentUser, logout } from '../features/auth/authSlice';
 import { isMWO } from '../utils/constants';
@@ -132,6 +133,29 @@ const MWONavigation = ({ onClose, isMinimized }) => {
           <FiUserCheck className="h-5 w-5" />
         </div>
         {!isMinimized && <span>Existing Patients</span>}
+      </NavLink>
+
+      {/* Room Management */}
+      <NavLink
+        to="/rooms"
+        onClick={onClose}
+        className={({ isActive }) =>
+          `group flex items-center ${isMinimized ? 'justify-center px-2' : 'px-4'} py-3.5 text-sm font-medium rounded-xl transition-all duration-200 ${
+            isActive
+              ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30'
+              : 'text-gray-700 hover:bg-white/40 hover:text-primary-700 hover:shadow-md'
+          }`
+        }
+        title={isMinimized ? 'Room Management' : ''}
+      >
+        <div className={`p-2 rounded-lg ${isMinimized ? '' : 'mr-3'} transition-colors ${
+          location.pathname === '/rooms' || location.pathname.startsWith('/rooms/')
+            ? 'bg-white/20'
+            : 'bg-gray-100 group-hover:bg-primary-100'
+        }`}>
+          <FiMapPin className="h-5 w-5" />
+        </div>
+        {!isMinimized && <span>Room Management</span>}
       </NavLink>
     </>
   );

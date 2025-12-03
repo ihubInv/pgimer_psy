@@ -25,30 +25,26 @@ async function getOccupiedRooms() {
 }
 
 /**
- * Get all available rooms from existing patient assignments
- * Excludes rooms that are already assigned to doctors
- * This dynamically discovers rooms from patient records
+ * Get all available rooms from rooms table (active rooms)
+ * Excludes rooms that are already assigned to doctors today
+ * Uses the rooms table as the source of truth
  */
 async function getAvailableRooms(excludeOccupied = true) {
   try {
-    // Get distinct rooms from patients assigned today
-    const today = new Date().toISOString().slice(0, 10);
-    
-    const result = await db.query(
-      `SELECT DISTINCT assigned_room 
-       FROM registered_patient 
-       WHERE assigned_room IS NOT NULL 
-         AND assigned_room != ''
-         AND DATE(created_at) = $1
-       ORDER BY assigned_room`,
-      [today]
+    // Get active rooms from rooms table
+    const roomsResult = await db.query(
+      `SELECT room_number 
+       FROM rooms 
+       WHERE is_active = true
+       ORDER BY room_number`
     );
 
-    let rooms = result.rows.map(row => row.assigned_room).filter(Boolean);
+    let rooms = roomsResult.rows.map(row => row.room_number).filter(Boolean);
 
-    // If no rooms found from today's patients, get all distinct rooms from all patients
+    // If no active rooms in table, fallback to discovering from patients
     if (rooms.length === 0) {
-      const allRoomsResult = await db.query(
+      const today = new Date().toISOString().slice(0, 10);
+      const result = await db.query(
         `SELECT DISTINCT assigned_room 
          FROM registered_patient 
          WHERE assigned_room IS NOT NULL 
@@ -56,7 +52,7 @@ async function getAvailableRooms(excludeOccupied = true) {
          ORDER BY assigned_room`
       );
       
-      rooms = allRoomsResult.rows.map(row => row.assigned_room).filter(Boolean);
+      rooms = result.rows.map(row => row.assigned_room).filter(Boolean);
       
       // If still no rooms, return default room numbers (1-10)
       if (rooms.length === 0) {
@@ -64,7 +60,7 @@ async function getAvailableRooms(excludeOccupied = true) {
       }
     }
 
-    // Exclude rooms that are already assigned to doctors
+    // Exclude rooms that are already assigned to doctors today
     if (excludeOccupied) {
       const occupiedRooms = await getOccupiedRooms();
       rooms = rooms.filter(room => !occupiedRooms.has(room));
@@ -79,10 +75,43 @@ async function getAvailableRooms(excludeOccupied = true) {
 }
 
 /**
- * Get room distribution count for today's patients
+ * Get room distribution count for ALL patients (not just today)
  * Returns a map of room -> patient count
+ * This matches the deletion validation logic which checks all historical patients
  */
 async function getRoomDistribution() {
+  try {
+    // Count ALL patients assigned to each room (not just today's)
+    // This ensures consistency with deletion validation
+    const result = await db.query(
+      `SELECT assigned_room, COUNT(*) as patient_count
+       FROM registered_patient
+       WHERE assigned_room IS NOT NULL 
+         AND assigned_room != ''
+       GROUP BY assigned_room
+       ORDER BY assigned_room`
+    );
+
+    const distribution = {};
+    result.rows.forEach(row => {
+      distribution[row.assigned_room] = parseInt(row.patient_count, 10);
+    });
+
+    console.log(`[getRoomDistribution] Total patient distribution (all time):`, distribution);
+    console.log(`[getRoomDistribution] Total rooms with patients:`, result.rows.length);
+    
+    return distribution;
+  } catch (error) {
+    console.error('[getRoomDistribution] Error:', error);
+    return {};
+  }
+}
+
+/**
+ * Get room distribution count for TODAY's patients only
+ * Returns a map of room -> patient count for today
+ */
+async function getTodayRoomDistribution() {
   try {
     const today = new Date().toISOString().slice(0, 10);
     
@@ -102,38 +131,46 @@ async function getRoomDistribution() {
       distribution[row.assigned_room] = parseInt(row.patient_count, 10);
     });
 
+    console.log(`[getTodayRoomDistribution] Distribution for ${today}:`, distribution);
+    
     return distribution;
   } catch (error) {
-    console.error('[getRoomDistribution] Error:', error);
+    console.error('[getTodayRoomDistribution] Error:', error);
     return {};
   }
 }
 
 /**
  * Auto-assign room using round-robin distribution
- * Ensures equal distribution across all available rooms
- * Excludes rooms that are already assigned to doctors
+ * Ensures equal distribution across all active rooms from rooms table
+ * Excludes rooms that are already assigned to doctors today
  */
 async function autoAssignRoom() {
   try {
-    // Get available rooms excluding those occupied by doctors
+    // Get active rooms from rooms table (excluding those occupied by doctors today)
     const availableRooms = await getAvailableRooms(true);
     
     if (availableRooms.length === 0) {
-      // Check if there are any rooms at all (even if occupied)
-      const allRooms = await getAvailableRooms(false);
-      if (allRooms.length === 0) {
-        // No rooms exist, assign to Room 1 as default
+      // Check if there are any active rooms at all (even if occupied)
+      const allActiveRooms = await getAvailableRooms(false);
+      if (allActiveRooms.length === 0) {
+        // No active rooms exist, check rooms table for any room
+        const roomsResult = await db.query(
+          `SELECT room_number FROM rooms WHERE is_active = true ORDER BY room_number LIMIT 1`
+        );
+        if (roomsResult.rows.length > 0) {
+          return roomsResult.rows[0].room_number;
+        }
+        // No rooms in table, assign to Room 1 as default
         return 'Room 1';
       }
-      // All rooms are occupied, still assign to first room (doctor can reassign later)
-      // This handles edge case where all rooms are taken but new patients still need assignment
-      return allRooms[0] || 'Room 1';
+      // All rooms are occupied, still assign to first active room (doctor can reassign later)
+      return allActiveRooms[0] || 'Room 1';
     }
 
     const distribution = await getRoomDistribution();
     
-    // Find room with minimum patient count
+    // Find room with minimum patient count (round-robin distribution)
     let minCount = Infinity;
     let selectedRoom = availableRooms[0]; // Default to first room
 
@@ -173,19 +210,26 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
 
     const doctor = doctorResult.rows[0];
 
-    // Find all patients assigned to this room today who don't have a doctor assigned yet
+    // Find all patients assigned to this room
+    // Include both today's patients and patients from previous days (if they're still in the room)
+    // Assign ALL patients in the room to this doctor (even if they have a different doctor assigned)
+    // This ensures when a doctor selects a room, they get all patients in that room
     const patientsResult = await db.query(
-      `SELECT id, name, assigned_doctor_id 
+      `SELECT id, name, assigned_doctor_id, DATE(created_at) as created_date
        FROM registered_patient 
-       WHERE assigned_room = $1 
-         AND DATE(created_at) = $2
-         AND (assigned_doctor_id IS NULL OR assigned_doctor_id != $3)`,
-      [roomNumber, today, doctorId]
+       WHERE assigned_room = $1`,
+      [roomNumber]
     );
 
     const patients = patientsResult.rows;
     
+    console.log(`[assignPatientsToDoctor] Found ${patients.length} patient(s) in room ${roomNumber} to assign to doctor ${doctorId}`);
+    if (patients.length > 0) {
+      console.log(`[assignPatientsToDoctor] Patient IDs:`, patients.map(p => `${p.id} (${p.name})`));
+    }
+    
     if (patients.length === 0) {
+      console.log(`[assignPatientsToDoctor] No patients to assign in room ${roomNumber}`);
       return {
         assigned: 0,
         patients: []
@@ -204,9 +248,8 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
                assigned_doctor_name = $2,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $3
-             AND assigned_room = $4
-             AND DATE(created_at) = $5`,
-          [doctorId, doctor.name, patientId, roomNumber, today]
+             AND assigned_room = $4`,
+          [doctorId, doctor.name, patientId, roomNumber]
         );
       }
     }
@@ -254,6 +297,8 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
       }
     }
 
+    console.log(`[assignPatientsToDoctor] ✅ Successfully assigned ${patients.length} patient(s) to doctor ${doctorId} in room ${roomNumber}`);
+    
     return {
       assigned: patients.length,
       patients: patients.map(p => ({
@@ -262,7 +307,8 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
       }))
     };
   } catch (error) {
-    console.error('[assignPatientsToDoctor] Error:', error);
+    console.error('[assignPatientsToDoctor] ❌ Error:', error);
+    console.error('[assignPatientsToDoctor] Error stack:', error.stack);
     throw error;
   }
 }
@@ -309,12 +355,53 @@ async function isRoomOccupied(roomNumber, excludeUserId = null) {
   }
 }
 
+/**
+ * Check if a doctor has selected a room for today
+ * @param {number} doctorId - The doctor's user ID
+ * @returns {Promise<{hasRoom: boolean, room: string|null}>}
+ */
+async function hasRoomToday(doctorId) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    
+    const result = await db.query(
+      `SELECT current_room, room_assignment_time 
+       FROM users 
+       WHERE id = $1 
+         AND current_room IS NOT NULL 
+         AND current_room != ''
+         AND DATE(room_assignment_time) = $2`,
+      [doctorId, today]
+    );
+
+    if (result.rows.length > 0 && result.rows[0].current_room) {
+      return {
+        hasRoom: true,
+        room: result.rows[0].current_room
+      };
+    }
+
+    return {
+      hasRoom: false,
+      room: null
+    };
+  } catch (error) {
+    console.error('[hasRoomToday] Error:', error);
+    return {
+      hasRoom: false,
+      room: null
+    };
+  }
+}
+
 module.exports = {
   getAvailableRooms,
   getOccupiedRooms,
   getRoomDistribution,
+  getTodayRoomDistribution,
   autoAssignRoom,
   assignPatientsToDoctor,
-  isRoomOccupied
+  isRoomOccupied,
+  hasRoomToday
 };
 

@@ -2,12 +2,15 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from 'react-toastify';
+import { createPortal } from 'react-dom';
 import { useGetPrescriptionByIdQuery, useCreatePrescriptionMutation, useUpdatePrescriptionMutation } from "../../features/prescriptions/prescriptionApiSlice";
-import medicinesData from '../../assets/psychiatric_meds_india.json';
-import { FiSave, FiEdit, FiPlus, FiTrash2, FiPackage, FiDroplet, FiActivity, FiClock, FiCalendar, FiFileText } from 'react-icons/fi';
+import { useGetAllMedicinesQuery } from "../../features/medicines/medicineApiSlice";
+import { useGetAllPrescriptionTemplatesQuery, useCreatePrescriptionTemplateMutation } from '../../features/prescriptionTemplates/prescriptionTemplateApiSlice';
+import { FiSave, FiEdit, FiPlus, FiTrash2, FiPackage, FiDroplet, FiActivity, FiClock, FiCalendar, FiFileText, FiBookmark, FiDownload } from 'react-icons/fi';
 import Select from '../../components/Select';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
+import Modal from '../../components/Modal';
 import { PRESCRIPTION_OPTIONS, PRESCRIPTION_FORM } from '../../utils/constants';
 
 
@@ -28,6 +31,34 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
   const [updatePrescription, { isLoading: isUpdating }] = useUpdatePrescriptionMutation();
   const prescriptionData = prescriptionsData?.data?.prescription;
   
+  // Fetch medicines from API
+  const { data: medicinesData, isLoading: isLoadingMedicines, error: medicinesError } = useGetAllMedicinesQuery({
+    limit: 1000,
+    is_active: true
+  });
+
+  // Template functionality
+  const { data: templatesData, isLoading: isLoadingTemplates } = useGetAllPrescriptionTemplatesQuery({ is_active: true });
+  const [createPrescriptionTemplate, { isLoading: isSavingTemplate }] = useCreatePrescriptionTemplateMutation();
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [showLoadTemplateModal, setShowLoadTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  
+  // Debug: Log medicines data
+  useEffect(() => {
+    if (medicinesData) {
+      console.log('[PrescriptionEdit] Medicines data received:', {
+        hasData: !!medicinesData,
+        dataStructure: medicinesData,
+        medicines: medicinesData?.data?.medicines?.length || 0
+      });
+    }
+    if (medicinesError) {
+      console.error('[PrescriptionEdit] Medicines API error:', medicinesError);
+    }
+  }, [medicinesData, medicinesError]);
+  
   // Memoize existingPrescriptions to prevent infinite loops
   const existingPrescriptions = useMemo(() => {
     return prescriptionData?.prescription || [];
@@ -38,53 +69,63 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
   // Create mode: no existingPrescriptions OR mode === 'create'
   const isUpdateMode = mode === 'update' || (mode !== 'create' && existingPrescriptions.length > 0);
 
-  // Flatten medicines data for autocomplete
+  // Flatten medicines data for autocomplete from API
   const allMedicines = useMemo(() => {
-    const medicines = [];
-    const data = medicinesData.psychiatric_medications;
-
-    const extractMedicines = (obj) => {
-      if (Array.isArray(obj)) {
-        obj.forEach(med => {
-          medicines.push({
+    if (!medicinesData) {
+      return [];
+    }
+    
+    // API returns: { success: true, data: { medicines: [...], pagination: {...} } }
+    const medicines = medicinesData?.data?.medicines || medicinesData?.data || [];
+    
+    if (!Array.isArray(medicines) || medicines.length === 0) {
+      return [];
+    }
+    
+    return medicines.map(med => ({
             name: med.name,
             displayName: med.name,
-            type: 'generic',
-            brands: med.brands || [],
-            strengths: med.strengths || []
-          });
-          if (med.brands && Array.isArray(med.brands)) {
-            med.brands.forEach(brand => {
-              medicines.push({
-                name: brand,
-                displayName: `${brand} (${med.name})`,
-                type: 'brand',
-                genericName: med.name,
-                strengths: med.strengths || []
-              });
-            });
-          }
-        });
-      } else if (typeof obj === 'object' && obj !== null) {
-        Object.values(obj).forEach(value => {
-          extractMedicines(value);
-        });
-      }
-    };
-
-    extractMedicines(data);
-    const uniqueMedicines = Array.from(
-      new Map(medicines.map(m => [m.name.toLowerCase(), m])).values()
-    );
-    return uniqueMedicines.sort((a, b) => a.name.localeCompare(b.name));
-  }, []);
+      category: med.category,
+      id: med.id
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [medicinesData]);
 
   // Medicine autocomplete state for each row
   const [medicineSuggestions, setMedicineSuggestions] = useState({});
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState({});
   const [showSuggestions, setShowSuggestions] = useState({});
-  const [suggestionPositions, setSuggestionPositions] = useState({});
+  const [dropdownPositions, setDropdownPositions] = useState({});
   const inputRefs = useRef({});
+  
+  // Update dropdown positions on scroll/resize when dropdowns are open
+  useEffect(() => {
+    const updatePositions = () => {
+      const openDropdowns = Object.keys(showSuggestions).filter(idx => showSuggestions[idx]);
+      if (openDropdowns.length === 0) return;
+      
+      openDropdowns.forEach(idx => {
+        const input = inputRefs.current[`medicine-${idx}`];
+        if (input) {
+          const rect = input.getBoundingClientRect();
+          setDropdownPositions(prev => ({
+            ...prev,
+            [idx]: {
+              top: rect.bottom + 4,
+              left: rect.left,
+              width: rect.width
+            }
+          }));
+        }
+      });
+    };
+    
+    window.addEventListener('scroll', updatePositions, true);
+    window.addEventListener('resize', updatePositions);
+    return () => {
+      window.removeEventListener('scroll', updatePositions, true);
+      window.removeEventListener('resize', updatePositions);
+    };
+  }, [showSuggestions]);
 
   // Initialize with empty row, will be populated when prescriptions load
   const [prescriptionRows, setPrescriptionRows] = useState([
@@ -250,31 +291,29 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
     // Handle medicine autocomplete
     if (field === 'medicine') {
       const searchTerm = value.toLowerCase().trim();
-      if (searchTerm.length > 0) {
+      
+      if (searchTerm.length > 0 && allMedicines.length > 0) {
+        // Filter medicines based on name or category
         const filtered = allMedicines.filter(med =>
           med.name.toLowerCase().includes(searchTerm) ||
-          med.displayName.toLowerCase().includes(searchTerm) ||
-          (med.genericName && med.genericName.toLowerCase().includes(searchTerm))
-        ).slice(0, 10);
+          (med.category && med.category.toLowerCase().includes(searchTerm))
+        ).slice(0, 20); // Show up to 20 suggestions
+        
         setMedicineSuggestions(prev => ({ ...prev, [rowIdx]: filtered }));
-        setShowSuggestions(prev => ({ ...prev, [rowIdx]: true }));
+        setShowSuggestions(prev => ({ ...prev, [rowIdx]: filtered.length > 0 }));
         setActiveSuggestionIndex(prev => ({ ...prev, [rowIdx]: -1 }));
 
-        // Calculate position for dropdown - always position below the input field
+        // Calculate position for portal dropdown
         setTimeout(() => {
           const input = inputRefs.current[`medicine-${rowIdx}`];
           if (input) {
             const rect = input.getBoundingClientRect();
-            // Height for 4 items (approximately 56px per item = 224px)
-            const dropdownHeight = 224;
-
-            setSuggestionPositions(prev => ({
+            setDropdownPositions(prev => ({
               ...prev,
               [rowIdx]: {
-                top: rect.bottom + 4, // Always position directly below the input field
-                left: rect.left, // Align with left edge of input
-                width: rect.width, // Match exact width of input field
-                maxHeight: dropdownHeight
+                top: rect.bottom + 4,
+                left: rect.left,
+                width: rect.width
               }
             }));
           }
@@ -416,6 +455,73 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
     }
   };
 
+  // Save current prescriptions as template
+  const handleSaveAsTemplate = async () => {
+    // Filter out empty prescriptions
+    const validPrescriptions = prescriptionRows.filter(p => p.medicine && p.medicine.trim());
+    
+    if (validPrescriptions.length === 0) {
+      toast.error('Please add at least one medication with a valid medicine name');
+      return;
+    }
+
+    if (!templateName.trim()) {
+      toast.error('Please enter a template name');
+      return;
+    }
+
+    try {
+      const templateData = {
+        name: templateName.trim(),
+        description: templateDescription.trim() || null,
+        prescription: validPrescriptions.map(p => ({
+          medicine: p.medicine.trim(),
+          dosage: p.dosage?.trim() || null,
+          when: p.when?.trim() || null,
+          frequency: p.frequency?.trim() || null,
+          duration: p.duration?.trim() || null,
+          qty: p.qty?.trim() || null,
+          details: p.details?.trim() || null,
+          notes: p.notes?.trim() || null,
+        }))
+      };
+
+      await createPrescriptionTemplate(templateData).unwrap();
+      toast.success('Template saved successfully!');
+      setShowSaveTemplateModal(false);
+      setTemplateName('');
+      setTemplateDescription('');
+    } catch (error) {
+      console.error('Error saving template:', error);
+      toast.error(error?.data?.message || 'Failed to save template. Please try again.');
+    }
+  };
+
+  // Load template into prescriptions (appends to existing)
+  const handleLoadTemplate = (template) => {
+    if (!template.prescription || !Array.isArray(template.prescription) || template.prescription.length === 0) {
+      toast.error('Template has no valid prescriptions');
+      return;
+    }
+
+    // Map template prescription to form format
+    const loadedPrescriptions = template.prescription.map(p => ({
+      id: null, // New prescriptions don't have IDs
+      medicine: p.medicine || '',
+      dosage: p.dosage || '',
+      when: p.when_to_take || p.when || '',
+      frequency: p.frequency || '',
+      duration: p.duration || '',
+      qty: p.quantity || p.qty || '',
+      details: p.details || '',
+      notes: p.notes || ''
+    }));
+
+    // Append to existing prescriptions instead of replacing
+    setPrescriptionRows(prev => [...prev, ...loadedPrescriptions]);
+    toast.success(`Template "${template.name}" loaded successfully! ${loadedPrescriptions.length} medication(s) added.`);
+    // Keep modal open so user can load more templates
+  };
 
   
   
@@ -531,10 +637,10 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                       </div>
                     </td>
                     {/* Medicine Field - Special handling with autocomplete */}
-                    <td className="px-4 py-3" style={{ position: 'relative', overflow: 'visible', zIndex: showSuggestions[idx] ? 1000 : 'auto' }}>
-                      <div style={{ position: 'relative', overflow: 'visible' }}>
+                    <td className="px-4 py-3">
+                      <div className="relative w-full">
                         <div className="relative">
-                          <FiDroplet className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                          <FiDroplet className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                           <input
                             ref={(el) => { inputRefs.current[`medicine-${idx}`] = el; }}
                             type="text"
@@ -545,28 +651,34 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                             }}
                             onKeyDown={(e) => handleMedicineKeyDown(e, idx)}
                             onFocus={() => {
+                              // Show suggestions when focused, even if input is empty
+                              if (allMedicines.length > 0) {
                               if (row.medicine && row.medicine.trim().length > 0) {
                                 const searchTerm = row.medicine.toLowerCase().trim();
                                 const filtered = allMedicines.filter(med =>
                                   med.name.toLowerCase().includes(searchTerm) ||
-                                  med.displayName.toLowerCase().includes(searchTerm) ||
-                                  (med.genericName && med.genericName.toLowerCase().includes(searchTerm))
+                                    (med.category && med.category.toLowerCase().includes(searchTerm))
                                 ).slice(0, 20);
                                 setMedicineSuggestions(prev => ({ ...prev, [idx]: filtered }));
+                                  setShowSuggestions(prev => ({ ...prev, [idx]: filtered.length > 0 }));
+                                } else {
+                                  // Show all medicines when input is empty and focused
+                                  const topMedicines = allMedicines.slice(0, 20);
+                                  setMedicineSuggestions(prev => ({ ...prev, [idx]: topMedicines }));
                                 setShowSuggestions(prev => ({ ...prev, [idx]: true }));
+                                }
 
+                                // Calculate position for portal dropdown
                                 setTimeout(() => {
                                   const input = inputRefs.current[`medicine-${idx}`];
                                   if (input) {
                                     const rect = input.getBoundingClientRect();
-                                    const dropdownHeight = 224;
-                                    setSuggestionPositions(prev => ({
+                                    setDropdownPositions(prev => ({
                                       ...prev,
                                       [idx]: {
                                         top: rect.bottom + 4,
                                         left: rect.left,
-                                        width: rect.width,
-                                        maxHeight: dropdownHeight
+                                        width: rect.width
                                       }
                                     }));
                                   }
@@ -583,20 +695,25 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                             autoComplete="off"
                           />
                         </div>
-                        {showSuggestions[idx] && medicineSuggestions[idx] && medicineSuggestions[idx].length > 0 && (
+                        {/* Dropdown using portal to render in document.body (like Select component) */}
+                        {showSuggestions[idx] && medicineSuggestions[idx] && Array.isArray(medicineSuggestions[idx]) && medicineSuggestions[idx].length > 0 && dropdownPositions[idx] && createPortal(
                           <div
-                            className="fixed bg-white border-2 border-amber-200 rounded-xl shadow-2xl overflow-hidden z-50"
                             style={{
-                              top: suggestionPositions[idx]?.top ? `${suggestionPositions[idx].top}px` : 'auto',
-                              left: suggestionPositions[idx]?.left ? `${suggestionPositions[idx].left}px` : 'auto',
-                              width: suggestionPositions[idx]?.width ? `${suggestionPositions[idx].width}px` : 'auto',
-                              minWidth: suggestionPositions[idx]?.width ? `${suggestionPositions[idx].width}px` : 'auto',
-                              maxWidth: suggestionPositions[idx]?.width ? `${suggestionPositions[idx].width}px` : 'auto',
-                              maxHeight: suggestionPositions[idx]?.maxHeight ? `${suggestionPositions[idx].maxHeight}px` : '224px',
+                              position: 'fixed',
+                              top: `${dropdownPositions[idx].top}px`,
+                              left: `${dropdownPositions[idx].left}px`,
+                              width: `${dropdownPositions[idx].width}px`,
+                              zIndex: 999999,
+                            }}
+                          >
+                            <div
+                              className="bg-white border-2 border-amber-200 rounded-lg shadow-2xl overflow-hidden"
+                              style={{
+                                maxHeight: '280px',
                               boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
                             }}
                           >
-                            <div className="overflow-y-auto max-h-full custom-scrollbar" style={{ maxHeight: suggestionPositions[idx]?.maxHeight ? `${suggestionPositions[idx].maxHeight}px` : '224px' }}>
+                              <div className="overflow-y-auto max-h-[280px] custom-scrollbar">
                               {medicineSuggestions[idx].map((med, medIdx) => (
                                 <div
                                   key={`${med.name}-${medIdx}`}
@@ -609,19 +726,20 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                                       : 'hover:bg-amber-50/50'
                                   }`}
                                 >
+                                    <div className="flex items-center justify-between">
                                   <div className="font-semibold text-gray-900 text-sm">{med.name}</div>
-                                  {med.displayName !== med.name && (
-                                    <div className="text-xs text-gray-500 mt-0.5">{med.displayName}</div>
-                                  )}
-                                  {med.strengths && med.strengths.length > 0 && (
-                                    <div className="text-xs text-amber-600 mt-1.5 font-medium">
-                                      Available: {med.strengths.join(', ')}
+                                      {med.category && (
+                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
+                                          {med.category.replace('_', ' ')}
+                                        </span>
+                                      )}
                                     </div>
-                                  )}
                                 </div>
                               ))}
                             </div>
                           </div>
+                          </div>,
+                          document.body
                         )}
                       </div>
                     </td>
@@ -652,7 +770,7 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                               name={`${field.value}-${idx}`}
                               value={row[field.value] || ''}
                               onChange={(e) => updatePrescriptionCell(idx, field.value, e.target.value)}
-                              options={PRESCRIPTION_OPTIONS[field.value.toUpperCase()] || []}
+                              options={PRESCRIPTION_OPTIONS[field.value === 'qty' ? 'QUANTITY' : field.value.toUpperCase()] || []}
                               placeholder={placeholders[field.value]}
                               searchable={true}
                               className="bg-white border-2 border-gray-200"
@@ -747,6 +865,16 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                 <FiPlus className="w-4 h-4" />
                 Add Medicine
               </Button>
+              <Button
+                type="button"
+                onClick={() => setShowLoadTemplateModal(true)}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 bg-white hover:bg-blue-50 border-2 border-blue-300 hover:border-blue-500 text-blue-700"
+              >
+                <FiDownload className="w-4 h-4" />
+                Load Template
+              </Button>
               {existingPrescriptions.length > 0 && (
                 <Button
                   onClick={() => navigate(`/prescriptions/view?clinical_proforma_id=${proforma.id}&patient_id=${patientId}`)}
@@ -759,21 +887,152 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                 </Button>
               )}
             </div>
-            {proforma.id && (
+            <div className="flex items-center gap-3">
               <Button
                 type="button"
-                onClick={handleSavePrescriptions}
-                disabled={isSaving}
-                className="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                onClick={() => setShowSaveTemplateModal(true)}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 bg-white hover:bg-purple-50 border-2 border-purple-300 hover:border-purple-500 text-purple-700"
               >
-                <FiSave className="w-4 h-4" />
-                {isSaving ? 'Saving...' : (isUpdateMode ? 'Update Prescriptions' : 'Create Prescriptions')}
+                <FiBookmark className="w-4 h-4" />
+                Save as Template
               </Button>
-            )}
+              {proforma.id && (
+                <Button
+                  type="button"
+                  onClick={handleSavePrescriptions}
+                  disabled={isSaving}
+                  className="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <FiSave className="w-4 h-4" />
+                  {isSaving ? 'Saving...' : (isUpdateMode ? 'Update Prescriptions' : 'Create Prescriptions')}
+                </Button>
+              )}
+            </div>
           </div>
         </Card>
       )}
       </div>
+
+      {/* Save Template Modal */}
+      <Modal
+        isOpen={showSaveTemplateModal}
+        onClose={() => {
+          setShowSaveTemplateModal(false);
+          setTemplateName('');
+          setTemplateDescription('');
+        }}
+        title="Save as Template"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Template Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              placeholder="e.g., Common Antidepressants"
+              maxLength={255}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description (Optional)
+            </label>
+            <textarea
+              value={templateDescription}
+              onChange={(e) => setTemplateDescription(e.target.value)}
+              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              placeholder="Brief description of this template..."
+              rows={3}
+              maxLength={1000}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowSaveTemplateModal(false);
+                setTemplateName('');
+                setTemplateDescription('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveAsTemplate}
+              disabled={isSavingTemplate || !templateName.trim()}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50"
+            >
+              {isSavingTemplate ? 'Saving...' : 'Save Template'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Load Template Modal */}
+      <Modal
+        isOpen={showLoadTemplateModal}
+        onClose={() => setShowLoadTemplateModal(false)}
+        title="Load Template"
+      >
+        <p className="text-sm text-gray-600 mb-4">
+          Click on a template to add its medications to your current prescription. You can load multiple templates.
+        </p>
+        <div className="space-y-4">
+          {isLoadingTemplates ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+              <p className="mt-2 text-sm text-gray-500">Loading templates...</p>
+            </div>
+          ) : templatesData?.data?.templates?.length > 0 ? (
+            <div className="max-h-96 overflow-y-auto space-y-2">
+              {templatesData.data.templates.map((template) => (
+                <div
+                  key={template.id}
+                  onClick={() => handleLoadTemplate(template)}
+                  className="p-4 border-2 border-gray-200 rounded-lg hover:border-purple-400 hover:bg-purple-50 cursor-pointer transition-all duration-200"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900">{template.name}</h3>
+                      {template.description && (
+                        <p className="text-sm text-gray-600 mt-1">{template.description}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-2">
+                        {Array.isArray(template.prescription) ? template.prescription.length : 0} medication(s)
+                        {template.creator_name && ` • Created by ${template.creator_name}`}
+                      </p>
+                    </div>
+                    <FiDownload className="w-5 h-5 text-purple-600 flex-shrink-0 ml-3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <FiBookmark className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+              <p className="text-gray-500">No templates available</p>
+              <p className="text-sm text-gray-400 mt-1">Save a prescription as a template to get started</p>
+            </div>
+          )}
+          <div className="flex justify-end pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowLoadTemplateModal(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 };

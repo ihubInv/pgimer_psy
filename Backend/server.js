@@ -18,7 +18,10 @@ const patientFileRoutes = require('./routes/patientFileRoutes');
 const clinicalRoutes = require('./routes/clinicalRoutes');
 const adlRoutes = require('./routes/adlRoutes');
 const prescriptionRoutes = require('./routes/prescriptionRoutes');
+const prescriptionTemplateRoutes = require('./routes/prescriptionTemplateRoutes');
+const medicineRoutes = require('./routes/medicineRoutes');
 const sessionRoutes = require('./routes/sessionRoutes');
+const roomRoutes = require('./routes/roomRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -208,7 +211,10 @@ app.use('/api/patient-files', patientFileRoutes);
 app.use('/api/clinical-proformas', clinicalRoutes);
 app.use('/api/adl-files', adlRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/prescription-templates', prescriptionTemplateRoutes);
+app.use('/api/medicines', medicineRoutes);
 app.use('/api/session', sessionRoutes);
+app.use('/api/rooms', roomRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

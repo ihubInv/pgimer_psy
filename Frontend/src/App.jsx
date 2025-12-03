@@ -42,6 +42,9 @@ import UsersPage from './pages/users/UsersPage';
 import CreateUser from './pages/users/CreateUser';
 import EditUser from './pages/users/EditUser';
 
+// Room Management Pages
+import RoomManagementPage from './pages/rooms/RoomManagementPage';
+
 // Profile
 import Profile from './pages/Profile';
 
@@ -118,6 +121,11 @@ function App() {
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/users/new" element={<CreateUser />} />
                 <Route path="/users/:id/edit" element={<EditUser />} />
+              </Route>
+
+              {/* Room Management - Admin and Psychiatric Welfare Officer */}
+              <Route element={<ProtectedRoute allowedRoles={['Admin', 'Psychiatric Welfare Officer']} />}>
+                <Route path="/rooms" element={<RoomManagementPage />} />
               </Route>
 
               {/* Profile - All authenticated users */}

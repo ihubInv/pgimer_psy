@@ -174,6 +174,7 @@ const SelectExistingPatient = () => {
 
       // Use updatePatient instead of assignPatient to avoid creating a visit record
       // assignPatient creates a visit record, which we don't want when just updating doctor
+      // CRITICAL: updatePatient now validates that doctor has selected a room today
       await updatePatient({
         id: selectedPatient.id,
         assigned_doctor_id: doctorId,
@@ -197,7 +198,13 @@ const SelectExistingPatient = () => {
       // The local state update above ensures UI shows the new doctor immediately
       await refetchDemographics();
     } catch (err) {
-      toast.error(err?.data?.message || 'Failed to assign doctor');
+      // Show clear error message if doctor hasn't selected room today
+      const errorMessage = err?.data?.message || err?.message || 'Failed to assign doctor';
+      if (errorMessage.includes('select a room for today') || errorMessage.includes('room selection')) {
+        toast.error('Please select a room for today before assigning patients. Room selection is required each day.');
+      } else {
+        toast.error(errorMessage);
+      }
     }
   };
 

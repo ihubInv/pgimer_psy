@@ -61,6 +61,28 @@ class ClinicalController {
             message: "Missing required fields",
           });
         }
+
+        // CRITICAL: Check if doctor has selected a room for TODAY
+        // Room selection is day-specific - doctor must select room each day
+        if (data.assigned_doctor) {
+          const { hasRoomToday } = require('../utils/roomAssignment');
+          const doctorIdInt = parseInt(data.assigned_doctor, 10);
+          if (!isNaN(doctorIdInt)) {
+            const roomStatus = await hasRoomToday(doctorIdInt);
+            
+            if (!roomStatus.hasRoom) {
+              return res.status(400).json({
+                success: false,
+                message: 'Please select a room for today before creating clinical proforma. Room selection is required each day.'
+              });
+            }
+            
+            // Use doctor's selected room if room_no not provided
+            if (!data.room_no && roomStatus.room) {
+              data.room_no = roomStatus.room;
+            }
+          }
+        }
   
     // 🔹 Complex Case (with ADL) - Transaction-like atomicity
     // When doctor_decision === 'complex_case', create ADL file and link bidirectionally

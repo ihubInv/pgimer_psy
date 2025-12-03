@@ -40,10 +40,77 @@ export const roomsApiSlice = apiSlice.injectEndpoints({
   }),
 });
 
+// Room Management endpoints (for MWO/Admin)
+export const roomManagementApiSlice = apiSlice.injectEndpoints({
+  endpoints: (builder) => ({
+    getAllRooms: builder.query({
+      query: ({ page = 1, limit = 10, is_active, search } = {}) => {
+        const params = new URLSearchParams();
+        if (page) params.append('page', page);
+        if (limit) params.append('limit', limit);
+        if (is_active !== undefined) params.append('is_active', is_active);
+        if (search) params.append('search', search);
+        return `/rooms?${params.toString()}`;
+      },
+      providesTags: ['RoomManagement'],
+    }),
+    getRoomById: builder.query({
+      query: (id) => `/rooms/${id}`,
+      providesTags: (result, error, id) => [{ type: 'RoomManagement', id }],
+    }),
+    getRoomStats: builder.query({
+      query: () => '/rooms/stats',
+      providesTags: ['RoomStats'],
+    }),
+    createRoom: builder.mutation({
+      query: (roomData) => ({
+        url: '/rooms',
+        method: 'POST',
+        body: roomData,
+      }),
+      invalidatesTags: ['RoomManagement', 'RoomStats', 'Rooms'],
+    }),
+    updateRoom: builder.mutation({
+      query: ({ id, ...roomData }) => ({
+        url: `/rooms/${id}`,
+        method: 'PUT',
+        body: roomData,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'RoomManagement', id },
+        'RoomManagement',
+        'RoomStats',
+        'Rooms',
+      ],
+    }),
+    deleteRoom: builder.mutation({
+      query: (id) => ({
+        url: `/rooms/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (result, error, id) => [
+        { type: 'RoomManagement', id },
+        'RoomManagement',
+        'RoomStats',
+        'Rooms',
+      ],
+    }),
+  }),
+});
+
 export const {
   useGetAvailableRoomsQuery,
   useGetMyRoomQuery,
   useSelectRoomMutation,
   useClearRoomMutation,
 } = roomsApiSlice;
+
+export const {
+  useGetAllRoomsQuery,
+  useGetRoomByIdQuery,
+  useGetRoomStatsQuery,
+  useCreateRoomMutation,
+  useUpdateRoomMutation,
+  useDeleteRoomMutation,
+} = roomManagementApiSlice;
 

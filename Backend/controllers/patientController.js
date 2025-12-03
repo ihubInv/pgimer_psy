@@ -82,10 +82,29 @@ class PatientController {
         const visitCount = await PatientVisit.getVisitCount(patientIdInt);
         const visitType = visitCount === 0 ? 'first_visit' : 'follow_up';
         
+        // CRITICAL: Check if doctor has selected a room for TODAY (if doctor is assigned)
+        let roomToUse = existingPatient.assigned_room || assigned_room || null;
+        if (assignedDoctorId) {
+          const { hasRoomToday } = require('../utils/roomAssignment');
+          const roomStatus = await hasRoomToday(assignedDoctorId);
+          
+          if (!roomStatus.hasRoom) {
+            return res.status(400).json({
+              success: false,
+              message: 'Please select a room for today before assigning patients. Room selection is required each day.'
+            });
+          }
+          
+          // Use doctor's selected room if not provided
+          if (!roomToUse && roomStatus.room) {
+            roomToUse = roomStatus.room;
+          }
+        }
+        
         const visit = await PatientVisit.assignPatient({
           patient_id: patientIdInt, // patient_id is now integer
           assigned_doctor_id: assignedDoctorId,
-          room_no: existingPatient.assigned_room || assigned_room || null,
+          room_no: roomToUse,
           visit_date: new Date().toISOString().slice(0, 10),
           visit_type: visitType, // Determined by visit count
           notes: `Visit created via Existing Patient flow - Visit #${visitCount + 1}`
@@ -194,14 +213,24 @@ class PatientController {
         delete patientData.mobile_no;
       }
 
-      // Auto-assign room if PSWO (Psychiatric Welfare Officer) and room not manually specified
-      const isPSWO = req.user.role === 'Psychiatric Welfare Officer';
-      if (isPSWO && !patientData.assigned_room) {
+      // Auto-assign room if room not manually specified (works for ALL users)
+      // Check if assigned_room is empty, null, or undefined
+      const hasRoom = patientData.assigned_room && 
+                      patientData.assigned_room.toString().trim() !== '';
+      
+      console.log(`[patientController] Before auto-assignment - assigned_room: "${patientData.assigned_room}" (type: ${typeof patientData.assigned_room}), hasRoom: ${hasRoom}`);
+      
+      if (!hasRoom) {
+        console.log(`[patientController] No room specified, starting auto-assignment for user ${req.user.id} (role: ${req.user.role})...`);
         const { autoAssignRoom } = require('../utils/roomAssignment');
         const assignedRoom = await autoAssignRoom();
         patientData.assigned_room = assignedRoom;
-        console.log(`[patientController] Auto-assigned room ${assignedRoom} for PSWO user ${req.user.id}`);
+        console.log(`[patientController] ✅ Auto-assigned room "${assignedRoom}" for user ${req.user.id} (role: ${req.user.role})`);
+      } else {
+        console.log(`[patientController] Using manually selected room: "${patientData.assigned_room}" for user ${req.user.id}`);
       }
+      
+      console.log(`[patientController] Final assigned_room value before Patient.create: "${patientData.assigned_room}"`);
       
       const patient = await Patient.create(patientData);
 
@@ -768,6 +797,18 @@ class PatientController {
             // Convert to integer
             const doctorIdInt = parseInt(value, 10);
             if (!isNaN(doctorIdInt) && doctorIdInt > 0) {
+              // CRITICAL: Check if doctor has selected a room for TODAY
+              // Room selection is day-specific - doctor must select room each day
+              const { hasRoomToday } = require('../utils/roomAssignment');
+              const roomStatus = await hasRoomToday(doctorIdInt);
+              
+              if (!roomStatus.hasRoom) {
+                return res.status(400).json({ 
+                  success: false, 
+                  message: 'Please select a room for today before assigning patients. Room selection is required each day.' 
+                });
+              }
+              
               updateData[field] = doctorIdInt;
               
               // If assigned_doctor_id is provided but assigned_doctor_name is not, fetch it
@@ -784,6 +825,11 @@ class PatientController {
                 } catch (err) {
                   console.warn('[updatePatient] Could not fetch doctor name:', err.message);
                 }
+              }
+              
+              // Use doctor's selected room if assigned_room not provided
+              if (!req.body.assigned_room && roomStatus.room) {
+                updateData.assigned_room = roomStatus.room;
               }
             }
           } else {
@@ -1383,15 +1429,30 @@ class PatientController {
           message: 'Patient not found' 
         });
       }
+
+      // CRITICAL: Check if doctor has selected a room for TODAY
+      // Room selection is day-specific - doctor must select room each day
+      const { hasRoomToday } = require('../utils/roomAssignment');
+      const roomStatus = await hasRoomToday(doctorIdInt);
+      
+      if (!roomStatus.hasRoom) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Please select a room for today before assigning patients. Room selection is required each day.' 
+        });
+      }
       
       // Use integers for both patient and doctor IDs
       const patientIdForVisit = patientIdInt;
       const doctorIdForVisit = doctorIdInt;
+      
+      // Use doctor's selected room if room_no not provided
+      const roomToUse = room_no || roomStatus.room;
    
       const assignment = await PatientVisit.assignPatient({ 
         patient_id: patientIdForVisit, 
         assigned_doctor_id: doctorIdForVisit, 
-        room_no, 
+        room_no: roomToUse, 
         visit_date, 
         notes 
       });

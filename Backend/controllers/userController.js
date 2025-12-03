@@ -558,16 +558,20 @@ class UserController {
         await user.clearRoom();
       }
 
-      // Assign room to doctor
+      // Assign room to doctor (or re-assign if same room - this allows re-assignment of patients)
       await user.assignRoom(roomNumber, assignmentTime);
 
       // Auto-assign all patients in this room to this doctor
+      // This will assign ALL patients in the room, even if they were previously assigned to another doctor
+      // This ensures when a doctor selects a room, they get all patients in that room
       const { assignPatientsToDoctor } = require('../utils/roomAssignment');
+      console.log(`[selectRoom] Calling assignPatientsToDoctor for doctor ${userId} in room ${roomNumber}`);
       const assignmentResult = await assignPatientsToDoctor(
         userId,
         roomNumber,
         assignmentTime
       );
+      console.log(`[selectRoom] Assignment result: ${assignmentResult.assigned} patient(s) assigned`);
 
       res.json({
         success: true,
@@ -608,10 +612,17 @@ class UserController {
   // Get available rooms
   static async getAvailableRooms(req, res) {
     try {
-      const { getAvailableRooms, getRoomDistribution, getOccupiedRooms } = require('../utils/roomAssignment');
+      const { getAvailableRooms, getRoomDistribution, getTodayRoomDistribution, getOccupiedRooms } = require('../utils/roomAssignment');
       const rooms = await getAvailableRooms(true); // Exclude occupied rooms
-      const distribution = await getRoomDistribution();
+      const distribution = await getRoomDistribution(); // All patients (for consistency with deletion)
+      const todayDistribution = await getTodayRoomDistribution(); // Today's patients only
       const occupiedRooms = await getOccupiedRooms();
+      
+      // Debug logging
+      console.log('[getAvailableRooms] Available rooms:', rooms);
+      console.log('[getAvailableRooms] Distribution (all patients):', distribution);
+      console.log('[getAvailableRooms] Today distribution:', todayDistribution);
+      console.log('[getAvailableRooms] Occupied rooms:', Array.from(occupiedRooms));
       
       // Get doctor info for occupied rooms
       const today = new Date().toISOString().slice(0, 10);
@@ -644,7 +655,8 @@ class UserController {
         success: true,
         data: {
           rooms, // Only available (unoccupied) rooms
-          distribution,
+          distribution, // All patients (for consistency with deletion validation)
+          distribution_today: todayDistribution, // Today's patients only (for reference)
           occupied_rooms: occupiedRoomsInfo // Info about which rooms are taken and by whom
         }
       });
@@ -658,7 +670,7 @@ class UserController {
     }
   }
 
-  // Get current user's room assignment
+  // Get current user's room assignment (only if assigned today)
   static async getMyRoom(req, res) {
     try {
       const user = await User.findById(req.user.id);
@@ -669,13 +681,32 @@ class UserController {
         });
       }
 
-      res.json({
-        success: true,
-        data: {
-          current_room: user.current_room,
-          room_assignment_time: user.room_assignment_time
-        }
-      });
+      // CRITICAL: Only return room if it was assigned TODAY
+      // Room assignments are day-specific and must be reselected each day
+      const today = new Date().toISOString().slice(0, 10);
+      const assignmentDate = user.room_assignment_time 
+        ? new Date(user.room_assignment_time).toISOString().slice(0, 10)
+        : null;
+
+      // Only return room if assigned today
+      if (user.current_room && assignmentDate === today) {
+        res.json({
+          success: true,
+          data: {
+            current_room: user.current_room,
+            room_assignment_time: user.room_assignment_time
+          }
+        });
+      } else {
+        // No room assigned today
+        res.json({
+          success: true,
+          data: {
+            current_room: null,
+            room_assignment_time: null
+          }
+        });
+      }
     } catch (error) {
       console.error('Get my room error:', error);
       res.status(500).json({

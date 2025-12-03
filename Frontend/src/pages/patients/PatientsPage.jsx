@@ -32,26 +32,25 @@ const PatientsPage = () => {
     setPage(1);
   }, [search]);
 
-  // Fetch patients - if searching, fetch more results for client-side filtering
+  // Fetch patients - use server-side pagination when not searching, client-side when searching
   const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
   
   const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
-    page: search.trim() ? 1 : page, // Always fetch page 1 when searching
+    page: search.trim() ? 1 : page, // Use current page when not searching, always page 1 when searching
     limit: fetchLimit,
-    search: undefined // Don't send search to backend, we'll filter client-side
+    search: search.trim() || undefined // Send search to backend if provided
   }, {
-    pollingInterval: 30000, // Auto-refresh every 30 seconds
     refetchOnMountOrArgChange: true,
   });
 
-  // Client-side filtering by all fields including doctor name
+  // Client-side filtering by all fields including doctor name (only when searching)
   const filteredPatients = data?.data?.patients ? (() => {
     if (!search.trim()) {
-      // No search - return paginated results
-      const startIndex = (page - 1) * limit;
-      return data.data.patients.slice(startIndex, startIndex + limit);
+      // No search - use server-side paginated results directly
+      return data.data.patients;
     }
 
+    // When searching, filter client-side
     const searchLower = search.trim().toLowerCase();
     
     // Filter by all searchable fields including doctor name

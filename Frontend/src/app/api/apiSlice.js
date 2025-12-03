@@ -125,8 +125,8 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
       // Session expired or refresh failed, logout user
       if (errorMessage.includes('Session expired') || errorMessage.includes('SESSION_EXPIRED')) {
         console.log('[apiSlice] Session expired, logging out');
-        api.dispatch({ type: 'auth/logout' });
-        return result;
+      api.dispatch({ type: 'auth/logout' });
+      return result;
       }
     }
 
@@ -142,28 +142,28 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
         console.log('[apiSlice] Token expired, attempting refresh...');
         
         refreshPromise = baseQuery(
-          { url: '/session/refresh', method: 'POST' },
-          api,
-          extraOptions
+      { url: '/session/refresh', method: 'POST' },
+      api,
+      extraOptions
         ).then((refreshResult) => {
           isRefreshing = false;
           refreshPromise = null;
-          
-          if (refreshResult?.data?.success && refreshResult?.data?.data?.accessToken) {
-            // Store the new token - use updateToken to avoid unnecessary re-renders
-            // This prevents form data from being cleared during automatic token refresh
-            const newToken = refreshResult.data.data.accessToken;
-            const state = api.getState();
-            
-            // Only update if token actually changed
-            if (state.auth.token !== newToken) {
+
+    if (refreshResult?.data?.success && refreshResult?.data?.data?.accessToken) {
+      // Store the new token - use updateToken to avoid unnecessary re-renders
+      // This prevents form data from being cleared during automatic token refresh
+      const newToken = refreshResult.data.data.accessToken;
+      const state = api.getState();
+      
+      // Only update if token actually changed
+      if (state.auth.token !== newToken) {
               console.log('[apiSlice] Token refreshed successfully');
-              api.dispatch({
-                type: 'auth/updateToken',
-                payload: newToken
-              });
-            }
-            
+        api.dispatch({
+          type: 'auth/updateToken',
+          payload: newToken
+        });
+      }
+
             return { success: true, token: newToken };
           } else {
             // Refresh failed, logout user
@@ -184,8 +184,8 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
       const refreshResult = await refreshPromise;
       
       if (refreshResult?.success) {
-        // Retry the original query with new token
-        result = await baseQuery(args, api, extraOptions);
+      // Retry the original query with new token
+      result = await baseQuery(args, api, extraOptions);
       }
     } else if (isRefreshing && refreshPromise) {
       // If we're already refreshing, wait for it to complete and retry
@@ -207,6 +207,6 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
 
 export const apiSlice = createApi({
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['User', 'Patient', 'Clinical', 'ADL', 'Stats', 'Prescription', 'Rooms', 'MyRoom'],
+  tagTypes: ['User', 'Patient', 'Clinical', 'ADL', 'Stats', 'Prescription', 'Rooms', 'MyRoom', 'Medicine', 'PrescriptionTemplate'],
   endpoints: (builder) => ({}),
 });

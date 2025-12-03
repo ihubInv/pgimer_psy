@@ -374,7 +374,8 @@ const ClinicalTodayPatients = () => {
       await Promise.all([
         refetchMyRoom(),
         refetchRooms(),
-        dispatch(roomsApiSlice.util.invalidateTags(['Rooms', 'MyRoom']))
+        refetch(), // Refetch patients to show newly assigned patients
+        dispatch(roomsApiSlice.util.invalidateTags(['Rooms', 'MyRoom', 'Patient']))
       ]);
     } catch (error) {
       console.error('Room selection error:', error);
@@ -460,10 +461,13 @@ const ClinicalTodayPatients = () => {
   const distribution = roomsData?.data?.distribution || {};
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
-  const roomOptions = rooms.map(room => ({
-    value: room,
-    label: `${room} (${distribution[room] || 0} patients)`,
-  }));
+  const roomOptions = rooms.map(room => {
+    const totalPatients = distribution[room] || 0;
+    return {
+      value: room,
+      label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''})`,
+    };
+  });
   
   // If no rooms available, add default rooms (but only if they're not occupied)
   const allRoomOptions = [...roomOptions];
@@ -767,8 +771,13 @@ const ClinicalTodayPatients = () => {
                         <FiHome className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-800">Select Your Room</h3>
-                        <p className="text-sm text-gray-600">Please select the room you are sitting in today</p>
+                        <h3 className="text-lg font-semibold text-gray-800">Select Your Room for Today</h3>
+                        <p className="text-sm text-gray-600">Room selection is required each day. You must select a room before patients can be assigned to you.</p>
+                        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <p className="text-xs text-yellow-800 font-medium">
+                            ⚠️ Important: Room selection is day-specific. Yesterday's room assignment does not carry over. Please select your room for today.
+                          </p>
+                        </div>
                       </div>
                     </div>
                     
@@ -798,7 +807,7 @@ const ClinicalTodayPatients = () => {
                             />
                             {selectedRoom && distribution[selectedRoom] !== undefined && (
                               <p className="text-xs text-gray-500 mt-1">
-                                {distribution[selectedRoom]} patient(s) currently assigned to this room
+                                {distribution[selectedRoom]} patient{distribution[selectedRoom] !== 1 ? 's' : ''} assigned to this room (total)
                               </p>
                             )}
                             {Object.keys(occupiedRooms).length > 0 && (

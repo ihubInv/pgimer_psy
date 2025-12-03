@@ -633,15 +633,15 @@ export const PRESCRIPTION_FORM = [
 
 
 export const DOSAGE_OPTIONS = [
-  { value: '1-0-1', label: '1-0-1' },
+  { value: '1-X-1', label: '1-X-1' },
   { value: '1-1-1', label: '1-1-1' },
-  { value: '1-0-0', label: '1-0-0' },
-  { value: '0-1-0', label: '0-1-0' },
-  { value: '0-0-1', label: '0-0-1' },
-  { value: '1-1-0', label: '1-1-0' },
-  { value: '0-1-1', label: '0-1-1' },
-  { value: '1-0-1½', label: '1-0-1½' },
-  { value: '½-0-½', label: '½-0-½' },
+  { value: '1-X-X', label: '1-X-X' },
+  { value: 'X-1-X', label: 'X-1-X' },
+  { value: 'X-X-1', label: 'X-X-1' },
+  { value: '1-1-X', label: '1-1-X' },
+  { value: 'X-1-1', label: 'X-1-1' },
+  { value: '1-X-1½', label: '1-X-1½' },
+  { value: '½-X-½', label: '½-X-½' },
   { value: 'SOS', label: 'SOS' },
   { value: 'STAT', label: 'STAT' }, 
 ]
@@ -715,26 +715,17 @@ export const PRESCRIPTION_OPTIONS = {
   ],
 
   DOSAGE: [
-    { value: "1-0-1", label: "1-0-1" },
+    { value: "1-❌-1", label: "1-❌-1" },
     { value: "1-1-1", label: "1-1-1" },
-    { value: "1-0-0", label: "1-0-0" },
-    { value: "0-1-0", label: "0-1-0" },
-    { value: "0-0-1", label: "0-0-1" },
-    { value: "1-1-0", label: "1-1-0" },
-    { value: "0-1-1", label: "0-1-1" },
-    { value: "1-0-1½", label: "1-0-1½" },
-    { value: "½-0-½", label: "½-0-½" },
+    { value: "1-❌-❌", label: "1-❌-❌" },
+    { value: "❌-1-❌", label: "❌-1-❌" },
+    { value: "❌-❌-1", label: "❌-❌-1" },
+    { value: "1-1-❌", label: "1-1-❌" },
+    { value: "❌-1-1", label: "❌-1-1" },
+    { value: "1-❌-1½", label: "1-❌-1½" },
+    { value: "½-❌-½", label: "½-❌-½" },
     { value: "SOS", label: "SOS" },
     { value: "STAT", label: "STAT" },
-    { value: "PRN", label: "PRN" },
-    { value: "OD", label: "OD" },
-    { value: "BD", label: "BD" },
-    { value: "TDS", label: "TDS" },
-    { value: "QID", label: "QID" },
-    { value: "HS", label: "HS" },
-    { value: "Q4H", label: "Q4H" },
-    { value: "Q6H", label: "Q6H" },
-    { value: "Q8H", label: "Q8H" }
   ],
 
   WHEN: [
