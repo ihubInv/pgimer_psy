@@ -898,22 +898,6 @@ const ClinicalTodayPatients = () => {
                   </div>
                 </Card>
               )}
-              
-              {/* No Patients Found Message */}
-              {/* {filteredPatients.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
-                    <FiUsers className="w-12 h-12 text-gray-400" />
-                  </div>
-                  <p className="text-xl font-semibold text-gray-700 mb-2">No patients found</p>
-                  <p className="text-gray-500 text-center max-w-md">
-                    {Object.values(filters).some(f => f) 
-                      ? 'No patients match the current filters for today.'
-                      : 'No patients were registered or have visits scheduled for today.'
-                    }
-                  </p>
-                </div>
-              )} */}
             </div>
           ) : filteredPatients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">

@@ -443,20 +443,25 @@ const PatientsPage = () => {
       
       patientDetailsData.push(patientRow);
 
+      // Check if user is MWO - if yes, only export patient details
+      const isMWOUser = isMWO(user?.role);
+      
       // Track if patient has any past history data
       let hasPastClinicalProforma = false;
       let hasPastAdlFile = false;
       let hasPastPrescription = false;
 
-      try {
-        // Fetch clinical proformas
-        const clinicalResponse = await fetch(`${baseUrl}/clinical-proformas/patient/${patientId}`, {
-          headers: {
-            'Authorization': token ? `Bearer ${token}` : '',
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        });
+      // Only fetch past history if user is not MWO
+      if (!isMWOUser) {
+        try {
+          // Fetch clinical proformas
+          const clinicalResponse = await fetch(`${baseUrl}/clinical-proformas/patient/${patientId}`, {
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : '',
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          });
 
         if (clinicalResponse.ok) {
           const clinicalResult = await clinicalResponse.json();
@@ -569,20 +574,20 @@ const PatientsPage = () => {
               console.warn(`Failed to fetch prescriptions for proforma ${proforma.id}:`, e);
             }
           }
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch clinical proformas for patient ${patientId}:`, e);
         }
-      } catch (e) {
-        console.warn(`Failed to fetch clinical proformas for patient ${patientId}:`, e);
-      }
 
-      try {
-        // Fetch ADL files
-        const adlResponse = await fetch(`${baseUrl}/adl-files/patient/${patientId}`, {
-          headers: {
-            'Authorization': token ? `Bearer ${token}` : '',
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        });
+        try {
+          // Fetch ADL files
+          const adlResponse = await fetch(`${baseUrl}/adl-files/patient/${patientId}`, {
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : '',
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          });
 
         if (adlResponse.ok) {
           const adlResult = await adlResponse.json();
@@ -628,34 +633,35 @@ const PatientsPage = () => {
             
             adlFileData.push(adlRow);
           });
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch ADL files for patient ${patientId}:`, e);
         }
-      } catch (e) {
-        console.warn(`Failed to fetch ADL files for patient ${patientId}:`, e);
-      }
 
-      // If patient has no past history data in any section, add placeholder rows with N/A
-      if (!hasPastClinicalProforma) {
-        const emptyProformaRow = { ...clinicalProformaHeaders };
-        emptyProformaRow['Patient ID'] = patientId;
-        emptyProformaRow['Patient Name'] = patient.name || 'N/A';
-        emptyProformaRow['CR No'] = patient.cr_no || 'N/A';
-        clinicalProformaData.push(emptyProformaRow);
-      }
+        // If patient has no past history data in any section, add placeholder rows with N/A
+        if (!hasPastClinicalProforma) {
+          const emptyProformaRow = { ...clinicalProformaHeaders };
+          emptyProformaRow['Patient ID'] = patientId;
+          emptyProformaRow['Patient Name'] = patient.name || 'N/A';
+          emptyProformaRow['CR No'] = patient.cr_no || 'N/A';
+          clinicalProformaData.push(emptyProformaRow);
+        }
 
-      if (!hasPastAdlFile) {
-        const emptyAdlRow = { ...adlFileHeaders };
-        emptyAdlRow['Patient ID'] = patientId;
-        emptyAdlRow['Patient Name'] = patient.name || 'N/A';
-        emptyAdlRow['CR No'] = patient.cr_no || 'N/A';
-        adlFileData.push(emptyAdlRow);
-      }
+        if (!hasPastAdlFile) {
+          const emptyAdlRow = { ...adlFileHeaders };
+          emptyAdlRow['Patient ID'] = patientId;
+          emptyAdlRow['Patient Name'] = patient.name || 'N/A';
+          emptyAdlRow['CR No'] = patient.cr_no || 'N/A';
+          adlFileData.push(emptyAdlRow);
+        }
 
-      if (!hasPastPrescription) {
-        const emptyPrescriptionRow = { ...prescriptionHeaders };
-        emptyPrescriptionRow['Patient ID'] = patientId;
-        emptyPrescriptionRow['Patient Name'] = patient.name || 'N/A';
-        emptyPrescriptionRow['CR No'] = patient.cr_no || 'N/A';
-        prescriptionData.push(emptyPrescriptionRow);
+        if (!hasPastPrescription) {
+          const emptyPrescriptionRow = { ...prescriptionHeaders };
+          emptyPrescriptionRow['Patient ID'] = patientId;
+          emptyPrescriptionRow['Patient Name'] = patient.name || 'N/A';
+          emptyPrescriptionRow['CR No'] = patient.cr_no || 'N/A';
+          prescriptionData.push(emptyPrescriptionRow);
+        }
       }
 
       // Create Excel workbook
@@ -695,20 +701,23 @@ const PatientsPage = () => {
       applyHeaderStyles(ws1);
       XLSX.utils.book_append_sheet(wb, ws1, 'Patient Details');
 
-      // Sheet 2: Walk-in Clinical Proforma (always created with all headers)
-      const ws2 = XLSX.utils.json_to_sheet(clinicalProformaData);
-      applyHeaderStyles(ws2);
-      XLSX.utils.book_append_sheet(wb, ws2, 'Walk-in Clinical Proforma');
+      // Only add other sheets if user is not MWO
+      if (!isMWOUser) {
+        // Sheet 2: Walk-in Clinical Proforma (always created with all headers)
+        const ws2 = XLSX.utils.json_to_sheet(clinicalProformaData);
+        applyHeaderStyles(ws2);
+        XLSX.utils.book_append_sheet(wb, ws2, 'Walk-in Clinical Proforma');
 
-      // Sheet 3: Out-Patient Intake Record (always created with all headers)
-      const ws3 = XLSX.utils.json_to_sheet(adlFileData);
-      applyHeaderStyles(ws3);
-      XLSX.utils.book_append_sheet(wb, ws3, 'Out-Patient Intake Record');
+        // Sheet 3: Out-Patient Intake Record (always created with all headers)
+        const ws3 = XLSX.utils.json_to_sheet(adlFileData);
+        applyHeaderStyles(ws3);
+        XLSX.utils.book_append_sheet(wb, ws3, 'Out-Patient Intake Record');
 
-      // Sheet 4: Prescription (always created with all headers)
-      const ws4 = XLSX.utils.json_to_sheet(prescriptionData);
-      applyHeaderStyles(ws4);
-      XLSX.utils.book_append_sheet(wb, ws4, 'Prescription');
+        // Sheet 4: Prescription (always created with all headers)
+        const ws4 = XLSX.utils.json_to_sheet(prescriptionData);
+        applyHeaderStyles(ws4);
+        XLSX.utils.book_append_sheet(wb, ws4, 'Prescription');
+      }
 
       // Generate filename with patient name and date
       const patientName = patient.name || patient.cr_no || 'Patient';
@@ -718,7 +727,10 @@ const PatientsPage = () => {
       // Write file
       XLSX.writeFile(wb, filename);
       
-      toast.success(`Successfully exported patient ${patient.name || patient.cr_no || patientId}'s Past History data to Excel`);
+      const exportMessage = isMWOUser 
+        ? `Successfully exported patient ${patient.name || patient.cr_no || patientId}'s details to Excel`
+        : `Successfully exported patient ${patient.name || patient.cr_no || patientId}'s Past History data to Excel`;
+      toast.success(exportMessage);
     } catch (err) {
       console.error('Export error:', err);
       toast.error(err?.message || 'Failed to export patient\'s Past History data');
@@ -741,8 +753,14 @@ const PatientsPage = () => {
     let progressToastId = null;
     
     try {
+      // Check if user is MWO - if yes, only export patient details
+      const isMWOUser = isMWO(user?.role);
+      
       // Show initial loading toast
-      progressToastId = toast.loading('Loading all patients\' Past History data for export...', {
+      const loadingMessage = isMWOUser 
+        ? 'Loading all patients\' data for export...'
+        : 'Loading all patients\' Past History data for export...';
+      progressToastId = toast.loading(loadingMessage, {
         autoClose: false,
       });
       
@@ -779,8 +797,11 @@ const PatientsPage = () => {
       }
 
       // Update toast with total count
+      const progressMessage = isMWOUser
+        ? `Processing patients' data for export... (0/${allPatients.length} patients)`
+        : `Processing patients' Past History data for export... (0/${allPatients.length} patients)`;
       toast.update(progressToastId, {
-        render: `Processing patients' Past History data for export... (0/${allPatients.length} patients)`,
+        render: progressMessage,
         type: 'info',
         isLoading: true,
         autoClose: false,
@@ -914,8 +935,11 @@ const PatientsPage = () => {
 
         // Update progress toast every 5 patients or on the last patient
         if ((i + 1) % 5 === 0 || i === allPatients.length - 1) {
+          const updateMessage = isMWOUser
+            ? `Processing patients' data for export... (${i + 1}/${allPatients.length} patients)`
+            : `Processing patients' Past History data for export... (${i + 1}/${allPatients.length} patients)`;
           toast.update(progressToastId, {
-            render: `Processing patients' Past History data for export... (${i + 1}/${allPatients.length} patients)`,
+            render: updateMessage,
             type: 'info',
             isLoading: true,
             autoClose: false,
@@ -983,15 +1007,17 @@ const PatientsPage = () => {
         let hasPastAdlFile = false;
         let hasPastPrescription = false;
 
-        try {
-          // Fetch clinical proformas
-          const clinicalResponse = await fetch(`${baseUrl}/clinical-proformas/patient/${patientId}`, {
-            headers: {
-              'Authorization': token ? `Bearer ${token}` : '',
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-          });
+        // Only fetch past history if user is not MWO
+        if (!isMWOUser) {
+          try {
+            // Fetch clinical proformas
+            const clinicalResponse = await fetch(`${baseUrl}/clinical-proformas/patient/${patientId}`, {
+              headers: {
+                'Authorization': token ? `Bearer ${token}` : '',
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+            });
 
           if (clinicalResponse.ok) {
             const clinicalResult = await clinicalResponse.json();
@@ -1099,92 +1125,93 @@ const PatientsPage = () => {
               }
             }
           }
-        } catch (e) {
-          console.warn(`Failed to fetch clinical proformas for patient ${patientId}:`, e);
-        }
-
-        try {
-          // Fetch ADL files
-          const adlResponse = await fetch(`${baseUrl}/adl-files/patient/${patientId}`, {
-            headers: {
-              'Authorization': token ? `Bearer ${token}` : '',
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-          });
-
-          if (adlResponse.ok) {
-            const adlResult = await adlResponse.json();
-            const adlFiles = adlResult?.data?.adlFiles || adlResult?.data?.files || adlResult?.data || [];
-            const adlFilesArray = Array.isArray(adlFiles) ? adlFiles : [];
-
-            // Filter to only past ADL files (not today's)
-            const pastAdlFiles = adlFilesArray.filter(adl => {
-              if (!adl) return false;
-              const adlDate = toISTDateString(adl.file_created_date || adl.created_at);
-              if (!adlDate) return true; // Include ADL files without date as past
-              return adlDate !== todayDateString;
-            });
-
-            if (pastAdlFiles.length > 0) {
-              hasPastAdlFile = true;
-            }
-
-            // Add past ADL files to ADL data
-            pastAdlFiles.forEach((adl, idx) => {
-              const adlRow = { ...adlFileHeaders };
-              adlRow['Patient ID'] = patientId;
-              adlRow['Patient Name'] = patient.name || 'N/A';
-              adlRow['CR No'] = patient.cr_no || 'N/A';
-              adlRow['ADL File #'] = idx + 1;
-              adlRow['ADL No'] = adl.adl_no || 'N/A';
-              adlRow['File Status'] = adl.file_status || 'N/A';
-              adlRow['File Created Date'] = formatDate(adl.file_created_date);
-              adlRow['Physical File Location'] = adl.physical_file_location || 'N/A';
-              adlRow['Last Accessed Date'] = formatDate(adl.last_accessed_date);
-              adlRow['Last Accessed By'] = adl.last_accessed_by_name || 'N/A';
-              adlRow['Total Visits'] = adl.total_visits || 'N/A';
-              adlRow['Created By'] = adl.created_by_name || 'N/A';
-              adlRow['Created By Role'] = adl.created_by_role || 'N/A';
-              adlRow['Created At'] = formatDateTime(adl.created_at);
-              
-              // Populate from ADL_FILE_FORM constants
-              const adlMappings = {
-                'history_treatment_dates': (data) => formatDate(data.history_treatment_dates),
-              };
-              
-              populateRowFromConstants(adlRow, ADL_FILE_FORM, adl, adlMappings);
-              
-              adlFileData.push(adlRow);
-            });
+          } catch (e) {
+            console.warn(`Failed to fetch clinical proformas for patient ${patientId}:`, e);
           }
-        } catch (e) {
-          console.warn(`Failed to fetch ADL files for patient ${patientId}:`, e);
-        }
 
-        // If patient has no past history data in any section, add placeholder rows with N/A
-        if (!hasPastClinicalProforma) {
-          const emptyProformaRow = { ...clinicalProformaHeaders };
-          emptyProformaRow['Patient ID'] = patientId;
-          emptyProformaRow['Patient Name'] = patient.name || 'N/A';
-          emptyProformaRow['CR No'] = patient.cr_no || 'N/A';
-          clinicalProformaData.push(emptyProformaRow);
-        }
+          try {
+            // Fetch ADL files
+            const adlResponse = await fetch(`${baseUrl}/adl-files/patient/${patientId}`, {
+              headers: {
+                'Authorization': token ? `Bearer ${token}` : '',
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+            });
 
-        if (!hasPastAdlFile) {
-          const emptyAdlRow = { ...adlFileHeaders };
-          emptyAdlRow['Patient ID'] = patientId;
-          emptyAdlRow['Patient Name'] = patient.name || 'N/A';
-          emptyAdlRow['CR No'] = patient.cr_no || 'N/A';
-          adlFileData.push(emptyAdlRow);
-        }
+            if (adlResponse.ok) {
+              const adlResult = await adlResponse.json();
+              const adlFiles = adlResult?.data?.adlFiles || adlResult?.data?.files || adlResult?.data || [];
+              const adlFilesArray = Array.isArray(adlFiles) ? adlFiles : [];
 
-        if (!hasPastPrescription) {
-          const emptyPrescriptionRow = { ...prescriptionHeaders };
-          emptyPrescriptionRow['Patient ID'] = patientId;
-          emptyPrescriptionRow['Patient Name'] = patient.name || 'N/A';
-          emptyPrescriptionRow['CR No'] = patient.cr_no || 'N/A';
-          prescriptionData.push(emptyPrescriptionRow);
+              // Filter to only past ADL files (not today's)
+              const pastAdlFiles = adlFilesArray.filter(adl => {
+                if (!adl) return false;
+                const adlDate = toISTDateString(adl.file_created_date || adl.created_at);
+                if (!adlDate) return true; // Include ADL files without date as past
+                return adlDate !== todayDateString;
+              });
+
+              if (pastAdlFiles.length > 0) {
+                hasPastAdlFile = true;
+              }
+
+              // Add past ADL files to ADL data
+              pastAdlFiles.forEach((adl, idx) => {
+                const adlRow = { ...adlFileHeaders };
+                adlRow['Patient ID'] = patientId;
+                adlRow['Patient Name'] = patient.name || 'N/A';
+                adlRow['CR No'] = patient.cr_no || 'N/A';
+                adlRow['ADL File #'] = idx + 1;
+                adlRow['ADL No'] = adl.adl_no || 'N/A';
+                adlRow['File Status'] = adl.file_status || 'N/A';
+                adlRow['File Created Date'] = formatDate(adl.file_created_date);
+                adlRow['Physical File Location'] = adl.physical_file_location || 'N/A';
+                adlRow['Last Accessed Date'] = formatDate(adl.last_accessed_date);
+                adlRow['Last Accessed By'] = adl.last_accessed_by_name || 'N/A';
+                adlRow['Total Visits'] = adl.total_visits || 'N/A';
+                adlRow['Created By'] = adl.created_by_name || 'N/A';
+                adlRow['Created By Role'] = adl.created_by_role || 'N/A';
+                adlRow['Created At'] = formatDateTime(adl.created_at);
+                
+                // Populate from ADL_FILE_FORM constants
+                const adlMappings = {
+                  'history_treatment_dates': (data) => formatDate(data.history_treatment_dates),
+                };
+                
+                populateRowFromConstants(adlRow, ADL_FILE_FORM, adl, adlMappings);
+                
+                adlFileData.push(adlRow);
+              });
+            }
+          } catch (e) {
+            console.warn(`Failed to fetch ADL files for patient ${patientId}:`, e);
+          }
+
+          // If patient has no past history data in any section, add placeholder rows with N/A
+          if (!hasPastClinicalProforma) {
+            const emptyProformaRow = { ...clinicalProformaHeaders };
+            emptyProformaRow['Patient ID'] = patientId;
+            emptyProformaRow['Patient Name'] = patient.name || 'N/A';
+            emptyProformaRow['CR No'] = patient.cr_no || 'N/A';
+            clinicalProformaData.push(emptyProformaRow);
+          }
+
+          if (!hasPastAdlFile) {
+            const emptyAdlRow = { ...adlFileHeaders };
+            emptyAdlRow['Patient ID'] = patientId;
+            emptyAdlRow['Patient Name'] = patient.name || 'N/A';
+            emptyAdlRow['CR No'] = patient.cr_no || 'N/A';
+            adlFileData.push(emptyAdlRow);
+          }
+
+          if (!hasPastPrescription) {
+            const emptyPrescriptionRow = { ...prescriptionHeaders };
+            emptyPrescriptionRow['Patient ID'] = patientId;
+            emptyPrescriptionRow['Patient Name'] = patient.name || 'N/A';
+            emptyPrescriptionRow['CR No'] = patient.cr_no || 'N/A';
+            prescriptionData.push(emptyPrescriptionRow);
+          }
         }
       }
 
@@ -1225,30 +1252,38 @@ const PatientsPage = () => {
       applyHeaderStyles(ws1);
       XLSX.utils.book_append_sheet(wb, ws1, 'Patient Details');
 
-      // Sheet 2: Walk-in Clinical Proforma (always created with all headers)
-      const ws2 = XLSX.utils.json_to_sheet(clinicalProformaData);
-      applyHeaderStyles(ws2);
-      XLSX.utils.book_append_sheet(wb, ws2, 'Walk-in Clinical Proforma');
+      // Only add other sheets if user is not MWO
+      if (!isMWOUser) {
+        // Sheet 2: Walk-in Clinical Proforma (always created with all headers)
+        const ws2 = XLSX.utils.json_to_sheet(clinicalProformaData);
+        applyHeaderStyles(ws2);
+        XLSX.utils.book_append_sheet(wb, ws2, 'Walk-in Clinical Proforma');
 
-      // Sheet 3: Out-Patient Intake Record (always created with all headers)
-      const ws3 = XLSX.utils.json_to_sheet(adlFileData);
-      applyHeaderStyles(ws3);
-      XLSX.utils.book_append_sheet(wb, ws3, 'Out-Patient Intake Record');
+        // Sheet 3: Out-Patient Intake Record (always created with all headers)
+        const ws3 = XLSX.utils.json_to_sheet(adlFileData);
+        applyHeaderStyles(ws3);
+        XLSX.utils.book_append_sheet(wb, ws3, 'Out-Patient Intake Record');
 
-      // Sheet 4: Prescription (always created with all headers)
-      const ws4 = XLSX.utils.json_to_sheet(prescriptionData);
-      applyHeaderStyles(ws4);
-      XLSX.utils.book_append_sheet(wb, ws4, 'Prescription');
+        // Sheet 4: Prescription (always created with all headers)
+        const ws4 = XLSX.utils.json_to_sheet(prescriptionData);
+        applyHeaderStyles(ws4);
+        XLSX.utils.book_append_sheet(wb, ws4, 'Prescription');
+      }
 
       // Generate filename with current date
-      const filename = `all_patients_past_history_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const filename = isMWOUser
+        ? `all_patients_details_${new Date().toISOString().split('T')[0]}.xlsx`
+        : `all_patients_past_history_${new Date().toISOString().split('T')[0]}.xlsx`;
 
       // Write file
       XLSX.writeFile(wb, filename);
       
       // Dismiss progress toast and show success
       toast.dismiss(progressToastId);
-      toast.success(`Successfully exported ${allPatients.length} patients' Past History data to Excel`);
+      const successMessage = isMWOUser
+        ? `Successfully exported ${allPatients.length} patients' details to Excel`
+        : `Successfully exported ${allPatients.length} patients' Past History data to Excel`;
+      toast.success(successMessage);
     } catch (err) {
       console.error('Export error:', err);
       // Dismiss progress toast and show error
@@ -1266,34 +1301,44 @@ const PatientsPage = () => {
     }
 
     try {
+      // Check if user is MWO - if yes, only print patient details
+      const isMWOUser = isMWO(user?.role);
+      
       toast.info('Loading complete patient data for printing...');
       
-      // Fetch all related data in parallel
+      // Fetch patient data
       const baseUrl = import.meta.env.VITE_API_URL || '/api';
       
-      const [patientResponse, clinicalResponse, adlResponse] = await Promise.all([
-        fetch(`${baseUrl}/patients/${patientId}`, {
-          headers: {
-            'Authorization': token ? `Bearer ${token}` : '',
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        }),
-        fetch(`${baseUrl}/clinical-proformas/patient/${patientId}`, {
-          headers: {
-            'Authorization': token ? `Bearer ${token}` : '',
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        }).catch(() => ({ ok: false })), // Gracefully handle if endpoint doesn't exist
-        fetch(`${baseUrl}/adl-files/patient/${patientId}`, {
-          headers: {
-            'Authorization': token ? `Bearer ${token}` : '',
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        }).catch(() => ({ ok: false })), // Gracefully handle if endpoint doesn't exist
-      ]);
+      const patientResponse = await fetch(`${baseUrl}/patients/${patientId}`, {
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+      
+      // Only fetch past history if user is not MWO
+      let clinicalResponse = { ok: false };
+      let adlResponse = { ok: false };
+      
+      if (!isMWOUser) {
+        [clinicalResponse, adlResponse] = await Promise.all([
+          fetch(`${baseUrl}/clinical-proformas/patient/${patientId}`, {
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : '',
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          }).catch(() => ({ ok: false })), // Gracefully handle if endpoint doesn't exist
+          fetch(`${baseUrl}/adl-files/patient/${patientId}`, {
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : '',
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          }).catch(() => ({ ok: false })), // Gracefully handle if endpoint doesn't exist
+        ]);
+      }
 
       if (!patientResponse.ok) {
         throw new Error('Failed to fetch patient details');
@@ -1310,88 +1355,93 @@ const PatientsPage = () => {
       // Get today's date string for filtering Past History
       const todayDateString = toISTDateString(new Date());
 
-      // Get clinical proforma data (may be empty array)
+      // Get clinical proforma data (may be empty array) - only if not MWO
       let allClinicalProformas = [];
-      if (clinicalResponse.ok) {
-        try {
-          const clinicalResult = await clinicalResponse.json();
-          allClinicalProformas = clinicalResult?.data?.proformas || clinicalResult?.data || [];
-        } catch (e) {
-          console.warn('Could not parse clinical proforma data:', e);
-        }
-      }
-
-      // Filter to only Past History (not today's visits)
-      const clinicalProformas = allClinicalProformas.filter(proforma => {
-        if (!proforma) return false;
-        const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
-        if (!proformaDate) return true; // Include proformas without date as past
-        return proformaDate !== todayDateString;
-      });
-
-      // Get ADL file data (may be empty array)
-      let allAdlFiles = [];
-      if (adlResponse.ok) {
-        try {
-          const adlResult = await adlResponse.json();
-          const files = adlResult?.data?.adlFiles || adlResult?.data?.files || adlResult?.data || [];
-          // Ensure it's always an array
-          allAdlFiles = Array.isArray(files) ? files : [];
-        } catch (e) {
-          console.warn('Could not parse ADL file data:', e);
-          allAdlFiles = [];
-        }
-      }
-
-      // Filter to only Past History (not today's ADL files)
-      const adlFiles = allAdlFiles.filter(adl => {
-        if (!adl) return false;
-        const adlDate = toISTDateString(adl.file_created_date || adl.created_at);
-        if (!adlDate) return true; // Include ADL files without date as past
-        return adlDate !== todayDateString;
-      });
-
-      // Fetch prescriptions for past clinical proformas only
+      let clinicalProformas = [];
+      let adlFiles = [];
       let allPrescriptions = [];
-      if (clinicalProformas && clinicalProformas.length > 0) {
-        const prescriptionPromises = clinicalProformas.slice(0, 10).map(proforma => 
-          fetch(`${baseUrl}/prescriptions/by-proforma/${proforma.id}`, {
-            headers: {
-              'Authorization': token ? `Bearer ${token}` : '',
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-          }).catch(() => ({ ok: false }))
-        );
+      
+      if (!isMWOUser) {
+        if (clinicalResponse.ok) {
+          try {
+            const clinicalResult = await clinicalResponse.json();
+            allClinicalProformas = clinicalResult?.data?.proformas || clinicalResult?.data || [];
+          } catch (e) {
+            console.warn('Could not parse clinical proforma data:', e);
+          }
+        }
 
-        const prescriptionResponses = await Promise.all(prescriptionPromises);
-        
-        for (let i = 0; i < prescriptionResponses.length; i++) {
-          const response = prescriptionResponses[i];
-          if (response.ok) {
-            try {
-              const prescriptionResult = await response.json();
-              const prescriptionData = prescriptionResult?.data?.prescription;
-              if (prescriptionData && prescriptionData.prescription) {
-                const proforma = clinicalProformas[i];
-                prescriptionData.prescription.forEach(prescription => {
-                  allPrescriptions.push({
-                    ...prescription,
-                    proforma_id: proforma.id,
-                    visit_date: proforma.visit_date || proforma.created_at,
-                    visit_type: proforma.visit_type
+        // Filter to only Past History (not today's visits)
+        clinicalProformas = allClinicalProformas.filter(proforma => {
+          if (!proforma) return false;
+          const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
+          if (!proformaDate) return true; // Include proformas without date as past
+          return proformaDate !== todayDateString;
+        });
+
+        // Get ADL file data (may be empty array)
+        let allAdlFiles = [];
+        if (adlResponse.ok) {
+          try {
+            const adlResult = await adlResponse.json();
+            const files = adlResult?.data?.adlFiles || adlResult?.data?.files || adlResult?.data || [];
+            // Ensure it's always an array
+            allAdlFiles = Array.isArray(files) ? files : [];
+          } catch (e) {
+            console.warn('Could not parse ADL file data:', e);
+            allAdlFiles = [];
+          }
+        }
+
+        // Filter to only Past History (not today's ADL files)
+        adlFiles = allAdlFiles.filter(adl => {
+          if (!adl) return false;
+          const adlDate = toISTDateString(adl.file_created_date || adl.created_at);
+          if (!adlDate) return true; // Include ADL files without date as past
+          return adlDate !== todayDateString;
+        });
+
+        // Fetch prescriptions for past clinical proformas only
+        if (clinicalProformas && clinicalProformas.length > 0) {
+          const prescriptionPromises = clinicalProformas.slice(0, 10).map(proforma => 
+            fetch(`${baseUrl}/prescriptions/by-proforma/${proforma.id}`, {
+              headers: {
+                'Authorization': token ? `Bearer ${token}` : '',
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+            }).catch(() => ({ ok: false }))
+          );
+
+          const prescriptionResponses = await Promise.all(prescriptionPromises);
+          
+          for (let i = 0; i < prescriptionResponses.length; i++) {
+            const response = prescriptionResponses[i];
+            if (response.ok) {
+              try {
+                const prescriptionResult = await response.json();
+                const prescriptionData = prescriptionResult?.data?.prescription;
+                if (prescriptionData && prescriptionData.prescription) {
+                  const proforma = clinicalProformas[i];
+                  prescriptionData.prescription.forEach(prescription => {
+                    allPrescriptions.push({
+                      ...prescription,
+                      proforma_id: proforma.id,
+                      visit_date: proforma.visit_date || proforma.created_at,
+                      visit_type: proforma.visit_type
+                    });
                   });
-                });
+                }
+              } catch (e) {
+                console.warn('Could not parse prescription data:', e);
               }
-            } catch (e) {
-              console.warn('Could not parse prescription data:', e);
             }
           }
         }
       }
 
-      // Check if there's any Past History data
-      const hasPastHistory = clinicalProformas.length > 0 || adlFiles.length > 0 || allPrescriptions.length > 0;
+      // Check if there's any Past History data - always false for MWO
+      const hasPastHistory = !isMWOUser && (clinicalProformas.length > 0 || adlFiles.length > 0 || allPrescriptions.length > 0);
 
       // Convert logo to base64 for embedding in print
       let logoBase64 = '';
@@ -1408,14 +1458,14 @@ const PatientsPage = () => {
       }
 
       // Create print content with all data
-      // If Past History exists, print it; otherwise print only Patient Details
+      // If MWO, only print Patient Details; otherwise if Past History exists, print it; otherwise print only Patient Details
       const printContent = generatePrintContent(
         patient, 
         hasPastHistory ? clinicalProformas : [], 
         hasPastHistory ? adlFiles : [], 
         hasPastHistory ? allPrescriptions : [], 
         logoBase64,
-        hasPastHistory // Pass flag to indicate if Past History should be shown
+        hasPastHistory // Pass flag to indicate if Past History should be shown (always false for MWO)
       );
       
       // Create a new window for printing
