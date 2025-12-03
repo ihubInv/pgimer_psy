@@ -142,7 +142,7 @@ const PatientsPage = () => {
   };
   
 
-  const handleExportAll = () => {
+  const handleExport = () => {
     // Export filtered patients if searching, otherwise all patients
     const patientsToExport = search.trim() 
       ? (data?.data?.patients?.filter(patient => {
@@ -179,7 +179,7 @@ const PatientsPage = () => {
     }
   };
 
-  const handleExport = async (patientId) => {
+  const handleExportAll = async (patientId) => {
     if (!patientId) {
       toast.error('Invalid patient ID. Unable to export patient details.');
       return;
@@ -1632,7 +1632,7 @@ const PatientsPage = () => {
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={() => handleExportAll(patientId)}
+              onClick={() => handleExport(patientId)}
               className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
               title="Export All Patients"
             >
@@ -1714,7 +1714,7 @@ const PatientsPage = () => {
                 <Button
                   variant="outline"
                   className="h-12 px-5 bg-white border-2 border-primary-200 hover:bg-primary-50 hover:border-primary-300 shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={handleExport}
+                  onClick={handleExportAll}
                   disabled={filteredPatients.length === 0 && (!data?.data?.patients || data.data.patients.length === 0)}
                 >
                   <FiDownload className="mr-2" />
