@@ -17,7 +17,7 @@ import Input from '../../components/Input';
 import Table from '../../components/Table';
 import Pagination from '../../components/Pagination';
 import Badge from '../../components/Badge';
-import { isAdmin, isMWO, isJrSr } from '../../utils/constants';
+import { isAdmin, isMWO, isJrSr, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM } from '../../utils/constants';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
 
@@ -387,70 +387,60 @@ const PatientsPage = () => {
       const adlFileData = [];
       const prescriptionData = [];
 
+      // Helper function to populate row data from constants
+      const populateRowFromConstants = (row, constantArray, data, specialMappings = {}) => {
+        constantArray.forEach(field => {
+          const fieldValue = field.value;
+          let value = data[fieldValue];
+          
+          // Apply special mappings if provided
+          if (specialMappings[fieldValue]) {
+            value = specialMappings[fieldValue](data);
+          } else {
+            // Handle date fields
+            if (fieldValue === 'date' || fieldValue === 'seen_in_walk_in_on' || fieldValue === 'worked_up_on') {
+              value = formatDate(value);
+            } else if (fieldValue === 'mobile_no') {
+              value = data.contact_number || data.mobile_no || 'N/A';
+            } else if (fieldValue === 'education') {
+              value = data.education || data.education_level || 'N/A';
+            } else if (fieldValue === 'patient_income' || fieldValue === 'family_income') {
+              value = value ? (typeof value === 'number' ? `₹${value}` : value) : 'N/A';
+            } else if (fieldValue === 'assigned_doctor_name') {
+              const doctorName = data.assigned_doctor_name || '';
+              const doctorRole = data.assigned_doctor_role || '';
+              value = doctorName ? (doctorRole ? `${doctorName} (${doctorRole})` : doctorName) : 'Not assigned';
+            } else {
+              value = (value !== null && value !== undefined && value !== '') ? value : 'N/A';
+            }
+          }
+          
+          row[field.label] = value;
+        });
+        return row;
+      };
+
       // Add patient details (always included with all headers)
       const patientRow = { ...patientDetailsHeaders };
       patientRow['Patient ID'] = patient.id;
-      patientRow['CR No'] = patient.cr_no || 'N/A';
-      patientRow['PSY No'] = patient.psy_no || 'N/A';
       patientRow['ADL No'] = patient.adl_no || 'N/A';
-      patientRow['Name'] = patient.name || 'N/A';
-      patientRow['Age'] = patient.age || 'N/A';
-      patientRow['Sex'] = patient.sex || 'N/A';
-      patientRow['Contact Number'] = patient.contact_number || 'N/A';
-      patientRow['Age Group'] = patient.age_group || 'N/A';
-      patientRow['Marital Status'] = patient.marital_status || 'N/A';
-      patientRow['Year of Marriage'] = patient.year_of_marriage || 'N/A';
-      patientRow['No of Children'] = patient.no_of_children || 'N/A';
-      patientRow['No of Children Male'] = patient.no_of_children_male || 'N/A';
-      patientRow['No of Children Female'] = patient.no_of_children_female || 'N/A';
-      patientRow['Occupation'] = patient.occupation || 'N/A';
       patientRow['Actual Occupation'] = patient.actual_occupation || 'N/A';
-      patientRow['Education Level'] = patient.education_level || 'N/A';
       patientRow['Completed Years of Education'] = patient.completed_years_of_education || 'N/A';
-      patientRow['Patient Income'] = patient.patient_income || 'N/A';
-      patientRow['Family Income'] = patient.family_income || 'N/A';
-      patientRow['Religion'] = patient.religion || 'N/A';
-      patientRow['Family Type'] = patient.family_type || 'N/A';
-      patientRow['Locality'] = patient.locality || 'N/A';
-      patientRow['Head Name'] = patient.head_name || 'N/A';
-      patientRow['Head Age'] = patient.head_age || 'N/A';
-      patientRow['Head Relationship'] = patient.head_relationship || 'N/A';
-      patientRow['Head Education'] = patient.head_education || 'N/A';
-      patientRow['Head Occupation'] = patient.head_occupation || 'N/A';
-      patientRow['Head Income'] = patient.head_income || 'N/A';
-      patientRow['Distance from Hospital'] = patient.distance_from_hospital || 'N/A';
-      patientRow['Mobility'] = patient.mobility || 'N/A';
-      patientRow['Referred By'] = patient.referred_by || 'N/A';
-      patientRow['Exact Source'] = patient.exact_source || 'N/A';
-      patientRow['Seen in Walk-in On'] = formatDate(patient.seen_in_walk_in_on);
-      patientRow['Worked Up On'] = formatDate(patient.worked_up_on);
       patientRow['Present Address Line 1'] = patient.present_address_line_1 || 'N/A';
       patientRow['Present Address Line 2'] = patient.present_address_line_2 || 'N/A';
       patientRow['Present City/Town/Village'] = patient.present_city_town_village || 'N/A';
-      patientRow['Present District'] = patient.present_district || 'N/A';
-      patientRow['Present State'] = patient.present_state || 'N/A';
-      patientRow['Present Pin Code'] = patient.present_pin_code || 'N/A';
-      patientRow['Present Country'] = patient.present_country || 'N/A';
       patientRow['Permanent Address Line 1'] = patient.permanent_address_line_1 || 'N/A';
       patientRow['Permanent Address Line 2'] = patient.permanent_address_line_2 || 'N/A';
       patientRow['Permanent City/Town/Village'] = patient.permanent_city_town_village || 'N/A';
-      patientRow['Permanent District'] = patient.permanent_district || 'N/A';
-      patientRow['Permanent State'] = patient.permanent_state || 'N/A';
-      patientRow['Permanent Pin Code'] = patient.permanent_pin_code || 'N/A';
-      patientRow['Permanent Country'] = patient.permanent_country || 'N/A';
       patientRow['Assigned Doctor'] = patient.assigned_doctor_name || 'N/A';
       patientRow['Doctor Role'] = patient.assigned_doctor_role || 'N/A';
       patientRow['Assigned Room'] = patient.assigned_room || 'N/A';
-      patientRow['Category'] = patient.category || 'N/A';
       patientRow['Case Complexity'] = patient.case_complexity || 'N/A';
-      patientRow['Department'] = patient.department || 'N/A';
-      patientRow['Unit/Consit'] = patient.unit_consit || 'N/A';
-      patientRow['Room No'] = patient.room_no || 'N/A';
-      patientRow['Serial No'] = patient.serial_no || 'N/A';
-      patientRow['File No'] = patient.file_no || 'N/A';
-      patientRow['Unit Days'] = patient.unit_days || 'N/A';
-      patientRow['Special Clinic No'] = patient.special_clinic_no || 'N/A';
       patientRow['Created At'] = formatDateTime(patient.created_at);
+      
+      // Populate from PATIENT_REGISTRATION_FORM constants
+      populateRowFromConstants(patientRow, PATIENT_REGISTRATION_FORM, patient);
+      
       patientDetailsData.push(patientRow);
 
       // Track if patient has any past history data
@@ -566,15 +556,12 @@ const PatientsPage = () => {
                   prescriptionRow['Visit Date'] = formatDate(proforma.visit_date);
                   prescriptionRow['Visit Type'] = proforma.visit_type || 'N/A';
                   prescriptionRow['Prescription #'] = pIdx + 1;
-                  prescriptionRow['Medicine'] = prescription.medicine || 'N/A';
-                  prescriptionRow['Dosage'] = prescription.dosage || 'N/A';
                   prescriptionRow['When to Take'] = prescription.when_to_take || 'N/A';
-                  prescriptionRow['Frequency'] = prescription.frequency || 'N/A';
-                  prescriptionRow['Duration'] = prescription.duration || 'N/A';
-                  prescriptionRow['Quantity'] = prescription.quantity || 'N/A';
-                  prescriptionRow['Details'] = prescription.details || 'N/A';
-                  prescriptionRow['Notes'] = prescription.notes || 'N/A';
                   prescriptionRow['Created At'] = formatDateTime(prescription.created_at);
+                  
+                  // Populate from PRESCRIPTION_FORM constants
+                  populateRowFromConstants(prescriptionRow, PRESCRIPTION_FORM, prescription);
+                  
                   prescriptionData.push(prescriptionRow);
                 });
               }
@@ -630,30 +617,15 @@ const PatientsPage = () => {
             adlRow['Total Visits'] = adl.total_visits || 'N/A';
             adlRow['Created By'] = adl.created_by_name || 'N/A';
             adlRow['Created By Role'] = adl.created_by_role || 'N/A';
-            adlRow['Notes'] = adl.notes || 'N/A';
-            adlRow['History Narrative'] = adl.history_narrative || 'N/A';
-            adlRow['History Specific Enquiry'] = adl.history_specific_enquiry || 'N/A';
-            adlRow['History Drug Intake'] = adl.history_drug_intake || 'N/A';
-            adlRow['History Treatment Place'] = adl.history_treatment_place || 'N/A';
-            adlRow['History Treatment Dates'] = formatDate(adl.history_treatment_dates);
-            adlRow['History Treatment Drugs'] = adl.history_treatment_drugs || 'N/A';
-            adlRow['History Treatment Response'] = adl.history_treatment_response || 'N/A';
-            adlRow['Informants'] = adl.informants || 'N/A';
-            adlRow['Complaints Patient'] = adl.complaints_patient || 'N/A';
-            adlRow['Complaints Informant'] = adl.complaints_informant || 'N/A';
-            adlRow['Past History Medical'] = adl.past_history_medical || 'N/A';
-            adlRow['Past History Psychiatric Diagnosis'] = adl.past_history_psychiatric_diagnosis || 'N/A';
-            adlRow['Past History Psychiatric Treatment'] = adl.past_history_psychiatric_treatment || 'N/A';
-            adlRow['Family History Father Age'] = adl.family_history_father_age || 'N/A';
-            adlRow['Family History Father Education'] = adl.family_history_father_education || 'N/A';
-            adlRow['Family History Father Occupation'] = adl.family_history_father_occupation || 'N/A';
-            adlRow['Family History Mother Age'] = adl.family_history_mother_age || 'N/A';
-            adlRow['Family History Mother Education'] = adl.family_history_mother_education || 'N/A';
-            adlRow['Family History Mother Occupation'] = adl.family_history_mother_occupation || 'N/A';
-            adlRow['Provisional Diagnosis'] = adl.provisional_diagnosis || 'N/A';
-            adlRow['Treatment Plan'] = adl.treatment_plan || 'N/A';
-            adlRow['Consultant Comments'] = adl.consultant_comments || 'N/A';
             adlRow['Created At'] = formatDateTime(adl.created_at);
+            
+            // Populate from ADL_FILE_FORM constants
+            const adlMappings = {
+              'history_treatment_dates': (data) => formatDate(data.history_treatment_dates),
+            };
+            
+            populateRowFromConstants(adlRow, ADL_FILE_FORM, adl, adlMappings);
+            
             adlFileData.push(adlRow);
           });
         }
@@ -800,73 +772,40 @@ const PatientsPage = () => {
         return;
       }
 
-      // Define complete header sets for each sheet
-      const patientDetailsHeaders = {
+      // Helper function to build headers from constants
+      const buildHeadersFromConstants = (constantArray, additionalHeaders = {}) => {
+        const headers = {};
+        // Add additional headers first (like Patient ID, CR No, etc.)
+        Object.keys(additionalHeaders).forEach(key => {
+          headers[key] = 'N/A';
+        });
+        // Add headers from constants
+        constantArray.forEach(field => {
+          headers[field.label] = 'N/A';
+        });
+        return headers;
+      };
+
+      // Define complete header sets for each sheet using constants
+      const patientDetailsHeaders = buildHeadersFromConstants(PATIENT_REGISTRATION_FORM, {
         'Patient ID': 'N/A',
-        'CR No': 'N/A',
-        'PSY No': 'N/A',
         'ADL No': 'N/A',
-        'Name': 'N/A',
-        'Age': 'N/A',
-        'Sex': 'N/A',
-        'Contact Number': 'N/A',
-        'Age Group': 'N/A',
-        'Marital Status': 'N/A',
-        'Year of Marriage': 'N/A',
-        'No of Children': 'N/A',
-        'No of Children Male': 'N/A',
-        'No of Children Female': 'N/A',
-        'Occupation': 'N/A',
         'Actual Occupation': 'N/A',
-        'Education Level': 'N/A',
         'Completed Years of Education': 'N/A',
-        'Patient Income': 'N/A',
-        'Family Income': 'N/A',
-        'Religion': 'N/A',
-        'Family Type': 'N/A',
-        'Locality': 'N/A',
-        'Head Name': 'N/A',
-        'Head Age': 'N/A',
-        'Head Relationship': 'N/A',
-        'Head Education': 'N/A',
-        'Head Occupation': 'N/A',
-        'Head Income': 'N/A',
-        'Distance from Hospital': 'N/A',
-        'Mobility': 'N/A',
-        'Referred By': 'N/A',
-        'Exact Source': 'N/A',
-        'Seen in Walk-in On': 'N/A',
-        'Worked Up On': 'N/A',
         'Present Address Line 1': 'N/A',
         'Present Address Line 2': 'N/A',
         'Present City/Town/Village': 'N/A',
-        'Present District': 'N/A',
-        'Present State': 'N/A',
-        'Present Pin Code': 'N/A',
-        'Present Country': 'N/A',
         'Permanent Address Line 1': 'N/A',
         'Permanent Address Line 2': 'N/A',
         'Permanent City/Town/Village': 'N/A',
-        'Permanent District': 'N/A',
-        'Permanent State': 'N/A',
-        'Permanent Pin Code': 'N/A',
-        'Permanent Country': 'N/A',
         'Assigned Doctor': 'N/A',
         'Doctor Role': 'N/A',
         'Assigned Room': 'N/A',
-        'Category': 'N/A',
         'Case Complexity': 'N/A',
-        'Department': 'N/A',
-        'Unit/Consit': 'N/A',
-        'Room No': 'N/A',
-        'Serial No': 'N/A',
-        'File No': 'N/A',
-        'Unit Days': 'N/A',
-        'Special Clinic No': 'N/A',
         'Created At': 'N/A',
-      };
+      });
 
-      const clinicalProformaHeaders = {
+      const clinicalProformaHeaders = buildHeadersFromConstants(CLINICAL_PROFORMA_FORM, {
         'Patient ID': 'N/A',
         'Patient Name': 'N/A',
         'CR No': 'N/A',
@@ -876,48 +815,16 @@ const PatientsPage = () => {
         'Room Number': 'N/A',
         'Doctor': 'N/A',
         'Doctor Role': 'N/A',
-        'Informant Present': 'N/A',
-        'Nature of Information': 'N/A',
-        'Onset Duration': 'N/A',
-        'Course': 'N/A',
-        'Precipitating Factor': 'N/A',
-        'Illness Duration': 'N/A',
-        'Current Episode Since': 'N/A',
-        'Mood': 'N/A',
-        'Behaviour': 'N/A',
-        'Speech': 'N/A',
-        'Thought': 'N/A',
-        'Perception': 'N/A',
-        'Somatic': 'N/A',
-        'Bio Functions': 'N/A',
-        'Adjustment': 'N/A',
-        'Cognitive Function': 'N/A',
-        'Fits': 'N/A',
-        'Sexual Problem': 'N/A',
-        'Substance Use': 'N/A',
-        'Past History': 'N/A',
-        'Family History': 'N/A',
-        'Associated Medical/Surgical': 'N/A',
-        'MSE Behaviour': 'N/A',
-        'MSE Affect': 'N/A',
-        'MSE Thought': 'N/A',
-        'MSE Delusions': 'N/A',
-        'MSE Perception': 'N/A',
-        'MSE Cognitive Function': 'N/A',
-        'General Physical Examination': 'N/A',
-        'Diagnosis': 'N/A',
-        'ICD Code': 'N/A',
         'Disposal': 'N/A',
         'Workup Appointment': 'N/A',
         'Referred To': 'N/A',
         'Treatment Prescribed': 'N/A',
-        'Doctor Decision': 'N/A',
         'Requires ADL File': 'N/A',
         'ADL Reasoning': 'N/A',
         'Created At': 'N/A',
-      };
+      });
 
-      const adlFileHeaders = {
+      const adlFileHeaders = buildHeadersFromConstants(ADL_FILE_FORM, {
         'Patient ID': 'N/A',
         'Patient Name': 'N/A',
         'CR No': 'N/A',
@@ -931,33 +838,10 @@ const PatientsPage = () => {
         'Total Visits': 'N/A',
         'Created By': 'N/A',
         'Created By Role': 'N/A',
-        'Notes': 'N/A',
-        'History Narrative': 'N/A',
-        'History Specific Enquiry': 'N/A',
-        'History Drug Intake': 'N/A',
-        'History Treatment Place': 'N/A',
-        'History Treatment Dates': 'N/A',
-        'History Treatment Drugs': 'N/A',
-        'History Treatment Response': 'N/A',
-        'Informants': 'N/A',
-        'Complaints Patient': 'N/A',
-        'Complaints Informant': 'N/A',
-        'Past History Medical': 'N/A',
-        'Past History Psychiatric Diagnosis': 'N/A',
-        'Past History Psychiatric Treatment': 'N/A',
-        'Family History Father Age': 'N/A',
-        'Family History Father Education': 'N/A',
-        'Family History Father Occupation': 'N/A',
-        'Family History Mother Age': 'N/A',
-        'Family History Mother Education': 'N/A',
-        'Family History Mother Occupation': 'N/A',
-        'Provisional Diagnosis': 'N/A',
-        'Treatment Plan': 'N/A',
-        'Consultant Comments': 'N/A',
         'Created At': 'N/A',
-      };
+      });
 
-      const prescriptionHeaders = {
+      const prescriptionHeaders = buildHeadersFromConstants(PRESCRIPTION_FORM, {
         'Patient ID': 'N/A',
         'Patient Name': 'N/A',
         'CR No': 'N/A',
@@ -965,16 +849,9 @@ const PatientsPage = () => {
         'Visit Date': 'N/A',
         'Visit Type': 'N/A',
         'Prescription #': 'N/A',
-        'Medicine': 'N/A',
-        'Dosage': 'N/A',
         'When to Take': 'N/A',
-        'Frequency': 'N/A',
-        'Duration': 'N/A',
-        'Quantity': 'N/A',
-        'Details': 'N/A',
-        'Notes': 'N/A',
         'Created At': 'N/A',
-      };
+      });
 
       // Prepare data arrays for each sheet
       const patientDetailsData = [];
@@ -1023,70 +900,60 @@ const PatientsPage = () => {
 
         toast.info(`Processing patient ${i + 1} of ${allPatients.length}: ${patient.name || patient.cr_no || 'Unknown'}`);
 
+        // Helper function to populate row data from constants (same as in handleExport)
+        const populateRowFromConstants = (row, constantArray, data, specialMappings = {}) => {
+          constantArray.forEach(field => {
+            const fieldValue = field.value;
+            let value = data[fieldValue];
+            
+            // Apply special mappings if provided
+            if (specialMappings[fieldValue]) {
+              value = specialMappings[fieldValue](data);
+            } else {
+              // Handle date fields
+              if (fieldValue === 'date' || fieldValue === 'seen_in_walk_in_on' || fieldValue === 'worked_up_on') {
+                value = formatDate(value);
+              } else if (fieldValue === 'mobile_no') {
+                value = data.contact_number || data.mobile_no || 'N/A';
+              } else if (fieldValue === 'education') {
+                value = data.education || data.education_level || 'N/A';
+              } else if (fieldValue === 'patient_income' || fieldValue === 'family_income') {
+                value = value ? (typeof value === 'number' ? `₹${value}` : value) : 'N/A';
+              } else if (fieldValue === 'assigned_doctor_name') {
+                const doctorName = data.assigned_doctor_name || '';
+                const doctorRole = data.assigned_doctor_role || '';
+                value = doctorName ? (doctorRole ? `${doctorName} (${doctorRole})` : doctorName) : 'Not assigned';
+              } else {
+                value = (value !== null && value !== undefined && value !== '') ? value : 'N/A';
+              }
+            }
+            
+            row[field.label] = value;
+          });
+          return row;
+        };
+
         // Add patient details (always included with all headers)
         const patientRow = { ...patientDetailsHeaders };
         patientRow['Patient ID'] = patientId;
-        patientRow['CR No'] = patient.cr_no || 'N/A';
-        patientRow['PSY No'] = patient.psy_no || 'N/A';
         patientRow['ADL No'] = patient.adl_no || 'N/A';
-        patientRow['Name'] = patient.name || 'N/A';
-        patientRow['Age'] = patient.age || 'N/A';
-        patientRow['Sex'] = patient.sex || 'N/A';
-        patientRow['Contact Number'] = patient.contact_number || 'N/A';
-        patientRow['Age Group'] = patient.age_group || 'N/A';
-        patientRow['Marital Status'] = patient.marital_status || 'N/A';
-        patientRow['Year of Marriage'] = patient.year_of_marriage || 'N/A';
-        patientRow['No of Children'] = patient.no_of_children || 'N/A';
-        patientRow['No of Children Male'] = patient.no_of_children_male || 'N/A';
-        patientRow['No of Children Female'] = patient.no_of_children_female || 'N/A';
-        patientRow['Occupation'] = patient.occupation || 'N/A';
         patientRow['Actual Occupation'] = patient.actual_occupation || 'N/A';
-        patientRow['Education Level'] = patient.education_level || 'N/A';
         patientRow['Completed Years of Education'] = patient.completed_years_of_education || 'N/A';
-        patientRow['Patient Income'] = patient.patient_income || 'N/A';
-        patientRow['Family Income'] = patient.family_income || 'N/A';
-        patientRow['Religion'] = patient.religion || 'N/A';
-        patientRow['Family Type'] = patient.family_type || 'N/A';
-        patientRow['Locality'] = patient.locality || 'N/A';
-        patientRow['Head Name'] = patient.head_name || 'N/A';
-        patientRow['Head Age'] = patient.head_age || 'N/A';
-        patientRow['Head Relationship'] = patient.head_relationship || 'N/A';
-        patientRow['Head Education'] = patient.head_education || 'N/A';
-        patientRow['Head Occupation'] = patient.head_occupation || 'N/A';
-        patientRow['Head Income'] = patient.head_income || 'N/A';
-        patientRow['Distance from Hospital'] = patient.distance_from_hospital || 'N/A';
-        patientRow['Mobility'] = patient.mobility || 'N/A';
-        patientRow['Referred By'] = patient.referred_by || 'N/A';
-        patientRow['Exact Source'] = patient.exact_source || 'N/A';
-        patientRow['Seen in Walk-in On'] = formatDate(patient.seen_in_walk_in_on);
-        patientRow['Worked Up On'] = formatDate(patient.worked_up_on);
         patientRow['Present Address Line 1'] = patient.present_address_line_1 || 'N/A';
         patientRow['Present Address Line 2'] = patient.present_address_line_2 || 'N/A';
         patientRow['Present City/Town/Village'] = patient.present_city_town_village || 'N/A';
-        patientRow['Present District'] = patient.present_district || 'N/A';
-        patientRow['Present State'] = patient.present_state || 'N/A';
-        patientRow['Present Pin Code'] = patient.present_pin_code || 'N/A';
-        patientRow['Present Country'] = patient.present_country || 'N/A';
         patientRow['Permanent Address Line 1'] = patient.permanent_address_line_1 || 'N/A';
         patientRow['Permanent Address Line 2'] = patient.permanent_address_line_2 || 'N/A';
         patientRow['Permanent City/Town/Village'] = patient.permanent_city_town_village || 'N/A';
-        patientRow['Permanent District'] = patient.permanent_district || 'N/A';
-        patientRow['Permanent State'] = patient.permanent_state || 'N/A';
-        patientRow['Permanent Pin Code'] = patient.permanent_pin_code || 'N/A';
-        patientRow['Permanent Country'] = patient.permanent_country || 'N/A';
         patientRow['Assigned Doctor'] = patient.assigned_doctor_name || 'N/A';
         patientRow['Doctor Role'] = patient.assigned_doctor_role || 'N/A';
         patientRow['Assigned Room'] = patient.assigned_room || 'N/A';
-        patientRow['Category'] = patient.category || 'N/A';
         patientRow['Case Complexity'] = patient.case_complexity || 'N/A';
-        patientRow['Department'] = patient.department || 'N/A';
-        patientRow['Unit/Consit'] = patient.unit_consit || 'N/A';
-        patientRow['Room No'] = patient.room_no || 'N/A';
-        patientRow['Serial No'] = patient.serial_no || 'N/A';
-        patientRow['File No'] = patient.file_no || 'N/A';
-        patientRow['Unit Days'] = patient.unit_days || 'N/A';
-        patientRow['Special Clinic No'] = patient.special_clinic_no || 'N/A';
         patientRow['Created At'] = formatDateTime(patient.created_at);
+        
+        // Populate from PATIENT_REGISTRATION_FORM constants
+        populateRowFromConstants(patientRow, PATIENT_REGISTRATION_FORM, patient);
+        
         patientDetailsData.push(patientRow);
 
         // Track if patient has any past history data
@@ -1132,45 +999,39 @@ const PatientsPage = () => {
               proformaRow['Room Number'] = proforma.room_no || 'N/A';
               proformaRow['Doctor'] = proforma.doctor_name || proforma.assigned_doctor_name || 'N/A';
               proformaRow['Doctor Role'] = proforma.doctor_role || proforma.assigned_doctor_role || 'N/A';
-              proformaRow['Informant Present'] = formatBoolean(proforma.informant_present);
-              proformaRow['Nature of Information'] = proforma.nature_of_information || 'N/A';
-              proformaRow['Onset Duration'] = proforma.onset_duration || 'N/A';
-              proformaRow['Course'] = proforma.course || 'N/A';
-              proformaRow['Precipitating Factor'] = proforma.precipitating_factor || 'N/A';
-              proformaRow['Illness Duration'] = proforma.illness_duration || 'N/A';
-              proformaRow['Current Episode Since'] = proforma.current_episode_since || 'N/A';
-              proformaRow['Mood'] = formatArray(proforma.mood);
-              proformaRow['Behaviour'] = formatArray(proforma.behaviour);
-              proformaRow['Speech'] = formatArray(proforma.speech);
-              proformaRow['Thought'] = formatArray(proforma.thought);
-              proformaRow['Perception'] = formatArray(proforma.perception);
-              proformaRow['Somatic'] = formatArray(proforma.somatic);
-              proformaRow['Bio Functions'] = formatArray(proforma.bio_functions);
-              proformaRow['Adjustment'] = formatArray(proforma.adjustment);
-              proformaRow['Cognitive Function'] = formatArray(proforma.cognitive_function);
-              proformaRow['Fits'] = formatArray(proforma.fits);
-              proformaRow['Sexual Problem'] = formatArray(proforma.sexual_problem);
-              proformaRow['Substance Use'] = formatArray(proforma.substance_use);
-              proformaRow['Past History'] = proforma.past_history || 'N/A';
-              proformaRow['Family History'] = proforma.family_history || 'N/A';
-              proformaRow['Associated Medical/Surgical'] = formatArray(proforma.associated_medical_surgical);
-              proformaRow['MSE Behaviour'] = formatArray(proforma.mse_behaviour);
-              proformaRow['MSE Affect'] = formatArray(proforma.mse_affect);
-              proformaRow['MSE Thought'] = formatArray(proforma.mse_thought);
-              proformaRow['MSE Delusions'] = proforma.mse_delusions || 'N/A';
-              proformaRow['MSE Perception'] = formatArray(proforma.mse_perception);
-              proformaRow['MSE Cognitive Function'] = formatArray(proforma.mse_cognitive_function);
-              proformaRow['General Physical Examination'] = proforma.gpe || 'N/A';
-              proformaRow['Diagnosis'] = proforma.diagnosis || 'N/A';
-              proformaRow['ICD Code'] = proforma.icd_code || 'N/A';
               proformaRow['Disposal'] = proforma.disposal || 'N/A';
               proformaRow['Workup Appointment'] = formatDate(proforma.workup_appointment);
               proformaRow['Referred To'] = proforma.referred_to || 'N/A';
               proformaRow['Treatment Prescribed'] = proforma.treatment_prescribed || 'N/A';
-              proformaRow['Doctor Decision'] = proforma.doctor_decision || 'N/A';
               proformaRow['Requires ADL File'] = formatBoolean(proforma.requires_adl_file);
               proformaRow['ADL Reasoning'] = proforma.adl_reasoning || 'N/A';
               proformaRow['Created At'] = formatDateTime(proforma.created_at);
+              
+              // Populate from CLINICAL_PROFORMA_FORM constants
+              const clinicalMappings = {
+                'informant_present': (data) => formatBoolean(data.informant_present),
+                'mood': (data) => formatArray(data.mood),
+                'behaviour': (data) => formatArray(data.behaviour),
+                'speech': (data) => formatArray(data.speech),
+                'thought': (data) => formatArray(data.thought),
+                'perception': (data) => formatArray(data.perception),
+                'somatic': (data) => formatArray(data.somatic),
+                'bio_functions': (data) => formatArray(data.bio_functions),
+                'adjustment': (data) => formatArray(data.adjustment),
+                'cognitive_function': (data) => formatArray(data.cognitive_function),
+                'fits': (data) => formatArray(data.fits),
+                'sexual_problem': (data) => formatArray(data.sexual_problem),
+                'substance_use': (data) => formatArray(data.substance_use),
+                'associated_medical_surgical': (data) => formatArray(data.associated_medical_surgical),
+                'mse_behaviour': (data) => formatArray(data.mse_behaviour),
+                'mse_affect': (data) => formatArray(data.mse_affect),
+                'mse_thought': (data) => formatArray(data.mse_thought),
+                'mse_perception': (data) => formatArray(data.mse_perception),
+                'mse_cognitive_function': (data) => formatArray(data.mse_cognitive_function),
+              };
+              
+              populateRowFromConstants(proformaRow, CLINICAL_PROFORMA_FORM, proforma, clinicalMappings);
+              
               clinicalProformaData.push(proformaRow);
             });
 
@@ -1202,15 +1063,12 @@ const PatientsPage = () => {
                     prescriptionRow['Visit Date'] = formatDate(proforma.visit_date);
                     prescriptionRow['Visit Type'] = proforma.visit_type || 'N/A';
                     prescriptionRow['Prescription #'] = pIdx + 1;
-                    prescriptionRow['Medicine'] = prescription.medicine || 'N/A';
-                    prescriptionRow['Dosage'] = prescription.dosage || 'N/A';
                     prescriptionRow['When to Take'] = prescription.when_to_take || 'N/A';
-                    prescriptionRow['Frequency'] = prescription.frequency || 'N/A';
-                    prescriptionRow['Duration'] = prescription.duration || 'N/A';
-                    prescriptionRow['Quantity'] = prescription.quantity || 'N/A';
-                    prescriptionRow['Details'] = prescription.details || 'N/A';
-                    prescriptionRow['Notes'] = prescription.notes || 'N/A';
                     prescriptionRow['Created At'] = formatDateTime(prescription.created_at);
+                    
+                    // Populate from PRESCRIPTION_FORM constants
+                    populateRowFromConstants(prescriptionRow, PRESCRIPTION_FORM, prescription);
+                    
                     prescriptionData.push(prescriptionRow);
                   });
                 }
@@ -1266,30 +1124,15 @@ const PatientsPage = () => {
               adlRow['Total Visits'] = adl.total_visits || 'N/A';
               adlRow['Created By'] = adl.created_by_name || 'N/A';
               adlRow['Created By Role'] = adl.created_by_role || 'N/A';
-              adlRow['Notes'] = adl.notes || 'N/A';
-              adlRow['History Narrative'] = adl.history_narrative || 'N/A';
-              adlRow['History Specific Enquiry'] = adl.history_specific_enquiry || 'N/A';
-              adlRow['History Drug Intake'] = adl.history_drug_intake || 'N/A';
-              adlRow['History Treatment Place'] = adl.history_treatment_place || 'N/A';
-              adlRow['History Treatment Dates'] = formatDate(adl.history_treatment_dates);
-              adlRow['History Treatment Drugs'] = adl.history_treatment_drugs || 'N/A';
-              adlRow['History Treatment Response'] = adl.history_treatment_response || 'N/A';
-              adlRow['Informants'] = adl.informants || 'N/A';
-              adlRow['Complaints Patient'] = adl.complaints_patient || 'N/A';
-              adlRow['Complaints Informant'] = adl.complaints_informant || 'N/A';
-              adlRow['Past History Medical'] = adl.past_history_medical || 'N/A';
-              adlRow['Past History Psychiatric Diagnosis'] = adl.past_history_psychiatric_diagnosis || 'N/A';
-              adlRow['Past History Psychiatric Treatment'] = adl.past_history_psychiatric_treatment || 'N/A';
-              adlRow['Family History Father Age'] = adl.family_history_father_age || 'N/A';
-              adlRow['Family History Father Education'] = adl.family_history_father_education || 'N/A';
-              adlRow['Family History Father Occupation'] = adl.family_history_father_occupation || 'N/A';
-              adlRow['Family History Mother Age'] = adl.family_history_mother_age || 'N/A';
-              adlRow['Family History Mother Education'] = adl.family_history_mother_education || 'N/A';
-              adlRow['Family History Mother Occupation'] = adl.family_history_mother_occupation || 'N/A';
-              adlRow['Provisional Diagnosis'] = adl.provisional_diagnosis || 'N/A';
-              adlRow['Treatment Plan'] = adl.treatment_plan || 'N/A';
-              adlRow['Consultant Comments'] = adl.consultant_comments || 'N/A';
               adlRow['Created At'] = formatDateTime(adl.created_at);
+              
+              // Populate from ADL_FILE_FORM constants
+              const adlMappings = {
+                'history_treatment_dates': (data) => formatDate(data.history_treatment_dates),
+              };
+              
+              populateRowFromConstants(adlRow, ADL_FILE_FORM, adl, adlMappings);
+              
               adlFileData.push(adlRow);
             });
           }
