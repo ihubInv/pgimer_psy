@@ -3235,7 +3235,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         className="px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
                       >
                         <FiSave className="mr-2" />
-                        {isLoading  ? 'Updating Record...' : 'Update Patient'}
+                        {isLoading  ? (isCreateMode ? 'Creating...' : 'Updating...') : (isCreateMode ? 'Create Patient' : 'Update Patient')}
                       </Button>
                     </div>
                   </div>

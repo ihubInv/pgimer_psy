@@ -5575,7 +5575,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                     className="px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center gap-2"
               >
                 <FiSave className="w-4 h-4" />
-                    {isUpdating || isCreating || isUploadingFiles ? 'Saving...' : (isUpdateMode ? 'Update Out Patient Intake Record' : 'Create Out Patient Intake Record')}
+                    {isUpdating || isCreating || isUploadingFiles ? 'Saving...' : (mode === 'create' || (!isUpdateMode && !id)) ? 'Create Out Patient Intake Record' : 'Update Out Patient Intake Record'}
               </Button>
                 </div>
               </div>

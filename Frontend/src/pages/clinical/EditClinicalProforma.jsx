@@ -1644,14 +1644,14 @@ console.log("existingPrescription", existingPrescription);
                   type="submit"
                   loading={isUpdating || isUploadingFiles}
                   disabled={isUpdating || isUploadingFiles}
-                  className="bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30"
+                  className="bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30 gap-3"
                 >
                   <FiSave className="w-4 h-4" />
                   {(isUpdating || isCreating || isUploadingFiles)
                     ? 'Saving...'
-                    : isUpdateMode || proforma?.id
-                      ? 'Update Walk-in Clinical Proforma'
-                      : 'Create Walk-in Clinical Proforma'}
+                    : (mode === 'create' || (!isUpdateMode && !proforma?.id))
+                      ? 'Create Walk-in Clinical Proforma'
+                      : 'Update Walk-in Clinical Proforma'}
                 </Button>
               </div>
             </div>
@@ -2078,9 +2078,9 @@ console.log("existingPrescription", existingPrescription);
                   <FiSave className="w-4 h-4" />
                   {(isUpdating || isCreating || isUploadingFiles)
                     ? 'Saving...'
-                    : isUpdateMode || proforma?.id
-                      ? 'Update Walk-in Clinical Proforma'
-                      : 'Create Walk-in Clinical Proforma'}
+                    : (mode === 'create' || (!isUpdateMode && !proforma?.id))
+                      ? 'Create'
+                      : 'Update'}
                 </Button>
               </div>
             </div>
