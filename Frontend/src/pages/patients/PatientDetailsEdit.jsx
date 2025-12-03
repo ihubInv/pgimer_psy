@@ -4167,7 +4167,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                       </div>
                                       {isExpanded && (
                                         <div className="p-4">
-                                          {isEditMode ? (
+                                          {/* {isEditMode ? (
                                             // Editable form when edit=true
                                             <PrescriptionEdit
                                               proforma={proforma}
@@ -4175,6 +4175,16 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                               patientId={patient?.id}
                                             />
                                           ) : (
+                                            // View-only when not in edit mode
+                                            <PrescriptionView 
+                                              clinicalProformaId={proforma.id}
+                                              patientId={patient?.id}
+                                            />
+                                          )} */}
+
+{isEditMode && (
+                                            
+                                            
                                             // View-only when not in edit mode
                                             <PrescriptionView 
                                               clinicalProformaId={proforma.id}
