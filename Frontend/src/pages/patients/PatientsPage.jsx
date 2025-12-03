@@ -143,40 +143,613 @@ const PatientsPage = () => {
   };
   
 
-  const handleExport = () => {
-    // Export filtered patients if searching, otherwise all patients
-    const patientsToExport = search.trim() 
-      ? (data?.data?.patients?.filter(patient => {
-          const searchLower = search.trim().toLowerCase();
-          return (
-            patient.name?.toLowerCase().includes(searchLower) ||
-            patient.cr_no?.toLowerCase().includes(searchLower) ||
-            patient.psy_no?.toLowerCase().includes(searchLower) ||
-            patient.adl_no?.toLowerCase().includes(searchLower) ||
-            patient.assigned_doctor_name?.toLowerCase().includes(searchLower) ||
-            patient.assigned_doctor_role?.toLowerCase().includes(searchLower)
-          );
-        }) || [])
-      : (data?.data?.patients || []);
-
-    if (!patientsToExport || patientsToExport.length === 0) {
-      toast.warning('No patient data available to export');
+  const handleExport = async (patientId) => {
+    if (!patientId) {
+      toast.error('Invalid patient ID. Unable to export patient details.');
       return;
     }
-    
+
     try {
-      // Format patient data for export
-      const formattedData = formatPatientsForExport(patientsToExport);
+      toast.info('Loading patient data for export...');
       
-      // Generate filename with current date
-      const filename = `patients_export_${new Date().toISOString().split('T')[0]}`;
+      const baseUrl = import.meta.env.VITE_API_URL || '/api';
+      const todayDateString = toISTDateString(new Date());
+
+      // Fetch patient data
+      const patientResponse = await fetch(`${baseUrl}/patients/${patientId}`, {
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!patientResponse.ok) {
+        throw new Error('Failed to fetch patient details');
+      }
+
+      const patientResult = await patientResponse.json();
+      const patient = patientResult?.data?.patient;
+
+      if (!patient) {
+        toast.error('Patient data not found');
+        return;
+      }
+
+      // Define complete header sets for each sheet (same as handleExportAll)
+      const patientDetailsHeaders = {
+        'Patient ID': 'N/A',
+        'CR No': 'N/A',
+        'PSY No': 'N/A',
+        'ADL No': 'N/A',
+        'Name': 'N/A',
+        'Age': 'N/A',
+        'Sex': 'N/A',
+        'Contact Number': 'N/A',
+        'Age Group': 'N/A',
+        'Marital Status': 'N/A',
+        'Year of Marriage': 'N/A',
+        'No of Children': 'N/A',
+        'No of Children Male': 'N/A',
+        'No of Children Female': 'N/A',
+        'Occupation': 'N/A',
+        'Actual Occupation': 'N/A',
+        'Education Level': 'N/A',
+        'Completed Years of Education': 'N/A',
+        'Patient Income': 'N/A',
+        'Family Income': 'N/A',
+        'Religion': 'N/A',
+        'Family Type': 'N/A',
+        'Locality': 'N/A',
+        'Head Name': 'N/A',
+        'Head Age': 'N/A',
+        'Head Relationship': 'N/A',
+        'Head Education': 'N/A',
+        'Head Occupation': 'N/A',
+        'Head Income': 'N/A',
+        'Distance from Hospital': 'N/A',
+        'Mobility': 'N/A',
+        'Referred By': 'N/A',
+        'Exact Source': 'N/A',
+        'Seen in Walk-in On': 'N/A',
+        'Worked Up On': 'N/A',
+        'Present Address Line 1': 'N/A',
+        'Present Address Line 2': 'N/A',
+        'Present City/Town/Village': 'N/A',
+        'Present District': 'N/A',
+        'Present State': 'N/A',
+        'Present Pin Code': 'N/A',
+        'Present Country': 'N/A',
+        'Permanent Address Line 1': 'N/A',
+        'Permanent Address Line 2': 'N/A',
+        'Permanent City/Town/Village': 'N/A',
+        'Permanent District': 'N/A',
+        'Permanent State': 'N/A',
+        'Permanent Pin Code': 'N/A',
+        'Permanent Country': 'N/A',
+        'Assigned Doctor': 'N/A',
+        'Doctor Role': 'N/A',
+        'Assigned Room': 'N/A',
+        'Category': 'N/A',
+        'Case Complexity': 'N/A',
+        'Department': 'N/A',
+        'Unit/Consit': 'N/A',
+        'Room No': 'N/A',
+        'Serial No': 'N/A',
+        'File No': 'N/A',
+        'Unit Days': 'N/A',
+        'Special Clinic No': 'N/A',
+        'Created At': 'N/A',
+      };
+
+      const clinicalProformaHeaders = {
+        'Patient ID': 'N/A',
+        'Patient Name': 'N/A',
+        'CR No': 'N/A',
+        'Visit Number': 'N/A',
+        'Visit Date': 'N/A',
+        'Visit Type': 'N/A',
+        'Room Number': 'N/A',
+        'Doctor': 'N/A',
+        'Doctor Role': 'N/A',
+        'Informant Present': 'N/A',
+        'Nature of Information': 'N/A',
+        'Onset Duration': 'N/A',
+        'Course': 'N/A',
+        'Precipitating Factor': 'N/A',
+        'Illness Duration': 'N/A',
+        'Current Episode Since': 'N/A',
+        'Mood': 'N/A',
+        'Behaviour': 'N/A',
+        'Speech': 'N/A',
+        'Thought': 'N/A',
+        'Perception': 'N/A',
+        'Somatic': 'N/A',
+        'Bio Functions': 'N/A',
+        'Adjustment': 'N/A',
+        'Cognitive Function': 'N/A',
+        'Fits': 'N/A',
+        'Sexual Problem': 'N/A',
+        'Substance Use': 'N/A',
+        'Past History': 'N/A',
+        'Family History': 'N/A',
+        'Associated Medical/Surgical': 'N/A',
+        'MSE Behaviour': 'N/A',
+        'MSE Affect': 'N/A',
+        'MSE Thought': 'N/A',
+        'MSE Delusions': 'N/A',
+        'MSE Perception': 'N/A',
+        'MSE Cognitive Function': 'N/A',
+        'General Physical Examination': 'N/A',
+        'Diagnosis': 'N/A',
+        'ICD Code': 'N/A',
+        'Disposal': 'N/A',
+        'Workup Appointment': 'N/A',
+        'Referred To': 'N/A',
+        'Treatment Prescribed': 'N/A',
+        'Doctor Decision': 'N/A',
+        'Requires ADL File': 'N/A',
+        'ADL Reasoning': 'N/A',
+        'Created At': 'N/A',
+      };
+
+      const adlFileHeaders = {
+        'Patient ID': 'N/A',
+        'Patient Name': 'N/A',
+        'CR No': 'N/A',
+        'ADL File #': 'N/A',
+        'ADL No': 'N/A',
+        'File Status': 'N/A',
+        'File Created Date': 'N/A',
+        'Physical File Location': 'N/A',
+        'Last Accessed Date': 'N/A',
+        'Last Accessed By': 'N/A',
+        'Total Visits': 'N/A',
+        'Created By': 'N/A',
+        'Created By Role': 'N/A',
+        'Notes': 'N/A',
+        'History Narrative': 'N/A',
+        'History Specific Enquiry': 'N/A',
+        'History Drug Intake': 'N/A',
+        'History Treatment Place': 'N/A',
+        'History Treatment Dates': 'N/A',
+        'History Treatment Drugs': 'N/A',
+        'History Treatment Response': 'N/A',
+        'Informants': 'N/A',
+        'Complaints Patient': 'N/A',
+        'Complaints Informant': 'N/A',
+        'Past History Medical': 'N/A',
+        'Past History Psychiatric Diagnosis': 'N/A',
+        'Past History Psychiatric Treatment': 'N/A',
+        'Family History Father Age': 'N/A',
+        'Family History Father Education': 'N/A',
+        'Family History Father Occupation': 'N/A',
+        'Family History Mother Age': 'N/A',
+        'Family History Mother Education': 'N/A',
+        'Family History Mother Occupation': 'N/A',
+        'Provisional Diagnosis': 'N/A',
+        'Treatment Plan': 'N/A',
+        'Consultant Comments': 'N/A',
+        'Created At': 'N/A',
+      };
+
+      const prescriptionHeaders = {
+        'Patient ID': 'N/A',
+        'Patient Name': 'N/A',
+        'CR No': 'N/A',
+        'Proforma ID': 'N/A',
+        'Visit Date': 'N/A',
+        'Visit Type': 'N/A',
+        'Prescription #': 'N/A',
+        'Medicine': 'N/A',
+        'Dosage': 'N/A',
+        'When to Take': 'N/A',
+        'Frequency': 'N/A',
+        'Duration': 'N/A',
+        'Quantity': 'N/A',
+        'Details': 'N/A',
+        'Notes': 'N/A',
+        'Created At': 'N/A',
+      };
+
+      // Helper functions
+      const formatDate = (date) => {
+        if (!date) return 'N/A';
+        try {
+          return new Date(date).toLocaleDateString('en-IN');
+        } catch {
+          return 'N/A';
+        }
+      };
+
+      const formatDateTime = (date) => {
+        if (!date) return 'N/A';
+        try {
+          return new Date(date).toLocaleString('en-IN');
+        } catch {
+          return 'N/A';
+        }
+      };
+
+      const formatArray = (arr) => {
+        if (!arr || !Array.isArray(arr) || arr.length === 0) return 'N/A';
+        return Array.isArray(arr) ? arr.join(', ') : String(arr);
+      };
+
+      const formatBoolean = (val) => {
+        if (val === null || val === undefined) return 'N/A';
+        return val ? 'Yes' : 'No';
+      };
+
+      // Prepare data arrays for each sheet
+      const patientDetailsData = [];
+      const clinicalProformaData = [];
+      const adlFileData = [];
+      const prescriptionData = [];
+
+      // Add patient details (always included with all headers)
+      const patientRow = { ...patientDetailsHeaders };
+      patientRow['Patient ID'] = patient.id;
+      patientRow['CR No'] = patient.cr_no || 'N/A';
+      patientRow['PSY No'] = patient.psy_no || 'N/A';
+      patientRow['ADL No'] = patient.adl_no || 'N/A';
+      patientRow['Name'] = patient.name || 'N/A';
+      patientRow['Age'] = patient.age || 'N/A';
+      patientRow['Sex'] = patient.sex || 'N/A';
+      patientRow['Contact Number'] = patient.contact_number || 'N/A';
+      patientRow['Age Group'] = patient.age_group || 'N/A';
+      patientRow['Marital Status'] = patient.marital_status || 'N/A';
+      patientRow['Year of Marriage'] = patient.year_of_marriage || 'N/A';
+      patientRow['No of Children'] = patient.no_of_children || 'N/A';
+      patientRow['No of Children Male'] = patient.no_of_children_male || 'N/A';
+      patientRow['No of Children Female'] = patient.no_of_children_female || 'N/A';
+      patientRow['Occupation'] = patient.occupation || 'N/A';
+      patientRow['Actual Occupation'] = patient.actual_occupation || 'N/A';
+      patientRow['Education Level'] = patient.education_level || 'N/A';
+      patientRow['Completed Years of Education'] = patient.completed_years_of_education || 'N/A';
+      patientRow['Patient Income'] = patient.patient_income || 'N/A';
+      patientRow['Family Income'] = patient.family_income || 'N/A';
+      patientRow['Religion'] = patient.religion || 'N/A';
+      patientRow['Family Type'] = patient.family_type || 'N/A';
+      patientRow['Locality'] = patient.locality || 'N/A';
+      patientRow['Head Name'] = patient.head_name || 'N/A';
+      patientRow['Head Age'] = patient.head_age || 'N/A';
+      patientRow['Head Relationship'] = patient.head_relationship || 'N/A';
+      patientRow['Head Education'] = patient.head_education || 'N/A';
+      patientRow['Head Occupation'] = patient.head_occupation || 'N/A';
+      patientRow['Head Income'] = patient.head_income || 'N/A';
+      patientRow['Distance from Hospital'] = patient.distance_from_hospital || 'N/A';
+      patientRow['Mobility'] = patient.mobility || 'N/A';
+      patientRow['Referred By'] = patient.referred_by || 'N/A';
+      patientRow['Exact Source'] = patient.exact_source || 'N/A';
+      patientRow['Seen in Walk-in On'] = formatDate(patient.seen_in_walk_in_on);
+      patientRow['Worked Up On'] = formatDate(patient.worked_up_on);
+      patientRow['Present Address Line 1'] = patient.present_address_line_1 || 'N/A';
+      patientRow['Present Address Line 2'] = patient.present_address_line_2 || 'N/A';
+      patientRow['Present City/Town/Village'] = patient.present_city_town_village || 'N/A';
+      patientRow['Present District'] = patient.present_district || 'N/A';
+      patientRow['Present State'] = patient.present_state || 'N/A';
+      patientRow['Present Pin Code'] = patient.present_pin_code || 'N/A';
+      patientRow['Present Country'] = patient.present_country || 'N/A';
+      patientRow['Permanent Address Line 1'] = patient.permanent_address_line_1 || 'N/A';
+      patientRow['Permanent Address Line 2'] = patient.permanent_address_line_2 || 'N/A';
+      patientRow['Permanent City/Town/Village'] = patient.permanent_city_town_village || 'N/A';
+      patientRow['Permanent District'] = patient.permanent_district || 'N/A';
+      patientRow['Permanent State'] = patient.permanent_state || 'N/A';
+      patientRow['Permanent Pin Code'] = patient.permanent_pin_code || 'N/A';
+      patientRow['Permanent Country'] = patient.permanent_country || 'N/A';
+      patientRow['Assigned Doctor'] = patient.assigned_doctor_name || 'N/A';
+      patientRow['Doctor Role'] = patient.assigned_doctor_role || 'N/A';
+      patientRow['Assigned Room'] = patient.assigned_room || 'N/A';
+      patientRow['Category'] = patient.category || 'N/A';
+      patientRow['Case Complexity'] = patient.case_complexity || 'N/A';
+      patientRow['Department'] = patient.department || 'N/A';
+      patientRow['Unit/Consit'] = patient.unit_consit || 'N/A';
+      patientRow['Room No'] = patient.room_no || 'N/A';
+      patientRow['Serial No'] = patient.serial_no || 'N/A';
+      patientRow['File No'] = patient.file_no || 'N/A';
+      patientRow['Unit Days'] = patient.unit_days || 'N/A';
+      patientRow['Special Clinic No'] = patient.special_clinic_no || 'N/A';
+      patientRow['Created At'] = formatDateTime(patient.created_at);
+      patientDetailsData.push(patientRow);
+
+      // Track if patient has any past history data
+      let hasPastClinicalProforma = false;
+      let hasPastAdlFile = false;
+      let hasPastPrescription = false;
+
+      try {
+        // Fetch clinical proformas
+        const clinicalResponse = await fetch(`${baseUrl}/clinical-proformas/patient/${patientId}`, {
+          headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        });
+
+        if (clinicalResponse.ok) {
+          const clinicalResult = await clinicalResponse.json();
+          const proformas = clinicalResult?.data?.proformas || clinicalResult?.data || [];
+          
+          // Filter to only past proformas (not today's)
+          const pastProformas = proformas.filter(proforma => {
+            if (!proforma) return false;
+            const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
+            if (!proformaDate) return true; // Include proformas without date as past
+            return proformaDate !== todayDateString;
+          });
+
+          if (pastProformas.length > 0) {
+            hasPastClinicalProforma = true;
+          }
+
+          // Add past proformas to clinical proforma data
+          pastProformas.forEach((proforma, idx) => {
+            const proformaRow = { ...clinicalProformaHeaders };
+            proformaRow['Patient ID'] = patientId;
+            proformaRow['Patient Name'] = patient.name || 'N/A';
+            proformaRow['CR No'] = patient.cr_no || 'N/A';
+            proformaRow['Visit Number'] = idx + 1;
+            proformaRow['Visit Date'] = formatDate(proforma.visit_date);
+            proformaRow['Visit Type'] = proforma.visit_type || 'N/A';
+            proformaRow['Room Number'] = proforma.room_no || 'N/A';
+            proformaRow['Doctor'] = proforma.doctor_name || proforma.assigned_doctor_name || 'N/A';
+            proformaRow['Doctor Role'] = proforma.doctor_role || proforma.assigned_doctor_role || 'N/A';
+            proformaRow['Informant Present'] = formatBoolean(proforma.informant_present);
+            proformaRow['Nature of Information'] = proforma.nature_of_information || 'N/A';
+            proformaRow['Onset Duration'] = proforma.onset_duration || 'N/A';
+            proformaRow['Course'] = proforma.course || 'N/A';
+            proformaRow['Precipitating Factor'] = proforma.precipitating_factor || 'N/A';
+            proformaRow['Illness Duration'] = proforma.illness_duration || 'N/A';
+            proformaRow['Current Episode Since'] = proforma.current_episode_since || 'N/A';
+            proformaRow['Mood'] = formatArray(proforma.mood);
+            proformaRow['Behaviour'] = formatArray(proforma.behaviour);
+            proformaRow['Speech'] = formatArray(proforma.speech);
+            proformaRow['Thought'] = formatArray(proforma.thought);
+            proformaRow['Perception'] = formatArray(proforma.perception);
+            proformaRow['Somatic'] = formatArray(proforma.somatic);
+            proformaRow['Bio Functions'] = formatArray(proforma.bio_functions);
+            proformaRow['Adjustment'] = formatArray(proforma.adjustment);
+            proformaRow['Cognitive Function'] = formatArray(proforma.cognitive_function);
+            proformaRow['Fits'] = formatArray(proforma.fits);
+            proformaRow['Sexual Problem'] = formatArray(proforma.sexual_problem);
+            proformaRow['Substance Use'] = formatArray(proforma.substance_use);
+            proformaRow['Past History'] = proforma.past_history || 'N/A';
+            proformaRow['Family History'] = proforma.family_history || 'N/A';
+            proformaRow['Associated Medical/Surgical'] = formatArray(proforma.associated_medical_surgical);
+            proformaRow['MSE Behaviour'] = formatArray(proforma.mse_behaviour);
+            proformaRow['MSE Affect'] = formatArray(proforma.mse_affect);
+            proformaRow['MSE Thought'] = formatArray(proforma.mse_thought);
+            proformaRow['MSE Delusions'] = proforma.mse_delusions || 'N/A';
+            proformaRow['MSE Perception'] = formatArray(proforma.mse_perception);
+            proformaRow['MSE Cognitive Function'] = formatArray(proforma.mse_cognitive_function);
+            proformaRow['General Physical Examination'] = proforma.gpe || 'N/A';
+            proformaRow['Diagnosis'] = proforma.diagnosis || 'N/A';
+            proformaRow['ICD Code'] = proforma.icd_code || 'N/A';
+            proformaRow['Disposal'] = proforma.disposal || 'N/A';
+            proformaRow['Workup Appointment'] = formatDate(proforma.workup_appointment);
+            proformaRow['Referred To'] = proforma.referred_to || 'N/A';
+            proformaRow['Treatment Prescribed'] = proforma.treatment_prescribed || 'N/A';
+            proformaRow['Doctor Decision'] = proforma.doctor_decision || 'N/A';
+            proformaRow['Requires ADL File'] = formatBoolean(proforma.requires_adl_file);
+            proformaRow['ADL Reasoning'] = proforma.adl_reasoning || 'N/A';
+            proformaRow['Created At'] = formatDateTime(proforma.created_at);
+            clinicalProformaData.push(proformaRow);
+          });
+
+          // Fetch prescriptions for past proformas
+          for (const proforma of pastProformas) {
+            try {
+              const prescriptionResponse = await fetch(`${baseUrl}/prescriptions/by-proforma/${proforma.id}`, {
+                headers: {
+                  'Authorization': token ? `Bearer ${token}` : '',
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+              });
+
+              if (prescriptionResponse.ok) {
+                const prescriptionResult = await prescriptionResponse.json();
+                const prescriptions = prescriptionResult?.data?.prescription || [];
+                
+                if (prescriptions.length > 0) {
+                  hasPastPrescription = true;
+                }
+                
+                prescriptions.forEach((prescription, pIdx) => {
+                  const prescriptionRow = { ...prescriptionHeaders };
+                  prescriptionRow['Patient ID'] = patientId;
+                  prescriptionRow['Patient Name'] = patient.name || 'N/A';
+                  prescriptionRow['CR No'] = patient.cr_no || 'N/A';
+                  prescriptionRow['Proforma ID'] = proforma.id;
+                  prescriptionRow['Visit Date'] = formatDate(proforma.visit_date);
+                  prescriptionRow['Visit Type'] = proforma.visit_type || 'N/A';
+                  prescriptionRow['Prescription #'] = pIdx + 1;
+                  prescriptionRow['Medicine'] = prescription.medicine || 'N/A';
+                  prescriptionRow['Dosage'] = prescription.dosage || 'N/A';
+                  prescriptionRow['When to Take'] = prescription.when_to_take || 'N/A';
+                  prescriptionRow['Frequency'] = prescription.frequency || 'N/A';
+                  prescriptionRow['Duration'] = prescription.duration || 'N/A';
+                  prescriptionRow['Quantity'] = prescription.quantity || 'N/A';
+                  prescriptionRow['Details'] = prescription.details || 'N/A';
+                  prescriptionRow['Notes'] = prescription.notes || 'N/A';
+                  prescriptionRow['Created At'] = formatDateTime(prescription.created_at);
+                  prescriptionData.push(prescriptionRow);
+                });
+              }
+            } catch (e) {
+              console.warn(`Failed to fetch prescriptions for proforma ${proforma.id}:`, e);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed to fetch clinical proformas for patient ${patientId}:`, e);
+      }
+
+      try {
+        // Fetch ADL files
+        const adlResponse = await fetch(`${baseUrl}/adl-files/patient/${patientId}`, {
+          headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        });
+
+        if (adlResponse.ok) {
+          const adlResult = await adlResponse.json();
+          const adlFiles = adlResult?.data?.adlFiles || adlResult?.data?.files || adlResult?.data || [];
+          const adlFilesArray = Array.isArray(adlFiles) ? adlFiles : [];
+
+          // Filter to only past ADL files (not today's)
+          const pastAdlFiles = adlFilesArray.filter(adl => {
+            if (!adl) return false;
+            const adlDate = toISTDateString(adl.file_created_date || adl.created_at);
+            if (!adlDate) return true; // Include ADL files without date as past
+            return adlDate !== todayDateString;
+          });
+
+          if (pastAdlFiles.length > 0) {
+            hasPastAdlFile = true;
+          }
+
+          // Add past ADL files to ADL data
+          pastAdlFiles.forEach((adl, idx) => {
+            const adlRow = { ...adlFileHeaders };
+            adlRow['Patient ID'] = patientId;
+            adlRow['Patient Name'] = patient.name || 'N/A';
+            adlRow['CR No'] = patient.cr_no || 'N/A';
+            adlRow['ADL File #'] = idx + 1;
+            adlRow['ADL No'] = adl.adl_no || 'N/A';
+            adlRow['File Status'] = adl.file_status || 'N/A';
+            adlRow['File Created Date'] = formatDate(adl.file_created_date);
+            adlRow['Physical File Location'] = adl.physical_file_location || 'N/A';
+            adlRow['Last Accessed Date'] = formatDate(adl.last_accessed_date);
+            adlRow['Last Accessed By'] = adl.last_accessed_by_name || 'N/A';
+            adlRow['Total Visits'] = adl.total_visits || 'N/A';
+            adlRow['Created By'] = adl.created_by_name || 'N/A';
+            adlRow['Created By Role'] = adl.created_by_role || 'N/A';
+            adlRow['Notes'] = adl.notes || 'N/A';
+            adlRow['History Narrative'] = adl.history_narrative || 'N/A';
+            adlRow['History Specific Enquiry'] = adl.history_specific_enquiry || 'N/A';
+            adlRow['History Drug Intake'] = adl.history_drug_intake || 'N/A';
+            adlRow['History Treatment Place'] = adl.history_treatment_place || 'N/A';
+            adlRow['History Treatment Dates'] = formatDate(adl.history_treatment_dates);
+            adlRow['History Treatment Drugs'] = adl.history_treatment_drugs || 'N/A';
+            adlRow['History Treatment Response'] = adl.history_treatment_response || 'N/A';
+            adlRow['Informants'] = adl.informants || 'N/A';
+            adlRow['Complaints Patient'] = adl.complaints_patient || 'N/A';
+            adlRow['Complaints Informant'] = adl.complaints_informant || 'N/A';
+            adlRow['Past History Medical'] = adl.past_history_medical || 'N/A';
+            adlRow['Past History Psychiatric Diagnosis'] = adl.past_history_psychiatric_diagnosis || 'N/A';
+            adlRow['Past History Psychiatric Treatment'] = adl.past_history_psychiatric_treatment || 'N/A';
+            adlRow['Family History Father Age'] = adl.family_history_father_age || 'N/A';
+            adlRow['Family History Father Education'] = adl.family_history_father_education || 'N/A';
+            adlRow['Family History Father Occupation'] = adl.family_history_father_occupation || 'N/A';
+            adlRow['Family History Mother Age'] = adl.family_history_mother_age || 'N/A';
+            adlRow['Family History Mother Education'] = adl.family_history_mother_education || 'N/A';
+            adlRow['Family History Mother Occupation'] = adl.family_history_mother_occupation || 'N/A';
+            adlRow['Provisional Diagnosis'] = adl.provisional_diagnosis || 'N/A';
+            adlRow['Treatment Plan'] = adl.treatment_plan || 'N/A';
+            adlRow['Consultant Comments'] = adl.consultant_comments || 'N/A';
+            adlRow['Created At'] = formatDateTime(adl.created_at);
+            adlFileData.push(adlRow);
+          });
+        }
+      } catch (e) {
+        console.warn(`Failed to fetch ADL files for patient ${patientId}:`, e);
+      }
+
+      // If patient has no past history data in any section, add placeholder rows with N/A
+      if (!hasPastClinicalProforma) {
+        const emptyProformaRow = { ...clinicalProformaHeaders };
+        emptyProformaRow['Patient ID'] = patientId;
+        emptyProformaRow['Patient Name'] = patient.name || 'N/A';
+        emptyProformaRow['CR No'] = patient.cr_no || 'N/A';
+        clinicalProformaData.push(emptyProformaRow);
+      }
+
+      if (!hasPastAdlFile) {
+        const emptyAdlRow = { ...adlFileHeaders };
+        emptyAdlRow['Patient ID'] = patientId;
+        emptyAdlRow['Patient Name'] = patient.name || 'N/A';
+        emptyAdlRow['CR No'] = patient.cr_no || 'N/A';
+        adlFileData.push(emptyAdlRow);
+      }
+
+      if (!hasPastPrescription) {
+        const emptyPrescriptionRow = { ...prescriptionHeaders };
+        emptyPrescriptionRow['Patient ID'] = patientId;
+        emptyPrescriptionRow['Patient Name'] = patient.name || 'N/A';
+        emptyPrescriptionRow['CR No'] = patient.cr_no || 'N/A';
+        prescriptionData.push(emptyPrescriptionRow);
+      }
+
+      // Create Excel workbook
+      const wb = XLSX.utils.book_new();
+
+      // Helper function to apply header styles
+      const applyHeaderStyles = (ws) => {
+        if (!ws['!ref']) return;
+        
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+          if (!ws[cellAddress]) continue;
+          ws[cellAddress].s = {
+            fill: { fgColor: { rgb: '1e40af' } },
+            font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: {
+              top: { style: 'thin', color: { rgb: '000000' } },
+              bottom: { style: 'thin', color: { rgb: '000000' } },
+              left: { style: 'thin', color: { rgb: '000000' } },
+              right: { style: 'thin', color: { rgb: '000000' } },
+            },
+          };
+        }
+        
+        // Set column widths
+        const colWidths = [];
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          colWidths.push({ wch: 20 });
+        }
+        ws['!cols'] = colWidths;
+      };
+
+      // Sheet 1: Patient Details (always created with all headers)
+      const ws1 = XLSX.utils.json_to_sheet(patientDetailsData);
+      applyHeaderStyles(ws1);
+      XLSX.utils.book_append_sheet(wb, ws1, 'Patient Details');
+
+      // Sheet 2: Walk-in Clinical Proforma (always created with all headers)
+      const ws2 = XLSX.utils.json_to_sheet(clinicalProformaData);
+      applyHeaderStyles(ws2);
+      XLSX.utils.book_append_sheet(wb, ws2, 'Walk-in Clinical Proforma');
+
+      // Sheet 3: Out-Patient Intake Record (always created with all headers)
+      const ws3 = XLSX.utils.json_to_sheet(adlFileData);
+      applyHeaderStyles(ws3);
+      XLSX.utils.book_append_sheet(wb, ws3, 'Out-Patient Intake Record');
+
+      // Sheet 4: Prescription (always created with all headers)
+      const ws4 = XLSX.utils.json_to_sheet(prescriptionData);
+      applyHeaderStyles(ws4);
+      XLSX.utils.book_append_sheet(wb, ws4, 'Prescription');
+
+      // Generate filename with patient name and date
+      const patientName = patient.name || patient.cr_no || 'Patient';
+      const sanitizedName = patientName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const filename = `patient_${sanitizedName}_${patientId}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      // Write file
+      XLSX.writeFile(wb, filename);
       
-      // Export directly to Excel with blue theme
-      exportData(formattedData, filename, 'excel', 'blue');
-      toast.success('Excel file downloaded successfully');
-    } catch (error) {
-      console.error('Export error:', error);
-      toast.error('Failed to export patient data');
+      toast.success(`Successfully exported patient ${patient.name || patient.cr_no || patientId}'s Past History data to Excel`);
+    } catch (err) {
+      console.error('Export error:', err);
+      toast.error(err?.message || 'Failed to export patient\'s Past History data');
     }
   };
 

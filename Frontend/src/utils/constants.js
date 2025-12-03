@@ -21,12 +21,12 @@ export const normalizeRole = (role) => {
     'Resident': 'Resident',
     'Psychiatric Welfare Officer': 'Psychiatric Welfare Officer',
     // Legacy role names (for backward compatibility)
-    'System Administrator': 'Admin',
-    'MWO': 'Psychiatric Welfare Officer',
-    'JR': 'Resident',
-    'SR': 'Faculty',
-    'Faculty Residents (Junior Resident (JR))': 'Resident',
-    'Faculty Residents (Senior Resident (SR))': 'Faculty',
+    // 'System Administrator': 'Admin',
+    // 'MWO': 'Psychiatric Welfare Officer',
+    // 'JR': 'Resident',
+    // 'SR': 'Faculty',
+    // 'Faculty Residents (Junior Resident (JR))': 'Resident',
+    // 'Faculty Residents (Senior Resident (SR))': 'Faculty',
   };
   return roleMap[role] || role;
 };
@@ -82,45 +82,7 @@ export const FILE_STATUS = [
 ];
 
 
-// Indian States Options
-export const INDIAN_STATES = [
-  { value: 'andhra_pradesh', label: 'Andhra Pradesh' },
-  { value: 'arunachal_pradesh', label: 'Arunachal Pradesh' },
-  { value: 'assam', label: 'Assam' },
-  { value: 'bihar', label: 'Bihar' },
-  { value: 'chhattisgarh', label: 'Chhattisgarh' },
-  { value: 'goa', label: 'Goa' },
-  { value: 'gujarat', label: 'Gujarat' },
-  { value: 'haryana', label: 'Haryana' },
-  { value: 'himachal_pradesh', label: 'Himachal Pradesh' },
-  { value: 'jharkhand', label: 'Jharkhand' },
-  { value: 'karnataka', label: 'Karnataka' },
-  { value: 'kerala', label: 'Kerala' },
-  { value: 'madhya_pradesh', label: 'Madhya Pradesh' },
-  { value: 'maharashtra', label: 'Maharashtra' },
-  { value: 'manipur', label: 'Manipur' },
-  { value: 'meghalaya', label: 'Meghalaya' },
-  { value: 'mizoram', label: 'Mizoram' },
-  { value: 'nagaland', label: 'Nagaland' },
-  { value: 'odisha', label: 'Odisha' },
-  { value: 'punjab', label: 'Punjab' },
-  { value: 'rajasthan', label: 'Rajasthan' },
-  { value: 'sikkim', label: 'Sikkim' },
-  { value: 'tamil_nadu', label: 'Tamil Nadu' },
-  { value: 'telangana', label: 'Telangana' },
-  { value: 'tripura', label: 'Tripura' },
-  { value: 'uttar_pradesh', label: 'Uttar Pradesh' },
-  { value: 'uttarakhand', label: 'Uttarakhand' },
-  { value: 'west_bengal', label: 'West Bengal' },
-  { value: 'andaman_nicobar', label: 'Andaman and Nicobar Islands' },
-  { value: 'chandigarh', label: 'Chandigarh' },
-  { value: 'dadra_nagar_haveli', label: 'Dadra and Nagar Haveli and Daman and Diu' },
-  { value: 'delhi', label: 'Delhi' },
-  { value: 'jammu_kashmir', label: 'Jammu and Kashmir' },
-  { value: 'ladakh', label: 'Ladakh' },
-  { value: 'lakshadweep', label: 'Lakshadweep' },
-  { value: 'puducherry', label: 'Puducherry' },
-];
+
 
 
 
@@ -143,10 +105,17 @@ export const PATIENT_REGISTRATION_FORM = [
   { value: 'file_no', label: 'File Number' },
   { value: 'unit_days', label: 'Unit Days' },
   { value: "contact_number", label: "Contact Number" },
-
-
   { value: 'seen_in_walk_in_on', label: 'Seen in Walk-in On' }, // First examination date (walk-in case)
   { value: 'worked_up_on', label: 'Worked Up On' },
+
+//Address Details
+{ value: 'address_line', label: 'Address Line' },
+{ value: 'country', label: 'Country' },
+{ value: 'state', label: 'State' },
+{ value: 'district', label: 'District' },
+{ value: 'city', label: 'City' },
+{ value: 'pin_code', label: 'Pin Code' },
+
   { value: 'psy_no', label: 'PSY Number' },
   { value: 'special_clinic_no', label: 'Special Clinic Number' },
   { value: 'age_group', label: 'Age Group' },
@@ -161,7 +130,8 @@ export const PATIENT_REGISTRATION_FORM = [
   { value: 'occupation', label: 'Occupation' },
   { value: 'education', label: 'Education' },
   { value: 'locality', label: 'Locality' },
-  { value: 'income', label: 'Income' },
+  {value: 'patient_income', label: 'Patient Income' },
+  {value: 'family_income', label: 'Family Income' },
   { value: 'religion', label: 'Religion' },
   { value: 'family_type', label: 'Family Type' },
 
@@ -184,13 +154,23 @@ export const PATIENT_REGISTRATION_FORM = [
   // Referred By
   { value: 'referred_by', label: 'Referred By' },
 
-  //Address Details
-  { value: 'address_line', label: 'Address Line' },
-  { value: 'country', label: 'Country' },
-  { value: 'state', label: 'State' },
-  { value: 'district', label: 'District' },
-  { value: 'city', label: 'City' },
-  { value: 'pin_code', label: 'Pin Code' },
+  //
+
+  // Present Address
+  { value: 'present_address_line', label: 'Present Address Line' },
+  { value: 'present_city', label: 'Present City' },
+  { value: 'present_district', label: 'Present District' },
+  { value: 'present_state', label: 'Present State' },
+  { value: 'present_pin_code', label: 'Present Pin Code' },
+  { value: 'present_country', label: 'Present Country' },
+
+  //permanent address
+  { value: 'permanent_address_line', label: 'Permanent Address Line' },
+  { value: 'permanent_city', label: 'Permanent City' },
+  { value: 'permanent_district', label: 'Permanent District' },
+  { value: 'permanent_state', label: 'Permanent State' },
+  { value: 'permanent_pin_code', label: 'Permanent Pin Code' },
+  { value: 'permanent_country', label: 'Permanent Country' },
 
 
 //Addictional field
@@ -633,15 +613,15 @@ export const PRESCRIPTION_FORM = [
 
 
 export const DOSAGE_OPTIONS = [
-  { value: '1-X-1', label: '1-X-1' },
+  { value: '1-❌-1', label: '1-❌-1' },
   { value: '1-1-1', label: '1-1-1' },
-  { value: '1-X-X', label: '1-X-X' },
-  { value: 'X-1-X', label: 'X-1-X' },
-  { value: 'X-X-1', label: 'X-X-1' },
-  { value: '1-1-X', label: '1-1-X' },
-  { value: 'X-1-1', label: 'X-1-1' },
-  { value: '1-X-1½', label: '1-X-1½' },
-  { value: '½-X-½', label: '½-X-½' },
+  { value: '1-❌-❌', label: '1-❌-❌' },
+  { value: '❌-1-❌', label: '❌-1-❌' },
+  { value: '❌-❌-1', label: '❌-❌-1' },
+  { value: '1-1-❌', label: '1-1-❌' },
+  { value: '❌-1-1', label: '❌-1-1' },
+  { value: '1-❌-1½', label: '1-❌-1½' },
+  { value: '½-❌-½', label: '½-❌-½' },
   { value: 'SOS', label: 'SOS' },
   { value: 'STAT', label: 'STAT' }, 
 ]
