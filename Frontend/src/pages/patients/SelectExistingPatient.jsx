@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
@@ -9,11 +9,10 @@ import {
   FiGlobe, FiUserCheck, FiInfo, FiAlertCircle
 } from 'react-icons/fi';
 import { useSearchPatientsQuery, useAssignPatientMutation, useUpdatePatientMutation,useCreatePatientCompleteMutation, useGetAllPatientsQuery, useGetPatientByIdQuery, useCreatePatientMutation, useGetPatientVisitCountQuery } from '../../features/patients/patientsApiSlice';
-import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
+import { useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
 import Card from '../../components/Card';
 import Select from '../../components/Select';
 import Button from '../../components/Button';
-import { isJR, isSR } from '../../utils/constants';
 
 const SelectExistingPatient = () => {
   const navigate = useNavigate();
@@ -25,12 +24,11 @@ const SelectExistingPatient = () => {
   
   const [assignPatient, { isLoading: isAssigning }] = useAssignPatientMutation();
   const [updatePatient, { isLoading: isUpdating }] = useUpdatePatientMutation();
-  const { data: usersData } = useGetDoctorsQuery({ page: 1, limit: 100 });
+  const { data: roomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
 
   const [crNumber, setCrNumber] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const justUpdatedDoctorRef = useRef(false);
 
   // Search for patient by CR number
   const { data: searchData, isLoading: searching, refetch: refetchPatient } = useSearchPatientsQuery(
@@ -51,18 +49,10 @@ const SelectExistingPatient = () => {
     { skip: !selectedPatient?.id }
   );
   const [isEditingRoom, setIsEditingRoom] = useState(false);
-  const [isEditingDoctor, setIsEditingDoctor] = useState(false);
   const [newRoom, setNewRoom] = useState('');
-  const [newDoctorId, setNewDoctorId] = useState('');
 
   // Auto-select patient when CR number matches
   useEffect(() => {
-    // Skip update if we just updated the doctor (to prevent overwriting)
-    if (justUpdatedDoctorRef.current) {
-      justUpdatedDoctorRef.current = false;
-      return;
-    }
-    
     if (searchData?.data?.patients && crNumber && crNumber.length >= 2) {
       const exactMatch = searchData.data.patients.find(
         (p) => p.cr_no?.toLowerCase() === crNumber.toLowerCase()
@@ -70,21 +60,13 @@ const SelectExistingPatient = () => {
 
       if (exactMatch) {
         // If we already have a selected patient with the same ID, merge the data
-        // This preserves any local updates (like doctor assignment) that haven't been reflected in search results yet
+        // This preserves any local updates (like room assignment) that haven't been reflected in search results yet
         if (selectedPatient && selectedPatient.id === exactMatch.id) {
-          setSelectedPatient(prev => {
-            // If current state has doctor info, preserve it (it's more recent than search results)
-            const hasCurrentDoctorInfo = prev.assigned_doctor_id !== undefined && prev.assigned_doctor_id !== null;
-            return {
-              ...exactMatch,
-              // Preserve updated doctor info - prioritize current state over search results
-              assigned_doctor_id: hasCurrentDoctorInfo ? prev.assigned_doctor_id : exactMatch.assigned_doctor_id,
-              assigned_doctor_name: prev.assigned_doctor_name || exactMatch.assigned_doctor_name,
-              assigned_doctor_role: prev.assigned_doctor_role || exactMatch.assigned_doctor_role,
-              // Preserve updated room if it exists
-              assigned_room: prev.assigned_room || exactMatch.assigned_room,
-            };
-          });
+          setSelectedPatient(prev => ({
+            ...exactMatch,
+            // Preserve updated room if it exists
+            assigned_room: prev.assigned_room || exactMatch.assigned_room,
+          }));
         } else {
           setSelectedPatient(exactMatch);
         }
@@ -93,35 +75,21 @@ const SelectExistingPatient = () => {
         if (!newRoom || newRoom !== exactMatch.assigned_room) {
           setNewRoom(exactMatch.assigned_room || '');
         }
-        if (!newDoctorId || newDoctorId !== String(exactMatch.assigned_doctor_id || '')) {
-          setNewDoctorId(exactMatch.assigned_doctor_id ? String(exactMatch.assigned_doctor_id) : '');
-        }
       } else if (searchData.data.patients.length === 1) {
         // Auto-select if only one result
         const patient = searchData.data.patients[0];
         if (selectedPatient && selectedPatient.id === patient.id) {
-          setSelectedPatient(prev => {
-            // If current state has doctor info, preserve it (it's more recent than search results)
-            const hasCurrentDoctorInfo = prev.assigned_doctor_id !== undefined && prev.assigned_doctor_id !== null;
-            return {
-              ...patient,
-              // Preserve updated doctor info - prioritize current state over search results
-              assigned_doctor_id: hasCurrentDoctorInfo ? prev.assigned_doctor_id : patient.assigned_doctor_id,
-              assigned_doctor_name: prev.assigned_doctor_name || patient.assigned_doctor_name,
-              assigned_doctor_role: prev.assigned_doctor_role || patient.assigned_doctor_role,
-              // Preserve updated room if it exists
-              assigned_room: prev.assigned_room || patient.assigned_room,
-            };
-          });
+          setSelectedPatient(prev => ({
+            ...patient,
+            // Preserve updated room if it exists
+            assigned_room: prev.assigned_room || patient.assigned_room,
+          }));
         } else {
           setSelectedPatient(patient);
         }
         setSelectedPatientId(patient.id);
         if (!newRoom || newRoom !== patient.assigned_room) {
           setNewRoom(patient.assigned_room || '');
-        }
-        if (!newDoctorId || newDoctorId !== String(patient.assigned_doctor_id || '')) {
-          setNewDoctorId(patient.assigned_doctor_id ? String(patient.assigned_doctor_id) : '');
         }
       } else {
         setSelectedPatient(null);
@@ -155,58 +123,6 @@ const SelectExistingPatient = () => {
     }
   };
 
-  const handleUpdateDoctor = async () => {
-    try {
-      // Validate that a doctor is selected
-      if (!newDoctorId || newDoctorId === '') {
-        toast.error('Please select a doctor');
-        return;
-      }
-
-      const doctorId = Number(newDoctorId);
-      if (isNaN(doctorId) || doctorId <= 0) {
-        toast.error('Invalid doctor selection');
-        return;
-      }
-
-      // Find the selected doctor from usersData to get name and role
-      const selectedDoctor = usersData?.data?.users?.find(u => u.id === doctorId);
-
-      // Use updatePatient instead of assignPatient to avoid creating a visit record
-      // assignPatient creates a visit record, which we don't want when just updating doctor
-      // CRITICAL: updatePatient now validates that doctor has selected a room today
-      await updatePatient({
-        id: selectedPatient.id,
-        assigned_doctor_id: doctorId,
-      }).unwrap();
-      
-      // Set flag to prevent useEffect from overwriting our update
-      justUpdatedDoctorRef.current = true;
-      
-      // Update local state immediately with new doctor info
-      setSelectedPatient(prev => ({
-        ...prev,
-        assigned_doctor_id: doctorId,
-        assigned_doctor_name: selectedDoctor?.name || null,
-        assigned_doctor_role: selectedDoctor?.role || null,
-      }));
-      
-      toast.success('Doctor assigned successfully!');
-      setIsEditingDoctor(false);
-      
-      // Only refetch patient details - don't refetch search query as it may have stale data
-      // The local state update above ensures UI shows the new doctor immediately
-      await refetchDemographics();
-    } catch (err) {
-      // Show clear error message if doctor hasn't selected room today
-      const errorMessage = err?.data?.message || err?.message || 'Failed to assign doctor';
-      if (errorMessage.includes('select a room for today') || errorMessage.includes('room selection')) {
-        toast.error('Please select a room for today before assigning patients. Room selection is required each day.');
-      } else {
-        toast.error(errorMessage);
-      }
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -356,7 +272,7 @@ const SelectExistingPatient = () => {
                     Assignment & Status
                   </h5>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
                     {/* Room Assignment */}
                     <div className="bg-white rounded-lg p-4 border border-green-100">
                       <div className="flex items-center gap-2 mb-3">
@@ -365,12 +281,18 @@ const SelectExistingPatient = () => {
                       </div>
                       {isEditingRoom ? (
                         <div className="flex items-center gap-2">
-                          <input
-                            type="text"
+                          <Select
                             value={newRoom}
                             onChange={(e) => setNewRoom(e.target.value)}
-                            placeholder="e.g., Ward A-101"
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            options={[
+                              { value: '', label: 'Select room or leave empty for auto-assignment' },
+                              ...(roomsData?.data?.rooms || []).map((room) => ({
+                                value: room.room_number,
+                                label: room.room_number + (room.description ? ` - ${room.description}` : '')
+                              }))
+                            ]}
+                            placeholder="Select room or leave empty for auto-assignment"
+                            className="flex-1"
                           />
                           <Button
                             type="button"
@@ -400,74 +322,6 @@ const SelectExistingPatient = () => {
                           <button
                             type="button"
                             onClick={() => setIsEditingRoom(true)}
-                            className="text-primary-600 hover:text-primary-700 p-1 rounded-lg hover:bg-primary-50"
-                          >
-                            <FiEdit2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Doctor Assignment */}
-                    <div className="bg-white rounded-lg p-4 border border-green-100">
-                      <div className="flex items-center gap-2 mb-3">
-                        <FiUser className="w-4 h-4 text-green-600" />
-                        <span className="text-sm font-semibold text-gray-700">Assigned Doctor</span>
-                      </div>
-                      {isEditingDoctor ? (
-                        <div className="flex items-center gap-2">
-                          <Select
-                            value={newDoctorId}
-                            onChange={(e) => setNewDoctorId(e.target.value)}
-                            options={(usersData?.data?.users || [])
-                              .map((u) => ({ 
-                                value: String(u.id), 
-                                label: `${u.name} - ${isJR(u.role) ? 'Resident' : isSR(u.role) ? 'Faculty' : u.role}` 
-                              }))}
-                            placeholder="Select doctor"
-                            className="flex-1"
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={handleUpdateDoctor}
-                            loading={isUpdating}
-                            className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
-                          >
-                            <FiCheck className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setIsEditingDoctor(false);
-                              setNewDoctorId(selectedPatient.assigned_doctor_id ? String(selectedPatient.assigned_doctor_id) : '');
-                            }}
-                            className="px-3 py-2 border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg"
-                          >
-                            <FiX className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {selectedPatient.assigned_doctor_name ? (
-                              <>
-                                <span className="text-gray-900 font-medium">{selectedPatient.assigned_doctor_name}</span>
-                                {selectedPatient.assigned_doctor_role && (
-                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                                    {selectedPatient.assigned_doctor_role}
-                                  </span>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-gray-500 italic">Not assigned</span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setIsEditingDoctor(true)}
                             className="text-primary-600 hover:text-primary-700 p-1 rounded-lg hover:bg-primary-50"
                           >
                             <FiEdit2 className="h-4 w-4" />
