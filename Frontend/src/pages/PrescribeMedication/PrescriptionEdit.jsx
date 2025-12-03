@@ -44,6 +44,8 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
   const [showLoadTemplateModal, setShowLoadTemplateModal] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
+  const [rowIndexToSave, setRowIndexToSave] = useState(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   
   // Debug: Log medicines data
   useEffect(() => {
@@ -175,6 +177,17 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
 
   const addPrescriptionRow = () => {
     setPrescriptionRows(prev => [...prev, { medicine: '', dosage: '', when: '', frequency: '', duration: '', qty: '', details: '', notes: '' }]);
+  };
+
+  const removeAllMedicines = () => {
+    if (prescriptionRows.length === 0) {
+      toast.info('No medicines to remove');
+      return;
+    }
+    
+    // Reset to one empty row
+    setPrescriptionRows([{ medicine: '', dosage: '', when: '', frequency: '', duration: '', qty: '', details: '', notes: '' }]);
+    toast.success('All medicines removed');
   };
 
 
@@ -497,6 +510,81 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
     }
   };
 
+  // Save single prescription row as template
+  const handleSaveRowAsTemplate = async (rowIdx) => {
+    const row = prescriptionRows[rowIdx];
+    
+    if (!row.medicine || !row.medicine.trim()) {
+      toast.error('Please enter a medicine name before saving as template');
+      return;
+    }
+
+    // Set the template name to the medicine name as default
+    setTemplateName(row.medicine.trim());
+    setTemplateDescription(`Template for ${row.medicine.trim()}`);
+    
+    // Store the row index to save after user confirms
+    setRowIndexToSave(rowIdx);
+    setShowSaveTemplateModal(true);
+  };
+
+  // Save single row template after modal confirmation
+  const handleSaveSingleRowTemplate = async () => {
+    if (rowIndexToSave === null) return;
+    
+    const row = prescriptionRows[rowIndexToSave];
+    
+    if (!templateName.trim()) {
+      toast.error('Please enter a template name');
+      return;
+    }
+
+    try {
+      const templateData = {
+        name: templateName.trim(),
+        description: templateDescription.trim() || null,
+        prescription: [{
+          medicine: row.medicine.trim(),
+          dosage: row.dosage?.trim() || null,
+          when: row.when?.trim() || null,
+          frequency: row.frequency?.trim() || null,
+          duration: row.duration?.trim() || null,
+          qty: row.qty?.trim() || null,
+          details: row.details?.trim() || null,
+          notes: row.notes?.trim() || null,
+        }]
+      };
+
+      await createPrescriptionTemplate(templateData).unwrap();
+      toast.success('Template saved successfully!');
+      setShowSaveTemplateModal(false);
+      setTemplateName('');
+      setTemplateDescription('');
+      setRowIndexToSave(null);
+    } catch (error) {
+      console.error('Error saving template:', error);
+      toast.error(error?.data?.message || 'Failed to save template. Please try again.');
+    }
+  };
+
+  // Save all prescriptions as template
+  const handleSaveAllAsTemplate = async () => {
+    const validPrescriptions = prescriptionRows.filter(p => p.medicine && p.medicine.trim());
+    
+    if (validPrescriptions.length === 0) {
+      toast.error('Please add at least one medication with a valid medicine name');
+      return;
+    }
+
+    // Set default template name
+    setTemplateName(`Prescription Template - ${new Date().toLocaleDateString()}`);
+    setTemplateDescription(`Template containing ${validPrescriptions.length} medication(s)`);
+    
+    // Clear row index to indicate saving all
+    setRowIndexToSave(null);
+    setShowSaveTemplateModal(true);
+  };
+
   // Load template into prescriptions (appends to existing)
   const handleLoadTemplate = (template) => {
     if (!template.prescription || !Array.isArray(template.prescription) || template.prescription.length === 0) {
@@ -583,7 +671,42 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                   <p className="text-sm text-amber-100">Edit medications for the patient</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="min-w-[200px] [&_button]:!text-white [&_button]:!bg-white/20 [&_button]:!hover:bg-white/30 [&_button]:!border-white/30 [&_button]:!backdrop-blur-sm [&_button]:!placeholder:text-white/70 [&_button>span]:!text-white">
+                    <Select
+                      name="load-template"
+                      value={selectedTemplateId}
+                      onChange={(e) => {
+                        const templateId = e.target.value;
+                        if (templateId) {
+                          const selectedTemplate = templatesData?.data?.templates?.find(t => t.id === parseInt(templateId));
+                          if (selectedTemplate) {
+                            handleLoadTemplate(selectedTemplate);
+                            // Reset the select value after loading
+                            setSelectedTemplateId('');
+                          }
+                        }
+                      }}
+                      options={templatesData?.data?.templates?.map(template => ({
+                        value: String(template.id),
+                        label: `${template.name}${template.description ? ` - ${template.description}` : ''} (${Array.isArray(template.prescription) ? template.prescription.length : 0} meds)`
+                      })) || []}
+                      placeholder="Load Template"
+                      searchable={true}
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleSaveAllAsTemplate}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm border-white/30 text-white hover:text-white"
+                >
+                  <FiBookmark className="w-4 h-4" />
+                  Save All Template
+                </Button>
                 <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-white text-sm font-medium">
                   {prescriptionRows.filter(p => p.medicine || p.dosage || p.frequency || p.details).length} medication(s)
                 </span>
@@ -591,129 +714,118 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
             </div>
           </div>
 
-          <div className="overflow-x-auto" style={{ overflowY: 'visible', maxHeight: '600px' }}>
-            <table className="min-w-full text-sm" style={{ position: 'relative' }}>
-              <thead className="bg-gradient-to-r from-gray-50 to-slate-50 border-b-2 border-gray-200 sticky top-0 z-10">
-                <tr>
-                  <th className="px-4 py-3 text-left w-12 font-semibold text-gray-700 bg-gradient-to-r from-gray-50 to-slate-50">
-                    <div className="flex items-center gap-1">
-                      <span>#</span>
-                    </div>
-                  </th>
-                  {PRESCRIPTION_FORM.map((field) => {
-                    const icons = {
-                      medicine: <FiDroplet className="w-4 h-4" />,
-                      dosage: <FiActivity className="w-4 h-4" />,
-                      frequency: <FiClock className="w-4 h-4" />,
-                      duration: <FiCalendar className="w-4 h-4" />,
-                      qty: <FiPackage className="w-4 h-4" />,
-                      details: <FiFileText className="w-4 h-4" />,
-                      notes: <FiFileText className="w-4 h-4" />
-                    };
-                    return (
-                      <th key={field.value} className="px-4 py-3 text-left font-semibold text-gray-700 bg-gradient-to-r from-gray-50 to-slate-50">
-                        <div className="flex items-center gap-2">
-                          {icons[field.value] || <FiFileText className="w-4 h-4" />}
-                          <span>{field.label}</span>
-                        </div>
-                      </th>
-                    );
-                  })}
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gradient-to-r from-gray-50 to-slate-50">
-                    <div className="flex items-center gap-2">
-                      <FiClock className="w-4 h-4" />
-                      <span>When</span>
-                    </div>
-                  </th>
-                  <th className="px-4 py-3 text-center w-24 font-semibold text-gray-700 bg-gradient-to-r from-gray-50 to-slate-50">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {prescriptionRows.map((row, idx) => (
-                  <tr key={row.id || idx} className="border-t border-gray-100 hover:bg-gradient-to-r hover:from-amber-50/50 hover:to-yellow-50/50 transition-colors duration-150">
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-amber-100 to-yellow-100 text-amber-700 font-semibold text-sm">
+          <div className="overflow-y-auto" style={{ maxHeight: '600px' }}>
+            <div className="space-y-4 p-4">
+              {prescriptionRows.map((row, idx) => (
+                <div key={row.id || idx} className="bg-white border-2 border-amber-200 rounded-lg p-4 hover:shadow-lg transition-all duration-200">
+                  {/* Header with number and remove button */}
+                  <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-amber-100 to-yellow-100 text-amber-700 font-semibold text-base">
                         {idx + 1}
                       </div>
-                    </td>
-                    {/* Medicine Field - Special handling with autocomplete */}
-                    <td className="px-4 py-3">
-                      <div className="relative w-full">
-                        <div className="relative">
-                          <FiDroplet className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
-                          <input
-                            ref={(el) => { inputRefs.current[`medicine-${idx}`] = el; }}
-                            type="text"
-                            value={row.medicine || ''}
-                            onChange={(e) => {
-                              const newValue = e.target.value;
-                              updatePrescriptionCell(idx, 'medicine', newValue);
-                            }}
-                            onKeyDown={(e) => handleMedicineKeyDown(e, idx)}
-                            onFocus={() => {
-                              // Show suggestions when focused, even if input is empty
-                              if (allMedicines.length > 0) {
+                      <h3 className="text-base font-semibold text-gray-800">Medication #{idx + 1}</h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        type="button" 
+                        onClick={() => handleSaveRowAsTemplate(idx)} 
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors duration-200 border border-purple-200 hover:border-purple-300"
+                      >
+                        <FiBookmark className="w-4 h-4" />
+                        Save as Template
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => removePrescriptionRow(idx)} 
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors duration-200 border border-red-200 hover:border-red-300"
+                      >
+                        <FiTrash2 className="w-4 h-4" />
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Grid Layout: 2 rows, 4 columns */}
+                  {/* Row 1: Medicine | Dosage | Frequency | When */}
+                  <div className="grid grid-cols-4 gap-4 mb-4">
+                    {/* Medicine Field */}
+                    <div className="relative">
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                        <FiDroplet className="w-3 h-3 inline mr-1" />
+                        Medicine
+                      </label>
+                      <div className="relative">
+                        <FiDroplet className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+                        <input
+                          ref={(el) => { inputRefs.current[`medicine-${idx}`] = el; }}
+                          type="text"
+                          value={row.medicine || ''}
+                          onChange={(e) => {
+                            const newValue = e.target.value;
+                            updatePrescriptionCell(idx, 'medicine', newValue);
+                          }}
+                          onKeyDown={(e) => handleMedicineKeyDown(e, idx)}
+                          onFocus={() => {
+                            if (allMedicines.length > 0) {
                               if (row.medicine && row.medicine.trim().length > 0) {
                                 const searchTerm = row.medicine.toLowerCase().trim();
                                 const filtered = allMedicines.filter(med =>
                                   med.name.toLowerCase().includes(searchTerm) ||
-                                    (med.category && med.category.toLowerCase().includes(searchTerm))
+                                  (med.category && med.category.toLowerCase().includes(searchTerm))
                                 ).slice(0, 20);
                                 setMedicineSuggestions(prev => ({ ...prev, [idx]: filtered }));
-                                  setShowSuggestions(prev => ({ ...prev, [idx]: filtered.length > 0 }));
-                                } else {
-                                  // Show all medicines when input is empty and focused
-                                  const topMedicines = allMedicines.slice(0, 20);
-                                  setMedicineSuggestions(prev => ({ ...prev, [idx]: topMedicines }));
+                                setShowSuggestions(prev => ({ ...prev, [idx]: filtered.length > 0 }));
+                              } else {
+                                const topMedicines = allMedicines.slice(0, 20);
+                                setMedicineSuggestions(prev => ({ ...prev, [idx]: topMedicines }));
                                 setShowSuggestions(prev => ({ ...prev, [idx]: true }));
-                                }
-
-                                // Calculate position for portal dropdown
-                                setTimeout(() => {
-                                  const input = inputRefs.current[`medicine-${idx}`];
-                                  if (input) {
-                                    const rect = input.getBoundingClientRect();
-                                    setDropdownPositions(prev => ({
-                                      ...prev,
-                                      [idx]: {
-                                        top: rect.bottom + 4,
-                                        left: rect.left,
-                                        width: rect.width
-                                      }
-                                    }));
-                                  }
-                                }, 0);
                               }
-                            }}
-                            onBlur={() => {
                               setTimeout(() => {
-                                setShowSuggestions(prev => ({ ...prev, [idx]: false }));
-                              }, 200);
-                            }}
-                            className="w-full pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white hover:border-amber-300"
-                            placeholder="Type to search medicine..."
-                            autoComplete="off"
-                          />
-                        </div>
-                        {/* Dropdown using portal to render in document.body (like Select component) */}
-                        {showSuggestions[idx] && medicineSuggestions[idx] && Array.isArray(medicineSuggestions[idx]) && medicineSuggestions[idx].length > 0 && dropdownPositions[idx] && createPortal(
+                                const input = inputRefs.current[`medicine-${idx}`];
+                                if (input) {
+                                  const rect = input.getBoundingClientRect();
+                                  setDropdownPositions(prev => ({
+                                    ...prev,
+                                    [idx]: {
+                                      top: rect.bottom + 4,
+                                      left: rect.left,
+                                      width: rect.width
+                                    }
+                                  }));
+                                }
+                              }, 0);
+                            }
+                          }}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setShowSuggestions(prev => ({ ...prev, [idx]: false }));
+                            }, 200);
+                          }}
+                          className="w-full pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white hover:border-amber-300 text-sm"
+                          placeholder="Type to search..."
+                          autoComplete="off"
+                        />
+                      </div>
+                      {/* Dropdown using portal */}
+                      {showSuggestions[idx] && medicineSuggestions[idx] && Array.isArray(medicineSuggestions[idx]) && medicineSuggestions[idx].length > 0 && dropdownPositions[idx] && createPortal(
+                        <div
+                          style={{
+                            position: 'fixed',
+                            top: `${dropdownPositions[idx].top}px`,
+                            left: `${dropdownPositions[idx].left}px`,
+                            width: `${dropdownPositions[idx].width}px`,
+                            zIndex: 999999,
+                          }}
+                        >
                           <div
+                            className="bg-white border-2 border-amber-200 rounded-lg shadow-2xl overflow-hidden"
                             style={{
-                              position: 'fixed',
-                              top: `${dropdownPositions[idx].top}px`,
-                              left: `${dropdownPositions[idx].left}px`,
-                              width: `${dropdownPositions[idx].width}px`,
-                              zIndex: 999999,
-                            }}
-                          >
-                            <div
-                              className="bg-white border-2 border-amber-200 rounded-lg shadow-2xl overflow-hidden"
-                              style={{
-                                maxHeight: '280px',
+                              maxHeight: '280px',
                               boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
                             }}
                           >
-                              <div className="overflow-y-auto max-h-[280px] custom-scrollbar">
+                            <div className="overflow-y-auto max-h-[280px] custom-scrollbar">
                               {medicineSuggestions[idx].map((med, medIdx) => (
                                 <div
                                   key={`${med.name}-${medIdx}`}
@@ -726,99 +838,142 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                                       : 'hover:bg-amber-50/50'
                                   }`}
                                 >
-                                    <div className="flex items-center justify-between">
-                                  <div className="font-semibold text-gray-900 text-sm">{med.name}</div>
-                                      {med.category && (
-                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
-                                          {med.category.replace('_', ' ')}
-                                        </span>
-                                      )}
-                                    </div>
+                                  <div className="flex items-center justify-between">
+                                    <div className="font-semibold text-gray-900 text-sm">{med.name}</div>
+                                    {med.category && (
+                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
+                                        {med.category.replace('_', ' ')}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </div>
                           </div>
-                          </div>,
-                          document.body
-                        )}
-                      </div>
-                    </td>
-                    {/* Dynamic fields from PRESCRIPTION_FORM (excluding medicine which is handled above) */}
-                    {PRESCRIPTION_FORM.filter(field => field.value !== 'medicine').map((field) => {
-                      const fieldIcons = {
-                        dosage: <FiActivity className="w-4 h-4 text-gray-400" />,
-                        frequency: <FiClock className="w-4 h-4 text-gray-400" />,
-                        duration: <FiCalendar className="w-4 h-4 text-gray-400" />,
-                        qty: <FiPackage className="w-4 h-4 text-gray-400" />,
-                        details: <FiFileText className="w-4 h-4 text-gray-400" />,
-                        notes: <FiFileText className="w-4 h-4 text-gray-400" />
-                      };
-                      const placeholders = {
-                        dosage: 'Select dosage',
-                        frequency: 'Select frequency',
-                        duration: 'Select duration',
-                        qty: 'Select quantity',
-                        details: 'Details',
-                        notes: 'Notes'
-                      };
-                      const isSelectField = ['dosage', 'frequency', 'duration', 'qty'].includes(field.value);
-                      
-                      return (
-                        <td key={field.value} className="px-4 py-3">
-                          {isSelectField ? (
-                            <Select
-                              name={`${field.value}-${idx}`}
-                              value={row[field.value] || ''}
-                              onChange={(e) => updatePrescriptionCell(idx, field.value, e.target.value)}
-                              options={PRESCRIPTION_OPTIONS[field.value === 'qty' ? 'QUANTITY' : field.value.toUpperCase()] || []}
-                              placeholder={placeholders[field.value]}
-                              searchable={true}
-                              className="bg-white border-2 border-gray-200"
-                            />
-                          ) : (
-                            <div className="relative">
-                              {fieldIcons[field.value] && (
-                                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                                  {fieldIcons[field.value]}
-                                </div>
-                              )}
-                              <input
-                                value={row[field.value] || ''}
-                                onChange={(e) => updatePrescriptionCell(idx, field.value, e.target.value)}
-                                className={`w-full border-2 border-gray-200 rounded-lg px-3 py-2 ${fieldIcons[field.value] ? 'pl-10' : 'pl-3'} focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white hover:border-amber-300`}
-                                placeholder={placeholders[field.value]}
-                              />
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                    {/* When field - not in PRESCRIPTION_FORM but needed */}
-                    <td className="px-4 py-3">
+                        </div>,
+                        document.body
+                      )}
+                    </div>
+
+                    {/* Dosage Field */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                        <FiActivity className="w-3 h-3 inline mr-1" />
+                        Dosage
+                      </label>
+                      <Select
+                        name={`dosage-${idx}`}
+                        value={row.dosage || ''}
+                        onChange={(e) => updatePrescriptionCell(idx, 'dosage', e.target.value)}
+                        options={PRESCRIPTION_OPTIONS.DOSAGE || []}
+                        placeholder="Select dosage"
+                        searchable={true}
+                        className="bg-white border-2 border-gray-200 text-sm"
+                      />
+                    </div>
+
+                    {/* Frequency Field */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                        <FiClock className="w-3 h-3 inline mr-1" />
+                        Frequency
+                      </label>
+                      <Select
+                        name={`frequency-${idx}`}
+                        value={row.frequency || ''}
+                        onChange={(e) => updatePrescriptionCell(idx, 'frequency', e.target.value)}
+                        options={PRESCRIPTION_OPTIONS.FREQUENCY || []}
+                        placeholder="Select frequency"
+                        searchable={true}
+                        className="bg-white border-2 border-gray-200 text-sm"
+                      />
+                    </div>
+
+                    {/* When Field */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                        <FiClock className="w-3 h-3 inline mr-1" />
+                        When
+                      </label>
                       <Select
                         name={`when-${idx}`}
                         value={row.when || ''}
                         onChange={(e) => updatePrescriptionCell(idx, 'when', e.target.value)}
-                        options={PRESCRIPTION_OPTIONS.WHEN}
+                        options={PRESCRIPTION_OPTIONS.WHEN || []}
                         placeholder="Select when"
                         searchable={true}
-                        className="bg-white border-2 border-gray-200"
+                        className="bg-white border-2 border-gray-200 text-sm"
                       />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button 
-                        type="button" 
-                        onClick={() => removePrescriptionRow(idx)} 
-                        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors duration-200 border border-red-200 hover:border-red-300"
-                      >
-                        <FiTrash2 className="w-4 h-4" />
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Duration | Qty | Details | Notes */}
+                  <div className="grid grid-cols-4 gap-4">
+                    {/* Duration Field */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                        <FiCalendar className="w-3 h-3 inline mr-1" />
+                        Duration
+                      </label>
+                      <Select
+                        name={`duration-${idx}`}
+                        value={row.duration || ''}
+                        onChange={(e) => updatePrescriptionCell(idx, 'duration', e.target.value)}
+                        options={PRESCRIPTION_OPTIONS.DURATION || []}
+                        placeholder="Select duration"
+                        searchable={true}
+                        className="bg-white border-2 border-gray-200 text-sm"
+                      />
+                    </div>
+
+                    {/* Qty Field */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                        <FiPackage className="w-3 h-3 inline mr-1" />
+                        Quantity
+                      </label>
+                      <Select
+                        name={`qty-${idx}`}
+                        value={row.qty || ''}
+                        onChange={(e) => updatePrescriptionCell(idx, 'qty', e.target.value)}
+                        options={PRESCRIPTION_OPTIONS.QUANTITY || []}
+                        placeholder="Select quantity"
+                        searchable={true}
+                        className="bg-white border-2 border-gray-200 text-sm"
+                      />
+                    </div>
+
+                    {/* Details Field */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                        <FiFileText className="w-3 h-3 inline mr-1" />
+                        Details
+                      </label>
+                      <input
+                        value={row.details || ''}
+                        onChange={(e) => updatePrescriptionCell(idx, 'details', e.target.value)}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white hover:border-amber-300 text-sm"
+                        placeholder="Additional details"
+                      />
+                    </div>
+
+                    {/* Notes Field */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                        <FiFileText className="w-3 h-3 inline mr-1" />
+                        Notes
+                      </label>
+                      <input
+                        value={row.notes || ''}
+                        onChange={(e) => updatePrescriptionCell(idx, 'notes', e.target.value)}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white hover:border-amber-300 text-sm"
+                        placeholder="Notes"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Datalist suggestions for prescription fields */}
@@ -867,13 +1022,13 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
               </Button>
               <Button
                 type="button"
-                onClick={() => setShowLoadTemplateModal(true)}
+                onClick={removeAllMedicines}
                 variant="outline"
                 size="sm"
-                className="flex items-center gap-2 bg-white hover:bg-blue-50 border-2 border-blue-300 hover:border-blue-500 text-blue-700"
+                className="flex items-center gap-2 bg-white hover:bg-red-50 border-2 border-red-300 hover:border-red-500 text-red-700 hover:text-red-800"
               >
-                <FiDownload className="w-4 h-4" />
-                Load Template
+                <FiTrash2 className="w-4 h-4" />
+                Remove All Medicine
               </Button>
               {existingPrescriptions.length > 0 && (
                 <Button
@@ -888,16 +1043,6 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
               )}
             </div>
             <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                onClick={() => setShowSaveTemplateModal(true)}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 bg-white hover:bg-purple-50 border-2 border-purple-300 hover:border-purple-500 text-purple-700"
-              >
-                <FiBookmark className="w-4 h-4" />
-                Save as Template
-              </Button>
               {proforma.id && (
                 <Button
                   type="button"
@@ -924,6 +1069,7 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
           setTemplateDescription('');
         }}
         title="Save as Template"
+        size="lg"
       >
         <div className="space-y-4">
           <div>
@@ -966,7 +1112,7 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
             </Button>
             <Button
               type="button"
-              onClick={handleSaveAsTemplate}
+              onClick={rowIndexToSave !== null ? handleSaveSingleRowTemplate : handleSaveAsTemplate}
               disabled={isSavingTemplate || !templateName.trim()}
               className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50"
             >

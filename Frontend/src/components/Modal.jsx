@@ -41,63 +41,75 @@ const Modal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center"
       aria-labelledby="modal-title"
       role="dialog"
       aria-modal="true"
     >
+      {/* Modal panel - reduced glassmorphism effect */}
       <div
-        className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
-        onClick={handleOverlayClick}
+        className={`relative z-50 backdrop-blur-lg bg-gradient-to-br from-white/70 via-white/65 to-white/60 border border-white/40 rounded-2xl text-left overflow-hidden transform transition-all w-full mx-4 ${sizes[size]}`}
+        style={{
+          boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.2), inset 0 1px 1px 0 rgba(255, 255, 255, 0.3)',
+          backdropFilter: 'blur(12px) saturate(130%)',
+          WebkitBackdropFilter: 'blur(12px) saturate(130%)',
+        }}
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* Background overlay with glassmorphism */}
-        <div
-          className="fixed inset-0 backdrop-blur-md bg-black/30 transition-opacity"
-          aria-hidden="true"
-        />
-
-        {/* Center modal */}
-        <span
-          className="hidden sm:inline-block sm:align-middle sm:h-screen"
-          aria-hidden="true"
-        >
-          &#8203;
-        </span>
-
-        {/* Modal panel with glassmorphism */}
-        <div
-          className={`inline-block align-bottom backdrop-blur-2xl bg-white/80 border border-white/40 rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle w-full ${sizes[size]}`}
-        >
-          {/* Header */}
-          {title && (
-            <div className="px-6 py-4 border-b border-white/30 backdrop-blur-sm bg-white/30 flex justify-between items-center">
-              <h3
-                className="text-lg font-semibold text-gray-900"
-                id="modal-title"
-              >
-                {title}
-              </h3>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 focus:outline-none backdrop-blur-sm bg-white/20 hover:bg-white/40 rounded-lg p-1 transition-all"
-              >
-                <FiX className="h-6 w-6" />
-              </button>
-            </div>
-          )}
-
-          {/* Body */}
-          <div className="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">
-            {children}
+        {/* Glass overlay effect - reduced */}
+        <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5 pointer-events-none rounded-2xl" />
+        
+        {/* Header - reduced glassmorphism */}
+        {title && (
+          <div 
+            className="relative px-6 py-4 border-b border-gray-200/50 backdrop-blur-sm bg-white/70 flex justify-between items-center"
+            style={{
+              backdropFilter: 'blur(8px) saturate(120%)',
+              WebkitBackdropFilter: 'blur(8px) saturate(120%)',
+            }}
+          >
+            <h3
+              className="text-lg font-semibold text-gray-900"
+              id="modal-title"
+            >
+              {title}
+            </h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 focus:outline-none backdrop-blur-sm bg-white/40 hover:bg-white/60 border border-white/30 rounded-lg p-1.5 transition-all"
+              style={{
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
+              }}
+            >
+              <FiX className="h-5 w-5" />
+            </button>
           </div>
+        )}
 
-          {/* Footer */}
-          {footer && (
-            <div className="px-6 py-4 border-t border-white/30 backdrop-blur-sm bg-white/30 flex justify-end gap-3">
-              {footer}
-            </div>
-          )}
+        {/* Body - reduced glassmorphism */}
+        <div 
+          className="relative px-6 py-4 overflow-visible backdrop-blur-sm bg-white/60"
+          style={{
+            backdropFilter: 'blur(8px) saturate(110%)',
+            WebkitBackdropFilter: 'blur(8px) saturate(110%)',
+          }}
+        >
+          {children}
         </div>
+
+        {/* Footer - reduced glassmorphism */}
+        {footer && (
+          <div 
+            className="relative px-6 py-4 border-t border-gray-200/50 backdrop-blur-sm bg-white/70 flex justify-end gap-3"
+            style={{
+              backdropFilter: 'blur(8px) saturate(120%)',
+              WebkitBackdropFilter: 'blur(8px) saturate(120%)',
+            }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
