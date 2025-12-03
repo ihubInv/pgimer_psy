@@ -1491,36 +1491,36 @@ const PatientsPage = () => {
         </div>
       ),
     },
-    {
-      header: (
-        <div className="flex items-center gap-2">
-          <FiShield className="w-4 h-4 text-primary-600" />
-          <span className="font-semibold">Doctor</span>
-        </div>
-      ),
-      render: (row) => (
-        row.assigned_doctor_name ? (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg flex items-center justify-center">
-              <FiUsers className="w-4 h-4 text-purple-600" />
-            </div>
-            <div>
-              <Badge className="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 border-purple-200">
-                {row.assigned_doctor_name}
-              </Badge>
-              <p className="text-xs text-gray-500 mt-1">{row.assigned_doctor_role}</p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-              <FiUsers className="w-4 h-4 text-gray-400" />
-            </div>
-            <span className="text-gray-400 text-sm">Unassigned</span>
-          </div>
-        )
-      ),
-    },
+    // {
+    //   header: (
+    //     <div className="flex items-center gap-2">
+    //       <FiShield className="w-4 h-4 text-primary-600" />
+    //       <span className="font-semibold">Doctor</span>
+    //     </div>
+    //   ),
+    //   render: (row) => (
+    //     row.assigned_doctor_name ? (
+    //       <div className="flex items-center gap-2">
+    //         <div className="w-8 h-8 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg flex items-center justify-center">
+    //           <FiUsers className="w-4 h-4 text-purple-600" />
+    //         </div>
+    //         <div>
+    //           <Badge className="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 border-purple-200">
+    //             {row.assigned_doctor_name}
+    //           </Badge>
+    //           <p className="text-xs text-gray-500 mt-1">{row.assigned_doctor_role}</p>
+    //         </div>
+    //       </div>
+    //     ) : (
+    //       <div className="flex items-center gap-2">
+    //         <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+    //           <FiUsers className="w-4 h-4 text-gray-400" />
+    //         </div>
+    //         <span className="text-gray-400 text-sm">Unassigned</span>
+    //       </div>
+    //     )
+    //   ),
+    // },
     {
       header: (
         <div className="flex items-center gap-2">
