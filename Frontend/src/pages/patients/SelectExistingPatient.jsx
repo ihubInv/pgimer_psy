@@ -135,9 +135,12 @@ const SelectExistingPatient = () => {
     try {
       // Create outpatient visit record
       // patient_id is now an integer
+      // Include assigned_room if it's been set (either from patient record or from room selection)
+      const roomToUse = newRoom || selectedPatient.assigned_room || '';
       await createRecord({ 
         name: selectedPatient.name, 
-        patient_id: parseInt(selectedPatient.id, 10) // patient_id is now integer
+        patient_id: parseInt(selectedPatient.id, 10), // patient_id is now integer
+        assigned_room: roomToUse || undefined // Pass room if available
       }).unwrap();
       toast.success('Visit record created successfully!');
       // Refetch visit count to update the display

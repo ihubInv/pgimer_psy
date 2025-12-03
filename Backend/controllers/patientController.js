@@ -101,14 +101,93 @@ class PatientController {
           }
         }
         
+        // Get today's date in IST (YYYY-MM-DD format)
+        // Use CURRENT_DATE from database to ensure consistency with IST timezone
+        const db = require('../config/database');
+        const todayResult = await db.query('SELECT CURRENT_DATE as today');
+        const todayDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+        
+        // Check if a doctor has already selected the room for today (if room is provided)
+        // This ensures patients added to a room are assigned to the doctor already in that room
+        let finalAssignedDoctorId = assignedDoctorId;
+        if (roomToUse && roomToUse.trim() !== '' && !finalAssignedDoctorId) {
+          const roomDoctorResult = await db.query(
+            `SELECT id, name, role 
+             FROM users 
+             WHERE current_room = $1 
+               AND DATE(room_assignment_time) = $2
+             LIMIT 1`,
+            [roomToUse.trim(), todayDate]
+          );
+          
+          if (roomDoctorResult.rows.length > 0) {
+            finalAssignedDoctorId = roomDoctorResult.rows[0].id;
+            console.log(`[createPatient] Found doctor ${finalAssignedDoctorId} (${roomDoctorResult.rows[0].name}) already in room ${roomToUse.trim()}, will assign patient to them`);
+          }
+        }
+        
+        console.log(`[createPatient] Creating visit for patient ${patientIdInt} with date: ${todayDate}, room: ${roomToUse}, doctor: ${finalAssignedDoctorId}`);
+        
         const visit = await PatientVisit.assignPatient({
           patient_id: patientIdInt, // patient_id is now integer
-          assigned_doctor_id: assignedDoctorId,
+          assigned_doctor_id: finalAssignedDoctorId,
           room_no: roomToUse,
-          visit_date: new Date().toISOString().slice(0, 10),
+          visit_date: todayDate, // Use database CURRENT_DATE for consistency
           visit_type: visitType, // Determined by visit count
           notes: `Visit created via Existing Patient flow - Visit #${visitCount + 1}`
         });
+        
+        console.log(`[createPatient] Visit created successfully:`, { visit_id: visit.id, patient_id: patientIdInt, visit_date: visit.visit_date, room_no: visit.room_no, assigned_doctor_id: visit.assigned_doctor_id });
+
+        // CRITICAL: Update patient's assigned_room if a room was provided/used
+        // This ensures the patient record reflects the room assignment
+        if (roomToUse && roomToUse.trim() !== '') {
+          // Check if a doctor has already selected this room for today
+          // If so, assign the patient to that doctor
+          const roomDoctorResult = await db.query(
+            `SELECT id, name, role 
+             FROM users 
+             WHERE current_room = $1 
+               AND DATE(room_assignment_time) = $2
+             LIMIT 1`,
+            [roomToUse.trim(), todayDate]
+          );
+          
+          let doctorToAssign = null;
+          if (roomDoctorResult.rows.length > 0) {
+            doctorToAssign = roomDoctorResult.rows[0];
+            console.log(`[createPatient] Found doctor ${doctorToAssign.id} (${doctorToAssign.name}) already in room ${roomToUse.trim()}, will assign patient to them`);
+          }
+          
+          // Update patient's assigned_room and assigned_doctor if doctor is in the room
+          // Note: The visit record already has the correct doctor from finalAssignedDoctorId
+          if (doctorToAssign) {
+            await db.query(
+              `UPDATE registered_patient 
+               SET assigned_room = $1, 
+                   assigned_doctor_id = $2,
+                   assigned_doctor_name = $3,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE id = $4`,
+              [roomToUse.trim(), doctorToAssign.id, doctorToAssign.name, patientIdInt]
+            );
+            // Update the local patient object
+            existingPatient.assigned_doctor_id = doctorToAssign.id;
+            existingPatient.assigned_doctor_name = doctorToAssign.name;
+            console.log(`[createPatient] Assigned patient ${patientIdInt} to doctor ${doctorToAssign.id} in room ${roomToUse.trim()}`);
+          } else {
+            await db.query(
+              `UPDATE registered_patient 
+               SET assigned_room = $1, updated_at = CURRENT_TIMESTAMP
+               WHERE id = $2`,
+              [roomToUse.trim(), patientIdInt]
+            );
+          }
+          
+          // Update the local patient object to reflect the room change
+          existingPatient.assigned_room = roomToUse.trim();
+          console.log(`[createPatient] Updated patient ${patientIdInt} assigned_room to "${roomToUse}"`);
+        }
 
         return res.status(201).json({
           success: true,
@@ -365,9 +444,12 @@ class PatientController {
         const db = require('../config/database');
         const patientIds = (result.patients || []).map(p => p.id);
         if (patientIds.length > 0) {
-          const today = new Date().toISOString().slice(0, 10);
+          // Use CURRENT_DATE from database to ensure consistency with IST timezone
+          const todayResult = await db.query('SELECT CURRENT_DATE as today');
+          const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
           
           console.log(`[getAllPatients] Fetching visits for ${patientIds.length} patients (sample IDs: ${patientIds.slice(0, 3).join(', ')})`);
+          console.log(`[getAllPatients] Using today's date: ${today}`);
           
           // Fetch visits with assigned_doctor info using PostgreSQL
           let visits = [];
@@ -376,7 +458,7 @@ class PatientController {
           
           try {
             const visitsResult = await db.query(
-              `SELECT patient_id, visit_date, assigned_doctor_id
+              `SELECT patient_id, visit_date, assigned_doctor_id, room_no, visit_status
                FROM patient_visits
                WHERE patient_id = ANY($1)
                ORDER BY visit_date DESC`,
@@ -384,9 +466,10 @@ class PatientController {
             );
             
             visits = visitsResult.rows || [];
+            console.log(`[getAllPatients] Found ${visits.length} total visits`);
             
             const visitsTodayResult = await db.query(
-              `SELECT patient_id, visit_date, assigned_doctor_id, visit_status
+              `SELECT patient_id, visit_date, assigned_doctor_id, visit_status, room_no
                FROM patient_visits
                WHERE patient_id = ANY($1) AND visit_date = $2
                ORDER BY created_at DESC`,
@@ -394,6 +477,7 @@ class PatientController {
             );
             
             visitsToday = visitsTodayResult.rows || [];
+            console.log(`[getAllPatients] Found ${visitsToday.length} visits for today (${today})`);
           } catch (queryErr) {
             console.error('[getAllPatients] Error in PostgreSQL query:', queryErr);
             visitsTodayError = true;
@@ -857,6 +941,22 @@ class PatientController {
           success: false,
           message: 'No valid fields to update. All provided values were null or empty.',
         });
+      }
+  
+      // If assigned_room is being updated, also update today's visit record
+      if (updateData.assigned_room !== undefined) {
+        const today = new Date().toISOString().slice(0, 10);
+        const db = require('../config/database');
+        
+        // Update today's visit record with the new room
+        await db.query(
+          `UPDATE patient_visits 
+           SET room_no = $1, updated_at = CURRENT_TIMESTAMP
+           WHERE patient_id = $2 AND visit_date = $3`,
+          [updateData.assigned_room, parseInt(id, 10), today]
+        );
+        
+        console.log(`[updatePatient] Updated today's visit record for patient ${id} with room ${updateData.assigned_room}`);
       }
   
       // Perform the update
