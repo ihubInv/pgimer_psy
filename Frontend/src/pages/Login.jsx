@@ -33,9 +33,27 @@ const Login = () => {
   useEffect(() => {
     if (isAuthenticated && pendingNavigationRef.current) {
       pendingNavigationRef.current = false;
-      navigate('/', { replace: true });
+      // Use setTimeout to ensure navigation happens after state is fully updated
+      setTimeout(() => {
+        navigate('/', { replace: true });
+      }, 0);
     }
   }, [isAuthenticated, navigate]);
+  
+  // Also check localStorage as a fallback
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('user');
+    if (token && user && pendingNavigationRef.current) {
+      // If we have credentials but isAuthenticated is not yet true, wait a bit and navigate
+      setTimeout(() => {
+        if (localStorage.getItem('token') && localStorage.getItem('user')) {
+          pendingNavigationRef.current = false;
+          navigate('/', { replace: true });
+        }
+      }, 50);
+    }
+  }, [navigate]);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -66,24 +84,52 @@ const Login = () => {
       // Check if accessToken is returned (direct login without OTP)
       if (result.data.accessToken || result.data.token) {
         // Direct login - accessToken received (new system) or token (legacy)
+        const token = result.data.accessToken || result.data.token;
+        const user = result.data.user;
+        
         // Use flushSync to ensure state update is synchronous and React re-renders immediately
         flushSync(() => {
-        dispatch(setCredentials({
-          user: result.data.user,
-          token: result.data.accessToken || result.data.token,
-        }));
+          dispatch(setCredentials({
+            user: user,
+            token: token,
+          }));
         });
+        
+        // Verify credentials were set in localStorage
+        const storedToken = localStorage.getItem('token');
+        const storedUser = localStorage.getItem('user');
+        
+        if (!storedToken || !storedUser) {
+          // If not in localStorage, set them manually as fallback
+          localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(user));
+        }
         
         toast.success('Login successful!');
         
         // Mark that we're waiting for navigation
         pendingNavigationRef.current = true;
         
-        // Navigation will happen via useEffect when isAuthenticated becomes true
-        // If it's already true (shouldn't happen but safety check), navigate immediately
-        if (localStorage.getItem('token') && localStorage.getItem('user')) {
-          navigate('/', { replace: true });
-        }
+        // Force immediate navigation after credentials are set
+        // Use requestAnimationFrame to ensure DOM and state are fully updated
+        requestAnimationFrame(() => {
+          // Double-check credentials are available
+          const finalToken = localStorage.getItem('token');
+          const finalUser = localStorage.getItem('user');
+          
+          if (finalToken && finalUser) {
+            pendingNavigationRef.current = false;
+            navigate('/', { replace: true });
+          } else {
+            // Fallback: try again after a short delay
+            setTimeout(() => {
+              if (localStorage.getItem('token') && localStorage.getItem('user')) {
+                pendingNavigationRef.current = false;
+                navigate('/', { replace: true });
+              }
+            }, 50);
+          }
+        });
       } else {
         // OTP required - store login data for OTP verification
         dispatch(setOTPRequired(result.data));
@@ -102,25 +148,53 @@ const Login = () => {
         otp: formData.otp,
       }).unwrap();
 
+      const token = result.data.accessToken || result.data.token;
+      const user = result.data.user;
+      
       // Use flushSync to ensure state update is synchronous and React re-renders immediately
       flushSync(() => {
-      dispatch(setCredentials({
-        user: result.data.user,
-        token: result.data.accessToken || result.data.token,
-      }));
-      dispatch(setOTPRequired(false));
+        dispatch(setCredentials({
+          user: user,
+          token: token,
+        }));
+        dispatch(setOTPRequired(false));
       });
+      
+      // Verify credentials were set in localStorage
+      const storedToken = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+      
+      if (!storedToken || !storedUser) {
+        // If not in localStorage, set them manually as fallback
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+      }
       
       toast.success('Login successful!');
       
       // Mark that we're waiting for navigation
       pendingNavigationRef.current = true;
       
-      // Navigation will happen via useEffect when isAuthenticated becomes true
-      // If it's already true (shouldn't happen but safety check), navigate immediately
-      if (localStorage.getItem('token') && localStorage.getItem('user')) {
-        navigate('/', { replace: true });
-      }
+      // Force immediate navigation after credentials are set
+      // Use requestAnimationFrame to ensure DOM and state are fully updated
+      requestAnimationFrame(() => {
+        // Double-check credentials are available
+        const finalToken = localStorage.getItem('token');
+        const finalUser = localStorage.getItem('user');
+        
+        if (finalToken && finalUser) {
+          pendingNavigationRef.current = false;
+          navigate('/', { replace: true });
+        } else {
+          // Fallback: try again after a short delay
+          setTimeout(() => {
+            if (localStorage.getItem('token') && localStorage.getItem('user')) {
+              pendingNavigationRef.current = false;
+              navigate('/', { replace: true });
+            }
+          }, 50);
+        }
+      });
     } catch (err) {
       toast.error(err?.data?.message || 'OTP verification failed');
     }
