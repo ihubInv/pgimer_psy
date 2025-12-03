@@ -1,4 +1,4 @@
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { useEffect, useState } from 'react';
 import {
@@ -320,23 +320,43 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
               <MWONavigation onClose={onClose} isMinimized={isMinimized} />
             ) : (
               // Other roles navigation (Admin, JR, SR)
-              filteredNavigation.map((item) => {
+              (() => {
                 const location = window.location.pathname;
+                const [searchParams] = useSearchParams();
+                const editParam = searchParams.get('edit');
+                const modeParam = searchParams.get('mode');
                 
-                // Special handling for "Today's Patients" - keep it active when on related pages
-                let isActive = false;
-                if (item.to === '/clinical-today-patients') {
-                  // Keep "Today's Patients" active when on:
-                  // - Today's Patients page itself
-                  // - Create Proforma page (when coming from Today's Patients)
-                  // - Prescribe Medication page (when coming from Today's Patients)
-                  isActive = location === item.to || 
-                             location === '/clinical/new' ||
-                             location.startsWith('/prescriptions');
-                } else {
-                  // For other routes, use standard matching
-                  isActive = location === item.to || location.startsWith(item.to + '/');
-                }
+                return filteredNavigation.map((item) => {
+                  // Special handling for "Today's Patients" and "Patients" tabs based on URL params
+                  let isActive = false;
+                  
+                  if (item.to === '/clinical-today-patients') {
+                    // "Today's Patients" should be active when:
+                    // - On Today's Patients page itself
+                    // - On patient detail page with edit=true&mode=create (creating new proforma from Today's Patients)
+                    // - On Create Proforma page
+                    // - On Prescribe Medication page
+                    const isPatientDetailPage = location.startsWith('/patients/') && location !== '/patients/new' && location !== '/patients/select';
+                    const isCreateMode = editParam === 'true' && modeParam === 'create';
+                    
+                    isActive = location === item.to || 
+                               location === '/clinical/new' ||
+                               location.startsWith('/prescriptions') ||
+                               (isPatientDetailPage && isCreateMode);
+                  } else if (item.to === '/patients') {
+                    // "Patients" tab should be active when:
+                    // - On /patients page
+                    // - On patient detail page with edit=true (without mode=create)
+                    // - On patient detail page without edit params
+                    const isPatientDetailPage = location.startsWith('/patients/') && location !== '/patients/new' && location !== '/patients/select';
+                    const isEditMode = editParam === 'true' && modeParam !== 'create';
+                    
+                    isActive = location === item.to || 
+                               (isPatientDetailPage && (isEditMode || !editParam));
+                  } else {
+                    // For other routes, use standard matching
+                    isActive = location === item.to || location.startsWith(item.to + '/');
+                  }
 
                 return (
                   <NavLink
@@ -361,6 +381,7 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                   </NavLink>
                 );
               })
+              })()
             )}
           </nav>
 
