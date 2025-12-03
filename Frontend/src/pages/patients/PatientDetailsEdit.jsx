@@ -28,7 +28,12 @@ import {
 import EditClinicalProforma from '../clinical/EditClinicalProforma';
 import EditADL from '../adl/EditADL';
 import PrescriptionEdit from '../PrescribeMedication/PrescriptionEdit';
+import PrescriptionView from '../PrescribeMedication/PrescriptionView';
+import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
+import ViewADL from '../adl/ViewADL';
 import PatientClinicalHistory from '../../components/PatientClinicalHistory';
+import { useGetADLFileByIdQuery, useGetADLFileByPatientIdQuery } from '../../features/adl/adlApiSlice';
+import { useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 
 import { SelectWithOther } from '../../components/SelectWithOther';
 import {IconInput} from '../../components/IconInput';
@@ -86,13 +91,25 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     patient: true,
     clinical: false,
     adl: false,
-    prescriptions: false
+    prescriptions: false,
+    pastHistory: false
   });
+
+  // State to track which visit cards are expanded in Past History
+  const [expandedVisits, setExpandedVisits] = useState({});
 
   const toggleCard = (cardName) => {
     setExpandedCards(prev => ({
       ...prev,
       [cardName]: !prev[cardName]
+    }));
+  };
+
+  // Toggle individual visit card in Past History
+  const toggleVisitCard = (visitId) => {
+    setExpandedVisits(prev => ({
+      ...prev,
+      [visitId]: !prev[visitId]
     }));
   };
 
@@ -1330,6 +1347,14 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         if (!proformaDate) return true; // Include proformas without date as past
         return proformaDate !== todayDateString;
       });
+
+  // For Past History card: exclude today's proformas (only show truly past visits)
+  const trulyPastProformas = patientProformas.filter(proforma => {
+    if (!proforma) return false;
+    const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
+    if (!proformaDate) return true; // Include proformas without date as past
+    return proformaDate !== todayDateString;
+  });
 
   // Get the latest proforma for current visit (most recent today's proforma)
   const currentVisitProforma = todayProformas.length > 0 
@@ -3752,6 +3777,186 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                     </p>
                     <p className="text-xs text-gray-500 italic">
                       Once a clinical proforma is created, prescription fields will appear here automatically.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Card 4: Past History - View-only display of all past visits */}
+      {(canViewPrescriptions || canViewClinicalProforma) && (
+        <Card className="shadow-lg border-0 bg-white">
+          <div
+            className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <div 
+              className="flex items-center gap-4 cursor-pointer flex-1"
+              onClick={() => toggleCard('pastHistory')}
+            >
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <FiClock className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Past History</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {trulyPastProformas.length > 0 
+                    ? `${trulyPastProformas.length} past visit${trulyPastProformas.length > 1 ? 's' : ''} - View only`
+                    : 'No past visits - View only'}
+                </p>
+              </div>
+            </div>
+            <div 
+              className="cursor-pointer"
+              onClick={() => toggleCard('pastHistory')}
+            >
+              {expandedCards.pastHistory ? (
+                <FiChevronUp className="h-6 w-6 text-gray-500" />
+              ) : (
+                <FiChevronDown className="h-6 w-6 text-gray-500" />
+              )}
+            </div>
+          </div>
+
+          {expandedCards.pastHistory && (
+            <div className="p-6">
+              {trulyPastProformas.length > 0 ? (
+                <div className="space-y-8">
+                  {/* Sort past proformas by visit date (oldest first - chronological order) */}
+                  {trulyPastProformas
+                    .sort((a, b) => {
+                      const dateA = new Date(a.visit_date || a.created_at || 0);
+                      const dateB = new Date(b.visit_date || b.created_at || 0);
+                      return dateA - dateB; // Oldest first (chronological order)
+                    })
+                    .map((proforma, index) => {
+                    const visitNumber = index + 1; // Visit 1 is oldest, Visit N is most recent
+                    const visitDate = formatDate(proforma.visit_date || proforma.created_at);
+                    const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === proforma.id);
+                    const visitId = proforma.id || `visit-${index}`;
+                    const isVisitExpanded = expandedVisits[visitId] || false;
+                    
+                    return (
+                      <Card key={visitId} className="shadow-md border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
+                        {/* Visit Header - Clickable to expand/collapse */}
+                        <div 
+                          className="mb-4 pb-4 border-b-2 border-purple-300 cursor-pointer hover:bg-purple-100/50 transition-colors rounded-t-lg p-2 -m-2 mb-2"
+                          onClick={() => toggleVisitCard(visitId)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-purple-600 rounded-lg">
+                                <FiHash className="h-5 w-5 text-white" />
+                              </div>
+                              <div>
+                                <h4 className="text-xl font-bold text-gray-900">
+                                  Visit {visitNumber}
+                                </h4>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {visitDate}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">
+                                {isVisitExpanded ? 'Minimize' : 'Expand'}
+                              </span>
+                              {isVisitExpanded ? (
+                                <FiChevronUp className="h-6 w-6 text-purple-600" />
+                              ) : (
+                                <FiChevronDown className="h-6 w-6 text-purple-600" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Visit Content - Collapsible */}
+                        {isVisitExpanded && (
+                          <div className="space-y-6 animate-in fade-in duration-300">
+                          {/* Patient Details Card */}
+                          <div className="bg-white rounded-lg p-4 border border-gray-200">
+                            <h5 className="text-md font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                              <FiUser className="h-5 w-5 text-blue-600" />
+                              Patient Details
+                            </h5>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              <div>
+                                <label className="text-xs font-medium text-gray-500">Patient Name</label>
+                                <p className="text-sm font-semibold text-gray-900 mt-1">{patient?.name || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-gray-500">CR No</label>
+                                <p className="text-sm text-gray-900 mt-1">{patient?.cr_no || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-gray-500">PSY No</label>
+                                <p className="text-sm text-gray-900 mt-1">{patient?.psy_no || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-gray-500">Visit Date</label>
+                                <p className="text-sm text-gray-900 mt-1">{visitDate}</p>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-gray-500">Visit Type</label>
+                                <p className="text-sm text-gray-900 mt-1">
+                                  {proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-gray-500">Room Number</label>
+                                <p className="text-sm text-gray-900 mt-1">{proforma.room_no || 'N/A'}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Walk-in Clinical Proforma Card */}
+                          <div className="bg-white rounded-lg p-4 border border-gray-200">
+                            <h5 className="text-md font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                              <FiFileText className="h-5 w-5 text-green-600" />
+                              Walk-in Clinical Proforma
+                            </h5>
+                            <ClinicalProformaDetails proforma={proforma} />
+                          </div>
+
+                          {/* Out Patient Intake Record (ADL) Card - Only if exists */}
+                          {adlFile && (
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                              <h5 className="text-md font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                                <FiFolder className="h-5 w-5 text-orange-600" />
+                                Out Patient Intake Record
+                              </h5>
+                              <ViewADL adlFiles={adlFile} />
+                            </div>
+                          )}
+
+                          {/* Prescription Card */}
+                          <div className="bg-white rounded-lg p-4 border border-gray-200">
+                            <h5 className="text-md font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                              <FiPackage className="h-5 w-5 text-amber-600" />
+                              Prescription
+                            </h5>
+                            <PrescriptionView 
+                              clinicalProformaId={proforma.id}
+                              patientId={patient?.id}
+                            />
+                          </div>
+                          </div>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 max-w-2xl mx-auto">
+                    <FiClock className="h-12 w-12 mx-auto mb-4 text-purple-500" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      No Past History Found
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      This patient has no past visit records. Past visit history will appear here once additional visits are recorded.
                     </p>
                   </div>
                 </div>
