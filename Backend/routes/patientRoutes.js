@@ -706,6 +706,7 @@ router.get('/:id/profile', authenticateToken, authorizeRoles('Admin', 'Psychiatr
  * /api/patients/{id}/visits:
  *   get:
  *     summary: Get patient's visit history
+ *     description: Retrieves all clinical proformas, ADL files, and prescriptions for a patient, grouped by visit date
  *     tags: [Patient Management]
  *     security:
  *       - bearerAuth: []
@@ -719,6 +720,44 @@ router.get('/:id/profile', authenticateToken, authorizeRoles('Admin', 'Psychiatr
  *     responses:
  *       200:
  *         description: Visit history retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Visit history retrieved successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     visits:
+ *                       type: array
+ *                       description: Array of visits grouped by date
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           visit_date:
+ *                             type: string
+ *                             format: date
+ *                           visit_type:
+ *                             type: string
+ *                             enum: [first_visit, follow_up]
+ *                           clinical_proformas:
+ *                             type: array
+ *                             items:
+ *                               $ref: '#/components/schemas/ClinicalProforma'
+ *                           adl_files:
+ *                             type: array
+ *                             items:
+ *                               $ref: '#/components/schemas/ADLFile'
+ *                           prescriptions:
+ *                             type: array
+ *                             items:
+ *                               $ref: '#/components/schemas/Prescription'
  *       401:
  *         description: Unauthorized
  *       404:

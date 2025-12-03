@@ -451,6 +451,10 @@ Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         description: 'Prescription management',
       },
       {
+        name: 'Patient Files',
+        description: 'Patient file upload and management',
+      },
+      {
         name: 'Session',
         description: 'Session management and token refresh',
       },
@@ -459,6 +463,7 @@ Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
   apis: [
     './routes/userRoutes.js',
     './routes/patientRoutes.js',
+    './routes/patientFileRoutes.js',
     './routes/clinicalRoutes.js',
     './routes/adlRoutes.js',
     './routes/prescriptionRoutes.js',

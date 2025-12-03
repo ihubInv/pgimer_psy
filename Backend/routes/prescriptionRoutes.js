@@ -253,28 +253,37 @@ router.get('/',authenticateToken, authorizeRoles(['Faculty', 'Resident', 'Admin'
 
 /**
  * @swagger
- * /api/prescriptions/{id}:
+ * /api/prescriptions/by-proforma/{clinical_proforma_id}:
  *   get:
- *     summary: Get a prescription by ID or clinical_proforma_id
+ *     summary: Get prescriptions by clinical proforma ID
+ *     description: Retrieves all prescriptions associated with a specific clinical proforma
  *     tags: [Prescriptions]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: id
- *         required: false
- *         schema:
- *           type: integer
- *         description: Prescription ID
- *       - in: query
  *         name: clinical_proforma_id
- *         required: false
+ *         required: true
  *         schema:
  *           type: integer
- *         description: Clinical proforma ID (alternative to id)
+ *         description: Clinical proforma ID
  *     responses:
  *       200:
- *         description: Prescription retrieved successfully
+ *         description: Prescriptions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     prescription:
+ *                       $ref: '#/components/schemas/Prescription'
  *       404:
  *         description: Prescription not found
  *       500:
@@ -290,7 +299,44 @@ router.get('/by-proforma/:clinical_proforma_id', authenticateToken, [
   return prescriptionController.getPrescriptionById(req, res);
 });
 
-// Route to get prescription by ID or clinical_proforma_id (query)
+/**
+ * @swagger
+ * /api/prescriptions/{id}:
+ *   get:
+ *     summary: Get a prescription by ID
+ *     tags: [Prescriptions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Prescription ID
+ *     responses:
+ *       200:
+ *         description: Prescription retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     prescription:
+ *                       $ref: '#/components/schemas/Prescription'
+ *       404:
+ *         description: Prescription not found
+ *       500:
+ *         description: Server error
+ */
+// Route to get prescription by ID
 router.get('/:id', authenticateToken, [
   param('id').isInt().withMessage('Prescription ID must be an integer')
 ], prescriptionController.getPrescriptionById);
@@ -319,20 +365,34 @@ router.get('/:id', authenticateToken, [
  *             properties:
  *               medicine:
  *                 type: string
+ *                 description: Medicine name
  *               dosage:
  *                 type: string
+ *                 description: Dosage (e.g., "1-0-1", "650mg")
+ *               when_to_take:
+ *                 type: string
+ *                 description: When to take medication (e.g., "After food", "Before food", "Before Dinner")
  *               when:
  *                 type: string
+ *                 description: Alias for when_to_take (for backward compatibility)
  *               frequency:
  *                 type: string
+ *                 description: Frequency (e.g., "Once Daily", "Twice Daily")
  *               duration:
  *                 type: string
+ *                 description: Duration (e.g., "3 Days", "5 Days", "1 Month")
+ *               quantity:
+ *                 type: string
+ *                 description: Quantity prescribed
  *               qty:
  *                 type: string
+ *                 description: Alias for quantity (for backward compatibility)
  *               details:
  *                 type: string
+ *                 description: Additional details
  *               notes:
  *                 type: string
+ *                 description: Additional notes or instructions
  *     responses:
  *       200:
  *         description: Prescription updated successfully
