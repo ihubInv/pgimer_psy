@@ -2745,7 +2745,7 @@ const PatientsPage = () => {
               size="sm"
               onClick={() => handleExport(patientId)}
               className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title="Export All Patients"
+              title="Export  Patient"
             >
               <BsFileEarmarkExcelFill className="w-4 h-4 text-green-600" />
             </Button>
@@ -2829,7 +2829,7 @@ const PatientsPage = () => {
                   disabled={filteredPatients.length === 0 && (!data?.data?.patients || data.data.patients.length === 0)}
                 >
                   <FiDownload className="mr-2" />
-                  Export
+                  Export All Patients
                 </Button>
               </div>
             </div>
