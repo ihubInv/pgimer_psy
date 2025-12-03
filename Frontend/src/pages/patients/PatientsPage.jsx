@@ -7,6 +7,7 @@ import {
    FiDownload,  FiClock, FiPrinter,
   FiHeart, FiFileText, FiShield, FiTrendingUp, FiX
 } from 'react-icons/fi';
+import { BsFileEarmarkExcelFill } from 'react-icons/bs';
 import { useGetAllPatientsQuery, useDeletePatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { formatPatientsForExport, exportData } from '../../utils/exportUtils';
@@ -141,7 +142,7 @@ const PatientsPage = () => {
   };
   
 
-  const handleExport = () => {
+  const handleExportAll = () => {
     // Export filtered patients if searching, otherwise all patients
     const patientsToExport = search.trim() 
       ? (data?.data?.patients?.filter(patient => {
@@ -178,6 +179,19 @@ const PatientsPage = () => {
     }
   };
 
+  const handleExport = async (patientId) => {
+    if (!patientId) {
+      toast.error('Invalid patient ID. Unable to export patient details.');
+      return;
+    }
+
+    try {
+      toast.info('Loading complete patient data for exporting...');
+    } catch (err) {
+      console.error('Export error:', err);
+      toast.error(err?.message || 'Failed to export patient details');
+    }
+  };
   // Handle print patient details
   const handlePrint = async (patientId) => {
     if (!patientId) {
@@ -1579,7 +1593,7 @@ const PatientsPage = () => {
       header: (
         <div className="flex items-center gap-2">
           {/* <FiMoreVertical className="w-4 h-4 text-primary-600" /> */}
-          <span className="font-semibold">Actions</span>
+          <span className="font-semibold ml-12">Actions</span>
         </div>
       ),
       render: (row) => {
@@ -1613,6 +1627,16 @@ const PatientsPage = () => {
               title="Print Patient Details"
             >
               <FiPrinter className="w-4 h-4 text-purple-600" />
+             
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => handleExportAll(patientId)}
+              className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+              title="Export All Patients"
+            >
+              <BsFileEarmarkExcelFill className="w-4 h-4 text-green-600" />
             </Button>
             {/* Show Delete button only for Admin, not for MWO */}
             {(isAdmin(user?.role) && !isMWO(user?.role)) && patientId && (
@@ -1680,6 +1704,7 @@ const PatientsPage = () => {
                   <Link to="/patients/new">
                     <Button className="bg-gradient-to-r h-12 px-5 from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap">
                       <FiPlus className="mr-2" />
+                 
                       Add Patient
                     </Button>
                   </Link>
