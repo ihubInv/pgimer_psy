@@ -543,10 +543,32 @@ const PatientDetails = () => {
           hover:text-cyan-700
         "
           >
-            {isEditing ? 'Edit Patient Details' : 'Patient Details'}
+            {(() => {
+              const editParam = searchParams.get('edit');
+              const modeParam = searchParams.get('mode');
+              
+              if (editParam === 'true' && modeParam === 'create') {
+                return 'Create the Walk-in Proforma';
+              } else if (editParam === 'true') {
+                return 'Edit Patient Details';
+              } else {
+                return 'Patient Details';
+              }
+            })()}
           </h1>
           <p className="text-gray-600 mt-2 text-base tracking-normal">
-            {isEditing ? 'Update patient information' : 'View and manage patient information'}
+            {(() => {
+              const editParam = searchParams.get('edit');
+              const modeParam = searchParams.get('mode');
+              
+              if (editParam === 'true' && modeParam === 'create') {
+                return 'Create a new walk-in clinical proforma for this patient';
+              } else if (editParam === 'true') {
+                return 'Update patient information';
+              } else {
+                return 'View and manage patient information';
+              }
+            })()}
           </p>
         </div>
       </div>
