@@ -29,6 +29,7 @@ import {
   MOBILITY_OPTIONS, REFERRED_BY_OPTIONS, UNIT_DAYS_OPTIONS,
    isSR, isJR, HEAD_RELATIONSHIP_OPTIONS, CATEGORY_OPTIONS, isMWO
 } from '../../utils/constants';
+import { validatePatientRegistration } from '../../utils/patientValidation';
 
 
 
@@ -68,6 +69,13 @@ const CreatePatient = () => {
 
   
   
+  // Initialize department field with default value
+  useEffect(() => {
+    if (!formData.department) {
+      dispatch(updatePatientRegistrationForm({ department: 'Psychiatry' }));
+    }
+  }, []);
+
   // Restore step state from localStorage on mount and after authentication
   useEffect(() => {
     const savedPatientId = localStorage.getItem('createPatient_patientId');
@@ -252,7 +260,9 @@ const CreatePatient = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    dispatch(updatePatientRegistrationForm({ [name]: value }));
+    // Ensure department is always set to "Psychiatry" if it's the department field
+    const updateValue = name === 'department' ? (value || 'Psychiatry') : value;
+    dispatch(updatePatientRegistrationForm({ [name]: updateValue }));
 
     // Configuration for fields with "others"/"other" option
     const othersFieldsConfig = {
@@ -316,58 +326,9 @@ const CreatePatient = () => {
   };
 
   const validate = (step = 1) => {
-    const newErrors = {};
-    const missingFields = [];
-
-    // Validate new patient data - check both main form and quick entry fields
-    const patientName = (formData.name || '').trim();
-    const patientSex = formData.sex || '';
-    const patientAge = formData.age || '';
-    const addressLine = (formData.address_line || '').trim();
-    const state = (formData.state || '').trim();
-    const district = (formData.district || '').trim();
-    const city = (formData.city || '').trim();
-    const pinCode = (formData.pin_code || '').trim();
-
-    if (!patientName) {
-      newErrors.patientName = 'Name is required';
-      missingFields.push('Name');
-    }
-    if (!patientSex) {
-      newErrors.patientSex = 'Sex is required';
-      missingFields.push('Sex');
-    }
-    if (!patientAge) {
-      newErrors.patientAge = 'Age is required';
-      missingFields.push('Age');
-    }
-
-    // Step 1 specific validations (Out Patient Card)
-    if (step === 1) {
-      if (!addressLine) {
-        newErrors.address_line = 'Address Line is required';
-        missingFields.push('Address Line');
-      }
-      if (!state) {
-        newErrors.state = 'State is required';
-        missingFields.push('State');
-      }
-      if (!district) {
-        newErrors.district = 'District is required';
-        missingFields.push('District');
-      }
-      if (!city) {
-        newErrors.city = 'City/Town/Village is required';
-        missingFields.push('City/Town/Village');
-      }
-      if (!pinCode) {
-        newErrors.pin_code = 'Pin Code is required';
-        missingFields.push('Pin Code');
-      }
-    }
-
-    setErrors(newErrors);
-    return { isValid: Object.keys(newErrors).length === 0, missingFields };
+    const validationResult = validatePatientRegistration(formData, step);
+    setErrors(validationResult.errors);
+    return { isValid: validationResult.isValid, missingFields: validationResult.missingFields };
   };
 
 
@@ -448,7 +409,7 @@ const CreatePatient = () => {
         contact_number: formData.contact_number || null,
 
         // Quick Entry fields
-        department: "Psychiatry",
+        department: formData.department || "Psychiatry",
         unit_consit: formData.unit_consit || null,
         room_no: formData.room_no || null,
         serial_no: formData.serial_no || null,
@@ -744,7 +705,11 @@ const CreatePatient = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                           <IconInput
                             icon={<FiHash className="w-4 h-4" />}
-                            label="CR No."
+                            label={
+                              <span>
+                                CR No. <span className="text-red-500">*</span>
+                              </span>
+                            }
                             name="cr_no"
                             value={formData.cr_no || ''}
                             onChange={handleChange}
@@ -759,6 +724,7 @@ const CreatePatient = () => {
                             value={formData.date || ''}
                             onChange={handleChange}
                             defaultToday={true}
+                            required={true}
                           />
                           <IconInput
                             icon={<FiUser className="w-4 h-4" />}
@@ -775,11 +741,17 @@ const CreatePatient = () => {
                           />
                           <IconInput
                             icon={<FiPhone className="w-4 h-4" />}
-                            label="Phone No."
+                            label={
+                              <span>
+                                Phone No. <span className="text-red-500">*</span>
+                              </span>
+                            }
                             name="contact_number"
                             value={formData.contact_number || ''}
                             onChange={handleChange}
                             placeholder="Enter mobile number"
+                            type="tel"
+                            maxLength={10}
                             className=""
                           />
                         </div>
@@ -820,7 +792,7 @@ const CreatePatient = () => {
                           <div className="space-y-2">
                             <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
                               <FiShield className="w-4 h-4 text-primary-600" />
-                              Category
+                              Category <span className="text-red-500">*</span>
                             </label>
                             <Select
                               name="category"
@@ -834,7 +806,11 @@ const CreatePatient = () => {
                           </div>
                           <IconInput
                             icon={<FiUsers className="w-4 h-4" />}
-                            label="Father's Name"
+                            label={
+                              <span>
+                                Father's Name <span className="text-red-500">*</span>
+                              </span>
+                            }
                             name="father_name"
                             value={formData.father_name || ''}
                             onChange={handleChange}
@@ -846,7 +822,11 @@ const CreatePatient = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                           <IconInput
                             icon={<FiLayers className="w-4 h-4" />}
-                            label="Department"
+                            label={
+                              <span>
+                                Department <span className="text-red-500">*</span>
+                              </span>
+                            }
                             name="department"
                             value="Psychiatry"
                             onChange={handleChange}
@@ -856,7 +836,11 @@ const CreatePatient = () => {
                           />
                           <IconInput
                             icon={<FiUsers className="w-4 h-4" />}
-                            label="Unit/Consit"
+                            label={
+                              <span>
+                                Unit/Consit <span className="text-red-500">*</span>
+                              </span>
+                            }
                             name="unit_consit"
                             value={formData.unit_consit || ''}
                             onChange={handleChange}
@@ -865,7 +849,11 @@ const CreatePatient = () => {
                           />
                           <IconInput
                             icon={<FiHome className="w-4 h-4" />}
-                            label="Room No."
+                            label={
+                              <span>
+                                Room No. <span className="text-red-500">*</span>
+                              </span>
+                            }
                             name="room_no"
                             value={formData.room_no || ''}
                             onChange={handleChange}
@@ -874,7 +862,11 @@ const CreatePatient = () => {
                           />
                           <IconInput
                             icon={<FiHash className="w-4 h-4" />}
-                            label="Serial No."
+                            label={
+                              <span>
+                                Serial No. <span className="text-red-500">*</span>
+                              </span>
+                            }
                             name="serial_no"
                             value={formData.serial_no || ''}
                             onChange={handleChange}
@@ -887,7 +879,11 @@ const CreatePatient = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <IconInput
                             icon={<FiFileText className="w-4 h-4" />}
-                            label="File No."
+                            label={
+                              <span>
+                                File No. <span className="text-red-500">*</span>
+                              </span>
+                            }
                             name="file_no"
                             value={formData.file_no || ''}
                             onChange={handleChange}
@@ -896,7 +892,11 @@ const CreatePatient = () => {
                           />
                           <div className="space-y-2">
                             <Select
-                              label="Unit Days"
+                              label={
+                                <span>
+                                  Unit Days <span className="text-red-500">*</span>
+                                </span>
+                              }
                               name="unit_days"
                               value={formData.unit_days || ''}
                               onChange={handleChange}
@@ -939,7 +939,11 @@ const CreatePatient = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <IconInput
                                 icon={<FiGlobe className="w-4 h-4" />}
-                                label="Country"
+                                label={
+                                  <span>
+                                    Country <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="country"
                                 value={formData.country || ''}
                                 onChange={handleChange}
@@ -1075,6 +1079,7 @@ const CreatePatient = () => {
                                 value={formData.seen_in_walk_in_on}
                                 onChange={handleChange}
                                 defaultToday={true}
+                                required={true}
                               />
                               <DatePicker
                                 icon={<FiCalendar className="w-4 h-4" />}
@@ -1083,6 +1088,7 @@ const CreatePatient = () => {
                                 value={formData.worked_up_on}
                                 onChange={handleChange}
                                 defaultToday={true}
+                                required={true}
                               />
 
                               <IconInput
@@ -1098,7 +1104,11 @@ const CreatePatient = () => {
 
                               <IconInput
                                 icon={<FiFileText className="w-4 h-4" />}
-                                label="Psy. No."
+                                label={
+                                  <span>
+                                    Psy. No. <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="psy_no"
                                 value={formData.psy_no}
                                 onChange={handlePatientChange}
@@ -1108,7 +1118,11 @@ const CreatePatient = () => {
                               />
                               <IconInput
                                 icon={<FiHeart className="w-4 h-4" />}
-                                label="Special Clinic No."
+                                label={
+                                  <span>
+                                    Special Clinic No. <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="special_clinic_no"
                                 value={formData.special_clinic_no}
                                 onChange={handleChange}
@@ -1152,7 +1166,11 @@ const CreatePatient = () => {
                               </div>
 
                               <Select
-                                label="Age Group"
+                                label={
+                                  <span>
+                                    Age Group <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="age_group"
                                 value={formData.age_group || ''}
                                 onChange={handleChange}
@@ -1162,7 +1180,11 @@ const CreatePatient = () => {
                                 className="bg-gradient-to-r from-blue-50 to-indigo-50"
                               />
                               <Select
-                                label="Marital Status"
+                                label={
+                                  <span>
+                                    Marital Status <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="marital_status"
                                 value={formData.marital_status || ''}
                                 onChange={handleChange}
@@ -1212,7 +1234,11 @@ const CreatePatient = () => {
 
                               <SelectWithOther
                                 icon={<FiBriefcase className="w-4 h-4" />}
-                                label=" Occupation"
+                                label={
+                                  <span>
+                                    Occupation <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="occupation"
                                 value={formData.occupation}
                                 onChange={handleChange}
@@ -1230,7 +1256,11 @@ const CreatePatient = () => {
 
                               <Select
                                 icon={<FiBookOpen className="w-4 h-4" />}
-                                label="Education"
+                                label={
+                                  <span>
+                                    Education <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="education"
                                 value={formData.education}
                                 onChange={handleChange}
@@ -1242,7 +1272,11 @@ const CreatePatient = () => {
 
                               <IconInput
                                 icon={<FiTrendingUp className="w-4 h-4" />}
-                                label="Exact Income of the Patient (₹)"
+                                label={
+                                  <span>
+                                    Exact Income of the Patient (₹) <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="patient_income"
                                 value={formData.patient_income}
                                 onChange={handleChange}
@@ -1253,7 +1287,11 @@ const CreatePatient = () => {
                               />
                                <IconInput
                                 icon={<FiTrendingUp className="w-4 h-4" />}
-                                label="Exact Income of the Family (₹)"
+                                label={
+                                  <span>
+                                    Exact Income of the Family (₹) <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="family_income"
                                 value={formData.family_income}
                                 onChange={handleChange}
@@ -1264,7 +1302,11 @@ const CreatePatient = () => {
                               />
 
                               <SelectWithOther
-                                label="Religion"
+                                label={
+                                  <span>
+                                    Religion <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="religion"
                                 value={formData.religion || ''}
                                 onChange={handleChange}
@@ -1280,7 +1322,11 @@ const CreatePatient = () => {
                                 inputLabel="Specify Religion"
                               />
                               <SelectWithOther
-                                label="Family Type"
+                                label={
+                                  <span>
+                                    Family Type <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="family_type"
                                 value={formData.family_type || ''}
                                 onChange={handleChange}
@@ -1296,7 +1342,11 @@ const CreatePatient = () => {
                                 inputLabel="Specify Family Type"
                               />
                               <SelectWithOther
-                                label="Locality"
+                                label={
+                                  <span>
+                                    Locality <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="locality"
                                 value={formData.locality || ''}
                                 onChange={handleChange}
@@ -1316,7 +1366,11 @@ const CreatePatient = () => {
 
                               <IconInput
                                 icon={<FiUser className="w-4 h-4" />}
-                                label="Family Head Name"
+                                label={
+                                  <span>
+                                    Family Head Name <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="head_name"
                                 value={formData.head_name}
                                 onChange={handleChange}
@@ -1325,7 +1379,11 @@ const CreatePatient = () => {
                               />
                               <IconInput
                                 icon={<FiClock className="w-4 h-4" />}
-                                label=" Family Head  Age"
+                                label={
+                                  <span>
+                                    Family Head Age <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="head_age"
                                 value={formData.head_age}
                                 onChange={handleChange}
@@ -1337,7 +1395,11 @@ const CreatePatient = () => {
                               />
 
                               <SelectWithOther
-                                label="Relationship With Family Head"
+                                label={
+                                  <span>
+                                    Relationship With Family Head <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="head_relationship"
                                 value={formData.head_relationship || ''}
                                 onChange={handleChange}
@@ -1356,7 +1418,11 @@ const CreatePatient = () => {
 
                               <Select
                                 icon={<FiBookOpen className="w-4 h-4" />}
-                                label="Family Head Education"
+                                label={
+                                  <span>
+                                    Family Head Education <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="head_education"
                                 value={formData.head_education}
                                 onChange={handleChange}
@@ -1368,18 +1434,26 @@ const CreatePatient = () => {
 
                               <Select
                                 icon={<FiBriefcase className="w-4 h-4" />}
-                                label=" Family Head Occupation"
+                                label={
+                                  <span>
+                                    Family Head Occupation <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="head_occupation"
                                 value={formData.head_occupation}
                                 onChange={handleChange}
                                 options={OCCUPATION_OPTIONS}
-                                placeholder="Select education"
+                                placeholder="Select occupation"
                                 searchable={true}
                                 className="bg-gradient-to-r from-green-50 to-emerald-50"
                               />
                               <IconInput
                                 icon={<FiTrendingUp className="w-4 h-4" />}
-                                label="Family Head Income (₹)"
+                                label={
+                                  <span>
+                                    Family Head Income (₹) <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="head_income"
                                 value={formData.head_income}
                                 onChange={handleChange}
@@ -1391,7 +1465,11 @@ const CreatePatient = () => {
 
                               <IconInput
                                 icon={<FiNavigation className="w-4 h-4" />}
-                                label="Exact distance from hospital"
+                                label={
+                                  <span>
+                                    Exact distance from hospital <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="distance_from_hospital"
                                 value={formData.distance_from_hospital}
                                 onChange={handleChange}
@@ -1400,7 +1478,11 @@ const CreatePatient = () => {
                               />
 
                               <SelectWithOther
-                                label="Mobility of the patient"
+                                label={
+                                  <span>
+                                    Mobility of the patient <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="mobility"
                                 value={formData.mobility || ''}
                                 onChange={handleChange}
@@ -1417,7 +1499,11 @@ const CreatePatient = () => {
                               />
 
                               <SelectWithOther
-                                label="Referred by"
+                                label={
+                                  <span>
+                                    Referred by <span className="text-red-500">*</span>
+                                  </span>
+                                }
                                 name="referred_by"
                                 value={formData.referred_by || ''}
                                 onChange={handleChange}
@@ -1767,12 +1853,12 @@ const CreatePatient = () => {
                               </Button>
                               <Button
                                 type="submit"
-                                loading={isLoading || isAssigning || isUpdating}
-                                disabled={isLoading || isAssigning || isUpdating}
+                                loading={isLoading || isUpdating}
+                                disabled={isLoading || isUpdating}
                                 className="px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
                               >
                                 <FiSave className="mr-2" />
-                                {isLoading || isAssigning || isUpdating ? 'Saving...' : 'Register Patient'}
+                                {isLoading || isUpdating ? 'Saving...' : 'Register Patient'}
                               </Button>
                             </div>
 
