@@ -93,7 +93,7 @@ let isRefreshing = false;
 let refreshPromise = null;
 
 const baseQuery = fetchBaseQuery({
-  baseUrl: import.meta.env.VITE_API_URL || 'http://31.97.60.2:2025/api',
+  baseUrl: import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api',
   credentials: 'include', // Include cookies for refresh tokens
   prepareHeaders: (headers, { getState }) => {
     const token = getState().auth.token;
