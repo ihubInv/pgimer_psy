@@ -452,6 +452,10 @@ const CreatePatient = () => {
 
         // Additional fields
         category: formData.category || null,
+
+        // Assignment - Include assigned_room in Step 1 so auto-assignment can happen
+        // If not provided, backend will auto-assign
+        assigned_room: formData.assigned_room || null,
       };
 
       // Create patient with step 1 data (using createPatientComplete which accepts all fields)
@@ -598,8 +602,10 @@ const CreatePatient = () => {
         // Local Address field
         local_address: formData.local_address || null,
 
-        // Assignment
-        assigned_room: formData.assigned_room || null,
+        // Assignment - Only update if a room is explicitly selected
+        // Don't overwrite auto-assigned room from Step 1 with null
+        // Only include assigned_room if it has a value
+        ...(formData.assigned_room && formData.assigned_room.trim() !== '' ? { assigned_room: formData.assigned_room } : {}),
       };
 
       // Update patient with step 2 data
