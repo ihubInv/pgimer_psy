@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   FiPlus, FiSearch, FiEdit, FiTrash2, FiCheck, FiX, FiUsers, 
-  FiShield, FiRefreshCw, FiUserCheck, FiUserX, FiMail, FiClock, 
+  FiShield, FiUserCheck, FiUserX, FiMail, FiClock, 
   FiKey, FiMoreVertical 
 } from 'react-icons/fi';
 import {
@@ -30,12 +30,11 @@ const UsersPage = () => {
     setPage(1);
   }, [search]);
 
-  const { data, isLoading, isFetching, refetch, error } = useGetAllUsersQuery({ 
+  const { data, isLoading, isFetching, error } = useGetAllUsersQuery({ 
     page, 
     limit,
     search: search.trim() || undefined 
   }, {
-    pollingInterval: 30000, // Auto-refresh every 30 seconds for real-time data
     refetchOnMountOrArgChange: true,
   });
   const [deleteUser] = useDeleteUserMutation();
@@ -57,23 +56,17 @@ const UsersPage = () => {
     try {
       await activateUser(id).unwrap();
       toast.success('User activated successfully');
-      // Refetch users list to update the UI immediately
-      await refetch();
     } catch (err) {
       toast.error(err?.data?.message || 'Failed to activate user');
     }
   };
 
   const handleDeactivate = async (id) => {
-    if (window.confirm('Are you sure you want to deactivate this user?')) {
-      try {
-        await deactivateUser(id).unwrap();
-        toast.success('User deactivated successfully');
-        // Refetch users list to update the UI immediately
-        await refetch();
-      } catch (err) {
-        toast.error(err?.data?.message || 'Failed to deactivate user');
-      }
+    try {
+      await deactivateUser(id).unwrap();
+      toast.success('User deactivated successfully');
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to deactivate user');
     }
   };
 
@@ -330,21 +323,12 @@ const UsersPage = () => {
                   className="pl-12 h-12 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-200 shadow-sm hover:shadow-md"
                 />
               </div>
-              <Button
-                  variant="outline"
-                  className="bg-white/80 border-2 border-primary-200 hover:bg-primary-50 hover:border-primary-300 shadow-sm transition-all duration-200 whitespace-nowrap"
-                  onClick={() => refetch()}
-                  disabled={isFetching}
-                >
-                  <FiRefreshCw className={`mr-2 ${isFetching ? 'animate-spin' : ''}`} />
-                  {isFetching ? 'Refreshing...' : 'Refresh'}
+              <Link to="/users/new">
+                <Button className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap">
+                  <FiPlus className="mr-2" />
+                  Add User
                 </Button>
-                <Link to="/users/new">
-                  <Button className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap">
-                    <FiPlus className="mr-2" />
-                    Add User
-                  </Button>
-                </Link>
+              </Link>
             </div>
           </div>
 

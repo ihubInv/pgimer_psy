@@ -103,7 +103,7 @@ class User {
   static async findAll(page = 1, limit = 10, role = null) {
     try {
       const offset = (page - 1) * limit;
-      let query = 'SELECT id, name, role, email, mobile, created_at FROM users';
+      let query = 'SELECT id, name, role, email, mobile, is_active, two_factor_enabled, last_login, created_at FROM users';
       let countQuery = 'SELECT COUNT(*) FROM users';
       const params = [];
       let paramCount = 0;
@@ -442,7 +442,9 @@ class User {
       role: this.role,
       mobile: this.mobile,
       email: this.email,
+      is_active: this.is_active,
       two_factor_enabled: this.two_factor_enabled,
+      last_login: this.last_login,
       current_room: this.current_room,
       room_assignment_time: this.room_assignment_time,
       created_at: this.created_at

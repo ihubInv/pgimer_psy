@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { FiUpload, FiCamera, FiX, FiImage, FiFile, FiVideo } from 'react-icons/fi';
 import Button from './Button';
+import { toast } from 'react-toastify';
 
 const FileUpload = ({ 
   files = [], 
@@ -37,14 +38,16 @@ const FileUpload = ({
     }
     
     if (files.length + selectedFiles.length > maxFiles) {
-      alert(`Maximum ${maxFiles} files allowed. You can upload ${maxFiles - files.length} more file(s).`);
+      // alert(`Maximum ${maxFiles} files allowed. You can upload ${maxFiles - files.length} more file(s).`);
+      toast.error(`Maximum ${maxFiles} files allowed. You can upload ${maxFiles - files.length} more file(s).`);
       return;
     }
 
     // Validate file sizes
     const oversizedFiles = selectedFiles.filter(file => file.size > maxSizeMB * 1024 * 1024);
     if (oversizedFiles.length > 0) {
-      alert(`Some files exceed ${maxSizeMB}MB limit. Please select smaller files.`);
+      // alert(`Some files exceed ${maxSizeMB}MB limit. Please select smaller files.`);
+      toast.error(`Some files exceed ${maxSizeMB}MB limit. Please select smaller files.`);
       return;
     }
 
