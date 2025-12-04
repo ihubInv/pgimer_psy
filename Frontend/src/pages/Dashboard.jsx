@@ -207,9 +207,9 @@ const Dashboard = () => {
     refetchOnMountOrArgChange: true,
   });
 
-  // File stats available for all roles (backend will filter if needed)
+  // File stats - skip for MWO (Psychiatric Welfare Officer)
   const { data: fileStats } = useGetFileStatsQuery(undefined, {
-    skip: !isAuthenticated,
+    skip: !isAuthenticated || isMwo,
     refetchOnMountOrArgChange: true,
   });
 
@@ -268,27 +268,30 @@ const Dashboard = () => {
     refetchOnMountOrArgChange: true 
   });
 
-  // Get recent prescriptions for all roles
+  // Get recent prescriptions - skip for MWO (Psychiatric Welfare Officer)
   const { data: recentPrescriptions } = useGetAllPrescriptionQuery({ 
     page: 1, 
     limit: 5 
   }, { 
+    skip: isMwo,
     refetchOnMountOrArgChange: true 
   });
 
-  // Get recent ADL files
+  // Get recent ADL files - skip for MWO (Psychiatric Welfare Officer)
   const { data: recentADLFiles } = useGetAllADLFilesQuery({ 
     page: 1, 
     limit: 5 
   }, { 
+    skip: isMwo,
     refetchOnMountOrArgChange: true 
   });
 
-  // Get recent clinical proformas
+  // Get recent clinical proformas - skip for MWO (Psychiatric Welfare Officer)
   const { data: recentClinicalProformas } = useGetAllClinicalProformasQuery({ 
     page: 1, 
     limit: 5 
   }, { 
+    skip: isMwo,
     refetchOnMountOrArgChange: true 
   });
 
