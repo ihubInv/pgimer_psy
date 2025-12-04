@@ -2845,7 +2845,7 @@ const PatientsPage = () => {
                   <FiSearch className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                 </div>
                 <Input
-                  placeholder="Search by CR No, Patient Name, PSY No, Doctor Name, or Doctor Role..."
+                  placeholder="Search by CR No, Patient Name, PSY No..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-12 pr-12 h-12 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-200 shadow-sm hover:shadow-md"
