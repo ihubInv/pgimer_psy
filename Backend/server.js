@@ -331,14 +331,14 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 🚀 EMRS PGIMER API Server is running!
 📍 Port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
-📚 API Documentation: http://localhost:${PORT}/api-docs
-🔍 Health Check: http://localhost:${PORT}/health
+📚 API Documentation: ${process.env.SERVER_HOST}:${PORT}/api-docs
+🔍 Health Check: ${process.env.SERVER_HOST}:${PORT}/health
 🏥 Endpoints:
-   - Users: http://localhost:${PORT}/api/users
-   - Patients: http://localhost:${PORT}/api/patients
-   - Clinical Proformas: http://localhost:${PORT}/api/clinical-proformas
-   - Out Patient Intake Record: http://localhost:${PORT}/api/adl-files
-   - Prescriptions: http://localhost:${PORT}/api/prescriptions
+   - Users: ${process.env.SERVER_HOST}:${PORT}/api/users
+   - Patients: ${process.env.SERVER_HOST}:${PORT}/api/patients
+   - Clinical Proformas: ${process.env.SERVER_HOST}:${PORT}/api/clinical-proformas
+   - Out Patient Intake Record: ${process.env.SERVER_HOST}:${PORT}/api/adl-files
+   - Prescriptions: ${process.env.SERVER_HOST}:${PORT}/api/prescriptions
   `);
 });
 
