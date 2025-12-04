@@ -308,38 +308,34 @@ async function getTodayRoomDistribution() {
 
 /**
  * Auto-assign room using round-robin distribution
- * Ensures equal distribution across all active rooms from rooms table ONLY
- * Excludes rooms that are already assigned to doctors today
+ * Ensures equal distribution across ALL active rooms from rooms table
+ * INCLUDES rooms that are already assigned to doctors today (for equal distribution)
  * Uses TODAY's distribution to ensure equal distribution for today's patients only
  * ONLY assigns to rooms that exist in the rooms table (active rooms)
+ * 
+ * IMPORTANT: This function distributes patients equally to ALL rooms, even if they're occupied by doctors.
+ * This ensures fair distribution regardless of doctor assignments.
  */
 async function autoAssignRoom() {
   try {
-    // Get active rooms from rooms table (excluding those occupied by doctors today)
-    // This ensures we ONLY use rooms from the rooms table
-    const availableRooms = await getAvailableRooms(true);
+    // Get ALL active rooms from rooms table (including those occupied by doctors)
+    // This ensures equal distribution across all rooms, not just unoccupied ones
+    const allActiveRooms = await getAvailableRooms(false);
     
-    if (availableRooms.length === 0) {
-      // Check if there are any active rooms at all (even if occupied)
-      const allActiveRooms = await getAvailableRooms(false);
-      if (allActiveRooms.length === 0) {
-        // No active rooms exist in rooms table - this is an error condition
-        console.error('[autoAssignRoom] ERROR: No active rooms found in rooms table! Cannot auto-assign.');
-        // Try to get any room from rooms table (even inactive) as last resort
-        const roomsResult = await db.query(
-          `SELECT room_number FROM rooms ORDER BY room_number LIMIT 1`
-        );
-        if (roomsResult.rows.length > 0) {
-          console.warn(`[autoAssignRoom] WARNING: Using inactive room ${roomsResult.rows[0].room_number} as fallback`);
-          return roomsResult.rows[0].room_number;
-        }
-        // No rooms in table at all - this should not happen, but assign to Room 1 as absolute fallback
-        console.error('[autoAssignRoom] CRITICAL: No rooms found in rooms table! Using "Room 1" as absolute fallback.');
-        return 'Room 1';
+    if (allActiveRooms.length === 0) {
+      // No active rooms exist in rooms table - this is an error condition
+      console.error('[autoAssignRoom] ERROR: No active rooms found in rooms table! Cannot auto-assign.');
+      // Try to get any room from rooms table (even inactive) as last resort
+      const roomsResult = await db.query(
+        `SELECT room_number FROM rooms ORDER BY room_number LIMIT 1`
+      );
+      if (roomsResult.rows.length > 0) {
+        console.warn(`[autoAssignRoom] WARNING: Using inactive room ${roomsResult.rows[0].room_number} as fallback`);
+        return roomsResult.rows[0].room_number;
       }
-      // All rooms are occupied, still assign to first active room (doctor can reassign later)
-      console.log(`[autoAssignRoom] All rooms are occupied, assigning to first active room: ${allActiveRooms[0]}`);
-      return allActiveRooms[0] || 'Room 1';
+      // No rooms in table at all - this should not happen, but assign to Room 1 as absolute fallback
+      console.error('[autoAssignRoom] CRITICAL: No rooms found in rooms table! Using "Room 1" as absolute fallback.');
+      return 'Room 1';
     }
 
     // Use TODAY's distribution instead of all-time distribution
@@ -347,17 +343,17 @@ async function autoAssignRoom() {
     // getTodayRoomDistribution now ONLY counts rooms from rooms table
     const todayDistribution = await getTodayRoomDistribution();
     
-    console.log(`[autoAssignRoom] Available rooms from rooms table: ${availableRooms.join(', ')}`);
+    console.log(`[autoAssignRoom] All active rooms from rooms table (including occupied): ${allActiveRooms.join(', ')}`);
     console.log(`[autoAssignRoom] Today's distribution:`, todayDistribution);
     
     // Find room with minimum patient count for TODAY (round-robin distribution)
-    // Only consider rooms from availableRooms (which are from rooms table)
+    // Consider ALL active rooms (including those occupied by doctors) for equal distribution
     let minCount = Infinity;
-    let selectedRoom = availableRooms[0]; // Default to first room from rooms table
+    let selectedRoom = allActiveRooms[0]; // Default to first room from rooms table
     const roomsWithMinCount = []; // Track all rooms with the minimum count
 
-    for (const room of availableRooms) {
-      // Only count patients in rooms that exist in rooms table
+    for (const room of allActiveRooms) {
+      // Count patients in all rooms (including occupied ones) for equal distribution
       const count = todayDistribution[room] || 0;
       if (count < minCount) {
         minCount = count;
@@ -377,7 +373,7 @@ async function autoAssignRoom() {
       selectedRoom = roomsWithMinCount[0];
     }
 
-    console.log(`[autoAssignRoom] ✅ Selected room: ${selectedRoom} with ${minCount} patient(s) today (from ${availableRooms.length} available rooms from rooms table)`);
+    console.log(`[autoAssignRoom] ✅ Selected room: ${selectedRoom} with ${minCount} patient(s) today (from ${allActiveRooms.length} total active rooms, including occupied ones)`);
 
     return selectedRoom;
   } catch (error) {
