@@ -613,13 +613,15 @@ class UserController {
   static async getAvailableRooms(req, res) {
     try {
       const { getAvailableRooms, getRoomDistribution, getTodayRoomDistribution, getOccupiedRooms } = require('../utils/roomAssignment');
-      const rooms = await getAvailableRooms(true); // Exclude occupied rooms
+      const allRooms = await getAvailableRooms(false); // Get ALL rooms (including occupied)
+      const availableRooms = await getAvailableRooms(true); // Get only available (unoccupied) rooms
       const distribution = await getRoomDistribution(); // All patients (for consistency with deletion)
       const todayDistribution = await getTodayRoomDistribution(); // Today's patients only
       const occupiedRooms = await getOccupiedRooms();
       
       // Debug logging
-      console.log('[getAvailableRooms] Available rooms:', rooms);
+      console.log('[getAvailableRooms] All rooms:', allRooms);
+      console.log('[getAvailableRooms] Available rooms:', availableRooms);
       console.log('[getAvailableRooms] Distribution (all patients):', distribution);
       console.log('[getAvailableRooms] Today distribution:', todayDistribution);
       console.log('[getAvailableRooms] Occupied rooms:', Array.from(occupiedRooms));
@@ -654,7 +656,8 @@ class UserController {
       res.json({
         success: true,
         data: {
-          rooms, // Only available (unoccupied) rooms
+          rooms: allRooms, // ALL rooms (including occupied ones)
+          available_rooms: availableRooms, // Only available (unoccupied) rooms (for backward compatibility)
           distribution, // All patients (for consistency with deletion validation)
           distribution_today: todayDistribution, // Today's patients only (for reference)
           occupied_rooms: occupiedRoomsInfo // Info about which rooms are taken and by whom
@@ -683,13 +686,35 @@ class UserController {
 
       // CRITICAL: Only return room if it was assigned TODAY
       // Room assignments are day-specific and must be reselected each day
-      const today = new Date().toISOString().slice(0, 10);
-      const assignmentDate = user.room_assignment_time 
-        ? new Date(user.room_assignment_time).toISOString().slice(0, 10)
-        : null;
+      // Use database CURRENT_DATE to ensure consistency with IST timezone
+      const db = require('../config/database');
+      const todayResult = await db.query('SELECT CURRENT_DATE as today');
+      const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+      
+      // Check if room was assigned today using database DATE function
+      let isAssignedToday = false;
+      if (user.current_room) {
+        if (user.room_assignment_time) {
+          // Use database DATE function for accurate comparison
+          const dateCheckResult = await db.query(
+            'SELECT DATE($1::timestamp) = $2::date as is_today',
+            [user.room_assignment_time, today]
+          );
+          isAssignedToday = dateCheckResult.rows[0]?.is_today === true;
+        } else {
+          // If room exists but no assignment time, check if it was set today
+          // This handles edge cases where assignment_time might be null
+          // For safety, if room exists but no time, we'll assume it's from today
+          // (This should not happen in normal flow, but handles data inconsistencies)
+          console.log(`[getMyRoom] WARNING: Room ${user.current_room} exists but no assignment_time. Assuming today.`);
+          isAssignedToday = true;
+        }
+      }
+
+      console.log(`[getMyRoom] User ${req.user.id} (${req.user.name}): current_room="${user.current_room}", assignment_time="${user.room_assignment_time}", today="${today}", isAssignedToday=${isAssignedToday}`);
 
       // Only return room if assigned today
-      if (user.current_room && assignmentDate === today) {
+      if (user.current_room && isAssignedToday) {
         res.json({
           success: true,
           data: {

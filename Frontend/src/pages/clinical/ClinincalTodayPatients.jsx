@@ -336,7 +336,16 @@ const ClinicalTodayPatients = () => {
   
   // Helper function to check if room assignment is from today (IST)
   const isRoomAssignmentFromToday = (roomData) => {
-    if (!roomData?.data?.room_assignment_time) return false;
+    if (!roomData?.data?.room_assignment_time) {
+      // If no assignment time but has a room, still check if room exists
+      // This handles cases where room_assignment_time might be null but room is set
+      if (roomData?.data?.current_room) {
+        // If room exists but no time, assume it's from today (might be a data issue)
+        console.log('[isRoomAssignmentFromToday] Room exists but no assignment time, assuming today');
+        return true;
+      }
+      return false;
+    }
     
     const assignmentDate = new Date(roomData.data.room_assignment_time);
     const today = new Date();
@@ -345,7 +354,15 @@ const ClinicalTodayPatients = () => {
     const assignmentDateStr = assignmentDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     
-    return assignmentDateStr === todayStr;
+    const isToday = assignmentDateStr === todayStr;
+    console.log('[isRoomAssignmentFromToday]', {
+      assignmentDateStr,
+      todayStr,
+      isToday,
+      current_room: roomData?.data?.current_room
+    });
+    
+    return isToday;
   };
   
   // Automatically clear room assignment if it's from a previous day
@@ -368,17 +385,48 @@ const ClinicalTodayPatients = () => {
   }, [isDoctor, isLoadingRoom, myRoomData, clearRoom, refetchMyRoom]);
   
   // Get valid room data (only if from today)
+  // Also check if current user's room is in occupied_rooms (means they have a room assigned)
   const validRoomData = myRoomData && isRoomAssignmentFromToday(myRoomData) 
     ? myRoomData 
     : null;
   
-  // Initialize room selection form - only use room data if it's from today
+  // Check if user has a room assigned - be more lenient: if room exists in myRoomData, use it
+  // This handles cases where date comparison might fail due to timezone issues
+  const hasRoomAssigned = myRoomData?.data?.current_room && 
+                          myRoomData.data.current_room !== null && 
+                          myRoomData.data.current_room !== '';
+  
+  // Fallback: If myRoomData has a room but date check failed, check if it's in occupied_rooms
+  // This handles timezone edge cases where the room is assigned but date comparison fails
+  // Also check if the current user's ID matches the doctor_id in occupied_rooms
+  const currentUserId = currentUser?.id ? parseInt(currentUser.id, 10) : null;
+  const fallbackRoomData = !validRoomData && hasRoomAssigned && 
+    roomsData?.data?.occupied_rooms?.[myRoomData.data.current_room]?.doctor_id === currentUserId
+    ? myRoomData
+    : null;
+  
+  // Use validRoomData if available, otherwise use fallbackRoomData
+  // If room exists in myRoomData but date check failed, still use it (handles timezone issues)
+  const effectiveRoomData = validRoomData || fallbackRoomData || (hasRoomAssigned ? myRoomData : null);
+  
+  console.log('[ClinicalTodayPatients] Room assignment check:', {
+    myRoomData: myRoomData?.data,
+    validRoomData: validRoomData?.data,
+    fallbackRoomData: fallbackRoomData?.data,
+    effectiveRoomData: effectiveRoomData?.data,
+    currentUserId,
+    occupiedRooms: roomsData?.data?.occupied_rooms
+  });
+  
+  // Initialize room selection form - use effectiveRoomData (handles timezone edge cases)
   useEffect(() => {
     if (isDoctor && !isLoadingRoom) {
-      if (validRoomData?.data?.current_room) {
-        setSelectedRoom(validRoomData.data.current_room);
-        if (validRoomData.data.room_assignment_time) {
-          const existingTime = new Date(validRoomData.data.room_assignment_time);
+      // Use effectiveRoomData which handles timezone edge cases
+      const roomToUse = effectiveRoomData?.data?.current_room;
+      if (roomToUse) {
+        setSelectedRoom(roomToUse);
+        if (effectiveRoomData.data.room_assignment_time) {
+          const existingTime = new Date(effectiveRoomData.data.room_assignment_time);
           setAssignmentTime(formatLocalDateTime(existingTime));
         } else {
           setAssignmentTime(formatLocalDateTime(new Date()));
@@ -388,7 +436,7 @@ const ClinicalTodayPatients = () => {
         setAssignmentTime(formatLocalDateTime(new Date()));
       }
     }
-  }, [isDoctor, isLoadingRoom, validRoomData]);
+  }, [isDoctor, isLoadingRoom, effectiveRoomData]);
   
   // Handle room selection submit
   const handleRoomSubmit = async (e) => {
@@ -396,6 +444,13 @@ const ClinicalTodayPatients = () => {
     
     if (!selectedRoom) {
       toast.error('Please select a room');
+      return;
+    }
+    
+    // Check if selected room is disabled (occupied)
+    const selectedOption = allRoomOptions.find(opt => opt.value === selectedRoom);
+    if (selectedOption && selectedOption.disabled) {
+      toast.error(`Room ${selectedRoom} is already assigned to another doctor. Please select a different room.`);
       return;
     }
     
@@ -420,6 +475,12 @@ const ClinicalTodayPatients = () => {
         refetch(), // Refetch patients to show newly assigned patients
         dispatch(roomsApiSlice.util.invalidateTags(['Rooms', 'MyRoom', 'Patient']))
       ]);
+      
+      // Force a small delay to ensure state updates
+      setTimeout(() => {
+        refetchMyRoom();
+        refetch();
+      }, 500);
     } catch (error) {
       console.error('Room selection error:', error);
       toast.error(error?.data?.message || 'Failed to select room');
@@ -500,34 +561,49 @@ const ClinicalTodayPatients = () => {
   }, [refetch]);
 
   // Room selection data - use today's distribution only (not historical)
-  const rooms = roomsData?.data?.rooms || [];
+  const rooms = roomsData?.data?.rooms || []; // ALL rooms (including occupied)
   const distribution = roomsData?.data?.distribution_today || {}; // Use today's distribution only
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
+  // Create room options with disabled state for occupied rooms
+  // Note: distribution_today shows patients created today OR with visits today
+  // We'll show the count but clarify in the UI that it includes both new and existing patients
   const roomOptions = rooms.map(room => {
-    const totalPatients = distribution[room] || 0; // This now shows only today's patients
+    const totalPatients = distribution[room] || 0; // This shows today's patients (new + existing with visits)
+    const isOccupied = occupiedRooms[room] !== undefined;
+    const occupiedBy = isOccupied ? occupiedRooms[room]?.doctor_name : null;
+    
+    // Check if this is the current user's room
+    const isMyRoom = validRoomData?.data?.current_room === room;
+    
     return {
       value: room,
-      label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''})`,
+      label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''} today)${isOccupied ? ` - Assigned to ${occupiedBy || 'Doctor'}` : ''}${isMyRoom ? ' (Your room)' : ''}`,
+      disabled: isOccupied && !isMyRoom, // Don't disable if it's the current user's room
+      disabledReason: isOccupied && !isMyRoom ? `This room is already assigned to ${occupiedBy || 'another doctor'}` : undefined,
     };
   });
   
-  // If no rooms available, add default rooms (but only if they're not occupied)
+  // If no rooms available, add default rooms
   const allRoomOptions = [...roomOptions];
   if (allRoomOptions.length === 0) {
     for (let i = 1; i <= 10; i++) {
       const roomName = `Room ${i}`;
-      if (!occupiedRooms[roomName]) {
-        allRoomOptions.push({
-          value: roomName,
-          label: `${roomName} (0 patients)`,
-        });
-      }
+      const isOccupied = occupiedRooms[roomName] !== undefined;
+      const occupiedBy = isOccupied ? occupiedRooms[roomName]?.doctor_name : null;
+      
+      allRoomOptions.push({
+        value: roomName,
+        label: `${roomName} (0 patients)${isOccupied ? ` - Assigned to ${occupiedBy || 'Doctor'}` : ''}`,
+        disabled: isOccupied,
+        disabledReason: isOccupied ? `This room is already assigned to ${occupiedBy || 'another doctor'}` : undefined,
+      });
     }
   }
   
-  const allRoomsOccupied = allRoomOptions.length === 0 && Object.keys(occupiedRooms).length > 0;
-  const hasNoRoom = isDoctor && !isLoadingRoom && (!validRoomData || !validRoomData.data?.current_room);
+  const allRoomsOccupied = allRoomOptions.every(room => room.disabled) && Object.keys(occupiedRooms).length > 0;
+  
+  const hasNoRoom = isDoctor && !isLoadingRoom && !effectiveRoomData?.data?.current_room;
   
 
 
@@ -743,7 +819,7 @@ const ClinicalTodayPatients = () => {
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-6 py-6">
       
         {/* Current Room Assignment Card - Show if doctor has selected a room TODAY */}
-        {isDoctor && !isLoadingRoom && validRoomData?.data?.current_room && validRoomData.data.current_room !== null && validRoomData.data.current_room !== '' && (
+        {isDoctor && !isLoadingRoom && effectiveRoomData?.data?.current_room && effectiveRoomData.data.current_room !== null && effectiveRoomData.data.current_room !== '' && (
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
             <div className="p-4">
               <div className="flex items-center gap-3">
@@ -753,11 +829,11 @@ const ClinicalTodayPatients = () => {
                 <div>
                   <p className="text-sm text-gray-600">Current Room Assignment</p>
                   <p className="text-lg font-semibold text-gray-800">
-                    Room: {validRoomData.data.current_room}
+                    Room: {effectiveRoomData.data.current_room}
                   </p>
-                  {validRoomData.data.room_assignment_time && (
+                  {effectiveRoomData.data.room_assignment_time && (
                     <p className="text-xs text-gray-500 mt-1">
-                      Assigned at: {new Date(validRoomData.data.room_assignment_time).toLocaleString()}
+                      Assigned at: {new Date(effectiveRoomData.data.room_assignment_time).toLocaleString()}
                     </p>
                   )}
                 </div>
@@ -778,10 +854,10 @@ const ClinicalTodayPatients = () => {
                 </span>
               </h3>
               {/* Show current room if doctor has one - simplified display since we have a card above */}
-              {isDoctor && validRoomData?.data?.current_room && (
+              {isDoctor && effectiveRoomData?.data?.current_room && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg border border-blue-200">
                   <FiHome className="w-4 h-4" />
-                  <span className="text-sm font-medium">Room: {validRoomData.data.current_room}</span>
+                  <span className="text-sm font-medium">Room: {effectiveRoomData.data.current_room}</span>
                 </div>
               )}
                 <div className="flex items-center gap-4 text-sm">
@@ -841,11 +917,17 @@ const ClinicalTodayPatients = () => {
                             <Select
                               name="room"
                               value={selectedRoom}
-                              onChange={(e) => setSelectedRoom(e.target.value)}
+                              onChange={(e) => {
+                                const selectedOption = allRoomOptions.find(opt => opt.value === e.target.value);
+                                // Only allow selection if room is not disabled
+                                if (selectedOption && !selectedOption.disabled) {
+                                  setSelectedRoom(e.target.value);
+                                }
+                              }}
                               options={allRoomOptions}
                               placeholder="Select room"
                               searchable={true}
-                              disabled={isLoadingRooms || allRoomsOccupied}
+                              disabled={isLoadingRooms}
                               className="bg-white border-2 border-gray-300"
                             />
                             {selectedRoom && distribution[selectedRoom] !== undefined && (
@@ -855,7 +937,7 @@ const ClinicalTodayPatients = () => {
                             )}
                             {Object.keys(occupiedRooms).length > 0 && (
                               <p className="text-xs text-gray-500 mt-1 italic">
-                                {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and are not shown.
+                                {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and are disabled.
                               </p>
                             )}
                           </>
@@ -880,7 +962,7 @@ const ClinicalTodayPatients = () => {
                         <Button
                           type="submit"
                           loading={isSubmitting || isSelectingRoom}
-                          disabled={isSubmitting || isSelectingRoom || !selectedRoom || !assignmentTime || allRoomsOccupied}
+                          disabled={isSubmitting || isSelectingRoom || !selectedRoom || !assignmentTime || allRoomsOccupied || (selectedRoom && allRoomOptions.find(opt => opt.value === selectedRoom)?.disabled)}
                           className="bg-blue-600 hover:bg-blue-700"
                         >
                           <FiCheck className="mr-2" />
@@ -891,7 +973,7 @@ const ClinicalTodayPatients = () => {
                     
                     <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="text-xs text-blue-800">
-                        <strong>Note:</strong> Only one doctor can be assigned to each room. Rooms already assigned to other doctors are not shown.
+                        <strong>Note:</strong> Only one doctor can be assigned to each room. Rooms already assigned to other doctors are shown but disabled.
                         All unassigned patients in your selected room will be automatically assigned to you.
                       </p>
                     </div>

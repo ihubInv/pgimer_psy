@@ -359,13 +359,14 @@ class Patient {
       for (const [fieldName, fieldValue] of Object.entries(optionalFields)) {
         // Special handling for assigned_room - always include if it has a value (even if empty string, we want to track it)
         if (fieldName === 'assigned_room') {
-          if (fieldValue !== undefined && fieldValue !== null && fieldValue.toString().trim() !== '') {
+          if (fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== '') {
+            const roomValue = String(fieldValue).trim();
             fields.push(fieldName);
             placeholders.push(`$${++paramCount}`);
-            values.push(fieldValue.toString().trim());
-            console.log(`[Patient.create] ✅ Including assigned_room in INSERT: "${fieldValue}"`);
+            values.push(roomValue);
+            console.log(`[Patient.create] ✅ Including assigned_room in INSERT: "${roomValue}" (type: ${typeof fieldValue})`);
           } else {
-            console.log(`[Patient.create] ⚠️  WARNING: assigned_room is empty/null/undefined, patient will have no room!`);
+            console.log(`[Patient.create] ⚠️  WARNING: assigned_room is empty/null/undefined (value: ${fieldValue}, type: ${typeof fieldValue}), patient will have no room!`);
           }
         } else if (fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
           fields.push(fieldName);

@@ -293,18 +293,28 @@ class PatientController {
       }
 
       // Auto-assign room if room not manually specified (works for ALL users)
-      // Check if assigned_room is empty, null, or undefined
-      const hasRoom = patientData.assigned_room && 
-                      patientData.assigned_room.toString().trim() !== '';
+      // Check if assigned_room is empty, null, undefined, or placeholder text
+      // Handle empty strings, null, undefined, and any placeholder-like values
+      const roomValue = patientData.assigned_room;
+      const hasRoom = roomValue !== null && 
+                      roomValue !== undefined && 
+                      roomValue !== '' &&
+                      String(roomValue).trim() !== '' &&
+                      !String(roomValue).toLowerCase().includes('select room') &&
+                      !String(roomValue).toLowerCase().includes('auto-assign');
       
-      console.log(`[patientController] Before auto-assignment - assigned_room: "${patientData.assigned_room}" (type: ${typeof patientData.assigned_room}), hasRoom: ${hasRoom}`);
+      console.log(`[patientController] Before auto-assignment - assigned_room: "${roomValue}" (type: ${typeof roomValue}), hasRoom: ${hasRoom}`);
       
       if (!hasRoom) {
         console.log(`[patientController] No room specified, starting auto-assignment for user ${req.user.id} (role: ${req.user.role})...`);
         const { autoAssignRoom } = require('../utils/roomAssignment');
         const assignedRoom = await autoAssignRoom();
-        patientData.assigned_room = assignedRoom;
-        console.log(`[patientController] ✅ Auto-assigned room "${assignedRoom}" for user ${req.user.id} (role: ${req.user.role})`);
+        if (assignedRoom) {
+          patientData.assigned_room = assignedRoom;
+          console.log(`[patientController] ✅ Auto-assigned room "${assignedRoom}" for user ${req.user.id} (role: ${req.user.role})`);
+        } else {
+          console.error(`[patientController] ⚠️  WARNING: autoAssignRoom returned null/undefined! No room assigned.`);
+        }
       } else {
         console.log(`[patientController] Using manually selected room: "${patientData.assigned_room}" for user ${req.user.id}`);
       }
@@ -312,6 +322,20 @@ class PatientController {
       console.log(`[patientController] Final assigned_room value before Patient.create: "${patientData.assigned_room}"`);
       
       const patient = await Patient.create(patientData);
+      
+      // Verify that assigned_room was saved correctly
+      if (patientData.assigned_room) {
+        const db = require('../config/database');
+        const verifyResult = await db.query(
+          'SELECT assigned_room FROM registered_patient WHERE id = $1',
+          [patient.id]
+        );
+        const savedRoom = verifyResult.rows[0]?.assigned_room;
+        console.log(`[patientController] ✅ Patient ${patient.id} created. Saved assigned_room: "${savedRoom}" (expected: "${patientData.assigned_room}")`);
+        if (savedRoom !== patientData.assigned_room) {
+          console.error(`[patientController] ⚠️  WARNING: Room mismatch! Expected "${patientData.assigned_room}" but saved "${savedRoom}"`);
+        }
+      }
 
       // Fetch related data to populate joined fields in response
       let assignedDoctorName = null;
@@ -471,7 +495,7 @@ class PatientController {
             const visitsTodayResult = await db.query(
               `SELECT patient_id, visit_date, assigned_doctor_id, visit_status, room_no
                FROM patient_visits
-               WHERE patient_id = ANY($1) AND visit_date = $2
+               WHERE patient_id = ANY($1) AND DATE(visit_date) = $2
                ORDER BY created_at DESC`,
               [patientIds, today]
             );

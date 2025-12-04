@@ -130,27 +130,34 @@ const Select = ({
             {searchQuery ? 'No matching options' : 'No options available'}
           </div>
         ) : (
-          filteredOptions.map((option, index) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => handleSelect(option.value)}
-              className={`
-                w-full px-4 py-3 text-left
-                flex items-center justify-between
-                transition-colors duration-150
-                ${value === option.value
-                  ? 'bg-primary-50 text-primary-700 font-semibold'
-                  : 'text-gray-700 hover:bg-gray-50'}
-                ${index !== 0 ? 'border-t border-gray-100' : ''}
-              `}
-            >
+          filteredOptions.map((option, index) => {
+            const isDisabled = option.disabled === true;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => !isDisabled && handleSelect(option.value)}
+                disabled={isDisabled}
+                className={`
+                  w-full px-4 py-3 text-left
+                  flex items-center justify-between
+                  transition-colors duration-150
+                  ${isDisabled 
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-60' 
+                    : value === option.value
+                      ? 'bg-primary-50 text-primary-700 font-semibold'
+                      : 'text-gray-700 hover:bg-gray-50'}
+                  ${index !== 0 ? 'border-t border-gray-100' : ''}
+                `}
+                title={isDisabled ? option.disabledReason || 'This option is disabled' : undefined}
+              >
               <span className="flex-1">{option.label}</span>
-              {value === option.value && (
+              {value === option.value && !isDisabled && (
                 <FiCheck className="h-5 w-5 text-primary-600 flex-shrink-0 ml-2" />
               )}
             </button>
-          ))
+            );
+          })
         )}
       </div>
     </div>
