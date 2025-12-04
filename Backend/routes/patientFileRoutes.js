@@ -8,6 +8,29 @@ const { handleUpload } = require('../middleware/upload');
 
 /**
  * @swagger
+ * /api/patient-files/stats:
+ *   get:
+ *     summary: Get patient file upload statistics
+ *     tags: [Patient Files]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: File statistics retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+// IMPORTANT: This route must be defined BEFORE /:patient_id to avoid route conflicts
+router.get('/stats', 
+  authenticateToken, 
+  authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), 
+  PatientFileController.getFileStats
+);
+
+/**
+ * @swagger
  * /api/patient-files/{patient_id}:
  *   get:
  *     summary: Get patient files
@@ -154,28 +177,6 @@ router.delete('/delete/:patient_id/:file_path',
   authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), 
   validateId, 
   PatientFileController.deletePatientFile
-);
-
-/**
- * @swagger
- * /api/patient-files/stats:
- *   get:
- *     summary: Get patient file upload statistics
- *     tags: [Patient Files]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: File statistics retrieved successfully
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
- */
-router.get('/stats', 
-  authenticateToken, 
-  authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), 
-  PatientFileController.getFileStats
 );
 
 module.exports = router;

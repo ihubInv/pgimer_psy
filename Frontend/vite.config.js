@@ -4,17 +4,20 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: '0.0.0.0', // ✅ Allows access from external IP (not just localhost)
-    port: 8001,      // ✅ Runs on port 8001
+    host: '0.0.0.0',
+    port: 8001,
     proxy: {
       '/api': {
-        target: 'http://122.186.76.102:8002', // ✅ Backend server IP and port
+        target: 'http://122.186.76.102:8002',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://122.186.76.102:8002', // ✅ Proxy /uploads to backend
+        target: 'http://122.186.76.102:8002',
         changeOrigin: true,
       },
     },
+    hmr: { 
+      overlay: false,   // 🔥 turns off the red error screen
+    }
   },
 })
