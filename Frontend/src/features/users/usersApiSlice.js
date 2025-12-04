@@ -87,6 +87,28 @@ export const usersApiSlice = apiSlice.injectEndpoints({
         body: data,
       }),
     }),
+    enable2FAForUser: builder.mutation({
+      query: (id) => ({
+        url: `/users/${id}/enable-2fa`,
+        method: 'POST',
+      }),
+      invalidatesTags: (result, error, id) => [
+        { type: 'User', id },
+        { type: 'User', id: 'LIST' },
+        'User',
+      ],
+    }),
+    disable2FAForUser: builder.mutation({
+      query: (id) => ({
+        url: `/users/${id}/disable-2fa`,
+        method: 'POST',
+      }),
+      invalidatesTags: (result, error, id) => [
+        { type: 'User', id },
+        { type: 'User', id: 'LIST' },
+        'User',
+      ],
+    }),
     getDoctors: builder.query({
       query: ({ page = 1, limit = 100 }) => ({
         url: '/users/doctors',
@@ -107,6 +129,8 @@ export const {
   useActivateUserMutation,
   useDeactivateUserMutation,
   useResetUserPasswordMutation,
+  useEnable2FAForUserMutation,
+  useDisable2FAForUserMutation,
   useGetDoctorsQuery,
 } = usersApiSlice;
 

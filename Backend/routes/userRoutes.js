@@ -1255,6 +1255,70 @@ router.put('/:id/activate', authenticateToken, requireAdmin, validateId, UserCon
  */
 router.put('/:id/deactivate', authenticateToken, requireAdmin, validateId, UserController.deactivateUserById);
 
+/**
+ * @swagger
+ * /api/users/{id}/enable-2fa:
+ *   post:
+ *     summary: Enable 2FA for a user (Admin only)
+ *     description: Admin can enable 2FA for any user in the system
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: 2FA enabled successfully
+ *       400:
+ *         description: 2FA is already enabled
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin access required
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.post('/:id/enable-2fa', authenticateToken, requireAdmin, validateId, UserController.adminEnable2FA);
+
+/**
+ * @swagger
+ * /api/users/{id}/disable-2fa:
+ *   post:
+ *     summary: Disable 2FA for a user (Admin only)
+ *     description: Admin can disable 2FA for any user in the system
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: 2FA disabled successfully
+ *       400:
+ *         description: 2FA is already disabled
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin access required
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.post('/:id/disable-2fa', authenticateToken, requireAdmin, validateId, UserController.adminDisable2FA);
+
 router.get('/:id', authenticateToken, requireAdmin, validateId, UserController.getUserById);
 
 /**

@@ -1026,6 +1026,90 @@ class UserController {
     }
   }
 
+  // Admin: Enable 2FA for any user
+  static async adminEnable2FA(req, res) {
+    try {
+      const userId = parseInt(req.params.id, 10);
+      const targetUser = await User.findById(userId);
+      
+      if (!targetUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Check if 2FA is already enabled
+      if (targetUser.two_factor_enabled) {
+        return res.status(400).json({
+          success: false,
+          message: '2FA is already enabled for this user'
+        });
+      }
+
+      // Enable 2FA
+      await targetUser.enable2FA();
+
+      res.json({
+        success: true,
+        message: '2FA has been enabled successfully for the user',
+        data: {
+          user_id: userId,
+          two_factor_enabled: true
+        }
+      });
+    } catch (error) {
+      console.error('Admin enable 2FA error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to enable 2FA',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  // Admin: Disable 2FA for any user
+  static async adminDisable2FA(req, res) {
+    try {
+      const userId = parseInt(req.params.id, 10);
+      const targetUser = await User.findById(userId);
+      
+      if (!targetUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Check if 2FA is already disabled
+      if (!targetUser.two_factor_enabled) {
+        return res.status(400).json({
+          success: false,
+          message: '2FA is already disabled for this user'
+        });
+      }
+
+      // Disable 2FA
+      await targetUser.disable2FA();
+
+      res.json({
+        success: true,
+        message: '2FA has been disabled successfully for the user',
+        data: {
+          user_id: userId,
+          two_factor_enabled: false
+        }
+      });
+    } catch (error) {
+      console.error('Admin disable 2FA error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to disable 2FA',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
   // Helper method to complete login with access and refresh tokens
   static async completeLogin(user, req, res) {
     try {

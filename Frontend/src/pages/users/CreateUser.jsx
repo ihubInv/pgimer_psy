@@ -2,18 +2,38 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FiUser, FiMail, FiShield, FiPhone, FiLock } from 'react-icons/fi';
-import { useCreateUserMutation, useUpdateUserMutation } from '../../features/users/usersApiSlice';
+import { 
+  useCreateUserMutation, 
+  useUpdateUserMutation,
+  useEnable2FAForUserMutation,
+  useDisable2FAForUserMutation,
+  useGetUserByIdQuery
+} from '../../features/users/usersApiSlice';
+import { useSelector } from 'react-redux';
+import { selectCurrentUser } from '../../features/auth/authSlice';
 import Card from '../../components/Card';
 import { IconInput } from '../../components/IconInput';
 import Select from '../../components/Select';
 import Button from '../../components/Button';
-import { USER_ROLES } from '../../utils/constants';
+import { USER_ROLES, isAdmin } from '../../utils/constants';
 
 const CreateUser = ({ editMode = false, existingUser = null, userId = null }) => {
   const navigate = useNavigate();
+  const currentUser = useSelector(selectCurrentUser);
   const [createUser, { isLoading: isCreating }] = useCreateUserMutation();
   const [updateUser, { isLoading: isUpdating }] = useUpdateUserMutation();
-  const isLoading = isCreating || isUpdating;
+  const [enable2FA, { isLoading: isEnabling2FA }] = useEnable2FAForUserMutation();
+  const [disable2FA, { isLoading: isDisabling2FA }] = useDisable2FAForUserMutation();
+  
+  // Refetch user data when in edit mode to get updated 2FA status
+  const { data: userData, refetch: refetchUser } = useGetUserByIdQuery(userId, {
+    skip: !editMode || !userId,
+  });
+  
+  // Use refetched user data if available, otherwise use existingUser prop
+  const currentUserData = userData?.data?.user || existingUser;
+  
+  const isLoading = isCreating || isUpdating || isEnabling2FA || isDisabling2FA;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -28,17 +48,17 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
 
   // Populate form when editing
   useEffect(() => {
-    if (editMode && existingUser) {
+    if (editMode && currentUserData) {
       setFormData({
-        name: existingUser.name || '',
-        email: existingUser.email || '',
-        mobile: existingUser.mobile || '',
+        name: currentUserData.name || '',
+        email: currentUserData.email || '',
+        mobile: currentUserData.mobile || '',
         password: '',
         confirmPassword: '',
-        role: existingUser.role || '',
+        role: currentUserData.role || '',
       });
     }
-  }, [editMode, existingUser]);
+  }, [editMode, currentUserData]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -118,6 +138,30 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
       navigate('/users');
     } catch (err) {
       toast.error(err?.data?.message || (editMode ? 'Failed to update user' : 'Failed to create user'));
+    }
+  };
+
+  const handleToggle2FA = async () => {
+    if (!editMode || !userId || !isAdmin(currentUser?.role)) {
+      return;
+    }
+
+    const isCurrentlyEnabled = currentUserData?.two_factor_enabled || false;
+
+    try {
+      if (isCurrentlyEnabled) {
+        await disable2FA(userId).unwrap();
+        toast.success('2FA disabled successfully for the user');
+      } else {
+        await enable2FA(userId).unwrap();
+        toast.success('2FA enabled successfully for the user');
+      }
+      // Refetch user data to update the UI
+      if (refetchUser) {
+        await refetchUser();
+      }
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to toggle 2FA');
     }
   };
 
@@ -235,48 +279,89 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
                         />
                       </div>
                     </div>
-
-                    {/* Row 3: Password | Confirm Password (only in create mode) */}
-                    {!editMode && (
-                      <>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative">
-                            <IconInput
-                              icon={<FiLock />}
-                              label="Password"
-                              type="password"
-                              name="password"
-                              value={formData.password}
-                              onChange={handleChange}
-                              placeholder="Minimum 8 characters"
-                              error={errors.password}
-                              required
-                               className="h-14"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                          <div className="relative">
-                            <IconInput
-                              icon={<FiLock />}
-                              label="Confirm Password"
-                              type="password"
-                              name="confirmPassword"
-                              value={formData.confirmPassword}
-                              onChange={handleChange}
-                              placeholder="Re-enter password"
-                              error={errors.confirmPassword}
-                              required
-                               className="h-14"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
                   </div>
+
+                  {/* 2FA Toggle Section - Only visible to Admin in Edit Mode */}
+                  {editMode && isAdmin(currentUser?.role) && (
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
+                        <div className="relative backdrop-blur-sm bg-white/50 border border-gray-200/60 rounded-xl p-5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-blue-100/80 backdrop-blur-sm rounded-lg border border-blue-200/60">
+                                <FiShield className="w-5 h-5 text-blue-600" />
+                              </div>
+                              <div>
+                                <h3 className="font-semibold text-gray-900">Two-Factor Authentication (2FA)</h3>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  Current status: <span className={`font-medium ${currentUserData?.two_factor_enabled ? 'text-green-600' : 'text-gray-500'}`}>
+                                    {currentUserData?.two_factor_enabled ? 'Enabled' : 'Disabled'}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              onClick={handleToggle2FA}
+                              loading={isEnabling2FA || isDisabling2FA}
+                              variant={currentUserData?.two_factor_enabled ? "outline" : "primary"}
+                              className={currentUserData?.two_factor_enabled 
+                                ? "bg-white border-2 border-red-200 hover:bg-red-50 hover:border-red-300 text-red-600 shadow-sm transition-all duration-200"
+                                : "bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg"
+                              }
+                            >
+                              <FiShield className="mr-2" />
+                              {currentUserData?.two_factor_enabled ? 'Disable 2FA' : 'Enable 2FA'}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Continue with password fields if not in edit mode */}
+                  {!editMode && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+
+                      {/* Row 3: Password | Confirm Password (only in create mode) */}
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
+                        <div className="relative">
+                          <IconInput
+                            icon={<FiLock />}
+                            label="Password"
+                            type="password"
+                            name="password"
+                            value={formData.password}
+                            onChange={handleChange}
+                            placeholder="Minimum 8 characters"
+                            error={errors.password}
+                            required
+                             className="h-14"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
+                        <div className="relative">
+                          <IconInput
+                            icon={<FiLock />}
+                            label="Confirm Password"
+                            type="password"
+                            name="confirmPassword"
+                            value={formData.confirmPassword}
+                            onChange={handleChange}
+                            placeholder="Re-enter password"
+                            error={errors.confirmPassword}
+                            required
+                             className="h-14"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Edit Mode Note */}
                   {editMode && (
