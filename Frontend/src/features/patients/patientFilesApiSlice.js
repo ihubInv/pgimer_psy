@@ -57,7 +57,7 @@ export const patientFilesApiSlice = apiSlice.injectEndpoints({
           { type: 'PatientFile', id: 'LIST' },
           { type: 'Patient', id: patient_id }
         ];
-        console.log('[patientFilesApiSlice] Invalidating tags after update:', tags);
+        // console.log('[patientFilesApiSlice] Invalidating tags after update:', tags);
         return tags;
       },
     }),
@@ -110,7 +110,7 @@ export const patientFilesApiSlice = apiSlice.injectEndpoints({
           { type: 'PatientFile', id: 'LIST' },
           { type: 'Patient', id: patient_id }
         ];
-        console.log('[patientFilesApiSlice] Invalidating tags after update:', tags);
+        // console.log('[patientFilesApiSlice] Invalidating tags after update:', tags);
         return tags;
       },
     }),
@@ -127,7 +127,7 @@ export const patientFilesApiSlice = apiSlice.injectEndpoints({
           { type: 'PatientFile', id: 'LIST' },
           { type: 'Patient', id: patient_id }
         ];
-        console.log('[patientFilesApiSlice] Invalidating tags after update:', tags);
+        // console.log('[patientFilesApiSlice] Invalidating tags after update:', tags);
         return tags;
       },
     }),

@@ -76,12 +76,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   const existingFiles = patientFilesData?.data?.files || [];
   const canEditFiles = patientFilesData?.data?.can_edit !== false; // Default to true if not specified
   
-  // Debug: Log files data
   useEffect(() => {
-    if (patientFilesData) {
-      console.log('[PatientDetailsEdit] Patient files data:', patientFilesData);
-      console.log('[PatientDetailsEdit] Existing files:', existingFiles);
-    }
   }, [patientFilesData, existingFiles]);
 
   const isAdminUser = isAdmin(currentUser?.role);
@@ -2175,7 +2170,6 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         // Refetch files after update with a small delay to ensure backend processing is complete
         setTimeout(() => {
           if (refetchFiles) {
-            console.log('[PatientDetailsEdit] Refetching files after update...');
             refetchFiles();
           }
         }, 1000);

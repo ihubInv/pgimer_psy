@@ -340,8 +340,6 @@ const ClinicalTodayPatients = () => {
       // If no assignment time but has a room, still check if room exists
       // This handles cases where room_assignment_time might be null but room is set
       if (roomData?.data?.current_room) {
-        // If room exists but no time, assume it's from today (might be a data issue)
-        console.log('[isRoomAssignmentFromToday] Room exists but no assignment time, assuming today');
         return true;
       }
       return false;
@@ -355,13 +353,6 @@ const ClinicalTodayPatients = () => {
     const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     
     const isToday = assignmentDateStr === todayStr;
-    console.log('[isRoomAssignmentFromToday]', {
-      assignmentDateStr,
-      todayStr,
-      isToday,
-      current_room: roomData?.data?.current_room
-    });
-    
     return isToday;
   };
   
@@ -374,7 +365,6 @@ const ClinicalTodayPatients = () => {
         clearRoom()
           .unwrap()
           .then(() => {
-            console.log('Room assignment cleared automatically - assignment was from a previous day');
             refetchMyRoom();
           })
           .catch((error) => {
@@ -409,14 +399,6 @@ const ClinicalTodayPatients = () => {
   // If room exists in myRoomData but date check failed, still use it (handles timezone issues)
   const effectiveRoomData = validRoomData || fallbackRoomData || (hasRoomAssigned ? myRoomData : null);
   
-  console.log('[ClinicalTodayPatients] Room assignment check:', {
-    myRoomData: myRoomData?.data,
-    validRoomData: validRoomData?.data,
-    fallbackRoomData: fallbackRoomData?.data,
-    effectiveRoomData: effectiveRoomData?.data,
-    currentUserId,
-    occupiedRooms: roomsData?.data?.occupied_rooms
-  });
   
   // Initialize room selection form - use effectiveRoomData (handles timezone edge cases)
   useEffect(() => {
@@ -519,8 +501,6 @@ const ClinicalTodayPatients = () => {
     refetch();
   };
   
-  // Debug: Log filtered patients for troubleshooting
-  // console.log("API Patients:", apiPatients?.length, "Today Patients:", todayPatients?.length, "New Patients:", newPatients?.length)
   // Track previous location to detect navigation changes
   const prevLocationRef = useRef(location.pathname);
   
@@ -757,23 +737,7 @@ const ClinicalTodayPatients = () => {
     });
   });
 
-  // Debug: Log filtering results (after all filters are applied)
-  console.log('[ClinicalTodayPatients] Debug:', {
-    totalApiPatients: deduplicatedApiPatients.length,
-    todayPatientsByDate: todayPatientsByDate.length,
-    todayPatientsAfterRoleFilter: todayPatients.length,
-    filteredPatients: filteredPatients.length,
-    selectedDate,
-    currentDate: toISTDateString(new Date()),
-    currentUser: currentUser ? { id: currentUser.id, role: currentUser.role } : null,
-    samplePatient: deduplicatedApiPatients[0] ? {
-      id: deduplicatedApiPatients[0].id,
-      name: deduplicatedApiPatients[0].name,
-      created_at: deduplicatedApiPatients[0].created_at,
-      created_at_IST: deduplicatedApiPatients[0].created_at ? toISTDateString(deduplicatedApiPatients[0].created_at) : null,
-      assigned_doctor_id: deduplicatedApiPatients[0].assigned_doctor_id,
-    } : null,
-  });
+
 
   if (isLoading) {
     return (

@@ -60,25 +60,6 @@ const ApiTest = () => {
           )}
         </div>
       </Card>
-
-      {/* Direct API Call Test */}
-      {/* <Card title="Manual API Call Test">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Open browser console (F12) and run this command:
-          </p>
-          <pre className="p-4 bg-gray-900 text-green-400 rounded text-xs overflow-auto">
-{`fetch('/api/patients?page=1&limit=10', {
-  headers: {
-    'Authorization': 'Bearer ' + localStorage.getItem('token')
-  }
-})
-.then(res => res.json())
-.then(data => console.log('Response:', data))
-.catch(err => console.error('Error:', err));`}
-          </pre>
-        </div>
-      </Card> */}
     </div>
   );
 };

@@ -218,12 +218,6 @@ const CreatePrescription = ({
   
   // Debug: Log medicines data
   useEffect(() => {
-    if (medicinesApiData) {
-      console.log('[CreatePrescription] Medicines data received:', {
-        hasData: !!medicinesApiData,
-        medicines: allMedicines.length
-      });
-    }
     if (medicinesError) {
       console.error('[CreatePrescription] Medicines API error:', medicinesError);
     }

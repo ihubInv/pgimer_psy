@@ -53,13 +53,6 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
   
   // Debug: Log medicines data
   useEffect(() => {
-    if (medicinesData) {
-      console.log('[PrescriptionEdit] Medicines data received:', {
-        hasData: !!medicinesData,
-        dataStructure: medicinesData,
-        medicines: medicinesData?.data?.medicines?.length || 0
-      });
-    }
     if (medicinesError) {
       console.error('[PrescriptionEdit] Medicines API error:', medicinesError);
     }

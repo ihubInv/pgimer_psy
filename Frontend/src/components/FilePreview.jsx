@@ -87,25 +87,18 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
       }
       
       const fullUrl = `${baseUrlWithoutApi}${relativePath}`;
-      // console.log('[FilePreview] Converted absolute path to URL:', {
-      //   original: filePath,
-      //   relative: relativePath,
-      //   fullUrl: fullUrl
-      // });
       return fullUrl;
     }
     
     // If it starts with /uploads, use it directly (backend serves from /uploads)
     if (filePath.startsWith('/uploads/')) {
       const fullUrl = `${baseUrlWithoutApi}${filePath}`;
-      console.log('[FilePreview] Constructed URL from /uploads path:', fullUrl, 'from path:', filePath);
       return fullUrl;
     }
     
     // If it's a relative path starting with uploads (no leading slash)
     if (filePath.startsWith('uploads/')) {
       const fullUrl = `${baseUrlWithoutApi}/${filePath}`;
-      console.log('[FilePreview] Constructed URL from uploads/ path:', fullUrl, 'from path:', filePath);
       return fullUrl;
     }
     
@@ -122,22 +115,20 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
         // Check if it already has /uploads prefix
         if (!filePath.startsWith('/uploads/')) {
           const fullUrl = `${baseUrlWithoutApi}/uploads${filePath}`;
-          console.log('[FilePreview] Added /uploads prefix to /patient_files path:', fullUrl, 'from path:', filePath);
+;
           return fullUrl;
         }
         const fullUrl = `${baseUrlWithoutApi}${filePath}`;
-        console.log('[FilePreview] Constructed URL from /patient_files path:', fullUrl, 'from path:', filePath);
+      
         return fullUrl;
       }
       // Otherwise, prepend /uploads
       const fullUrl = `${baseUrlWithoutApi}/uploads${filePath}`;
-      console.log('[FilePreview] Constructed URL from / path:', fullUrl, 'from path:', filePath);
       return fullUrl;
     }
     
     // Otherwise assume it's a relative path and prepend /uploads
     const fullUrl = `${baseUrlWithoutApi}/uploads/${filePath}`;
-    console.log('[FilePreview] Constructed URL (relative):', fullUrl, 'from path:', filePath);
     return fullUrl;
   };
 
@@ -192,11 +183,6 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
     }
   };
 
-  // Debug logging
-  // console.log('[FilePreview] Rendering files:', files?.length || 0, 'files');
-  if (files && files.length > 0) {
-    // console.log('[FilePreview] File paths:', files);
-  }
 
   if (!files || files.length === 0) {
     return (
@@ -222,16 +208,6 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
             const fileType = getFileType(actualPath);
             const fileName = actualPath.split('/').pop();
             const fileUrl = getFileUrl(actualPath);
-            
-            // console.log('[FilePreview] Rendering file:', {
-            //   index,
-            //   original: filePath,
-            //   actualPath,
-            //   fileName,
-            //   fileUrl,
-            //   fileType
-            // });
-
             return {
               actualPath,
               fileType,
@@ -281,9 +257,7 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
                         parent.appendChild(errorDiv);
                       }
                     }}
-                    onLoad={() => {
-                      // console.log('[FilePreview] Image loaded successfully:', String(fileUrl || ''));
-                    }}
+                    onLoad={() => {}}
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                     <FiImage className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />

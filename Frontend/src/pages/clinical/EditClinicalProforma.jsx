@@ -61,7 +61,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   // URL params return strings, but patient_id in database is integer
   const patientIdFromUrl = id ? parseInt(id, 10) : null;
   const proforma = proformaData?.data?.proformas?.find(p => p.patient_id === patientIdFromUrl);
-  // console.log(patient_id);
   const isComplexCase = proforma?.doctor_decision === 'complex_case' && proforma?.adl_file_id;
 
   // Check if the case is already marked as complex (from original data, not form state)
@@ -140,20 +139,15 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   }, [hasHistory, isCreateMode, propInitialData, isLoadingVisitHistory, showProformaForm]);
 
   const { data: existingAdlFileData } = useGetAllADLFilesQuery({});
-  // console.log("existingAdlFile", existingAdlFileData);
 
   const existingAdlFile = existingAdlFileData?.data?.files?.find(f => f.patient_id === patient?.id && f.clinical_proforma_id === proforma?.id);
   // const adlFile = adlFileData?.data?.adlFile || adlFileData?.data?.file;
 
 
   const { data: existingPrescriptionData } = useGetAllPrescriptionQuery({});
-  // console.log("existingPrescriptionData", existingPrescriptionData);
 
   const existingPrescription = existingPrescriptionData?.data?.prescriptions?.find(p => p.patient_id === patient?.id && p.clinical_proforma_id === proforma?.id);
-  // const prescription = prescriptionData?.data?.prescription;
-console.log("existingPrescription", existingPrescription);
-// console.log("existingPrescriptionData", existingPrescriptionData);
-  // Fetch doctors list
+
   const { data: doctorsData } = useGetDoctorsQuery({ page: 1, limit: 100 });
   const doctors = doctorsData?.data?.doctors || [];
 
@@ -412,15 +406,7 @@ console.log("existingPrescription", existingPrescription);
 
   // Debug logging (moved here after formData is defined)
   useEffect(() => {
-    console.log('[EditClinicalProforma] Doctor Decision Debug:', {
-      proformaDecision: proforma?.doctor_decision,
-      propInitialDataDecision: propInitialData?.doctor_decision,
-      proformaAdlFileId: proforma?.adl_file_id,
-      propInitialDataAdlFileId: propInitialData?.adl_file_id,
-      isAlreadyComplex,
-      formDataDecision: formData?.doctor_decision,
-      dropdownDisabled: isAlreadyComplex
-    });
+ 
   }, [proforma?.doctor_decision, propInitialData?.doctor_decision, proforma?.adl_file_id, propInitialData?.adl_file_id, isAlreadyComplex, formData?.doctor_decision]);
 
   // File upload state
@@ -439,14 +425,6 @@ console.log("existingPrescription", existingPrescription);
   
   // Debug: Log files data
   useEffect(() => {
-    if (patientFilesData) {
-      console.log('[EditClinicalProforma] Patient files data:', patientFilesData);
-      console.log('[EditClinicalProforma] Existing files:', existingFiles);
-      console.log('[EditClinicalProforma] Files count:', existingFiles.length);
-      if (existingFiles.length > 0) {
-        console.log('[EditClinicalProforma] First file path:', existingFiles[0]);
-      }
-    }
   }, [patientFilesData, existingFiles]);
 
   // Card expand/collapse state
@@ -809,16 +787,6 @@ console.log("existingPrescription", existingPrescription);
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
     
-    // Debug logging for doctor_decision changes
-    if (name === 'doctor_decision') {
-      console.log('[EditClinicalProforma] Doctor Decision Change:', {
-        name,
-        newValue,
-        currentValue: formData.doctor_decision,
-        event: e
-      });
-    }
-    
     // Mark that user has manually edited the form
     userHasEditedRef.current = true;
     setFormData((prev) => {
@@ -827,13 +795,7 @@ console.log("existingPrescription", existingPrescription);
         [name]: newValue,
       };
       
-      // Debug logging after state update
-      if (name === 'doctor_decision') {
-        console.log('[EditClinicalProforma] FormData Updated:', {
-          previous: prev.doctor_decision,
-          updated: updated.doctor_decision
-        });
-      }
+       
       
       // Notify parent component of form data changes, especially doctor_decision
       // Defer to avoid setState during render warning
@@ -1054,7 +1016,6 @@ console.log("existingPrescription", existingPrescription);
             // Refetch files after update with delay to ensure backend processing is complete
             setTimeout(() => {
               if (refetchFiles) {
-                console.log('[EditClinicalProforma] Refetching files after update...');
                 refetchFiles();
               }
             }, 1000);
@@ -1071,7 +1032,6 @@ console.log("existingPrescription", existingPrescription);
             // Refetch files after create with delay to ensure backend processing is complete
             setTimeout(() => {
               if (refetchFiles) {
-                console.log('[EditClinicalProforma] Refetching files after create...');
                 refetchFiles();
               }
             }, 1000);
