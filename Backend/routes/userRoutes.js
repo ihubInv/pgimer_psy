@@ -332,6 +332,67 @@ router.post('/verify-login-otp', UserController.verifyLoginOTP);
 
 /**
  * @swagger
+ * /api/users/resend-login-otp:
+ *   post:
+ *     summary: Resend login OTP
+ *     description: |
+ *       Resends a new OTP to the user's email. The previous OTP will be invalidated.
+ *       
+ *       **Use Case:**
+ *       - User didn't receive the OTP
+ *       - OTP expired
+ *       - User wants a fresh OTP
+ *       
+ *       **Note:** Requires the `user_id` from the initial login response.
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - user_id
+ *             properties:
+ *               user_id:
+ *                 type: integer
+ *                 description: User ID from login response
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: New OTP sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "New OTP sent to your email. Please check your inbox."
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user_id:
+ *                       type: integer
+ *                     email:
+ *                       type: string
+ *                     expires_in:
+ *                       type: integer
+ *                       description: OTP expiration time in seconds
+ *       400:
+ *         description: Missing user_id
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.post('/resend-login-otp', UserController.resendLoginOTP);
+
+/**
+ * @swagger
  * /api/users/forgot-password:
  *   post:
  *     summary: Request password reset OTP (Step 1)

@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { flushSync } from 'react-dom';
 import { toast } from 'react-toastify';
-import { useLoginMutation, useVerifyLoginOTPMutation } from '../features/auth/authApiSlice';
+import { useLoginMutation, useVerifyLoginOTPMutation, useResendLoginOTPMutation } from '../features/auth/authApiSlice';
 import { setCredentials, setOTPRequired, selectOTPRequired, selectLoginData, selectIsAuthenticated } from '../features/auth/authSlice';
 import {
   Eye,
@@ -65,6 +65,14 @@ const Login = () => {
 
   const [login, { isLoading: isLoggingIn }] = useLoginMutation();
   const [verifyLoginOTP, { isLoading: isVerifying }] = useVerifyLoginOTPMutation();
+  const [resendLoginOTP, { isLoading: isResending }] = useResendLoginOTPMutation();
+
+  // Clear OTP field when OTP is required (new OTP requested)
+  useEffect(() => {
+    if (otpRequired) {
+      setFormData(prev => ({ ...prev, otp: '' }));
+    }
+  }, [otpRequired]);
 
   const handleChange = (e) => {
     setFormData({
@@ -196,7 +204,23 @@ const Login = () => {
         }
       });
     } catch (err) {
+      // Clear OTP field on error so user can enter a new one
+      setFormData(prev => ({ ...prev, otp: '' }));
       toast.error(err?.data?.message || 'OTP verification failed');
+    }
+  };
+
+  const handleResendOTP = async () => {
+    try {
+      const result = await resendLoginOTP({
+        user_id: loginData.user_id,
+      }).unwrap();
+
+      // Clear OTP field when new OTP is sent
+      setFormData(prev => ({ ...prev, otp: '' }));
+      toast.success(result.message || 'New OTP sent to your email');
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to resend OTP');
     }
   };
 
@@ -499,7 +523,15 @@ const Login = () => {
                     </button>
                   </form>
 
-                  <div className="text-center">
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={handleResendOTP}
+                      disabled={isResending}
+                      className="text-sm font-medium text-blue-600 transition-colors hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isResending ? 'Sending...' : 'Resend OTP'}
+                    </button>
                     <button
                       type="button"
                       onClick={() => {

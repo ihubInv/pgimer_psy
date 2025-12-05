@@ -115,12 +115,35 @@ class UserController {
     try {
       const { user_id, otp } = req.body;
 
+      // Validate input
+      if (!user_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'User ID is required'
+        });
+      }
+
+      if (!otp) {
+        return res.status(400).json({
+          success: false,
+          message: 'OTP is required'
+        });
+      }
+
+      // Sanitize OTP input (trim whitespace)
+      const sanitizedOTP = String(otp).trim().replace(/\s+/g, '');
+
+      // Log the verification attempt (for debugging)
+      console.log(`OTP verification attempt for user ${user_id}, OTP: "${otp}" (sanitized: "${sanitizedOTP}")`);
+
       // Verify OTP
-      const loginOTP = await LoginOTP.verifyOTP(user_id, otp);
+      const loginOTP = await LoginOTP.verifyOTP(user_id, sanitizedOTP);
       if (!loginOTP) {
+        // The detailed error is already logged in verifyOTP method
+        // Check server logs for specific error details
         return res.status(401).json({
           success: false,
-          message: 'Invalid or expired OTP'
+          message: 'Invalid or expired OTP. Please check the code and try again, or request a new OTP.'
         });
       }
 
@@ -148,6 +171,61 @@ class UserController {
       res.status(500).json({
         success: false,
         message: 'OTP verification failed',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  // Resend login OTP
+  static async resendLoginOTP(req, res) {
+    try {
+      const { user_id } = req.body;
+
+      // Validate input
+      if (!user_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'User ID is required'
+        });
+      }
+
+      // Get user to verify they exist and are active
+      const user = await User.findById(user_id);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Check if user is active
+      if (!user.is_active) {
+        return res.status(401).json({
+          success: false,
+          message: 'Account is deactivated. Please contact administrator.'
+        });
+      }
+
+      // Create a new OTP (this will mark old ones as used)
+      const loginOTP = await LoginOTP.create(user.id);
+
+      // Send OTP email
+      await sendEmail(user.email, 'loginOTP', { userName: user.name, otp: loginOTP.otp });
+
+      res.json({
+        success: true,
+        message: 'New OTP sent to your email. Please check your inbox.',
+        data: {
+          user_id: user.id,
+          email: user.email,
+          expires_in: 300 // 5 minutes in seconds
+        }
+      });
+    } catch (error) {
+      console.error('Resend login OTP error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to resend OTP',
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
       });
     }
