@@ -37,6 +37,16 @@ const isValidEmail = (email) => {
   return emailRegex.test(email);
 };
 
+// Normalize email address (only converts to lowercase, preserves dots and plus signs)
+// Example: Jasdeep.Singh.Inbox@gmail.com -> jasdeep.singh.inbox@gmail.com
+// Note: jasdeep.singh.inbox@gmail.com and jasdeepsinghinbox@gmail.com are treated as DIFFERENT emails
+const normalizeEmail = (email) => {
+  if (!email) return email;
+  
+  // Just trim and convert to lowercase, keep all characters including dots and plus signs
+  return email.trim().toLowerCase();
+};
+
 // Validate phone number (Indian format)
 const isValidPhoneNumber = (phone) => {
   const phoneRegex = /^[6-9]\d{9}$/;
@@ -221,6 +231,7 @@ module.exports = {
   parseDate,
   calculateAge,
   isValidEmail,
+  normalizeEmail,
   isValidPhoneNumber,
   sanitizeString,
   generatePagination,

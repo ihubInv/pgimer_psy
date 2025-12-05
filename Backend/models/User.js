@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { normalizeEmail } = require('../utils/helpers');
 
 class User {
   constructor(data) {
@@ -26,10 +27,14 @@ class User {
     try {
       const { name, role, email, password ,mobile} = userData;
       
-      // Check if user already exists
+      // Normalize email (lowercase only, preserves dots and plus signs)
+      const normalizedEmail = normalizeEmail(email);
+      
+      // Check if user already exists (case-insensitive check)
+      // Use LOWER() for case-insensitive comparison while preserving dots/plus
       const existingUser = await db.query(
-        'SELECT id FROM users WHERE email = $1',
-        [email]
+        'SELECT id, email FROM users WHERE LOWER(email) = $1',
+        [normalizedEmail]
       );
 
       if (existingUser.rows.length > 0) {
@@ -81,12 +86,16 @@ class User {
     }
   }
 
-  // Find user by email
+  // Find user by email (case-insensitive, preserves dots and plus signs)
   static async findByEmail(email) {
     try {
+      // Normalize email to lowercase for case-insensitive search
+      const normalizedEmail = normalizeEmail(email);
+      
+      // Use LOWER() for case-insensitive comparison
       const result = await db.query(
-        'SELECT * FROM users WHERE email = $1',
-        [email]
+        'SELECT * FROM users WHERE LOWER(email) = $1',
+        [normalizedEmail]
       );
 
       if (result.rows.length === 0) {
@@ -147,6 +156,21 @@ class User {
       const updates = [];
       const values = [];
       let paramCount = 0;
+
+      // If email is being updated, check for duplicates (case-insensitive)
+      if (updateData.email && updateData.email !== this.email) {
+        const normalizedEmail = normalizeEmail(updateData.email);
+        
+        // Check for case-insensitive duplicate (preserves dots and plus signs)
+        const existingUser = await db.query(
+          'SELECT id FROM users WHERE LOWER(email) = $1 AND id != $2',
+          [normalizedEmail, this.id]
+        );
+
+        if (existingUser.rows.length > 0) {
+          throw new Error('User with this email already exists');
+        }
+      }
 
       for (const [key, value] of Object.entries(updateData)) {
         if (allowedFields.includes(key) && value !== undefined) {
