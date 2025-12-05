@@ -22,9 +22,35 @@ const validateUserRegistration = [
     .isLength({ min: 2, max: 255 })
     .withMessage('Name must be between 2 and 255 characters'),
   body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Valid email is required'),
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .custom((value) => {
+      // Very lenient email validation - allows any characters (except whitespace) before @
+      // Allows dots before @, multiple dots, etc.
+      // Just checks: has characters before @, has @, has domain with extension
+      const trimmed = value.trim();
+      if (!trimmed || trimmed.length < 5) {
+        throw new Error('Email is too short');
+      }
+      const atIndex = trimmed.indexOf('@');
+      if (atIndex <= 0 || atIndex >= trimmed.length - 4) {
+        throw new Error('Please enter a valid email address');
+      }
+      const localPart = trimmed.substring(0, atIndex);
+      const domainPart = trimmed.substring(atIndex + 1);
+      if (!localPart || localPart.includes(' ') || !domainPart || domainPart.includes(' ')) {
+        throw new Error('Please enter a valid email address');
+      }
+      if (!domainPart.includes('.')) {
+        throw new Error('Email domain must include a dot (e.g., example.com)');
+      }
+      return true;
+    })
+    .customSanitizer((value) => {
+      // Only convert to lowercase, preserve all dots and plus signs
+      return value ? value.trim().toLowerCase() : value;
+    }),
   body('password')
     .isLength({ min: 6 })
     .withMessage('Password must be at least 6 characters long'),
@@ -36,9 +62,35 @@ const validateUserRegistration = [
 
 const validateUserLogin = [
   body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Valid email is required'),
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .custom((value) => {
+      // Very lenient email validation - allows any characters (except whitespace) before @
+      // Allows dots before @, multiple dots, etc.
+      // Just checks: has characters before @, has @, has domain with extension
+      const trimmed = value.trim();
+      if (!trimmed || trimmed.length < 5) {
+        throw new Error('Email is too short');
+      }
+      const atIndex = trimmed.indexOf('@');
+      if (atIndex <= 0 || atIndex >= trimmed.length - 4) {
+        throw new Error('Please enter a valid email address');
+      }
+      const localPart = trimmed.substring(0, atIndex);
+      const domainPart = trimmed.substring(atIndex + 1);
+      if (!localPart || localPart.includes(' ') || !domainPart || domainPart.includes(' ')) {
+        throw new Error('Please enter a valid email address');
+      }
+      if (!domainPart.includes('.')) {
+        throw new Error('Email domain must include a dot (e.g., example.com)');
+      }
+      return true;
+    })
+    .customSanitizer((value) => {
+      // Only convert to lowercase, preserve all dots and plus signs
+      return value ? value.trim().toLowerCase() : value;
+    }),
   body('password')
     .notEmpty()
     .withMessage('Password is required'),

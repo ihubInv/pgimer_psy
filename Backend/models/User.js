@@ -27,7 +27,8 @@ class User {
     try {
       const { name, role, email, password ,mobile} = userData;
       
-      // Normalize email (lowercase only, preserves dots and plus signs)
+      // Normalize email for comparison only (lowercase, preserves dots and plus signs)
+      // Store the original email as entered by the user
       const normalizedEmail = normalizeEmail(email);
       
       // Check if user already exists (case-insensitive check)
@@ -45,12 +46,16 @@ class User {
       const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
       const password_hash = await bcrypt.hash(password, saltRounds);
 
-      // Insert user
+      // Store email exactly as received (already lowercased by validation middleware)
+      // Dots and plus signs are preserved
+      const emailToStore = email.trim();
+
+      // Insert user - store email exactly as entered (lowercase, but with dots/plus preserved)
       const result = await db.query(
         `INSERT INTO users (name, role, email, password_hash, mobile) 
          VALUES ($1, $2, $3, $4, $5) 
          RETURNING id, name, role, email, mobile, created_at`,
-        [name, role, email, password_hash, mobile]
+        [name, role, emailToStore, password_hash, mobile]
       );
 
       return new User(result.rows[0]);
