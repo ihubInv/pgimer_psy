@@ -522,35 +522,66 @@ class UserController {
   static async deleteUserById(req, res) {
     try {
       const { id } = req.params;
+      const userId = parseInt(id);
+      
+      console.log(`[Delete User] Attempting to delete user ID: ${userId} by admin ID: ${req.user.id}`);
+      
+      // Validate ID
+      if (isNaN(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid user ID'
+        });
+      }
       
       // Prevent admin from deleting themselves
-      if (parseInt(id) === req.user.id) {
+      if (userId === req.user.id) {
         return res.status(400).json({
           success: false,
           message: 'Cannot delete your own account'
         });
       }
 
-      const user = await User.findById(id);
+      const user = await User.findById(userId);
       if (!user) {
+        console.log(`[Delete User] User ${userId} not found`);
         return res.status(404).json({
           success: false,
           message: 'User not found'
         });
       }
 
+      console.log(`[Delete User] User found: ${user.name} (${user.email}), proceeding with deletion...`);
       await user.delete();
 
+      console.log(`[Delete User] ✅ User ${userId} deleted successfully`);
       res.json({
         success: true,
         message: 'User deleted successfully'
       });
     } catch (error) {
-      console.error('Delete user by ID error:', error);
+      console.error('[Delete User] ❌ Error deleting user:', error);
+      console.error('[Delete User] Error stack:', error.stack);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to delete user';
+      if (error.code === '23503') { // Foreign key constraint violation
+        errorMessage = 'Cannot delete user: User has associated records that prevent deletion';
+      } else if (error.code === '23505') { // Unique constraint violation
+        errorMessage = 'Cannot delete user: Constraint violation';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       res.status(500).json({
         success: false,
-        message: 'Failed to delete user',
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        message: errorMessage,
+        error: process.env.NODE_ENV === 'development' ? {
+          message: error.message,
+          code: error.code,
+          detail: error.detail,
+          constraint: error.constraint
+        } : undefined
       });
     }
   }

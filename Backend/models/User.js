@@ -317,35 +317,74 @@ class User {
     }
   }
 
-  // Delete user (soft delete by deactivating)
+  // Delete user (hard delete - removes user from database)
   async delete() {
     try {
+      console.log(`[User Delete] Starting deletion process for user ID: ${this.id}`);
+      
       // First, set all foreign key references to NULL or handle them appropriately
       // This prevents foreign key constraint violations
+      // Note: Most foreign keys have ON DELETE SET NULL, but we'll update them explicitly for safety
       
-      // 1. Set clinical_proforma.filled_by to NULL for records created by this user
+      // 1. Set clinical_proforma.filled_by to NULL
       await db.query('UPDATE clinical_proforma SET filled_by = NULL WHERE filled_by = $1', [this.id]);
+      console.log(`[User Delete] Updated clinical_proforma.filled_by`);
       
-      // 3. Set adl_files.created_by to NULL for files created by this user
+      // 2. Set clinical_proforma.assigned_doctor to NULL
+      await db.query('UPDATE clinical_proforma SET assigned_doctor = NULL WHERE assigned_doctor = $1', [this.id]);
+      console.log(`[User Delete] Updated clinical_proforma.assigned_doctor`);
+      
+      // 3. Set adl_files.created_by to NULL
       await db.query('UPDATE adl_files SET created_by = NULL WHERE created_by = $1', [this.id]);
+      console.log(`[User Delete] Updated adl_files.created_by`);
       
-      // 4. Set adl_files.last_accessed_by to NULL for files last accessed by this user
+      // 4. Set adl_files.last_accessed_by to NULL
       await db.query('UPDATE adl_files SET last_accessed_by = NULL WHERE last_accessed_by = $1', [this.id]);
+      console.log(`[User Delete] Updated adl_files.last_accessed_by`);
       
+      // 5. Set registered_patient.assigned_doctor_id to NULL
+      await db.query('UPDATE registered_patient SET assigned_doctor_id = NULL WHERE assigned_doctor_id = $1', [this.id]);
+      console.log(`[User Delete] Updated registered_patient.assigned_doctor_id`);
       
-      // 6. Set patient_assignments.assigned_doctor to NULL for assignments to this user
-      await db.query('UPDATE patient_assignments SET assigned_doctor = NULL WHERE assigned_doctor = $1', [this.id]);
+      // 6. Set registered_patient.filled_by to NULL
+      await db.query('UPDATE registered_patient SET filled_by = NULL WHERE filled_by = $1', [this.id]);
+      console.log(`[User Delete] Updated registered_patient.filled_by`);
       
-      // 7. Set audit_logs.changed_by to NULL for logs by this user
-      await db.query('UPDATE audit_logs SET changed_by = NULL WHERE changed_by = $1', [this.id]);
+      // 7. Set patient_visits.assigned_doctor_id to NULL
+      await db.query('UPDATE patient_visits SET assigned_doctor_id = NULL WHERE assigned_doctor_id = $1', [this.id]);
+      console.log(`[User Delete] Updated patient_visits.assigned_doctor_id`);
       
-      await db.query('UPDATE prescriptions SET filled_by = NULL WHERE filled_by = $1', [this.id]);
-      // Now delete the user (login_otps and password_reset_tokens will cascade automatically)
-      await db.query('DELETE FROM users WHERE id = $1', [this.id]);
+      // 8. Set audit_log.changed_by to NULL
+      await db.query('UPDATE audit_log SET changed_by = NULL WHERE changed_by = $1', [this.id]);
+      console.log(`[User Delete] Updated audit_log.changed_by`);
       
+      // 9. Set prescriptions.filled_by to NULL (if table exists)
+      try {
+        await db.query('UPDATE prescriptions SET filled_by = NULL WHERE filled_by = $1', [this.id]);
+        console.log(`[User Delete] Updated prescriptions.filled_by`);
+      } catch (err) {
+        // Table might not exist, ignore
+        console.log(`[User Delete] prescriptions table not found or column doesn't exist, skipping`);
+      }
+      
+      // Now delete the user
+      // login_otps, password_reset_tokens, and refresh_tokens will cascade automatically (ON DELETE CASCADE)
+      const deleteResult = await db.query('DELETE FROM users WHERE id = $1 RETURNING id', [this.id]);
+      
+      if (deleteResult.rows.length === 0) {
+        throw new Error('User not found or already deleted');
+      }
+      
+      console.log(`[User Delete] ✅ User ${this.id} deleted successfully`);
       return true;
     } catch (error) {
-      console.error('Error deleting user:', error);
+      console.error(`[User Delete] ❌ Error deleting user ${this.id}:`, error);
+      console.error(`[User Delete] Error details:`, {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        constraint: error.constraint
+      });
       throw error;
     }
   }
