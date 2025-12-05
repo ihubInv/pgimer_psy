@@ -94,6 +94,7 @@ const Login = () => {
         // Direct login - accessToken received (new system) or token (legacy)
         const token = result.data.accessToken || result.data.token;
         const user = result.data.user;
+        const redirectUrl = result.data.redirectUrl || '/';
         
         // Use flushSync to ensure state update is synchronous and React re-renders immediately
         flushSync(() => {
@@ -115,29 +116,11 @@ const Login = () => {
         
         toast.success('Login successful!');
         
-        // Mark that we're waiting for navigation
-        pendingNavigationRef.current = true;
-        
-        // Force immediate navigation after credentials are set
-        // Use requestAnimationFrame to ensure DOM and state are fully updated
-        requestAnimationFrame(() => {
-          // Double-check credentials are available
-          const finalToken = localStorage.getItem('token');
-          const finalUser = localStorage.getItem('user');
-          
-          if (finalToken && finalUser) {
-            pendingNavigationRef.current = false;
-            navigate('/', { replace: true });
-          } else {
-            // Fallback: try again after a short delay
-            setTimeout(() => {
-              if (localStorage.getItem('token') && localStorage.getItem('user')) {
-                pendingNavigationRef.current = false;
-                navigate('/', { replace: true });
-              }
-            }, 50);
-          }
-        });
+        // Immediate redirect - use window.location for more reliable navigation
+        // This ensures the redirect happens even if React state hasn't fully updated
+        setTimeout(() => {
+          window.location.href = redirectUrl;
+        }, 100);
       } else {
         // OTP required - store login data for OTP verification
         dispatch(setOTPRequired(result.data));
@@ -180,29 +163,12 @@ const Login = () => {
       
       toast.success('Login successful!');
       
-      // Mark that we're waiting for navigation
-      pendingNavigationRef.current = true;
-      
-      // Force immediate navigation after credentials are set
-      // Use requestAnimationFrame to ensure DOM and state are fully updated
-      requestAnimationFrame(() => {
-        // Double-check credentials are available
-        const finalToken = localStorage.getItem('token');
-        const finalUser = localStorage.getItem('user');
-        
-        if (finalToken && finalUser) {
-          pendingNavigationRef.current = false;
-          navigate('/', { replace: true });
-        } else {
-          // Fallback: try again after a short delay
-          setTimeout(() => {
-            if (localStorage.getItem('token') && localStorage.getItem('user')) {
-              pendingNavigationRef.current = false;
-              navigate('/', { replace: true });
-            }
-          }, 50);
-        }
-      });
+      // Immediate redirect - use window.location for more reliable navigation
+      // This ensures the redirect happens even if React state hasn't fully updated
+      const redirectUrl = result.data?.redirectUrl || '/';
+      setTimeout(() => {
+        window.location.href = redirectUrl;
+      }, 100);
     } catch (err) {
       // Clear OTP field on error so user can enter a new one
       setFormData(prev => ({ ...prev, otp: '' }));

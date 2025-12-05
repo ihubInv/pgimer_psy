@@ -1222,7 +1222,7 @@ class UserController {
   // Helper method to complete login with access and refresh tokens
   static async completeLogin(user, req, res) {
     try {
-      // Generate access token (5 minutes)
+      // Generate access token (10 minutes - consistent with session timeout)
       const accessToken = generateAccessToken({
         userId: user.id,
         email: user.email,
@@ -1245,13 +1245,24 @@ class UserController {
       // Update last login
       await user.updateLastLogin();
 
+      // Determine redirect URL based on user role
+      let redirectUrl = '/';
+      if (user.role === 'Admin') {
+        redirectUrl = '/';
+      } else if (['Faculty', 'Resident'].includes(user.role)) {
+        redirectUrl = '/clinical-today-patients';
+      } else if (user.role === 'Psychiatric Welfare Officer') {
+        redirectUrl = '/patients';
+      }
+
       res.json({
         success: true,
         message: 'Login successful',
         data: {
           user: user.toJSON(),
           accessToken,
-          expiresIn: 300 // 5 minutes in seconds
+          expiresIn: 600, // 10 minutes in seconds (consistent with session timeout)
+          redirectUrl: redirectUrl // Add redirect URL for frontend
         }
       });
     } catch (error) {

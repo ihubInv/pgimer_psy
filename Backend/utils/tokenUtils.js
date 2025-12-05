@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 
 /**
- * Generate a short-lived access token (5 minutes)
+ * Generate a short-lived access token (10 minutes)
  * @param {Object} payload - Token payload (userId, email, role)
  * @returns {string} JWT access token
  */
@@ -14,7 +14,7 @@ function generateAccessToken(payload) {
       type: 'access'
     },
     process.env.JWT_SECRET,
-    { expiresIn: '5m' } // 5 minutes TTL
+    { expiresIn: '10m' } // 10 minutes TTL (consistent with session timeout)
   );
 }
 
