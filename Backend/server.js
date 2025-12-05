@@ -25,7 +25,7 @@ const roomRoutes = require('./routes/roomRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
-
+const FRONTEND_PORT = process.env.FRONTEND_PORT || 8001;
 // Security middleware - less restrictive for Swagger UI
 app.use(helmet({
   contentSecurityPolicy: {
@@ -43,37 +43,17 @@ app.use(helmet({
   hsts: false, // Disable HSTS for HTTP connections
 }));
 
-// CORS configuration
-// app.use(cors({
-//   origin: process.env.NODE_ENV === 'production'
-//     ? ['https://emrs.pgimer.ac.in']
-//     : ['http://72.60.206.223:3000', 'http://72.60.206.223:2026', 'http://72.60.206.223:2026'],
-//   credentials: true,
-//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-//   allowedHeaders: ['Content-Type', 'Authorization'],
-// }));
 
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
     ? [
-        'https://emrs.pgimer.ac.in',
-        `http://122.186.76.102:3000`,
-        `http://122.186.76.102:8000`,
-        `http://122.186.76.102:8001`,
-        `http://122.186.76.102:8002`,
-        `http://122.186.76.102:2026`,
+        `${process.env.SERVER_HOST}:${FRONTEND_PORT}`,
+        `${process.env.SERVER_HOST}:${PORT}`,
+
       ]
     : [
-        `http://122.186.76.102:3000`,
-        `http://122.186.76.102:8000`,
-        `http://122.186.76.102:8001`,
-        `http://122.186.76.102:8002`,
-        `http://122.186.76.102:2026`,
-        'http://localhost:3000',
-        'http://localhost:8000',
-        'http://localhost:8001',
-        'http://localhost:8002',
-        'http://localhost:2026',
+        `${process.env.SERVER_HOST}:${FRONTEND_PORT}`,
+        `${process.env.SERVER_HOST}:${PORT}`,
       ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -160,7 +140,7 @@ app.use((req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     success: true,
-    message: 'EMRS PGIMER API is running',
+    message: 'PGIMER Psychiatry API is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     version: '1.0.0'
@@ -204,7 +184,6 @@ app.get('/favicon.ico', (req, res) => {
 // Serve Swagger UI with proper configuration
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, swaggerUiOptions));
 
-// API Routes
 app.use('/api/users', userRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/patient-files', patientFileRoutes);
@@ -216,23 +195,29 @@ app.use('/api/medicines', medicineRoutes);
 app.use('/api/session', sessionRoutes);
 app.use('/api/rooms', roomRoutes);
 
-// Root endpoint
+// ✅ Updated Root endpoint
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'Welcome to EMRS PGIMER API',
+    message: 'Welcome to PGIMER Psychiatry API',
     version: '1.0.0',
     documentation: '/api-docs',
     health: '/health',
     endpoints: {
       users: '/api/users',
       patients: '/api/patients',
+      patientFiles: '/api/patient-files',
       clinicalProformas: '/api/clinical-proformas',
       adlFiles: '/api/adl-files',
       prescriptions: '/api/prescriptions',
+      prescriptionTemplates: '/api/prescription-templates',
+      medicines: '/api/medicines',
+      session: '/api/session',
+      rooms: '/api/rooms'
     }
   });
 });
+
 
 // 404 handler
 app.use('*', (req, res) => {
