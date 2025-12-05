@@ -2,18 +2,33 @@ const nodemailer = require('nodemailer');
 
 // Create reusable transporter object using SMTP transport
 const createTransporter = () => {
-  return nodemailer.createTransport({
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+  
+  // Validate that credentials are provided
+  if (!smtpUser || !smtpPass) {
+    throw new Error('SMTP credentials are not configured. Please set SMTP_USER and SMTP_PASS environment variables.');
+  }
+  
+  const config = {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
+    port: parseInt(process.env.SMTP_PORT) || 587,
     secure: false, // true for 465, false for other ports
     auth: {
-      user: process.env.SMTP_USER || process.env.EMAIL_USER,
-      pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
+      user: smtpUser,
+      pass: smtpPass
     },
     tls: {
       rejectUnauthorized: false
     }
-  });
+  };
+  
+  // If port is 465, use secure connection
+  if (config.port === 465) {
+    config.secure = true;
+  }
+  
+  return nodemailer.createTransport(config);
 };
 
 // Email templates
@@ -254,11 +269,12 @@ Postgraduate Institute of Medical Education & Research, Chandigarh
 const sendEmail = async (to, template, data = {}) => {
   try {
     const transporter = createTransporter();
+    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
 
     const emailContent = emailTemplates[template](data);
 
     const mailOptions = {
-      from: `"PGIMER EMR System" <${process.env.SMTP_USER || process.env.EMAIL_USER}>`,
+      from: `"PGIMER EMR System" <${smtpUser}>`,
       to: to,
       subject: emailContent.subject,
       text: emailContent.text,
@@ -297,6 +313,18 @@ const sendEmail = async (to, template, data = {}) => {
 
   } catch (error) {
     console.error('Email sending failed:', error);
+
+    // Check for specific authentication errors
+    if (error.code === 'EENVELOPE' || error.responseCode === 530 || error.message.includes('Authentication required')) {
+      console.error('❌ SMTP Authentication Error: Please check your SMTP credentials (SMTP_USER and SMTP_PASS)');
+      throw new Error('SMTP authentication failed. Please check email server configuration.');
+    }
+
+    // Check for missing credentials
+    if (error.message.includes('SMTP credentials are not configured')) {
+      console.error('❌ SMTP Configuration Error: Missing email credentials');
+      throw new Error('Email service is not configured. Please contact system administrator.');
+    }
 
     // In development mode, log the error but continue
     if (process.env.NODE_ENV === 'development') {
