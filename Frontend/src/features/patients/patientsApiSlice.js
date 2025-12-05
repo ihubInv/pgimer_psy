@@ -8,10 +8,14 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         params: { page, limit, ...filters },
       }),
       providesTags: ['Patient'],
+      // Keep unused data for 60 seconds to reduce refetches
+      keepUnusedDataFor: 60,
     }),
     getPatientById: builder.query({
       query: (id) => `/patients/${id}`,
       providesTags: (result, error, id) => [{ type: 'Patient', id }],
+      // Keep patient data for 5 minutes (patients don't change frequently)
+      keepUnusedDataFor: 300,
     }),
     searchPatients: builder.query({
       query: ({ search, page = 1, limit = 10 }) => ({

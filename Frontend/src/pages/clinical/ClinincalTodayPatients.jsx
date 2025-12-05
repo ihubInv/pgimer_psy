@@ -487,12 +487,13 @@ const ClinicalTodayPatients = () => {
   // This ensures newly created patients appear immediately
   const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
     page: 1,
-    limit: 1000, // High limit to fetch all patients, then filter client-side for today
+    limit: 100, // Reduced from 1000 - use server-side filtering instead
+    // Filter for today's patients on backend if possible
     // search: search.trim() || undefined // Only include search if it has a value
   }, {
-    pollingInterval: 30000, // Auto-refresh every 30 seconds
+    pollingInterval: 60000, // Increased from 30s to 60s to reduce API calls
     refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
+    refetchOnFocus: false, // Disable auto-refetch on focus to reduce unnecessary calls
     refetchOnReconnect: true,
   });
   

@@ -1,4 +1,6 @@
-const Button = ({
+import { memo } from 'react';
+
+const Button = memo(({
   children,
   variant = 'primary',
   size = 'md',
@@ -60,7 +62,9 @@ const Button = ({
       {children}
     </button>
   );
-};
+});
+
+Button.displayName = 'Button';
 
 export default Button;
 

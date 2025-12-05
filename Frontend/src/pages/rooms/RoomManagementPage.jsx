@@ -43,12 +43,14 @@ const RoomManagementPage = () => {
     is_active: isActiveFilter,
     search: search.trim() || undefined 
   }, {
-    pollingInterval: 30000,
+    pollingInterval: 60000, // Increased from 30s to 60s
+    refetchOnFocus: false,
     refetchOnMountOrArgChange: true,
   });
 
   const { data: statsData } = useGetRoomStatsQuery(undefined, {
-    pollingInterval: 30000,
+    pollingInterval: 60000, // Increased from 30s to 60s
+    refetchOnFocus: false,
   });
 
   const [createRoom, { isLoading: isCreating }] = useCreateRoomMutation();

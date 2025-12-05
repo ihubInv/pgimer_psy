@@ -186,20 +186,23 @@ const Dashboard = () => {
   // Admin Stats - Full System Analytics
   const { data: patientStats, isLoading: patientsLoading } = useGetPatientStatsQuery(undefined, {
     skip: !isAdminUser,
-    pollingInterval: isAdminUser ? 30000 : 0,
+    pollingInterval: isAdminUser ? 60000 : 0, // Increased from 30s to 60s
     refetchOnMountOrArgChange: true,
+    refetchOnFocus: false, // Disable auto-refetch on focus
   });
 
   const { data: clinicalStats, isLoading: clinicalLoading } = useGetClinicalStatsQuery(undefined, {
     skip: !isAdminUser,
-    pollingInterval: isAdminUser ? 30000 : 0,
+    pollingInterval: isAdminUser ? 60000 : 0, // Increased from 30s to 60s
     refetchOnMountOrArgChange: true,
+    refetchOnFocus: false,
   });
 
   const { data: adlStats, isLoading: adlLoading } = useGetADLStatsQuery(undefined, {
     skip: !isAdminUser,
-    pollingInterval: isAdminUser ? 30000 : 0,
+    pollingInterval: isAdminUser ? 60000 : 0, // Increased from 30s to 60s
     refetchOnMountOrArgChange: true,
+    refetchOnFocus: false,
   });
 
   const { data: userStats } = useGetUserStatsQuery(undefined, {

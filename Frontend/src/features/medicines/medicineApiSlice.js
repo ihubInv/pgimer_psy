@@ -20,6 +20,8 @@ export const medicineApiSlice = apiSlice.injectEndpoints({
               { type: 'Medicine', id: 'LIST' },
             ]
           : [{ type: 'Medicine', id: 'LIST' }],
+      // Keep medicine data for 5 minutes (medicines don't change frequently)
+      keepUnusedDataFor: 300,
     }),
 
     // Get medicine by ID

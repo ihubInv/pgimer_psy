@@ -1,4 +1,6 @@
-const Textarea = ({
+import { memo } from 'react';
+
+const Textarea = memo(({
   label,
   name,
   value,
@@ -47,7 +49,9 @@ const Textarea = ({
       )}
     </div>
   );
-};
+});
+
+Textarea.displayName = 'Textarea';
 
 export default Textarea;
 

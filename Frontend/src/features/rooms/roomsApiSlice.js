@@ -6,7 +6,7 @@ export const roomsApiSlice = apiSlice.injectEndpoints({
       query: () => '/users/rooms/available',
       providesTags: ['Rooms'],
       // Poll every 10 seconds to get updated room availability
-      pollingInterval: 10000,
+      pollingInterval: 30000, // Increased from 10s to 30s
     }),
     getMyRoom: builder.query({
       query: () => '/users/rooms/my-room',

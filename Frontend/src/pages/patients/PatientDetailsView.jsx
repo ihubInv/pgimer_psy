@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, memo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../../components/Card';
 import { formatDate, formatDateForDatePicker } from '../../utils/formatters';
@@ -28,9 +28,7 @@ import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useSelector } from 'react-redux';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 
-
-
-const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatientData, userRole }) => {
+const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, outpatientData, userRole }) => {
   const navigate = useNavigate();
   const currentUser = useSelector(selectCurrentUser);
 
@@ -3868,6 +3866,8 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
       )}
     </div>
   );
-};
+});
+
+PatientDetailsView.displayName = 'PatientDetailsView';
 
 export default PatientDetailsView;

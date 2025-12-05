@@ -35,7 +35,8 @@ const ADLFilesPage = () => {
     limit,
     include_all: !showOnlyComplexCases // If showOnlyComplexCases is true, don't include all
   }, {
-    pollingInterval: 30000, // Auto-refresh every 30 seconds for real-time data
+    pollingInterval: 60000, // Increased from 30s to 60s to reduce API calls
+    refetchOnFocus: false, // Disable auto-refetch on focus
     refetchOnMountOrArgChange: true,
     refetchOnFocus: true,
     refetchOnReconnect: true,

@@ -193,7 +193,7 @@ const CreatePrescription = ({
 
   // Fetch medicines from API
   const { data: medicinesApiData, isLoading: isLoadingMedicines, error: medicinesError } = useGetAllMedicinesQuery({
-    limit: 1000,
+    limit: 200, // Reduced from 1000 - use pagination or search for specific medicines
     is_active: true
   });
 
