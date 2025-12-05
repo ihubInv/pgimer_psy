@@ -15,9 +15,13 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import FilePreview from '../../components/FilePreview';
 import { formatDate } from '../../utils/formatters';
 import { getDoctorDecisionLabel } from '../../utils/enumMappings';
-import { useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
-import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
+import { useGetPatientVisitHistoryQuery, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
+import { useGetClinicalProformaByPatientIdQuery, useGetAllClinicalOptionsQuery } from '../../features/clinical/clinicalApiSlice';
 import PatientClinicalHistory from '../../components/PatientClinicalHistory';
+import Input from '../../components/Input';
+import Textarea from '../../components/Textarea';
+import DatePicker from '../../components/CustomDatePicker';
+import { CheckboxGroup } from '../../components/CheckboxGroup';
 
 const ClinicalProformaDetails = ({ proforma: propProforma }) => {
   const navigate = useNavigate();
@@ -54,6 +58,37 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
     skip: !patientId
   });
   const existingFiles = patientFilesData?.data?.files || [];
+
+  // Fetch patient data for demographics
+  const { data: patientData } = useGetPatientByIdQuery(patientId, {
+    skip: !patientId
+  });
+  const patient = patientData?.data?.patient;
+
+  // Fetch clinical options for checkbox groups
+  const { data: allOptionsData } = useGetAllClinicalOptionsQuery();
+  const clinicalOptions = allOptionsData || {};
+
+  // Helper function to normalize array fields (handle comma-separated strings)
+  const normalizeArrayField = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      // Try to parse as JSON first
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+      } catch {
+        // If not JSON, check if it's a comma-separated string
+        if (value.includes(',')) {
+          return value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+        }
+        // Single value string
+        return value.trim() ? [value.trim()] : [];
+      }
+    }
+    return value ? [value] : [];
+  };
 
   // Fetch patient visit history and clinical proformas to show history
   const { data: visitHistoryData, isLoading: isLoadingVisitHistory } = useGetPatientVisitHistoryQuery(
@@ -942,104 +977,453 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
       </Card>
 
       {/* Walk-in Clinical Proforma Section */}
-      <div ref={clinicalProformaPrintRef}>
-        {/* History */}
-        <InfoSection
-          title="History of Present Illness"
-        data={{
-          'Onset & Duration': proforma.onset_duration,
-          'Course': proforma.course,
-          'Precipitating Factor': proforma.precipitating_factor,
-          'Illness Duration': proforma.illness_duration,
-          'Current Episode Since': proforma.current_episode_since ? formatDate(proforma.current_episode_since) : null,
-        }}
-      />
-
-      {/* MSE */}
-      <InfoSection
-        title="Mental State Examination"
-        data={{
-          'Behaviour': proforma.mse_behaviour,
-          'Affect': proforma.mse_affect,
-          'Thought': proforma.mse_thought,
-          'Delusions': proforma.mse_delusions,
-          'Perception': proforma.mse_perception,
-          'Cognitive Function': proforma.mse_cognitive_function,
-        }}
-      />
-
-      {/* Additional History */}
-      <InfoSection
-        title="Additional History"
-        data={{
-          'Bio-Functions': proforma.bio_functions,
-          'Substance Use': proforma.substance_use,
-          'Past History': proforma.past_history,
-          'Family History': proforma.family_history,
-          'Associated Medical/Surgical': proforma.associated_medical_surgical,
-        }}
-      />
-
-      {/* Physical Examination */}
-      {proforma.gpe && (
-        <Card title="General Physical Examination">
-          <p className="text-gray-900 whitespace-pre-wrap">{proforma.gpe}</p>
-        </Card>
-      )}
-
-      {/* Diagnosis & Management */}
-      <Card title="Diagnosis & Management">
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">Diagnosis</label>
-              <p className="text-lg font-semibold mt-1">{proforma.diagnosis}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">ICD Code</label>
-              <p className="text-lg mt-1">{proforma.icd_code || 'Not specified'}</p>
-            </div>
-            {/* <div>
-              <label className="text-sm font-medium text-gray-500">Case Severity</label>
-              <div className="mt-1">
-                <Badge variant={proforma.case_severity === 'severe' ? 'danger' : 'warning'}>
-                  {proforma.case_severity}
-                </Badge>
-              </div>
-            </div> */}
-            <div>
-              <label className="text-sm font-medium text-gray-500">Doctor Decision</label>
-              <div className="mt-1">
-                <Badge variant={proforma.doctor_decision === 'complex_case' ? 'warning' : 'success'}>
-                  {getDoctorDecisionLabel(proforma.doctor_decision) || 'N/A'}
-                </Badge>
-              </div>
+      <Card title="Walk-in Clinical Proforma" className="border-2 border-green-200 bg-green-50/30">
+        <div ref={clinicalProformaPrintRef} className="space-y-6">
+          {/* Patient Demographics */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <DatePicker
+                label="Date"
+                name="date"
+                value={proforma.visit_date ? new Date(proforma.visit_date).toISOString().split('T')[0] : ''}
+                onChange={() => {}}
+                disabled={true}
+              />
+              <Input
+                label="Patient Name"
+                value={patient?.name || proforma.patient_name || ''}
+                onChange={() => {}}
+                disabled={true}
+              />
+              <Input
+                label="Age"
+                value={patient?.age || ''}
+                onChange={() => {}}
+                disabled={true}
+              />
+              <Input
+                label="Sex"
+                value={patient?.sex || ''}
+                onChange={() => {}}
+                disabled={true}
+              />
             </div>
           </div>
 
-          {proforma.treatment_prescribed && (
-            <div>
-              <label className="text-sm font-medium text-gray-500">Treatment Prescribed</label>
-              <p className="text-gray-900 mt-1 whitespace-pre-wrap">{proforma.treatment_prescribed}</p>
+          {/* Informant Section */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Informant</h2>
+            <div className="flex flex-wrap gap-3">
+              {[
+                { v: true, t: 'Present' },
+                { v: false, t: 'Absent' },
+              ].map(({ v, t }) => (
+                <label 
+                  key={t} 
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                    proforma.informant_present === v 
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800' 
+                      : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="informant_present"
+                    checked={proforma.informant_present === v}
+                    onChange={() => {}}
+                    disabled={true}
+                    className="h-4 w-4 text-primary-600 cursor-not-allowed"
+                  />
+                  <span className="font-medium">{t}</span>
+                </label>
+              ))}
             </div>
-          )}
 
-          {proforma.disposal && (
-            <div>
-              <label className="text-sm font-medium text-gray-500">Disposal</label>
-              <p className="text-gray-900 mt-1">{proforma.disposal}</p>
+            {/* Nature of information */}
+            <h2 className="text-xl font-semibold text-gray-800 border-b pb-2 mt-4">Nature of information</h2>
+            <div className="flex flex-wrap gap-3">
+              {['Reliable', 'Unreliable', 'Adequate', 'Inadequate'].map((opt) => (
+                <label 
+                  key={opt} 
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                    proforma.nature_of_information === opt 
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800' 
+                      : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="nature_of_information"
+                    value={opt}
+                    checked={proforma.nature_of_information === opt}
+                    onChange={() => {}}
+                    disabled={true}
+                    className="h-4 w-4 text-primary-600 cursor-not-allowed"
+                  />
+                  <span className="font-medium">{opt}</span>
+                </label>
+              ))}
             </div>
-          )}
 
-          {proforma.referred_to && (
-            <div>
-              <label className="text-sm font-medium text-gray-500">Referred To</label>
-              <p className="text-gray-900 mt-1">{proforma.referred_to}</p>
+            {/* Onset Duration and Course */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              <div className="space-y-3">
+                <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Onset Duration</h2>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { v: '<1_week', t: '1. < 1 week' }, 
+                    { v: '1w_1m', t: '2. 1 week – 1 month' }, 
+                    { v: '>1_month', t: '3. > 1 month' }, 
+                    { v: 'not_known', t: '4. Not known' }
+                  ].map(({ v, t }) => (
+                    <label 
+                      key={v} 
+                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                        proforma.onset_duration === v 
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-800' 
+                          : 'border-gray-200 bg-white'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="onset_duration"
+                        value={v}
+                        checked={proforma.onset_duration === v}
+                        onChange={() => {}}
+                        disabled={true}
+                        className="h-4 w-4 text-primary-600 cursor-not-allowed"
+                      />
+                      <span className="font-medium">{t}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Course</h2>
+                <div className="flex flex-wrap gap-3">
+                  {['Continuous', 'Episodic', 'Fluctuating', 'Deteriorating', 'Improving'].map((opt) => (
+                    <label 
+                      key={opt} 
+                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                        proforma.course === opt 
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-800' 
+                          : 'border-gray-200 bg-white'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="course"
+                        value={opt}
+                        checked={proforma.course === opt}
+                        onChange={() => {}}
+                        disabled={true}
+                        className="h-4 w-4 text-primary-600 cursor-not-allowed"
+                      />
+                      <span className="font-medium">{opt}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
-          )}
+
+            {/* Precipitating Factor */}
+            <Textarea
+              label="Precipitating Factor"
+              name="precipitating_factor"
+              value={proforma.precipitating_factor || ''}
+              onChange={() => {}}
+              rows={3}
+              disabled={true}
+            />
+
+            {/* Total Duration of Illness */}
+            <Input
+              label="Total Duration of Illness"
+              name="illness_duration"
+              value={proforma.illness_duration || ''}
+              onChange={() => {}}
+              disabled={true}
+            />
+
+            {/* Current Episode Since */}
+            {proforma.current_episode_since && (
+              <DatePicker
+                label="Current Episode Duration / Worsening Since"
+                name="current_episode_since"
+                value={proforma.current_episode_since ? new Date(proforma.current_episode_since).toISOString().split('T')[0] : ''}
+                onChange={() => {}}
+                disabled={true}
+              />
+            )}
+          </div>
+
+          {/* Complaints / History of Presenting Illness */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Complaints / History of Presenting Illness</h2>
+            <div className="space-y-6">
+              <CheckboxGroup 
+                label="Mood" 
+                name="mood" 
+                value={normalizeArrayField(proforma.mood)} 
+                onChange={() => {}} 
+                options={clinicalOptions.mood || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Behaviour" 
+                name="behaviour" 
+                value={normalizeArrayField(proforma.behaviour)} 
+                onChange={() => {}} 
+                options={clinicalOptions.behaviour || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Speech" 
+                name="speech" 
+                value={normalizeArrayField(proforma.speech)} 
+                onChange={() => {}} 
+                options={clinicalOptions.speech || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Thought" 
+                name="thought" 
+                value={normalizeArrayField(proforma.thought)} 
+                onChange={() => {}} 
+                options={clinicalOptions.thought || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Perception" 
+                name="perception" 
+                value={normalizeArrayField(proforma.perception)} 
+                onChange={() => {}} 
+                options={clinicalOptions.perception || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Somatic" 
+                name="somatic" 
+                value={normalizeArrayField(proforma.somatic)} 
+                onChange={() => {}} 
+                options={clinicalOptions.somatic || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Bio-functions" 
+                name="bio_functions" 
+                value={normalizeArrayField(proforma.bio_functions)} 
+                onChange={() => {}} 
+                options={clinicalOptions.bio_functions || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Adjustment" 
+                name="adjustment" 
+                value={normalizeArrayField(proforma.adjustment)} 
+                onChange={() => {}} 
+                options={clinicalOptions.adjustment || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Cognitive Function" 
+                name="cognitive_function" 
+                value={normalizeArrayField(proforma.cognitive_function)} 
+                onChange={() => {}} 
+                options={clinicalOptions.cognitive_function || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Fits" 
+                name="fits" 
+                value={normalizeArrayField(proforma.fits)} 
+                onChange={() => {}} 
+                options={clinicalOptions.fits || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Sexual Problem" 
+                name="sexual_problem" 
+                value={normalizeArrayField(proforma.sexual_problem)} 
+                onChange={() => {}} 
+                options={clinicalOptions.sexual_problem || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Substance Use" 
+                name="substance_use" 
+                value={normalizeArrayField(proforma.substance_use)} 
+                onChange={() => {}} 
+                options={clinicalOptions.substance_use || []} 
+                disabled={true}
+              />
+            </div>
+          </div>
+
+          {/* Additional History */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Additional History</h2>
+            <div className="space-y-4">
+              <Textarea
+                label="Past Psychiatric History"
+                name="past_history"
+                value={proforma.past_history || ''}
+                onChange={() => {}}
+                rows={4}
+                disabled={true}
+              />
+              <Textarea
+                label="Family History"
+                name="family_history"
+                value={proforma.family_history || ''}
+                onChange={() => {}}
+                rows={4}
+                disabled={true}
+              />
+              <CheckboxGroup
+                label="Associated Medical/Surgical Illness"
+                name="associated_medical_surgical"
+                value={normalizeArrayField(proforma.associated_medical_surgical)}
+                onChange={() => {}}
+                options={clinicalOptions.associated_medical_surgical || []}
+                disabled={true}
+              />
+            </div>
+          </div>
+
+          {/* Mental State Examination (MSE) */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Mental State Examination (MSE)</h2>
+            <div className="space-y-6">
+              <CheckboxGroup 
+                label="Behaviour" 
+                name="mse_behaviour" 
+                value={normalizeArrayField(proforma.mse_behaviour)} 
+                onChange={() => {}} 
+                options={clinicalOptions.mse_behaviour || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Affect & Mood" 
+                name="mse_affect" 
+                value={normalizeArrayField(proforma.mse_affect)} 
+                onChange={() => {}} 
+                options={clinicalOptions.mse_affect || []} 
+                disabled={true}
+              />
+              <CheckboxGroup
+                label="Thought (Flow, Form, Content)"
+                name="mse_thought"
+                value={normalizeArrayField(proforma.mse_thought)}
+                onChange={() => {}}
+                options={clinicalOptions.mse_thought || []}
+                disabled={true}
+                rightInlineExtra={
+                  <Input
+                    name="mse_delusions"
+                    value={proforma.mse_delusions || ''}
+                    onChange={() => {}}
+                    placeholder="Delusions / Ideas of (optional)"
+                    className="max-w-xs"
+                    disabled={true}
+                  />
+                }
+              />
+              <CheckboxGroup 
+                label="Perception" 
+                name="mse_perception" 
+                value={normalizeArrayField(proforma.mse_perception)} 
+                onChange={() => {}} 
+                options={clinicalOptions.mse_perception || []} 
+                disabled={true}
+              />
+              <CheckboxGroup 
+                label="Cognitive Functions" 
+                name="mse_cognitive_function" 
+                value={normalizeArrayField(proforma.mse_cognitive_function)} 
+                onChange={() => {}} 
+                options={clinicalOptions.mse_cognitive_function || []} 
+                disabled={true}
+              />
+            </div>
+          </div>
+
+          {/* General Physical Examination */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">General Physical Examination</h2>
+            <div className="space-y-4">
+              <Textarea
+                label="GPE Findings"
+                name="gpe"
+                value={proforma.gpe || ''}
+                onChange={() => {}}
+                rows={4}
+                placeholder="BP, Pulse, Weight, BMI, General appearance, Systemic examination..."
+                disabled={true}
+              />
+            </div>
+          </div>
+
+          {/* Diagnosis & Management */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Diagnosis & Management</h2>
+            <div className="space-y-4">
+              <Textarea
+                label="Diagnosis"
+                name="diagnosis"
+                value={proforma.diagnosis || ''}
+                onChange={() => {}}
+                rows={3}
+                placeholder="Primary and secondary diagnoses..."
+                disabled={true}
+              />
+              <Input
+                label="ICD Code"
+                name="icd_code"
+                value={proforma.icd_code || ''}
+                onChange={() => {}}
+                disabled={true}
+              />
+              <div>
+                <label className="text-sm font-medium text-gray-500">Doctor Decision</label>
+                <div className="mt-1">
+                  <Badge variant={proforma.doctor_decision === 'complex_case' ? 'warning' : 'success'}>
+                    {getDoctorDecisionLabel(proforma.doctor_decision) || 'N/A'}
+                  </Badge>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Textarea
+                  label="Disposal & Referral"
+                  name="disposal"
+                  value={proforma.disposal || ''}
+                  onChange={() => {}}
+                  rows={2}
+                  placeholder="Admission, discharge, follow-up..."
+                  disabled={true}
+                />
+                <Input
+                  label="Referred To"
+                  name="referred_to"
+                  value={proforma.referred_to || ''}
+                  onChange={() => {}}
+                  disabled={true}
+                />
+              </div>
+              {proforma.treatment_prescribed && (
+                <Textarea
+                  label="Treatment Prescribed"
+                  name="treatment_prescribed"
+                  value={proforma.treatment_prescribed || ''}
+                  onChange={() => {}}
+                  rows={4}
+                  disabled={true}
+                />
+              )}
+            </div>
+          </div>
         </div>
       </Card>
-      </div>
 
       {/* Print button for Walk-in Clinical Proforma section */}
       {/* <div className="flex justify-end mb-4 no-print">
