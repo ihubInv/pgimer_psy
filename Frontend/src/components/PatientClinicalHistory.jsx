@@ -65,7 +65,7 @@ const PatientClinicalHistory = ({
   return (
     <div className="space-y-6">
       {/* Header with Add New Button */}
-      <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
+      {/* <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
@@ -83,10 +83,10 @@ const PatientClinicalHistory = ({
             Add New Proforma
           </Button>
         </div>
-      </Card>
+      </Card> */}
 
       {/* Visit History Section */}
-      {visitHistory.length > 0 && (
+      {/* {visitHistory.length > 0 && (
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -157,10 +157,10 @@ const PatientClinicalHistory = ({
             ))}
           </div>
         </Card>
-      )}
+      )} */}
 
       {/* Clinical Proformas Section */}
-      {clinicalProformas.length > 0 && (
+      {/* {clinicalProformas.length > 0 && (
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -251,7 +251,7 @@ const PatientClinicalHistory = ({
             ))}
           </div>
         </Card>
-      )}
+      )} */}
 
       {/* Empty state if no history but patient exists */}
       {!hasHistory && (

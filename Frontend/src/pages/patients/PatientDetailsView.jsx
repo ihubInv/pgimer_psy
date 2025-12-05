@@ -3380,7 +3380,7 @@ const PatientDetailsView = ({ patient, formData, clinicalData, adlData, outpatie
                 <FiPackage className="h-6 w-6 text-amber-600" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900">Prescription History</h3>
+                <h3 className="text-xl font-bold text-gray-900">Prescription</h3>
                 <p className="text-sm text-gray-500 mt-1">
                   {allPrescriptions.length > 0
                     ? `${allPrescriptions.length} prescription${allPrescriptions.length > 1 ? 's' : ''} across ${Object.keys(prescriptionsByVisit).length} visit${Object.keys(prescriptionsByVisit).length > 1 ? 's' : ''}`
