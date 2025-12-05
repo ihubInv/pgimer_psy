@@ -48,14 +48,9 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   const returnTab = searchParams.get('returnTab');
   const returnPath = searchParams.get('returnPath');
   const mode = searchParams.get('mode'); // 'create' or 'update' from URL
-  // const [updatePrescription, { isLoading: isUpdatingPrescription }] = useUpdatePrescriptionMutation();
   const [createPrescriptions, { isLoading: isSavingPrescriptions }] = useCreatePrescriptionMutation();
 
   const { data: proformaData, isLoading, isFetching, refetch, error } = useGetAllClinicalProformasQuery({});
-
-
-  // Use propInitialData if provided, otherwise use fetched data
-  // const proforma = propInitialData ? null : (proformaData?.data?.proforma);
 
   // Convert id to number for comparison since patient_id is a number
   // URL params return strings, but patient_id in database is integer
@@ -141,8 +136,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   const { data: existingAdlFileData } = useGetAllADLFilesQuery({});
 
   const existingAdlFile = existingAdlFileData?.data?.files?.find(f => f.patient_id === patient?.id && f.clinical_proforma_id === proforma?.id);
-  // const adlFile = adlFileData?.data?.adlFile || adlFileData?.data?.file;
-
 
   const { data: existingPrescriptionData } = useGetAllPrescriptionQuery({});
 
@@ -154,9 +147,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   // Update and Create mutations
   const [updateProforma, { isLoading: isUpdating }] = useUpdateClinicalProformaMutation();
   const [createProforma, { isLoading: isCreating }] = useCreateClinicalProformaMutation();
-  // const [updateADLFile] = useUpdateADLFileMutation();
   const [createADLFile, { isLoading: isCreatingADLFile }] = useCreateADLFileMutation();
-  // Helper functions
 
   
 
@@ -302,7 +293,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         referred_to: '',
         treatment_prescribed: '',
         doctor_decision: 'simple_case',
-        // case_severity: '',
       };
     }
 
@@ -348,7 +338,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
       referred_to: proforma.referred_to || '',
       treatment_prescribed: proforma.treatment_prescribed || '',
       doctor_decision: proforma.doctor_decision || 'simple_case',
-      // case_severity: proforma.case_severity || '',
     };
 
     return baseData;
@@ -397,7 +386,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     referred_to: '',
     treatment_prescribed: '',
     doctor_decision: 'simple_case',
-    // case_severity: '',
   };
 
   const [formData, setFormData] = useState(initialFormData || defaultFormData);
@@ -1041,22 +1029,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           toast.error(fileErr?.data?.message || 'Failed to update files. Proforma was saved successfully.');
         }
       }
-
-      // ============================================
-      // TRY–CATCH #3: Create ADL if complex decision
-      // ============================================
-      // if (formData.doctor_decision === "complex_case") {
-      //   try {
-      //     await createADLFile({
-      //       patient_id: patient.id,
-      //       clinical_proforma_id: proforma.id,
-      //     }).unwrap();
-      //     toast.success("ADL file created");
-      //   } catch (err) {
-      //     toast.error(err?.data?.message || "Failed to create ADL file");
-      //   }
-      // }
-
 
       // Use savedProforma.id if we just created one, otherwise use proforma.id
       const proformaId = savedProforma?.id || proforma?.id;

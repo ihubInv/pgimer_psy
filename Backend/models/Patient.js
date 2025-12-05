@@ -623,26 +623,6 @@ class Patient {
     }
   }
 
-  static async findByPSYNo(psy_no) {
-    try {
-      const result = await db.query('SELECT * FROM registered_patient WHERE psy_no = $1', [psy_no]);
-      if (result.rows.length === 0) return null;
-      return new Patient(result.rows[0]);
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  static async findByADLNo(adl_no) {
-    try {
-      const result = await db.query('SELECT * FROM registered_patient WHERE adl_no = $1', [adl_no]);
-      if (result.rows.length === 0) return null;
-      return new Patient(result.rows[0]);
-    } catch (error) {
-      throw error;
-    }
-  }
-
   // Search (name / cr / psy / adl) with pagination
   static async search(searchTerm = '', page = 1, limit = 10) {
     try {

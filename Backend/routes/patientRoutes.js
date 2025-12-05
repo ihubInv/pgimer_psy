@@ -928,15 +928,6 @@ router.post('/assign', authenticateToken, authorizeRoles('Admin', 'Psychiatric W
  */
 router.get('/cr/:cr_no', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), PatientController.getPatientByCRNo);
 
-// Endpoint not used in frontend - Swagger docs removed
-router.get('/psy/:psy_no', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), PatientController.getPatientByPSYNo);
-
-// Endpoint not used in frontend - Swagger docs removed
-router.get('/adl/:adl_no', authenticateToken,  PatientController.getPatientByADLNo);
-
-// Duplicate /stats endpoint - using the one at line 537 with proper Swagger docs
-router.get('/stats', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), PatientController.getPatientStats);
-
 /**
  * @swagger
  * /api/patients/{id}/files:

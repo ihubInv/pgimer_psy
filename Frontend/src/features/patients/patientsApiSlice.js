@@ -243,7 +243,6 @@ export const {
   useDeletePatientMutation,
   useGetPatientStatsQuery,
   useAssignPatientMutation,
-  useCheckCRNumberExistsQuery,
   //dashboard stats queries
   useGetPatientsStatsQuery,
   useGetAgeDistributionQuery,

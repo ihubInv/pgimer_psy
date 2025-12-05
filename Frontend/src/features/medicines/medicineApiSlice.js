@@ -77,15 +77,6 @@ export const medicineApiSlice = apiSlice.injectEndpoints({
         'Medicine',
       ],
     }),
-
-    // Bulk import medicines
-    bulkImportMedicines: builder.mutation({
-      query: () => ({
-        url: '/medicines/bulk-import',
-        method: 'POST',
-      }),
-      invalidatesTags: ['Medicine'],
-    }),
   }),
 });
 
@@ -97,6 +88,5 @@ export const {
   useCreateMedicineMutation,
   useUpdateMedicineMutation,
   useDeleteMedicineMutation,
-  useBulkImportMedicinesMutation,
 } = medicineApiSlice;
 

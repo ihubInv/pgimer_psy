@@ -36,9 +36,6 @@ const DisplayField = ({ label, value, icon, className = '', rows }) => {
 
 const ViewADL = ( {adlFiles} ) => {
   const navigate = useNavigate();
-  
-  // const { data: adlData, isLoading: isLoadingADL } = useGetADLFileByIdQuery(id, { skip: !id });
-  // const adlFile = adlData?.data?.adlFile || adlData?.data?.adl_file || adlData?.data?.file || adlData?.data;
   const adlFile = adlFiles;
   const patientId = adlFiles?.patient_id;
   const { data: patientData, isLoading: isLoadingPatient } = useGetPatientByIdQuery(patientId, { skip: !patientId });
@@ -101,14 +98,6 @@ const ViewADL = ( {adlFiles} ) => {
       [cardName]: !prev[cardName]
     }));
   };
-
-  // if (isLoadingADL || isLoadingPatient) {
-  //   return (
-  //     <div className="min-h-screen flex items-center justify-center">
-  //       <LoadingSpinner />
-  //     </div>
-  //   );
-  // }
 
   if (!adlFile) {
     return (
