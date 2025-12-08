@@ -3,28 +3,50 @@ const path = require('path');
 const fs = require('fs');
 const uploadConfig = require('../config/uploadConfig');
 
-// Get upload directory from config
-const uploadsDir = uploadConfig.getAbsolutePath(uploadConfig.PATIENT_UPLOADS_PATH);
+// Get base upload directory from config
+const baseUploadsDir = uploadConfig.getAbsolutePath(uploadConfig.PATIENT_FILES_PATH);
 
-// Ensure uploads directory exists
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+// Ensure base uploads directory exists
+if (!fs.existsSync(baseUploadsDir)) {
+  fs.mkdirSync(baseUploadsDir, { recursive: true });
 }
 
-// Configure storage
+// Configure storage with dynamic destination
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadsDir);
+    try {
+      // Get patient ID from params or body
+      const patientId = req.params.patient_id || req.params.id || req.body.patient_id || 'temp';
+      
+      // Get user role from authenticated user or default to 'Admin'
+      const userRole = req.user?.role?.trim() || req.body.role || 'Admin';
+      
+      // Get document type from body or default to 'Patient_Details'
+      const documentType = req.body.document_type || req.body.file_type || 'Patient_Details';
+      
+      // Get the target directory using config helper
+      const targetDir = uploadConfig.getPatientFilesDir(patientId, userRole, documentType);
+      
+      console.log('[upload middleware] Destination directory:', targetDir);
+      console.log('[upload middleware] Patient ID:', patientId, 'Role:', userRole, 'Document Type:', documentType);
+      
+      // Ensure directory exists
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+        console.log('[upload middleware] Created directory:', targetDir);
+      }
+      
+      cb(null, targetDir);
+    } catch (error) {
+      console.error('[upload middleware] Error setting destination:', error);
+      cb(error, null);
+    }
   },
   filename: (req, file, cb) => {
-    // Generate unique filename: timestamp-patientId-originalname
-    const patientId = req.params.id || req.body.patient_id || 'temp';
-    const timestamp = Date.now();
+    // Keep original filename (sanitized)
     const originalName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const ext = path.extname(originalName);
-    const name = path.basename(originalName, ext);
-    const uniqueFilename = `${timestamp}-${patientId}-${name}${ext}`;
-    cb(null, uniqueFilename);
+    // Use original filename to preserve file type and readability
+    cb(null, originalName);
   }
 });
 

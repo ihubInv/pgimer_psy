@@ -138,13 +138,16 @@ class PatientFileController {
 
       // Get user role for folder structure
       const userRole = req.user?.role?.trim() || 'Admin';
-      const roleFolder = userRole.replace(/\s+/g, '_'); // Replace spaces with underscores for folder name
+      
+      // Get document type from request body or default to Patient_Details
+      const documentType = req.body.document_type || req.body.file_type || 'Patient_Details';
+      
+      console.log('[createPatientFiles] Role:', userRole, 'Document Type:', documentType);
       
       // Check if record exists to get the ID
       let patientFile = await PatientFile.findByPatientId(patientIdInt);
-      let fileRecordId = patientFile ? patientFile.id : null;
       
-      // If no record exists, create it first to get the ID
+      // If no record exists, create it first
       if (!patientFile) {
         // Create empty record first
         patientFile = await PatientFile.create({
@@ -152,63 +155,22 @@ class PatientFileController {
           attachment: [],
           user_id: userId
         });
-        fileRecordId = patientFile.id;
       }
       
-      // Create role-based directory structure using config
-      const patientFilesDir = uploadConfig.getPatientFilesDir(patientIdInt, userRole);
-      console.log('[createPatientFiles] Creating directory:', patientFilesDir);
-      if (!fs.existsSync(patientFilesDir)) {
-        fs.mkdirSync(patientFilesDir, { recursive: true });
-        console.log('[createPatientFiles] Directory created successfully');
-      } else {
-        console.log('[createPatientFiles] Directory already exists');
-      }
-
-      // Move files to role-based directory and build file paths
+      // Files are already in the correct location (multer handles it via dynamic storage)
+      // Directory structure: /fileupload/{role}/{document_type}/PATIENT_ID_{patient_id}/
+      // Just need to get the file paths and store them in database
       const filePaths = [];
-      let fileIndex = 0;
+      
       for (const file of files) {
-        console.log('[createPatientFiles] Processing file:', file.originalname, 'Temp path:', file.path);
+        console.log('[createPatientFiles] Processing file:', file.originalname, 'Path:', file.path);
         
-        // Get file extension
-        const originalName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const ext = path.extname(originalName);
-        
-        // Generate filename: {file_record_id}_{role}{ext}
-        // Use record ID + index to ensure uniqueness if multiple files
-        const uniqueFilename = `${fileRecordId}_${roleFolder}${fileIndex > 0 ? `_${fileIndex}` : ''}${ext}`;
-        const newPath = path.join(patientFilesDir, uniqueFilename);
-        
-        console.log('[createPatientFiles] Moving file to:', newPath);
-        
-        // Move file from temp location to role-based directory
-        if (file.path && fs.existsSync(file.path)) {
-          try {
-            fs.renameSync(file.path, newPath);
-            console.log('[createPatientFiles] File moved successfully');
-          } catch (moveError) {
-            console.error('[createPatientFiles] Error moving file:', moveError);
-            // Try copying instead if rename fails
-            try {
-              fs.copyFileSync(file.path, newPath);
-              fs.unlinkSync(file.path); // Delete temp file after copy
-              console.log('[createPatientFiles] File copied successfully');
-            } catch (copyError) {
-              console.error('[createPatientFiles] Error copying file:', copyError);
-              throw new Error(`Failed to save file: ${copyError.message}`);
-            }
-          }
-        } else {
-          console.error('[createPatientFiles] File path does not exist:', file.path);
-          throw new Error(`File not found at temporary location: ${file.path}`);
-        }
-        
-        // Store relative URL path for database using config
-        const relativePath = uploadConfig.getPatientFileUrl(newPath, userRole);
+        // File is already in the correct directory structure:
+        // /fileupload/{role}/{document_type}/PATIENT_ID_{patient_id}/{filename}
+        // Just get the URL path for database storage
+        const relativePath = uploadConfig.getPatientFileUrl(file.path, userRole, documentType);
         console.log('[createPatientFiles] File saved with URL path:', relativePath);
         filePaths.push(relativePath);
-        fileIndex++;
       }
 
       // Update patient file record with new files
@@ -314,9 +276,13 @@ class PatientFileController {
 
       // Get user role for folder structure
       const userRole = req.user?.role?.trim() || 'Admin';
-      const roleFolder = userRole.replace(/\s+/g, '_'); // Replace spaces with underscores for folder name
+      
+      // Get document type from request body or default to Patient_Details
+      const documentType = req.body.document_type || req.body.file_type || 'Patient_Details';
+      
+      console.log('[updatePatientFiles] Role:', userRole, 'Document Type:', documentType);
 
-      // Get or create record to use its ID for filename
+      // Get or create record
       let currentRecord = existing;
       if (!currentRecord) {
         currentRecord = await PatientFile.findByPatientId(patientIdInt);
@@ -329,66 +295,23 @@ class PatientFileController {
           });
         }
       }
-      const recordId = currentRecord.id;
 
       // Handle new file uploads
       const files = Array.isArray(req.files) ? req.files : [];
       if (files.length > 0) {
         console.log('[updatePatientFiles] Processing', files.length, 'new file(s)');
         
-        // Create role-based directory structure using config
-        const patientFilesDir = uploadConfig.getPatientFilesDir(patientIdInt, userRole);
-        console.log('[updatePatientFiles] Target directory:', patientFilesDir);
-        
-        if (!fs.existsSync(patientFilesDir)) {
-          fs.mkdirSync(patientFilesDir, { recursive: true });
-          console.log('[updatePatientFiles] Directory created');
-        }
-
-        // Count existing files to append index for uniqueness
-        const existingFileCount = (currentRecord.attachment || []).length;
-        let fileIndex = 0;
-
-        // Move files to role-based directory
+        // Files are already in the correct location (multer handles it via dynamic storage)
+        // Directory structure: /fileupload/{role}/{document_type}/PATIENT_ID_{patient_id}/
+        // Just need to get the file paths and store them in database
         for (const file of files) {
-          console.log('[updatePatientFiles] Processing file:', file.originalname, 'Temp path:', file.path);
+          console.log('[updatePatientFiles] Processing file:', file.originalname, 'Path:', file.path);
           
-          // Get file extension
-          const originalName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-          const ext = path.extname(originalName);
-          
-          // Generate filename: {file_record_id}_{role}{ext} or {file_record_id}_{role}_{index}{ext} for multiple files
-          const uniqueFilename = `${recordId}_${roleFolder}${fileIndex > 0 || existingFileCount > 0 ? `_${existingFileCount + fileIndex}` : ''}${ext}`;
-          const newPath = path.join(patientFilesDir, uniqueFilename);
-          
-          console.log('[updatePatientFiles] Moving file to:', newPath);
-          
-          if (file.path && fs.existsSync(file.path)) {
-            try {
-              fs.renameSync(file.path, newPath);
-              console.log('[updatePatientFiles] File moved successfully');
-            } catch (moveError) {
-              console.error('[updatePatientFiles] Error moving file:', moveError);
-              // Try copying instead if rename fails
-              try {
-                fs.copyFileSync(file.path, newPath);
-                fs.unlinkSync(file.path); // Delete temp file after copy
-                console.log('[updatePatientFiles] File copied successfully');
-              } catch (copyError) {
-                console.error('[updatePatientFiles] Error copying file:', copyError);
-                throw new Error(`Failed to save file: ${copyError.message}`);
-              }
-            }
-          } else {
-            console.error('[updatePatientFiles] File path does not exist:', file.path);
-            throw new Error(`File not found at temporary location: ${file.path}`);
-          }
-          
-          // Store relative URL path for database using config
-          const relativePath = uploadConfig.getPatientFileUrl(newPath, userRole);
+          // File is already in the correct directory structure
+          // Just get the URL path for database storage
+          const relativePath = uploadConfig.getPatientFileUrl(file.path, userRole, documentType);
           console.log('[updatePatientFiles] File saved with URL path:', relativePath);
           newFiles.push(relativePath);
-          fileIndex++;
         }
       }
 
