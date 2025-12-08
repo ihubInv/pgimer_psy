@@ -32,6 +32,7 @@ import {
 import { useGetAllPrescriptionQuery } from '../features/prescriptions/prescriptionApiSlice';
 import { useGetPatientFilesQuery, useGetFileStatsQuery } from '../features/patients/patientFilesApiSlice';
 import { useGetDoctorsQuery, useGetUserStatsQuery } from '../features/users/usersApiSlice';
+import { useGetAllRoomsQuery } from '../features/rooms/roomsApiSlice';
 import Card from '../components/Card';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Badge from '../components/Badge';
@@ -234,6 +235,16 @@ const Dashboard = () => {
     }
   );
 
+  // Get all assigned patients for Faculty/Resident dashboard
+  // Note: Backend caps limit at 100, so we get up to 100 assigned patients
+  const { data: allAssignedPatients } = useGetAllPatientsQuery(
+    { page: 1, limit: 100 }, // Backend caps at 100
+    { 
+      skip: !isAuthenticated || !isJrSrUser,
+      refetchOnMountOrArgChange: true 
+    }
+  );
+
   // Age distribution for admin
   const { data: ageDistribution } = useGetAgeDistributionQuery(undefined, {
     skip: !isAdminUser,
@@ -271,6 +282,30 @@ const Dashboard = () => {
     refetchOnMountOrArgChange: true 
   });
 
+  // Get all patients for MWO to calculate state-wise distribution
+  const { data: allPatientsForMWO } = useGetAllPatientsQuery({ page: 1, limit: 100 }, { 
+    skip: !isMwo, 
+    refetchOnMountOrArgChange: true 
+  });
+
+  // Get all rooms for MWO to calculate total rooms count
+  const { data: allRoomsForMWO } = useGetAllRoomsQuery({ page: 1, limit: 1000 }, { 
+    skip: !isMwo, 
+    refetchOnMountOrArgChange: true 
+  });
+
+  // Get all patients for Admin to calculate state distribution and weekly patients
+  const { data: allPatientsForAdmin } = useGetAllPatientsQuery({ page: 1, limit: 100 }, { 
+    skip: !isAdminUser, 
+    refetchOnMountOrArgChange: true 
+  });
+
+  // Get all rooms for Admin to calculate total rooms count
+  const { data: allRoomsForAdmin } = useGetAllRoomsQuery({ page: 1, limit: 1000 }, { 
+    skip: !isAdminUser, 
+    refetchOnMountOrArgChange: true 
+  });
+
   // Get recent prescriptions - skip for MWO (Psychiatric Welfare Officer)
   const { data: recentPrescriptions } = useGetAllPrescriptionQuery({ 
     page: 1, 
@@ -302,13 +337,134 @@ const Dashboard = () => {
   const totalStaff = useMemo(() => {
     if (!userStats?.data?.stats || !Array.isArray(userStats.data.stats)) return 0;
     return userStats.data.stats.reduce((sum, item) => {
-      // Count Faculty (SR) and Residents (JR) as staff
-      if (item.role === 'SR' || item.role === 'JR') {
+      // Count Faculty, Residents, and Psychiatric Welfare Officer as staff
+      const role = item.role || '';
+      if (role === 'Faculty' || role === 'Resident' || role === 'Psychiatric Welfare Officer') {
         return sum + (parseInt(item.count, 10) || 0);
       }
       return sum;
     }, 0);
   }, [userStats]);
+
+  // Calculate state-wise distribution from all patients for Admin (moved outside conditional)
+  const adminStateDistribution = useMemo(() => {
+    if (!isAdminUser || !allPatientsForAdmin?.data?.patients) return [];
+    const patients = allPatientsForAdmin.data.patients;
+    const stateMap = {};
+    
+    patients.forEach(p => {
+      const state = p.state || 'Unknown';
+      stateMap[state] = (stateMap[state] || 0) + 1;
+    });
+    
+    return Object.entries(stateMap)
+      .map(([state, count]) => ({ state, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [allPatientsForAdmin, isAdminUser]);
+
+  // Calculate weekly patients (last 7 days) for Admin (moved outside conditional)
+  const weeklyPatients = useMemo(() => {
+    if (!isAdminUser || !allPatientsForAdmin?.data?.patients) return [];
+    const patients = allPatientsForAdmin.data.patients;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    
+    return patients
+      .filter(p => {
+        const createdDate = p.created_at ? new Date(p.created_at) : null;
+        if (!createdDate) return false;
+        const patientDate = new Date(createdDate);
+        patientDate.setHours(0, 0, 0, 0);
+        return patientDate >= sevenDaysAgo && patientDate <= today;
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.created_at);
+        const dateB = new Date(b.created_at);
+        return dateB - dateA;
+      });
+  }, [allPatientsForAdmin, isAdminUser]);
+
+  // Calculate state-wise distribution from all patients for MWO (moved outside conditional)
+  const stateDistribution = useMemo(() => {
+    if (!isMwo || !allPatientsForMWO?.data?.patients) return [];
+    const patients = allPatientsForMWO.data.patients;
+    const stateMap = {};
+    
+    patients.forEach(p => {
+      const state = p.state || 'Unknown';
+      stateMap[state] = (stateMap[state] || 0) + 1;
+    });
+    
+    return Object.entries(stateMap)
+      .map(([state, count]) => ({ state, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [allPatientsForMWO, isMwo]);
+
+  // Calculate urban and rural counts from patient records for MWO (moved outside conditional)
+  const localityStats = useMemo(() => {
+    if (!isMwo || !allPatientsForMWO?.data?.patients) {
+      return { urban: 0, rural: 0, total: 0 };
+    }
+    const patients = allPatientsForMWO.data.patients;
+    let urban = 0;
+    let rural = 0;
+    
+    patients.forEach(p => {
+      const locality = (p.locality || '').toLowerCase().trim();
+      if (locality === 'urban') {
+        urban++;
+      } else if (locality === 'rural') {
+        rural++;
+      }
+    });
+    
+    return {
+      urban,
+      rural,
+      total: urban + rural
+    };
+  }, [allPatientsForMWO, isMwo]);
+
+  // Calculate marital status distribution from all patients for MWO (moved outside conditional)
+  const maritalStatusDistribution = useMemo(() => {
+    if (!isMwo || !allPatientsForMWO?.data?.patients) {
+      return {
+        married: 0,
+        unmarried: 0,
+        widow_widower: 0,
+        divorced: 0,
+        other: 0
+      };
+    }
+    const patients = allPatientsForMWO.data.patients;
+    const maritalMap = {
+      married: 0,
+      unmarried: 0,
+      widow_widower: 0,
+      divorced: 0,
+      other: 0
+    };
+    
+    patients.forEach(p => {
+      const maritalStatus = (p.marital_status || '').toLowerCase().trim();
+      if (maritalStatus === 'married') {
+        maritalMap.married++;
+      } else if (maritalStatus === 'unmarried' || maritalStatus === 'single') {
+        maritalMap.unmarried++;
+      } else if (maritalStatus === 'widow' || maritalStatus === 'widower' || maritalStatus === 'widow/widower') {
+        maritalMap.widow_widower++;
+      } else if (maritalStatus === 'divorced') {
+        maritalMap.divorced++;
+      } else if (maritalStatus) {
+        maritalMap.other++;
+      }
+    });
+    
+    return maritalMap;
+  }, [allPatientsForMWO, isMwo]);
 
   const isLoading = isAdminUser ? (patientsLoading || clinicalLoading || adlLoading) : false;
 
@@ -495,38 +651,43 @@ const Dashboard = () => {
     );
   }
 
+  // State-wise chart data for admin
+  const adminStateChartData = useMemo(() => {
+    if (!isAdminUser || !adminStateDistribution || adminStateDistribution.length === 0) {
+      return {
+        labels: [],
+        datasets: [{
+          label: 'Number of Patients',
+          data: [],
+          backgroundColor: 'rgba(59, 130, 246, 0.8)',
+          borderColor: 'rgba(29, 78, 216, 1)',
+          borderWidth: 2,
+        }],
+      };
+    }
+    return {
+      labels: adminStateDistribution.map(item => item.state),
+      datasets: [{
+        label: 'Number of Patients',
+        data: adminStateDistribution.map(item => item.count),
+        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+        borderColor: 'rgba(29, 78, 216, 1)',
+        borderWidth: 2,
+      }],
+    };
+  }, [adminStateDistribution, isAdminUser]);
+
   // ==================== ADMIN DASHBOARD ====================
   if (isAdminUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
           {/* Welcome Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Welcome back, {user?.name || 'Admin'}! 👑
-              </h1>
-              <p className="text-gray-600 mt-1">System Administrator Dashboard - Full System Analytics</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <select
-                value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="px-4 py-2 bg-white/70 backdrop-blur-md border border-white/40 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="day">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-              </select>
-              <Button
-                variant="outline"
-                onClick={() => window.location.reload()}
-                className="flex items-center gap-2"
-              >
-                <FiRefreshCw className="w-4 h-4" />
-                Refresh
-              </Button>
-            </div>
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900">
+              Welcome back, {user?.name || 'Admin'}! 👑
+            </h1>
+            <p className="text-gray-600 mt-1">System Administrator Dashboard - Full System Analytics</p>
           </div>
 
           {/* Admin KPI Cards */}
@@ -540,19 +701,10 @@ const Dashboard = () => {
               subtitle="Registered patients"
             />
             <StatCard
-              title="Clinical Proformas"
-              value={clinicalStats?.data?.stats?.total_proformas || 0}
-              icon={FiFileText}
-              colorClasses="from-green-500 to-green-600"
-              to="/clinical"
-              subtitle="Walk-in assessments"
-            />
-            <StatCard
-              title="Out Patient Intake Record  Files"
+              title="Total ADL Files"
               value={adlStats?.data?.stats?.total_files || 0}
               icon={FiFolder}
               colorClasses="from-purple-500 to-purple-600"
-              // to="/adl-files"
               subtitle="Outpatient intake records"
             />
             <StatCard
@@ -560,51 +712,27 @@ const Dashboard = () => {
               value={totalStaff}
               icon={FiBriefcase}
               colorClasses="from-orange-500 to-orange-600"
+              to="/users"
               subtitle="Faculty + Residents"
             />
-          </div>
-
-          {/* Secondary Admin KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
-              title="Complex Cases"
-              value={clinicalStats?.data?.stats?.complex_cases || 0}
-              icon={FiAlertCircle}
-              colorClasses="from-red-500 to-red-600"
-              to="/adl-files"
-              subtitle="Requiring attention"
-            />
-            <StatCard
-              title="First Visits"
-              value={clinicalStats?.data?.stats?.first_visits || 0}
-              icon={FiCalendar}
-              colorClasses="from-indigo-500 to-indigo-600"
-              subtitle="New patient visits"
-            />
-            <StatCard
-              title="Follow-ups"
-              value={clinicalStats?.data?.stats?.follow_ups || 0}
-              icon={FiActivity}
-              colorClasses="from-teal-500 to-teal-600"
-              subtitle="Return visits"
-            />
-            <StatCard
-              title="Files Uploaded"
-              value={fileStats?.data?.stats?.total_files || 0}
-              icon={FiUpload}
-              colorClasses="from-pink-500 to-pink-600"
-              subtitle={`${fileStats?.data?.stats?.files_this_month || 0} this month`}
+              title="Total Rooms"
+              value={allRoomsForAdmin?.data?.pagination?.total || allRoomsForAdmin?.data?.rooms?.length || 0}
+              icon={FiHome}
+              colorClasses="from-green-500 to-green-600"
+              to="/rooms"
+              subtitle="All available rooms"
             />
           </div>
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Patient Gender Distribution */}
+            {/* Total Patient Gender Distribution */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
                   <FiPieChart className="w-5 h-5 text-primary-600" />
-                  <span>Patient Gender Distribution</span>
+                  <span>Total Patient Gender Distribution</span>
                 </div>
               }
               className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
@@ -618,7 +746,7 @@ const Dashboard = () => {
                       ...chartOptions.plugins,
                       title: {
                         ...chartOptions.plugins.title,
-                        text: 'Patient Gender Distribution'
+                        text: 'Total Patient Gender Distribution'
                       }
                     }
                   }} 
@@ -626,85 +754,35 @@ const Dashboard = () => {
               </div>
             </Card>
 
-            {/* Visit Type Distribution */}
+            {/* Total Distribution by State-wise */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
                   <FiBarChart2 className="w-5 h-5 text-primary-600" />
-                  <span>Visit Type Distribution</span>
+                  <span>Total Distribution by State-wise</span>
                 </div>
               }
               className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
             >
               <div className="h-80">
                 <Bar 
-                  data={visitTypeChartData} 
+                  data={adminStateChartData} 
                   options={{
                     ...barChartOptions,
                     plugins: {
                       ...barChartOptions.plugins,
                       title: {
                         ...barChartOptions.plugins.title,
-                        text: 'Visit Type Distribution'
-                      }
-                    }
-                  }} 
-                />
-              </div>
-            </Card>
-
-            {/* ADL File Status */}
-            <Card 
-              title={
-                <div className="flex items-center gap-2">
-                  <FiFolder className="w-5 h-5 text-primary-600" />
-                  <span>Out Patient Intake Record Status Distribution</span>
-                </div>
-              }
-              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
-            >
-              <div className="h-80">
-                <Doughnut 
-                  data={adlStatusChartData} 
-                  options={{
-                    ...chartOptions,
-                    plugins: {
-                      ...chartOptions.plugins,
-                      title: {
-                        ...chartOptions.plugins.title,
-                        text: 'Out Patient Intake Record Status Distribution'
-                      }
-                    }
-                  }} 
-                />
-              </div>
-            </Card>
-
-            {/* Patient Visit Trend */}
-            <Card 
-              title={
-                <div className="flex items-center gap-2">
-                  <FiTrendingUp className="w-5 h-5 text-primary-600" />
-                  <span>Weekly Visit Trend</span>
-                </div>
-              }
-              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
-            >
-              <div className="h-80">
-                <Line 
-                  data={visitTrendData} 
-                  options={{
-                    ...chartOptions,
-                    plugins: {
-                      ...chartOptions.plugins,
-                      title: {
-                        ...chartOptions.plugins.title,
-                        text: 'Weekly Patient Visit Trend'
+                        text: 'Total Distribution by State-wise'
                       }
                     },
                     scales: {
-                      y: {
-                        beginAtZero: true
+                      ...barChartOptions.scales,
+                      x: {
+                        ticks: {
+                          maxRotation: 45,
+                          minRotation: 45
+                        }
                       }
                     }
                   }} 
@@ -715,7 +793,7 @@ const Dashboard = () => {
 
           {/* Recent Activity & Quick Actions Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Recent Activity */}
+            {/* Recent Activity - Weekly Patients */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
@@ -726,49 +804,22 @@ const Dashboard = () => {
               className="lg:col-span-2 bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
             >
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {(!recentClinicalProformas?.data?.proformas?.length && 
-                  !recentADLFiles?.data?.files?.length && 
-                  !recentPrescriptions?.data?.prescriptions?.length) ? (
+                {weeklyPatients.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                     <FiActivity className="w-12 h-12 mb-3 opacity-50" />
-                    <p className="text-sm">No recent activity</p>
+                    <p className="text-sm">No patients registered in the last 7 days</p>
                   </div>
                 ) : (
-                  <>
-                    {recentClinicalProformas?.data?.proformas?.slice(0, 5).map((proforma, idx) => (
-                      <ActivityItem
-                        key={proforma.id || idx}
-                        icon={FiFileText}
-                        title={`Clinical Proforma Created`}
-                        description={`Patient: ${proforma.patient_name || 'N/A'} - Visit: ${proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}`}
-                        time={proforma.created_at ? formatDateTime(proforma.created_at) : 'N/A'}
-                        status={proforma.doctor_decision === 'complex_case' ? 'complex' : 'simple'}
-                        color="from-green-500 to-green-600"
-                      />
-                    ))}
-                    {recentADLFiles?.data?.files?.slice(0, 3).map((file, idx) => (
-                      <ActivityItem
-                        key={file.id || idx}
-                        icon={FiFolder}
-                        title={`Out Patient Intake Record ${file.file_status || 'Created'}`}
-                        description={`Patient: ${file.patient_name || 'N/A'} - Out Patient Intake Record  No: ${file.adl_no || 'N/A'}`}
-                        time={file.created_at ? formatDateTime(file.created_at) : 'N/A'}
-                        status={file.file_status}
-                        color="from-purple-500 to-purple-600"
-                      />
-                    ))}
-                    {recentPrescriptions?.data?.prescriptions?.slice(0, 2).map((prescription, idx) => (
-                      <ActivityItem
-                        key={prescription.id || idx}
-                        icon={FiPackage}
-                        title={`Prescription Created`}
-                        description={`Medicine: ${prescription.medicine || 'N/A'}`}
-                        time={prescription.created_at ? formatDateTime(prescription.created_at) : 'N/A'}
-                        status="completed"
-                        color="from-blue-500 to-blue-600"
-                      />
-                    ))}
-                  </>
+                  weeklyPatients.map((patient, idx) => (
+                    <ActivityItem
+                      key={patient.id || idx}
+                      icon={FiUsers}
+                      title={`Patient Registered: ${patient.name || 'N/A'}`}
+                      description={`CR No: ${patient.cr_no || 'N/A'}${patient.locality ? ` - ${patient.locality}` : ''}`}
+                      time={patient.created_at ? formatDateTime(patient.created_at) : 'N/A'}
+                      color="from-blue-500 to-blue-600"
+                    />
+                  ))
                 )}
               </div>
             </Card>
@@ -785,101 +836,19 @@ const Dashboard = () => {
             >
               <div className="space-y-3">
                 <QuickActionCard
-                  icon={FiUserPlus}
-                  title="Create Patient"
-                  description="Register new patient"
-                  to="/patients/new"
+                  icon={FiUsers}
+                  title="Total Patients"
+                  description="View all patients"
+                  to="/patients"
                   colorClasses="hover:from-blue-50 hover:to-indigo-50"
                 />
                 <QuickActionCard
-                  icon={FiFileText}
-                  title="Create Proforma"
-                  description="New clinical assessment"
-                  to="/clinical-proforma/create"
+                  icon={FiUserPlus}
+                  title="Create User"
+                  description="Register new user"
+                  to="/users/new"
                   colorClasses="hover:from-green-50 hover:to-emerald-50"
                 />
-                {/* <QuickActionCard
-                  icon={FiFolder}
-                  title="Create ADL"
-                  description="New intake record"
-                  to="/adl-files/new"
-                  colorClasses="hover:from-purple-50 hover:to-pink-50"
-                /> */}
-                <QuickActionCard
-                  icon={FiUsers}
-                  title="Manage Users"
-                  description="View all staff"
-                  to="/users"
-                  colorClasses="hover:from-orange-50 hover:to-amber-50"
-                />
-                <QuickActionCard
-                  icon={FiBarChart2}
-                  title="View Reports"
-                  description="Analytics & insights"
-                  to="/reports"
-                  colorClasses="hover:from-teal-50 hover:to-cyan-50"
-                />
-              </div>
-            </Card>
-          </div>
-
-          {/* Detailed Statistics */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card 
-              title={
-                <div className="flex items-center gap-2">
-                  <FiUsers className="w-5 h-5 text-primary-600" />
-                  <span>Patient Statistics</span>
-                </div>
-              }
-              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
-            >
-              <div className="space-y-3">
-                <div className="flex justify-between items-center p-3 bg-blue-50/50 rounded-lg">
-                  <span className="text-gray-700 font-medium">Male Patients</span>
-                  <Badge variant="info">{patientStats?.data?.stats?.male_patients || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-pink-50/50 rounded-lg">
-                  <span className="text-gray-700 font-medium">Female Patients</span>
-                  <Badge variant="info">{patientStats?.data?.stats?.female_patients || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-purple-50/50 rounded-lg">
-                  <span className="text-gray-700 font-medium">Complex Cases</span>
-                  <Badge variant="warning">{patientStats?.data?.stats?.complex_cases || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-green-50/50 rounded-lg">
-                  <span className="text-gray-700 font-medium">Out Patient Intake Record of Patients</span>
-                  <Badge variant="success">{patientStats?.data?.stats?.patients_with_adl || 0}</Badge>
-                </div>
-              </div>
-            </Card>
-
-            <Card 
-              title={
-                <div className="flex items-center gap-2">
-                  <FiFileText className="w-5 h-5 text-primary-600" />
-                  <span>Clinical Statistics</span>
-                </div>
-              }
-              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
-            >
-              <div className="space-y-3">
-                <div className="flex justify-between items-center p-3 bg-green-50/50 rounded-lg">
-                  <span className="text-gray-700 font-medium">Simple Cases</span>
-                  <Badge variant="info">{clinicalStats?.data?.stats?.simple_cases || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-red-50/50 rounded-lg">
-                  <span className="text-gray-700 font-medium">Severe Cases</span>
-                  <Badge variant="error">{clinicalStats?.data?.stats?.severe_cases || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-yellow-50/50 rounded-lg">
-                  <span className="text-gray-700 font-medium">Cases Requiring Out Patient Intake Record</span>
-                  <Badge variant="warning">{clinicalStats?.data?.stats?.cases_requiring_adl || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-blue-50/50 rounded-lg">
-                  <span className="text-gray-700 font-medium">Moderate Cases</span>
-                  <Badge variant="warning">{clinicalStats?.data?.stats?.moderate_cases || 0}</Badge>
-                </div>
               </div>
             </Card>
           </div>
@@ -890,6 +859,179 @@ const Dashboard = () => {
 
   // ==================== FACULTY DASHBOARD ====================
   if (isFaculty) {
+    // Calculate statistics from assigned patients
+    const assignedPatients = useMemo(() => {
+      if (!allAssignedPatients?.data?.patients) return [];
+      const patients = allAssignedPatients.data.patients;
+      const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
+      
+      return patients.filter(p => {
+        // Only include patients assigned to this doctor
+        const patientDoctorId = p.assigned_doctor_id ? parseInt(p.assigned_doctor_id, 10) : null;
+        const currentUserId = user?.id ? parseInt(user.id, 10) : null;
+        return patientDoctorId === currentUserId;
+      });
+    }, [allAssignedPatients, user]);
+
+    // Calculate summary statistics
+    const stats = useMemo(() => {
+      const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const allPatientsCount = assignedPatients.length;
+      const adlFileCount = assignedPatients.filter(p => p.has_adl_file === true).length;
+      const assignedAfterCreation = userCreatedAt 
+        ? assignedPatients.filter(p => {
+            const assignedDate = p.last_assigned_date ? new Date(p.last_assigned_date) : (p.created_at ? new Date(p.created_at) : null);
+            return assignedDate && assignedDate >= userCreatedAt;
+          }).length
+        : allPatientsCount;
+      const todayPatients = assignedPatients.filter(p => {
+        const assignedDate = p.last_assigned_date ? new Date(p.last_assigned_date) : (p.created_at ? new Date(p.created_at) : null);
+        if (!assignedDate) return false;
+        const patientDate = new Date(assignedDate);
+        patientDate.setHours(0, 0, 0, 0);
+        return patientDate.getTime() === today.getTime();
+      });
+
+      // Gender distribution
+      const maleCount = assignedPatients.filter(p => p.sex === 'M' || p.sex === 'Male').length;
+      const femaleCount = assignedPatients.filter(p => p.sex === 'F' || p.sex === 'Female').length;
+
+      // Age group distribution
+      const ageGroupMap = {
+        '0-18': 0,
+        '19-30': 0,
+        '31-45': 0,
+        '46-60': 0,
+        '61-75': 0,
+        '75+': 0
+      };
+      
+      assignedPatients.forEach(p => {
+        let age = null;
+        // Try to get age from numeric age field first
+        if (p.age) {
+          age = typeof p.age === 'number' ? p.age : parseInt(p.age, 10);
+        }
+        // If age is not available or invalid, try to parse from age_group
+        if (!age || isNaN(age)) {
+          if (p.age_group) {
+            // Try to extract age from age_group string (e.g., "25-30" -> use first number)
+            const ageMatch = p.age_group.match(/(\d+)/);
+            if (ageMatch) {
+              age = parseInt(ageMatch[1], 10);
+            }
+          }
+        }
+        
+        if (age && !isNaN(age)) {
+          if (age <= 18) ageGroupMap['0-18']++;
+          else if (age <= 30) ageGroupMap['19-30']++;
+          else if (age <= 45) ageGroupMap['31-45']++;
+          else if (age <= 60) ageGroupMap['46-60']++;
+          else if (age <= 75) ageGroupMap['61-75']++;
+          else ageGroupMap['75+']++;
+        }
+      });
+      
+      const ageGroupData = Object.entries(ageGroupMap)
+        .map(([group, count]) => ({ group, count }));
+
+      // State-wise distribution
+      const stateMap = {};
+      assignedPatients.forEach(p => {
+        const state = p.state || 'Unknown';
+        stateMap[state] = (stateMap[state] || 0) + 1;
+      });
+      const stateData = Object.entries(stateMap)
+        .map(([state, count]) => ({ state, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // Recent patients (last 7 days - today to previous 7 days, where doctor accepted room)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+      
+      const recentPatients = [...assignedPatients]
+        .filter(p => {
+          // Only include patients assigned in the last 7 days
+          const assignedDate = p.last_assigned_date ? new Date(p.last_assigned_date) : (p.created_at ? new Date(p.created_at) : null);
+          if (!assignedDate) return false;
+          const patientDate = new Date(assignedDate);
+          patientDate.setHours(0, 0, 0, 0);
+          // Include patients from today to 7 days ago
+          return patientDate >= sevenDaysAgo && patientDate <= today;
+        })
+        .sort((a, b) => {
+          const dateA = a.last_assigned_date ? new Date(a.last_assigned_date) : new Date(a.created_at);
+          const dateB = b.last_assigned_date ? new Date(b.last_assigned_date) : new Date(b.created_at);
+          return dateB - dateA;
+        });
+
+      return {
+        allPatientsCount,
+        adlFileCount,
+        assignedAfterCreation,
+        todayPatients,
+        maleCount,
+        femaleCount,
+        ageGroupData,
+        stateData,
+        recentPatients
+      };
+    }, [assignedPatients, user]);
+
+    // Gender chart data
+    const genderChartData = {
+      labels: ['Male', 'Female'],
+      datasets: [{
+        data: [stats.maleCount, stats.femaleCount],
+        backgroundColor: ['#3B82F6', '#EC4899'],
+        borderColor: ['#1D4ED8', '#BE185D'],
+        borderWidth: 2,
+      }],
+    };
+
+    // State chart data
+    const stateChartData = {
+      labels: stats.stateData.map(item => item.state),
+      datasets: [{
+        label: 'Number of Patients',
+        data: stats.stateData.map(item => item.count),
+        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+        borderColor: 'rgba(29, 78, 216, 1)',
+        borderWidth: 1,
+      }],
+    };
+
+    // Age group chart data
+    const ageGroupChartData = {
+      labels: stats.ageGroupData.map(item => item.group),
+      datasets: [{
+        label: 'Number of Patients',
+        data: stats.ageGroupData.map(item => item.count),
+        backgroundColor: [
+          'rgba(239, 68, 68, 0.8)',   // Red for 0-18
+          'rgba(251, 191, 36, 0.8)',  // Yellow for 19-30
+          'rgba(34, 197, 94, 0.8)',   // Green for 31-45
+          'rgba(59, 130, 246, 0.8)',  // Blue for 46-60
+          'rgba(139, 92, 246, 0.8)',  // Purple for 61-75
+          'rgba(168, 85, 247, 0.8)',  // Violet for 75+
+        ],
+        borderColor: [
+          'rgba(220, 38, 38, 1)',
+          'rgba(217, 119, 6, 1)',
+          'rgba(22, 163, 74, 1)',
+          'rgba(37, 99, 235, 1)',
+          'rgba(124, 58, 237, 1)',
+          'rgba(147, 51, 234, 1)',
+        ],
+        borderWidth: 2,
+      }],
+    };
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50 to-emerald-50">
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -898,76 +1040,57 @@ const Dashboard = () => {
             <h1 className="text-3xl font-bold text-gray-900">
               Welcome back, {user?.name || 'Faculty'}! 🎓
             </h1>
-            <p className="text-gray-600 mt-1">Faculty Dashboard - Clinical Assessment & Case Management</p>
+            <p className="text-gray-600 mt-1">Faculty Dashboard - Patient Management & Analytics</p>
           </div>
 
-          {/* Faculty KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <StatCard 
-              title="My Clinical Proformas" 
-              value={myProformas?.data?.pagination?.total || 0} 
-              icon={FiFileText} 
-              colorClasses="from-green-500 to-green-600"
-              to="/clinical"
-              subtitle="Total assessments"
+              title="All Patients Count" 
+              value={stats.allPatientsCount} 
+              icon={FiUsers} 
+              colorClasses="from-blue-500 to-blue-600"
+              to="/patients"
+              subtitle="Total assigned patients"
             />
             <StatCard 
-              title="Complex Cases" 
-              value={complexCases?.data?.pagination?.total || 0} 
-              icon={FiAlertCircle} 
-              colorClasses="from-red-500 to-red-600"
-              to="/adl-files"
-              subtitle="Requiring attention"
-            />
-            <StatCard 
-              title="Active Out Patient Intake Record" 
-              value={activeADLFiles?.data?.files?.length || 0} 
+              title="Total Out Patient Intake Record" 
+              value={stats.adlFileCount} 
               icon={FiFolder} 
               colorClasses="from-purple-500 to-purple-600"
-              // to="/adl-files"
-              subtitle="In progress"
+              subtitle="Patients with ADL files"
             />
             <StatCard 
-              title="Prescriptions Given" 
-              value={recentPrescriptions?.data?.pagination?.total || 0} 
-              icon={FiPackage} 
-              colorClasses="from-blue-500 to-blue-600"
-              subtitle="Total prescriptions"
+              title="Assigned Patients Count" 
+              value={stats.assignedAfterCreation} 
+              icon={FiUserPlus} 
+              colorClasses="from-green-500 to-green-600"
+              subtitle="Assigned after account creation"
             />
           </div>
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gender Distribution */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
                   <FiPieChart className="w-5 h-5 text-primary-600" />
-                  <span>My Cases by Decision</span>
+                  <span>Patient Gender Distribution</span>
                 </div>
               }
               className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
             >
               <div className="h-80">
                 <Doughnut
-                  data={{
-                    labels: (decisionStats?.data?.decisionStats || []).map(item => {
-                      const decision = item.doctor_decision || '';
-                      return decision.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Unknown';
-                    }),
-                    datasets: [{
-                      data: (decisionStats?.data?.decisionStats || []).map(item => parseInt(item.count, 10) || 0),
-                      backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
-                      borderColor: ['#1D4ED8', '#059669', '#D97706', '#DC2626', '#7C3AED'],
-                      borderWidth: 2,
-                    }],
-                  }}
+                  data={genderChartData}
                   options={{
                     ...chartOptions,
                     plugins: {
                       ...chartOptions.plugins,
                       title: {
                         ...chartOptions.plugins.title,
-                        text: 'My Cases by Decision'
+                        text: 'Patient Gender Distribution'
                       }
                     }
                   }}
@@ -975,161 +1098,196 @@ const Dashboard = () => {
               </div>
             </Card>
 
+            {/* Age Group Distribution */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
-                  <FiTrendingUp className="w-5 h-5 text-primary-600" />
-                  <span>Daily Consultation Trend</span>
+                  <FiBarChart2 className="w-5 h-5 text-primary-600" />
+                  <span>Age Group Distribution</span>
                 </div>
               }
               className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
             >
               <div className="h-80">
-                <Line 
-                  data={visitTrendData} 
+                <Bar
+                  data={ageGroupChartData}
                   options={{
-                    ...chartOptions,
+                    ...barChartOptions,
                     plugins: {
-                      ...chartOptions.plugins,
+                      ...barChartOptions.plugins,
                       title: {
-                        ...chartOptions.plugins.title,
-                        text: 'Daily Consultation Trend'
+                        ...barChartOptions.plugins.title,
+                        text: 'Age Group Distribution'
                       }
                     },
                     scales: {
+                      ...barChartOptions.scales,
                       y: {
-                        beginAtZero: true
+                        beginAtZero: true,
+                        ticks: {
+                          stepSize: 1
+                        }
                       }
                     }
-                  }} 
+                  }}
                 />
               </div>
             </Card>
           </div>
 
-          {/* Recent Activity & Quick Actions */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* State-wise Distribution - Full Width */}
+          <Card 
+            title={
+              <div className="flex items-center gap-2">
+                <FiBarChart2 className="w-5 h-5 text-primary-600" />
+                <span>State-wise Patient Distribution</span>
+              </div>
+            }
+            className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
+          >
+            <div className="h-80">
+              <Bar
+                data={stateChartData}
+                options={{
+                  ...barChartOptions,
+                  plugins: {
+                    ...barChartOptions.plugins,
+                    title: {
+                      ...barChartOptions.plugins.title,
+                      text: 'State-wise Patient Distribution'
+                    }
+                  },
+                  scales: {
+                    ...barChartOptions.scales,
+                    x: {
+                      ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                      }
+                    }
+                  }
+                }}
+              />
+            </div>
+          </Card>
+
+          {/* Recent Patients & Today's Patients */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Recent Patients List */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
                   <FiActivity className="w-5 h-5 text-primary-600" />
-                  <span>Recent Activity</span>
+                  <span>Weekly Patients (Last 7 Days)</span>
                 </div>
               }
-              className="lg:col-span-2 bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
+              actions={
+                <Link to="/patients">
+                  <Button variant="outline" size="sm">
+                    View All
+                  </Button>
+                </Link>
+              }
+              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
             >
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {!myProformas?.data?.proformas?.length ? (
+                {stats.recentPatients.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-                    <FiActivity className="w-12 h-12 mb-3 opacity-50" />
-                    <p className="text-sm">No recent activity</p>
+                    <FiUsers className="w-12 h-12 mb-3 opacity-50" />
+                    <p className="text-sm">No recent patients</p>
                   </div>
                 ) : (
-                  myProformas?.data?.proformas?.slice(0, 5).map((proforma, idx) => (
-                    <ActivityItem
-                      key={proforma.id || idx}
-                      icon={FiFileText}
-                      title={`Clinical Proforma: ${proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}`}
-                      description={`Patient: ${proforma.patient_name || 'N/A'} - ${proforma.doctor_decision === 'complex_case' ? 'Instantly Requires Detailed Work-Up' : 'Requires Detailed Workup on Next Follow-Up'}`}
-                      time={proforma.created_at ? formatDateTime(proforma.created_at) : 'N/A'}
-                      status={proforma.doctor_decision === 'complex_case' ? 'complex' : 'simple'}
-                      color="from-green-500 to-green-600"
-                    />
+                  stats.recentPatients.map((patient, idx) => (
+                    <div 
+                      key={patient.id || idx}
+                      className="flex items-start gap-4 p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/40 hover:bg-white/70 transition-all duration-200"
+                    >
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-green-500 to-green-600 shadow-md">
+                        <FiUser className="h-5 w-5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900">{patient.name || 'N/A'}</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {patient.cr_no ? `CR No: ${patient.cr_no}` : 'N/A'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <FiClock className="w-3 h-3 text-gray-400" />
+                          <span className="text-xs text-gray-500">
+                            {patient.last_assigned_date 
+                              ? formatDateTime(patient.last_assigned_date) 
+                              : (patient.created_at ? formatDateTime(patient.created_at) : 'N/A')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Link to={`/patients/${patient.id}?edit=false`}>
+                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0" title="View Details">
+                            <FiEye className="w-4 h-4 text-blue-600" />
+                          </Button>
+                        </Link>
+                        <Link to={`/patients/${patient.id}?edit=true`}>
+                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0" title="Edit Patient">
+                            <FiEdit className="w-4 h-4 text-green-600" />
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
                   ))
                 )}
               </div>
             </Card>
 
-            <div className="space-y-4">
-              {/* Notifications Panel */}
-              {/* <Card 
-                title={
-                  <div className="flex items-center gap-2">
-                    <FiBell className="w-5 h-5 text-primary-600" />
-                    <span>Notifications</span>
+            {/* Today's Patients */}
+            <Card 
+              title={
+                <div className="flex items-center gap-2">
+                  <FiCalendar className="w-5 h-5 text-primary-600" />
+                  <span>Today's Patients</span>
+                </div>
+              }
+              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
+            >
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {stats.todayPatients.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                    <FiCalendar className="w-12 h-12 mb-3 opacity-50" />
+                    <p className="text-sm">No patients assigned today</p>
                   </div>
-                }
-                className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
-              >
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {complexCases?.data?.pagination?.total > 0 && (
-                    <div className="flex items-start gap-3 p-3 bg-red-50/50 rounded-lg border border-red-200/50">
-                      <FiAlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-red-900">
-                          {complexCases.data.pagination.total} Complex Case{complexCases.data.pagination.total > 1 ? 's' : ''} Requiring Attention
-                        </p>
-                        <Link to="/adl-files" className="text-xs text-red-600 hover:text-red-700 mt-1 inline-block">
-                          View cases →
+                ) : (
+                  stats.todayPatients.map((patient, idx) => (
+                    <div 
+                      key={patient.id || idx}
+                      className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200/50 hover:from-green-100 hover:to-emerald-100 transition-all duration-200"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-green-500 to-green-600 shadow-md">
+                          <FiUser className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">{patient.name || 'N/A'}</p>
+                          <p className="text-sm text-gray-600 truncate">
+                            {patient.cr_no ? `CR No: ${patient.cr_no}` : 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Link to={`/patients/${patient.id}?edit=true&mode=create`}>
+                          <Button variant="outline" size="sm" className="text-xs bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
+                            <FiEdit className="w-4 h-4 mr-1" />
+                            Edit
+                          </Button>
+                        </Link>
+                        <Link to={`/patients/${patient.id}?edit=false`}>
+                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0" title="View Details">
+                            <FiEye className="w-4 h-4 text-blue-600" />
+                          </Button>
                         </Link>
                       </div>
                     </div>
-                  )}
-                  {activeADLFiles?.data?.files?.filter(f => f.file_status === 'created').length > 0 && (
-                    <div className="flex items-start gap-3 p-3 bg-yellow-50/50 rounded-lg border border-yellow-200/50">
-                      <FiClock className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-yellow-900">
-                          {activeADLFiles.data.files.filter(f => f.file_status === 'created').length} Pending ADL File{activeADLFiles.data.files.filter(f => f.file_status === 'created').length > 1 ? 's' : ''}
-                        </p>
-                        <Link to="/adl-files?status=created" className="text-xs text-yellow-600 hover:text-yellow-700 mt-1 inline-block">
-                          Review →
-                        </Link>
-                      </div>
-                    </div>
-                  )}
-                  {(!complexCases?.data?.pagination?.total && 
-                    !activeADLFiles?.data?.files?.filter(f => f.file_status === 'created').length) && (
-                    <div className="flex flex-col items-center justify-center py-8 text-gray-400">
-                      <FiCheckCircle className="w-8 h-8 mb-2 opacity-50" />
-                      <p className="text-xs">All caught up! No pending items.</p>
-                    </div>
-                  )}
-                </div>
-              </Card> */}
-
-              {/* Quick Actions */}
-              <Card 
-                title={
-                  <div className="flex items-center gap-2">
-                    <FiSettings className="w-5 h-5 text-primary-600" />
-                    <span>Quick Actions</span>
-                  </div>
-                }
-                className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
-              >
-                <div className="space-y-3">
-                  <QuickActionCard
-                    icon={FiFileText}
-                    title="Create Proforma"
-                    description="New clinical assessment"
-                    to="/clinical-proforma/create"
-                    colorClasses="hover:from-green-50 hover:to-emerald-50"
-                  />
-                  <QuickActionCard
-                    icon={FiPackage}
-                    title="Create Prescription"
-                    description="Prescribe medication"
-                    to="/prescriptions/create"
-                    colorClasses="hover:from-blue-50 hover:to-indigo-50"
-                  />
-                  <QuickActionCard
-                    icon={FiUpload}
-                    title="Upload Files"
-                    description="Patient documents"
-                    to="/patients"
-                    colorClasses="hover:from-purple-50 hover:to-pink-50"
-                  />
-                  <QuickActionCard
-                    icon={FiUsers}
-                    title="My Patients"
-                    description="View assigned patients"
-                    to="/patients"
-                    colorClasses="hover:from-orange-50 hover:to-amber-50"
-                  />
-                </div>
-              </Card>
-            </div>
+                  ))
+                )}
+              </div>
+            </Card>
           </div>
         </div>
       </div>
@@ -1138,6 +1296,179 @@ const Dashboard = () => {
 
   // ==================== RESIDENT DASHBOARD ====================
   if (isResident) {
+    // Calculate statistics from assigned patients
+    const assignedPatients = useMemo(() => {
+      if (!allAssignedPatients?.data?.patients) return [];
+      const patients = allAssignedPatients.data.patients;
+      const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
+      
+      return patients.filter(p => {
+        // Only include patients assigned to this doctor
+        const patientDoctorId = p.assigned_doctor_id ? parseInt(p.assigned_doctor_id, 10) : null;
+        const currentUserId = user?.id ? parseInt(user.id, 10) : null;
+        return patientDoctorId === currentUserId;
+      });
+    }, [allAssignedPatients, user]);
+
+    // Calculate summary statistics
+    const stats = useMemo(() => {
+      const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const allPatientsCount = assignedPatients.length;
+      const adlFileCount = assignedPatients.filter(p => p.has_adl_file === true).length;
+      const assignedAfterCreation = userCreatedAt 
+        ? assignedPatients.filter(p => {
+            const assignedDate = p.last_assigned_date ? new Date(p.last_assigned_date) : (p.created_at ? new Date(p.created_at) : null);
+            return assignedDate && assignedDate >= userCreatedAt;
+          }).length
+        : allPatientsCount;
+      const todayPatients = assignedPatients.filter(p => {
+        const assignedDate = p.last_assigned_date ? new Date(p.last_assigned_date) : (p.created_at ? new Date(p.created_at) : null);
+        if (!assignedDate) return false;
+        const patientDate = new Date(assignedDate);
+        patientDate.setHours(0, 0, 0, 0);
+        return patientDate.getTime() === today.getTime();
+      });
+
+      // Gender distribution
+      const maleCount = assignedPatients.filter(p => p.sex === 'M' || p.sex === 'Male').length;
+      const femaleCount = assignedPatients.filter(p => p.sex === 'F' || p.sex === 'Female').length;
+
+      // Age group distribution
+      const ageGroupMap = {
+        '0-18': 0,
+        '19-30': 0,
+        '31-45': 0,
+        '46-60': 0,
+        '61-75': 0,
+        '75+': 0
+      };
+      
+      assignedPatients.forEach(p => {
+        let age = null;
+        // Try to get age from numeric age field first
+        if (p.age) {
+          age = typeof p.age === 'number' ? p.age : parseInt(p.age, 10);
+        }
+        // If age is not available or invalid, try to parse from age_group
+        if (!age || isNaN(age)) {
+          if (p.age_group) {
+            // Try to extract age from age_group string (e.g., "25-30" -> use first number)
+            const ageMatch = p.age_group.match(/(\d+)/);
+            if (ageMatch) {
+              age = parseInt(ageMatch[1], 10);
+            }
+          }
+        }
+        
+        if (age && !isNaN(age)) {
+          if (age <= 18) ageGroupMap['0-18']++;
+          else if (age <= 30) ageGroupMap['19-30']++;
+          else if (age <= 45) ageGroupMap['31-45']++;
+          else if (age <= 60) ageGroupMap['46-60']++;
+          else if (age <= 75) ageGroupMap['61-75']++;
+          else ageGroupMap['75+']++;
+        }
+      });
+      
+      const ageGroupData = Object.entries(ageGroupMap)
+        .map(([group, count]) => ({ group, count }));
+
+      // State-wise distribution
+      const stateMap = {};
+      assignedPatients.forEach(p => {
+        const state = p.state || 'Unknown';
+        stateMap[state] = (stateMap[state] || 0) + 1;
+      });
+      const stateData = Object.entries(stateMap)
+        .map(([state, count]) => ({ state, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // Recent patients (last 7 days - today to previous 7 days, where doctor accepted room)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+      
+      const recentPatients = [...assignedPatients]
+        .filter(p => {
+          // Only include patients assigned in the last 7 days
+          const assignedDate = p.last_assigned_date ? new Date(p.last_assigned_date) : (p.created_at ? new Date(p.created_at) : null);
+          if (!assignedDate) return false;
+          const patientDate = new Date(assignedDate);
+          patientDate.setHours(0, 0, 0, 0);
+          // Include patients from today to 7 days ago
+          return patientDate >= sevenDaysAgo && patientDate <= today;
+        })
+        .sort((a, b) => {
+          const dateA = a.last_assigned_date ? new Date(a.last_assigned_date) : new Date(a.created_at);
+          const dateB = b.last_assigned_date ? new Date(b.last_assigned_date) : new Date(b.created_at);
+          return dateB - dateA;
+        });
+
+      return {
+        allPatientsCount,
+        adlFileCount,
+        assignedAfterCreation,
+        todayPatients,
+        maleCount,
+        femaleCount,
+        ageGroupData,
+        stateData,
+        recentPatients
+      };
+    }, [assignedPatients, user]);
+
+    // Gender chart data
+    const genderChartData = {
+      labels: ['Male', 'Female'],
+      datasets: [{
+        data: [stats.maleCount, stats.femaleCount],
+        backgroundColor: ['#3B82F6', '#EC4899'],
+        borderColor: ['#1D4ED8', '#BE185D'],
+        borderWidth: 2,
+      }],
+    };
+
+    // State chart data
+    const stateChartData = {
+      labels: stats.stateData.map(item => item.state),
+      datasets: [{
+        label: 'Number of Patients',
+        data: stats.stateData.map(item => item.count),
+        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+        borderColor: 'rgba(29, 78, 216, 1)',
+        borderWidth: 1,
+      }],
+    };
+
+    // Age group chart data
+    const ageGroupChartData = {
+      labels: stats.ageGroupData.map(item => item.group),
+      datasets: [{
+        label: 'Number of Patients',
+        data: stats.ageGroupData.map(item => item.count),
+        backgroundColor: [
+          'rgba(239, 68, 68, 0.8)',   // Red for 0-18
+          'rgba(251, 191, 36, 0.8)',  // Yellow for 19-30
+          'rgba(34, 197, 94, 0.8)',   // Green for 31-45
+          'rgba(59, 130, 246, 0.8)',  // Blue for 46-60
+          'rgba(139, 92, 246, 0.8)',  // Purple for 61-75
+          'rgba(168, 85, 247, 0.8)',  // Violet for 75+
+        ],
+        borderColor: [
+          'rgba(220, 38, 38, 1)',
+          'rgba(217, 119, 6, 1)',
+          'rgba(22, 163, 74, 1)',
+          'rgba(37, 99, 235, 1)',
+          'rgba(124, 58, 237, 1)',
+          'rgba(147, 51, 234, 1)',
+        ],
+        borderWidth: 2,
+      }],
+    };
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -1146,76 +1477,57 @@ const Dashboard = () => {
             <h1 className="text-3xl font-bold text-gray-900">
               Welcome back, {user?.name || 'Resident'}! 🏠
             </h1>
-            <p className="text-gray-600 mt-1">Resident Dashboard - Clinical Assessment & Case Management</p>
+            <p className="text-gray-600 mt-1">Resident Dashboard - Patient Management & Analytics</p>
           </div>
 
-          {/* Resident KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <StatCard 
-              title="My Clinical Proformas" 
-              value={myProformas?.data?.pagination?.total || 0} 
-              icon={FiFileText} 
+              title="All Patients Count" 
+              value={stats.allPatientsCount} 
+              icon={FiUsers} 
               colorClasses="from-blue-500 to-blue-600"
-              to="/clinical"
-              subtitle="Total assessments"
+              to="/patients"
+              subtitle="Total assigned patients"
             />
             <StatCard 
-              title="Total Out Patient Intake Record  Created" 
-              value={activeADLFiles?.data?.files?.length || 0} 
+              title="Total Out Patient Intake Record" 
+              value={stats.adlFileCount} 
               icon={FiFolder} 
               colorClasses="from-purple-500 to-purple-600"
-              // to="/adl-files"
-              subtitle="Intake records"
+              subtitle="Patients with ADL files"
             />
             <StatCard 
-              title="Pending ADLs" 
-              value={complexCases?.data?.pagination?.total || 0} 
-              icon={FiAlertCircle} 
-              colorClasses="from-orange-500 to-orange-600"
-              to="/adl-files"
-              subtitle="Requiring completion"
-            />
-            <StatCard 
-              title="Files Uploaded" 
-              value={fileStats?.data?.stats?.total_files || 0} 
-              icon={FiUpload} 
-              colorClasses="from-pink-500 to-pink-600"
-              subtitle="Patient documents"
+              title="Assigned Patients Count" 
+              value={stats.assignedAfterCreation} 
+              icon={FiUserPlus} 
+              colorClasses="from-green-500 to-green-600"
+              subtitle="Assigned after account creation"
             />
           </div>
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gender Distribution */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
                   <FiPieChart className="w-5 h-5 text-primary-600" />
-                  <span>My Cases by Decision</span>
+                  <span>Patient Gender Distribution</span>
                 </div>
               }
               className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
             >
               <div className="h-80">
                 <Doughnut
-                  data={{
-                    labels: (decisionStats?.data?.decisionStats || []).map(item => {
-                      const decision = item.doctor_decision || '';
-                      return decision.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Unknown';
-                    }),
-                    datasets: [{
-                      data: (decisionStats?.data?.decisionStats || []).map(item => parseInt(item.count, 10) || 0),
-                      backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'],
-                      borderColor: ['#1D4ED8', '#059669', '#D97706', '#DC2626'],
-                      borderWidth: 2,
-                    }],
-                  }}
+                  data={genderChartData}
                   options={{
                     ...chartOptions,
                     plugins: {
                       ...chartOptions.plugins,
                       title: {
                         ...chartOptions.plugins.title,
-                        text: 'My Cases by Decision'
+                        text: 'Patient Gender Distribution'
                       }
                     }
                   }}
@@ -1223,39 +1535,35 @@ const Dashboard = () => {
               </div>
             </Card>
 
+            {/* Age Group Distribution */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
                   <FiBarChart2 className="w-5 h-5 text-primary-600" />
-                  <span>Out Patient Intake Record Status Breakdown</span>
+                  <span>Age Group Distribution</span>
                 </div>
               }
               className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
             >
               <div className="h-80">
                 <Bar
-                  data={{
-                    labels: ['Active', 'Stored', 'Retrieved', 'Archived'],
-                    datasets: [{
-                      label: 'Out Patient Intake Record Files',
-                      data: [
-                        adlStatusMap.active || 0,
-                        adlStatusMap.stored || 0,
-                        adlStatusMap.retrieved || 0,
-                        adlStatusMap.archived || 0
-                      ],
-                      backgroundColor: ['#EF4444', '#10B981', '#F59E0B', '#6B7280'],
-                      borderColor: ['#DC2626', '#059669', '#D97706', '#4B5563'],
-                      borderWidth: 2,
-                    }],
-                  }}
+                  data={ageGroupChartData}
                   options={{
                     ...barChartOptions,
                     plugins: {
                       ...barChartOptions.plugins,
                       title: {
                         ...barChartOptions.plugins.title,
-                        text: 'Out Patient Intake Record Status Breakdown'
+                        text: 'Age Group Distribution'
+                      }
+                    },
+                    scales: {
+                      ...barChartOptions.scales,
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          stepSize: 1
+                        }
                       }
                     }
                   }}
@@ -1264,147 +1572,220 @@ const Dashboard = () => {
             </Card>
           </div>
 
-          {/* Recent Activity & Quick Actions */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* State-wise Distribution - Full Width */}
+          <Card 
+            title={
+              <div className="flex items-center gap-2">
+                <FiBarChart2 className="w-5 h-5 text-primary-600" />
+                <span>State-wise Patient Distribution</span>
+              </div>
+            }
+            className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
+          >
+            <div className="h-80">
+              <Bar
+                data={stateChartData}
+                options={{
+                  ...barChartOptions,
+                  plugins: {
+                    ...barChartOptions.plugins,
+                    title: {
+                      ...barChartOptions.plugins.title,
+                      text: 'State-wise Patient Distribution'
+                    }
+                  },
+                  scales: {
+                    ...barChartOptions.scales,
+                    x: {
+                      ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                      }
+                    }
+                  }
+                }}
+              />
+            </div>
+          </Card>
+
+          {/* Recent Patients & Today's Patients */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Recent Patients List */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
                   <FiActivity className="w-5 h-5 text-primary-600" />
-                  <span>Recent Activity</span>
+                  <span>Weekly Patients (Last 7 Days)</span>
                 </div>
               }
-              className="lg:col-span-2 bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
+              actions={
+                <Link to="/patients">
+                  <Button variant="outline" size="sm">
+                    View All
+                  </Button>
+                </Link>
+              }
+              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
             >
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {(!myProformas?.data?.proformas?.length && !activeADLFiles?.data?.files?.length) ? (
+                {stats.recentPatients.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-                    <FiActivity className="w-12 h-12 mb-3 opacity-50" />
-                    <p className="text-sm">No recent activity</p>
+                    <FiUsers className="w-12 h-12 mb-3 opacity-50" />
+                    <p className="text-sm">No recent patients</p>
                   </div>
                 ) : (
-                  <>
-                    {myProformas?.data?.proformas?.slice(0, 5).map((proforma, idx) => (
-                      <ActivityItem
-                        key={proforma.id || idx}
-                        icon={FiFileText}
-                        title={`Clinical Proforma Created`}
-                        description={`Patient: ${proforma.patient_name || 'N/A'}`}
-                        time={proforma.created_at ? formatDateTime(proforma.created_at) : 'N/A'}
-                        status={proforma.doctor_decision === 'complex_case' ? 'complex' : 'simple'}
-                        color="from-blue-500 to-blue-600"
-                      />
-                    ))}
-                    {activeADLFiles?.data?.files?.slice(0, 3).map((file, idx) => (
-                      <ActivityItem
-                        key={file.id || idx}
-                        icon={FiFolder}
-                        title={`Out Patient Intake Record: ${file.file_status || 'Active'}`}
-                        description={`Patient: ${file.patient_name || 'N/A'}`}
-                        time={file.created_at ? formatDateTime(file.created_at) : 'N/A'}
-                        status={file.file_status}
-                        color="from-purple-500 to-purple-600"
-                      />
-                    ))}
-                  </>
+                  stats.recentPatients.map((patient, idx) => (
+                    <div 
+                      key={patient.id || idx}
+                      className="flex items-start gap-4 p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/40 hover:bg-white/70 transition-all duration-200"
+                    >
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 shadow-md">
+                        <FiUser className="h-5 w-5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900">{patient.name || 'N/A'}</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {patient.cr_no ? `CR No: ${patient.cr_no}` : 'N/A'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <FiClock className="w-3 h-3 text-gray-400" />
+                          <span className="text-xs text-gray-500">
+                            {patient.last_assigned_date 
+                              ? formatDateTime(patient.last_assigned_date) 
+                              : (patient.created_at ? formatDateTime(patient.created_at) : 'N/A')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Link to={`/patients/${patient.id}?edit=false`}>
+                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0" title="View Details">
+                            <FiEye className="w-4 h-4 text-blue-600" />
+                          </Button>
+                        </Link>
+                        <Link to={`/patients/${patient.id}?edit=true`}>
+                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0" title="Edit Patient">
+                            <FiEdit className="w-4 h-4 text-green-600" />
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
             </Card>
 
-            <div className="space-y-4">
-              {/* Notifications Panel */}
-              {/* <Card 
-                title={
-                  <div className="flex items-center gap-2">
-                    <FiBell className="w-5 h-5 text-primary-600" />
-                    <span>Notifications</span>
+            {/* Today's Patients */}
+            <Card 
+              title={
+                <div className="flex items-center gap-2">
+                  <FiCalendar className="w-5 h-5 text-primary-600" />
+                  <span>Today's Patients</span>
+                </div>
+              }
+              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
+            >
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {stats.todayPatients.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                    <FiCalendar className="w-12 h-12 mb-3 opacity-50" />
+                    <p className="text-sm">No patients assigned today</p>
                   </div>
-                }
-                className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
-              >
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {complexCases?.data?.pagination?.total > 0 && (
-                    <div className="flex items-start gap-3 p-3 bg-red-50/50 rounded-lg border border-red-200/50">
-                      <FiAlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-red-900">
-                          {complexCases.data.pagination.total} Complex Case{complexCases.data.pagination.total > 1 ? 's' : ''} Requiring Attention
-                        </p>
-                        <Link to="/adl-files" className="text-xs text-red-600 hover:text-red-700 mt-1 inline-block">
-                          View cases →
+                ) : (
+                  stats.todayPatients.map((patient, idx) => (
+                    <div 
+                      key={patient.id || idx}
+                      className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200/50 hover:from-blue-100 hover:to-indigo-100 transition-all duration-200"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 shadow-md">
+                          <FiUser className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">{patient.name || 'N/A'}</p>
+                          <p className="text-sm text-gray-600 truncate">
+                            {patient.cr_no ? `CR No: ${patient.cr_no}` : 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Link to={`/patients/${patient.id}?edit=true&mode=create`}>
+                          <Button variant="outline" size="sm" className="text-xs bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
+                            <FiEdit className="w-4 h-4 mr-1" />
+                            Edit
+                          </Button>
+                        </Link>
+                        <Link to={`/patients/${patient.id}?edit=false`}>
+                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0" title="View Details">
+                            <FiEye className="w-4 h-4 text-blue-600" />
+                          </Button>
                         </Link>
                       </div>
                     </div>
-                  )}
-                  {activeADLFiles?.data?.files?.filter(f => f.file_status === 'created').length > 0 && (
-                    <div className="flex items-start gap-3 p-3 bg-yellow-50/50 rounded-lg border border-yellow-200/50">
-                      <FiClock className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-yellow-900">
-                          {activeADLFiles.data.files.filter(f => f.file_status === 'created').length} Pending ADL File{activeADLFiles.data.files.filter(f => f.file_status === 'created').length > 1 ? 's' : ''}
-                        </p>
-                        <Link to="/adl-files?status=created" className="text-xs text-yellow-600 hover:text-yellow-700 mt-1 inline-block">
-                          Review →
-                        </Link>
-                      </div>
-                    </div>
-                  )}
-                  {(!complexCases?.data?.pagination?.total && 
-                    !activeADLFiles?.data?.files?.filter(f => f.file_status === 'created').length) && (
-                    <div className="flex flex-col items-center justify-center py-8 text-gray-400">
-                      <FiCheckCircle className="w-8 h-8 mb-2 opacity-50" />
-                      <p className="text-xs">All caught up! No pending items.</p>
-                    </div>
-                  )}
-                </div>
-              </Card> */}
-
-              {/* Quick Actions */}
-              {/* <Card 
-                title={
-                  <div className="flex items-center gap-2">
-                    <FiSettings className="w-5 h-5 text-primary-600" />
-                    <span>Quick Actions</span>
-                  </div>
-                }
-                className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
-              >
-                <div className="space-y-3">
-                  <QuickActionCard
-                    icon={FiFolder}
-                    title="Add Out Patient Intake Record"
-                    description="New intake record"
-                    to="/adl-files/new"
-                    colorClasses="hover:from-purple-50 hover:to-pink-50"
-                  />
-                  <QuickActionCard
-                    icon={FiUpload}
-                    title="Upload Documents"
-                    description="Patient files"
-                    to="/patients"
-                    colorClasses="hover:from-blue-50 hover:to-indigo-50"
-                  />
-                  <QuickActionCard
-                    icon={FiCalendar}
-                    title="Follow-ups"
-                    description="Check schedules"
-                    to="/clinical"
-                    colorClasses="hover:from-green-50 hover:to-emerald-50"
-                  />
-                  <QuickActionCard
-                    icon={FiFileText}
-                    title="My Proformas"
-                    description="View assessments"
-                    to="/clinical"
-                    colorClasses="hover:from-orange-50 hover:to-amber-50"
-                  />
-                </div>
-              </Card> */}
-            </div>
+                  ))
+                )}
+              </div>
+            </Card>
           </div>
         </div>
       </div>
     );
   }
+
+  // State-wise chart data for MWO
+  const stateChartData = useMemo(() => {
+    if (!isMwo || !stateDistribution || stateDistribution.length === 0) {
+      return {
+        labels: [],
+        datasets: [{
+          label: 'Number of Patients',
+          data: [],
+          backgroundColor: 'rgba(139, 92, 246, 0.8)',
+          borderColor: 'rgba(124, 58, 237, 1)',
+          borderWidth: 2,
+        }],
+      };
+    }
+    return {
+      labels: stateDistribution.map(item => item.state),
+      datasets: [{
+        label: 'Number of Patients',
+        data: stateDistribution.map(item => item.count),
+        backgroundColor: 'rgba(139, 92, 246, 0.8)',
+        borderColor: 'rgba(124, 58, 237, 1)',
+        borderWidth: 2,
+      }],
+    };
+  }, [stateDistribution, isMwo]);
+
+  // Marital status chart data for MWO
+  const maritalStatusChartData = useMemo(() => {
+    if (!isMwo || !maritalStatusDistribution) {
+      return {
+        labels: ['Married', 'Unmarried', 'Widow/Widower', 'Divorced', 'Other'],
+        datasets: [{
+          data: [0, 0, 0, 0, 0],
+          backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
+          borderColor: ['#1D4ED8', '#059669', '#D97706', '#DC2626', '#7C3AED'],
+          borderWidth: 2,
+        }],
+      };
+    }
+    return {
+      labels: ['Married', 'Unmarried', 'Widow/Widower', 'Divorced', 'Other'],
+      datasets: [{
+        data: [
+          maritalStatusDistribution.married,
+          maritalStatusDistribution.unmarried,
+          maritalStatusDistribution.widow_widower,
+          maritalStatusDistribution.divorced,
+          maritalStatusDistribution.other,
+        ],
+        backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
+        borderColor: ['#1D4ED8', '#059669', '#D97706', '#DC2626', '#7C3AED'],
+        borderWidth: 2,
+      }],
+    };
+  }, [maritalStatusDistribution, isMwo]);
 
   // ==================== PSYCHIATRIC WELFARE OFFICER DASHBOARD ====================
   if (isMwo) {
@@ -1422,24 +1803,16 @@ const Dashboard = () => {
           {/* MWO KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard 
-              title="Total Patient Records" 
-              value={outpatientStats?.data?.stats?.total_records || 0} 
-              icon={FiClipboard} 
+              title="Total Registered Patients" 
+              value={localityStats.total} 
+              icon={FiUsers} 
               colorClasses="from-blue-500 to-blue-600"
               to="/patients"
               subtitle="All registered patients"
             />
             <StatCard 
-              title="Registered Patients" 
-              value={myRecords?.data?.pagination?.total || 0} 
-              icon={FiUsers} 
-              colorClasses="from-purple-500 to-purple-600"
-              to="/patients"
-              subtitle="Patient database"
-            />
-            <StatCard 
               title="Urban Patients" 
-              value={outpatientStats?.data?.stats?.urban || 0} 
+              value={localityStats.urban} 
               icon={FiMapPin} 
               colorClasses="from-green-500 to-green-600"
               to="/patients?locality=urban"
@@ -1447,16 +1820,61 @@ const Dashboard = () => {
             />
             <StatCard 
               title="Rural Patients" 
-              value={outpatientStats?.data?.stats?.rural || 0} 
+              value={localityStats.rural} 
               icon={FiMapPin} 
               colorClasses="from-orange-500 to-orange-600"
               to="/patients?locality=rural"
               subtitle="Rural locality"
             />
+            <StatCard 
+              title="Total Rooms" 
+              value={allRoomsForMWO?.data?.pagination?.total || allRoomsForMWO?.data?.rooms?.length || 0} 
+              icon={FiHome} 
+              colorClasses="from-purple-500 to-purple-600"
+              to="/rooms"
+              subtitle="All available rooms"
+            />
           </div>
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* State-wise Patient Distribution */}
+            <Card 
+              title={
+                <div className="flex items-center gap-2">
+                  <FiBarChart2 className="w-5 h-5 text-primary-600" />
+                  <span>State-wise Patient Distribution</span>
+                </div>
+              }
+              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
+            >
+              <div className="h-80">
+                <Bar
+                  data={stateChartData}
+                  options={{
+                    ...barChartOptions,
+                    plugins: {
+                      ...barChartOptions.plugins,
+                      title: {
+                        ...barChartOptions.plugins.title,
+                        text: 'State-wise Patient Distribution'
+                      }
+                    },
+                    scales: {
+                      ...barChartOptions.scales,
+                      x: {
+                        ticks: {
+                          maxRotation: 45,
+                          minRotation: 45
+                        }
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </Card>
+
+            {/* Patient Records by Marital Status */}
             <Card 
               title={
                 <div className="flex items-center gap-2">
@@ -1468,66 +1886,14 @@ const Dashboard = () => {
             >
               <div className="h-80">
                 <Doughnut
-                  data={{
-                    labels: ['Married', 'Unmarried', 'Widow/Widower', 'Divorced', 'Other'],
-                    datasets: [{
-                      data: [
-                        outpatientStats?.data?.stats?.married || 0,
-                        outpatientStats?.data?.stats?.unmarried || 0,
-                        outpatientStats?.data?.stats?.widow_widower || 0,
-                        outpatientStats?.data?.stats?.divorced || 0,
-                        outpatientStats?.data?.stats?.other_marital || 0,
-                      ],
-                      backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
-                      borderColor: ['#1D4ED8', '#059669', '#D97706', '#DC2626', '#7C3AED'],
-                      borderWidth: 2,
-                    }],
-                  }}
+                  data={maritalStatusChartData}
                   options={{
                     ...chartOptions,
                     plugins: {
                       ...chartOptions.plugins,
                       title: {
                         ...chartOptions.plugins.title,
-                        text: 'Records by Marital Status'
-                      }
-                    }
-                  }}
-                />
-              </div>
-            </Card>
-
-            <Card 
-              title={
-                <div className="flex items-center gap-2">
-                  <FiBarChart2 className="w-5 h-5 text-primary-600" />
-                  <span>Urban vs Rural Distribution</span>
-                </div>
-              }
-              className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
-            >
-              <div className="h-80">
-                <Bar
-                  data={{
-                    labels: ['Urban', 'Rural'],
-                    datasets: [{
-                      label: 'Records',
-                      data: [
-                        outpatientStats?.data?.stats?.urban || 0,
-                        outpatientStats?.data?.stats?.rural || 0,
-                      ],
-                      backgroundColor: ['#3B82F6', '#10B981'],
-                      borderColor: ['#1D4ED8', '#059669'],
-                      borderWidth: 2,
-                    }],
-                  }}
-                  options={{
-                    ...barChartOptions,
-                    plugins: {
-                      ...barChartOptions.plugins,
-                      title: {
-                        ...barChartOptions.plugins.title,
-                        text: 'Urban vs Rural Distribution'
+                        text: 'Patient Records by Marital Status'
                       }
                     }
                   }}
