@@ -230,6 +230,12 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
       icon: FiSettings, 
       roles: ['Admin'] 
     },
+    { 
+      name: 'Room Management', 
+      to: '/rooms', 
+      icon: FiHome, 
+      roles: ['Admin'] 
+    },
   ];
 
   // Helper function to check if user role matches navigation item
