@@ -131,8 +131,8 @@ Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     servers: [
       {
         url: process.env.NODE_ENV === 'production' 
-          ? 'http://31.97.60.2:2025/api' 
-          : `http://localhost:${process.env.PORT || 2025}/api`,
+          ? 'http://122.186.76.102:8002/' 
+          : `http://localhost:${process.env.PORT || 8002}/`,
         description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
       },
     ],
