@@ -159,6 +159,6 @@ module.exports = {
   upload,
   uploadMultiple,
   handleUpload,
-  uploadsDir
+  uploadsDir: baseUploadsDir // Export base uploads directory for backward compatibility
 };
 

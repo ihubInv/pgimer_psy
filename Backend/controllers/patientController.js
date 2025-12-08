@@ -1707,6 +1707,7 @@ class PatientController {
       }
 
       // Delete physical file
+      const uploadsDir = uploadConfig.getAbsolutePath(uploadConfig.PATIENT_FILES_PATH);
       const filePath = path.join(uploadsDir, filename);
       if (fs.existsSync(filePath)) {
         try {

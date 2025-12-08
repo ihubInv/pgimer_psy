@@ -26,21 +26,24 @@ const roomRoutes = require('./routes/roomRoutes');
 const app = express();
 const PORT = process.env.PORT || 8000;
 const FRONTEND_PORT = process.env.FRONTEND_PORT || 8001;
-// Security middleware - less restrictive for Swagger UI
+// Security middleware - configured to allow Google Fonts
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
-      connectSrc: ["'self'", "http:", "https:"],
+      connectSrc: ["'self'", "http:", "https:", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
     },
   },
   crossOriginOpenerPolicy: false,
   crossOriginResourcePolicy: false,
   hsts: false, // Disable HSTS for HTTP connections
+  // Disable X-Content-Type-Options to prevent MIME type blocking for external resources like Google Fonts
+  // This allows the browser to load CSS from Google Fonts even if there are MIME type mismatches
+  contentTypeNosniff: false,
 }));
 
 
