@@ -643,15 +643,7 @@ const Dashboard = () => {
     };
   }, [ageDistribution]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
-  // State-wise chart data for admin
+  // State-wise chart data for admin (moved before early return)
   const adminStateChartData = useMemo(() => {
     if (!isAdminUser || !adminStateDistribution || adminStateDistribution.length === 0) {
       return {
@@ -676,6 +668,70 @@ const Dashboard = () => {
       }],
     };
   }, [adminStateDistribution, isAdminUser]);
+
+  // State-wise chart data for MWO (moved before early return)
+  const stateChartData = useMemo(() => {
+    if (!isMwo || !stateDistribution || stateDistribution.length === 0) {
+      return {
+        labels: [],
+        datasets: [{
+          label: 'Number of Patients',
+          data: [],
+          backgroundColor: 'rgba(139, 92, 246, 0.8)',
+          borderColor: 'rgba(124, 58, 237, 1)',
+          borderWidth: 2,
+        }],
+      };
+    }
+    return {
+      labels: stateDistribution.map(item => item.state),
+      datasets: [{
+        label: 'Number of Patients',
+        data: stateDistribution.map(item => item.count),
+        backgroundColor: 'rgba(139, 92, 246, 0.8)',
+        borderColor: 'rgba(124, 58, 237, 1)',
+        borderWidth: 2,
+      }],
+    };
+  }, [stateDistribution, isMwo]);
+
+  // Marital status chart data for MWO (moved before early return)
+  const maritalStatusChartData = useMemo(() => {
+    if (!isMwo || !maritalStatusDistribution) {
+      return {
+        labels: ['Married', 'Unmarried', 'Widow/Widower', 'Divorced', 'Other'],
+        datasets: [{
+          data: [0, 0, 0, 0, 0],
+          backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
+        borderColor: ['#1D4ED8', '#059669', '#D97706', '#DC2626', '#7C3AED'],
+          borderWidth: 2,
+        }],
+      };
+    }
+    return {
+      labels: ['Married', 'Unmarried', 'Widow/Widower', 'Divorced', 'Other'],
+      datasets: [{
+        data: [
+          maritalStatusDistribution.married,
+          maritalStatusDistribution.unmarried,
+          maritalStatusDistribution.widow_widower,
+          maritalStatusDistribution.divorced,
+          maritalStatusDistribution.other,
+        ],
+        backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
+        borderColor: ['#1D4ED8', '#059669', '#D97706', '#DC2626', '#7C3AED'],
+        borderWidth: 2,
+      }],
+    };
+  }, [maritalStatusDistribution, isMwo]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   // ==================== ADMIN DASHBOARD ====================
   if (isAdminUser) {
@@ -1730,62 +1786,6 @@ const Dashboard = () => {
       </div>
     );
   }
-
-  // State-wise chart data for MWO
-  const stateChartData = useMemo(() => {
-    if (!isMwo || !stateDistribution || stateDistribution.length === 0) {
-      return {
-        labels: [],
-        datasets: [{
-          label: 'Number of Patients',
-          data: [],
-          backgroundColor: 'rgba(139, 92, 246, 0.8)',
-          borderColor: 'rgba(124, 58, 237, 1)',
-          borderWidth: 2,
-        }],
-      };
-    }
-    return {
-      labels: stateDistribution.map(item => item.state),
-      datasets: [{
-        label: 'Number of Patients',
-        data: stateDistribution.map(item => item.count),
-        backgroundColor: 'rgba(139, 92, 246, 0.8)',
-        borderColor: 'rgba(124, 58, 237, 1)',
-        borderWidth: 2,
-      }],
-    };
-  }, [stateDistribution, isMwo]);
-
-  // Marital status chart data for MWO
-  const maritalStatusChartData = useMemo(() => {
-    if (!isMwo || !maritalStatusDistribution) {
-      return {
-        labels: ['Married', 'Unmarried', 'Widow/Widower', 'Divorced', 'Other'],
-        datasets: [{
-          data: [0, 0, 0, 0, 0],
-          backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
-          borderColor: ['#1D4ED8', '#059669', '#D97706', '#DC2626', '#7C3AED'],
-          borderWidth: 2,
-        }],
-      };
-    }
-    return {
-      labels: ['Married', 'Unmarried', 'Widow/Widower', 'Divorced', 'Other'],
-      datasets: [{
-        data: [
-          maritalStatusDistribution.married,
-          maritalStatusDistribution.unmarried,
-          maritalStatusDistribution.widow_widower,
-          maritalStatusDistribution.divorced,
-          maritalStatusDistribution.other,
-        ],
-        backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
-        borderColor: ['#1D4ED8', '#059669', '#D97706', '#DC2626', '#7C3AED'],
-        borderWidth: 2,
-      }],
-    };
-  }, [maritalStatusDistribution, isMwo]);
 
   // ==================== PSYCHIATRIC WELFARE OFFICER DASHBOARD ====================
   if (isMwo) {
