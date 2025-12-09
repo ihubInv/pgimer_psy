@@ -52,7 +52,8 @@ router.get('/stats',
 router.get('/:patient_id', 
   authenticateToken, 
   authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), 
-  validateId, 
+  param('patient_id').isInt({ min: 1 }).withMessage('Valid integer patient ID is required'),
+  handleValidationErrors,
   PatientFileController.getPatientFiles
 );
 
@@ -175,7 +176,8 @@ router.put('/update/:patient_id',
 router.delete('/delete/:patient_id/:file_path', 
   authenticateToken, 
   authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), 
-  validateId, 
+  param('patient_id').isInt({ min: 1 }).withMessage('Valid integer patient ID is required'),
+  handleValidationErrors,
   PatientFileController.deletePatientFile
 );
 

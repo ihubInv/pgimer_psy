@@ -6,6 +6,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const swaggerUi = require('swagger-ui-express');
 const cookieParser = require('cookie-parser');
+const fs = require('fs');
 require('dotenv').config();
 
 // Import configurations
@@ -93,20 +94,55 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser()); // Parse cookies for refresh tokens
 
-// Serve uploaded files statically - MUST be before API routes
+// Secure file serving - MUST be before API routes but after authentication setup
 const path = require('path');
-const uploadsPath = path.join(__dirname, 'uploads');
-console.log('[Server] Serving static files from:', uploadsPath);
+const { authenticateToken, authorizeRoles } = require('./middleware/auth');
+const SecureFileController = require('./controllers/secureFileController');
 
-// Explicitly handle /uploads route before any other middleware
-app.use('/uploads', (req, res, next) => {
-  // Log static file requests for debugging
-  console.log('[Server] Static file request:', req.path);
-  next();
-}, express.static(uploadsPath, {
-  setHeaders: (res, filePath) => {
-    // Set proper content type based on file extension
-    const ext = path.extname(filePath).toLowerCase();
+// Serve files from /fileupload directory with authentication and authorization
+// Path format: /fileupload/{role}/{document_type}/{patient_id}/{filename}
+app.get('/fileupload/*', 
+  authenticateToken,
+  authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'),
+  SecureFileController.servePatientFile
+);
+
+// Legacy /uploads route - also secured (for backward compatibility)
+const uploadsPath = path.join(__dirname, 'fileupload');
+const fileuploadPath = path.join(__dirname, 'fileupload');
+console.log('[Server] Secure file serving enabled for /fileupload');
+console.log('[Server] Fileupload directory:', fileuploadPath);
+console.log('[Server] Legacy uploads directory:', uploadsPath);
+
+// Legacy /uploads route - secured (if files exist in old location)
+app.get('/fileupload/*',
+  authenticateToken,
+  authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'),
+  (req, res, next) => {
+    // For legacy files, use similar security but simpler path validation
+    const requestedPath = req.path;
+    const legacyPath = path.join(__dirname, 'fileupload', requestedPath.replace(/^\/fileupload\//, ''));
+    const normalizedRequested = path.normalize(legacyPath);
+    const normalizedBase = path.normalize(uploadsPath);
+    
+    // Prevent directory traversal
+    if (!normalizedRequested.startsWith(normalizedBase)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied: Invalid file path'
+      });
+    }
+    
+    // Check if file exists
+    if (!fs.existsSync(normalizedRequested)) {
+      return res.status(404).json({
+        success: false,
+        message: 'File not found'
+      });
+    }
+    
+    // Serve file with appropriate headers
+    const ext = path.extname(normalizedRequested).toLowerCase();
     const contentTypes = {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
@@ -118,19 +154,22 @@ app.use('/uploads', (req, res, next) => {
       '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       '.txt': 'text/plain'
     };
-    if (contentTypes[ext]) {
-      res.setHeader('Content-Type', contentTypes[ext]);
+    
+    res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf'].includes(ext)) {
+      res.setHeader('Content-Disposition', 'inline');
+    } else {
+      const filename = path.basename(normalizedRequested);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     }
-    // Set CORS headers for static files
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
-  },
-  // Don't redirect, serve files directly
-  redirect: false,
-  // Enable index file serving if needed
-  index: false
-}));
+    
+    const fileStream = require('fs').createReadStream(normalizedRequested);
+    fileStream.pipe(res);
+  }
+);
 
 // Request logging middleware
 app.use((req, res, next) => {

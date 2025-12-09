@@ -25,6 +25,164 @@ const canEditDelete = (user, patientFile) => {
   return false;
 };
 
+/**
+ * Resolve file path dynamically using role, module, patient_id, and filename
+ * Structure: Backend/fileupload/{role}/{module}/{patient_id}/{filename}
+ * 
+ * @param {string|number} patientId - Patient ID
+ * @param {string} filename - Filename (e.g., "Screenshot_2025-10-09_105918.png")
+ * @param {string} role - User role (optional, will use default if not provided)
+ * @param {string} module - Module/document type (optional, defaults to "Patient_Details")
+ * @returns {string} Absolute file system path
+ */
+const resolveFilePath = (patientId, filename, role = null, module = null) => {
+  if (!patientId || !filename) {
+    return null;
+  }
+  
+  // Get role folder (default to 'admin' if not provided)
+  const roleFolder = role ? uploadConfig.mapRoleToFolder(role) : 'admin';
+  
+  // Get module/document type (default to 'Patient_Details')
+  const documentType = module ? uploadConfig.getDocumentType(module) : 'Patient_Details';
+  
+  // Format patient ID
+  const patientFolder = uploadConfig.formatPatientId(patientId);
+  
+  // Get base directory
+  const baseDir = uploadConfig.getAbsolutePath(uploadConfig.PATIENT_FILES_PATH);
+  
+  // Build full path: Backend/fileupload/{role}/{module}/{patient_id}/{filename}
+  const filePath = path.join(baseDir, roleFolder, documentType, patientFolder, filename);
+  
+  return path.normalize(filePath);
+};
+
+/**
+ * Resolve file path from URL path or relative path
+ * Handles various input formats:
+ * - /fileupload/psychiatric_welfare_officer/Patient_Details/50/file.png
+ * - fileupload/psychiatric_welfare_officer/Patient_Details/50/file.png
+ * - Full absolute path
+ * 
+ * @param {string} filePath - URL path, relative path, or absolute path
+ * @returns {string} Absolute file system path
+ */
+const resolveFilePathFromUrl = (filePath) => {
+  if (!filePath) return null;
+  
+  // If already absolute and exists, return as-is
+  if (path.isAbsolute(filePath) && fs.existsSync(filePath)) {
+    return path.normalize(filePath);
+  }
+  
+  // Use config helper to convert URL path to absolute path
+  const absolutePath = uploadConfig.urlPathToAbsolutePath(filePath);
+  
+  // If the path exists, return it
+  if (absolutePath && fs.existsSync(absolutePath)) {
+    return path.normalize(absolutePath);
+  }
+  
+  // Try alternative: direct join with project root
+  const projectRoot = path.join(__dirname, '..');
+  const normalizedPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
+  const altPath = path.join(projectRoot, normalizedPath);
+  
+  if (fs.existsSync(altPath)) {
+    return path.normalize(altPath);
+  }
+  
+  return path.normalize(absolutePath || altPath);
+};
+
+/**
+ * Delete file from filesystem permanently
+ * Tries multiple path resolution strategies to ensure file is found and deleted
+ * 
+ * @param {string} filePath - File path (URL, relative, or absolute)
+ * @param {object} options - Options object with patientId, filename, role, module for dynamic resolution
+ * @returns {object} Result object with { success: boolean, deleted: boolean, path: string, error: string }
+ */
+const deleteFileFromDisk = (filePath, options = {}) => {
+  const { patientId, filename, role, module } = options;
+  
+  let deleted = false;
+  let deletedPath = null;
+  let error = null;
+  
+  // Strategy 1: Try resolving from provided filePath
+  let absolutePath = resolveFilePathFromUrl(filePath);
+  
+  if (absolutePath && fs.existsSync(absolutePath)) {
+    try {
+      fs.unlinkSync(absolutePath);
+      deleted = true;
+      deletedPath = absolutePath;
+      console.log('[deleteFileFromDisk] ✓ File deleted from resolved path:', absolutePath);
+      return { success: true, deleted: true, path: deletedPath, error: null };
+    } catch (err) {
+      error = err.message;
+      console.error('[deleteFileFromDisk] ✗ Error deleting from resolved path:', err.message);
+    }
+  }
+  
+  // Strategy 2: If we have patientId and filename, try dynamic resolution
+  if (patientId && filename && !deleted) {
+    absolutePath = resolveFilePath(patientId, filename, role, module);
+    
+    if (absolutePath && fs.existsSync(absolutePath)) {
+      try {
+        fs.unlinkSync(absolutePath);
+        deleted = true;
+        deletedPath = absolutePath;
+        console.log('[deleteFileFromDisk] ✓ File deleted from dynamic path:', absolutePath);
+        return { success: true, deleted: true, path: deletedPath, error: null };
+      } catch (err) {
+        error = err.message;
+        console.error('[deleteFileFromDisk] ✗ Error deleting from dynamic path:', err.message);
+      }
+    }
+  }
+  
+  // Strategy 3: Try extracting path components from filePath and reconstructing
+  if (!deleted && filePath) {
+    // Extract components from path like: /fileupload/role/module/patient_id/filename
+    const pathMatch = filePath.match(/fileupload[\/\\]([^\/\\]+)[\/\\]([^\/\\]+)[\/\\]([^\/\\]+)[\/\\]([^\/\\]+)$/);
+    if (pathMatch) {
+      const [, extractedRole, extractedModule, extractedPatientId, extractedFilename] = pathMatch;
+      absolutePath = resolveFilePath(extractedPatientId, extractedFilename, extractedRole, extractedModule);
+      
+      if (absolutePath && fs.existsSync(absolutePath)) {
+        try {
+          fs.unlinkSync(absolutePath);
+          deleted = true;
+          deletedPath = absolutePath;
+          console.log('[deleteFileFromDisk] ✓ File deleted from extracted path:', absolutePath);
+          return { success: true, deleted: true, path: deletedPath, error: null };
+        } catch (err) {
+          error = err.message;
+          console.error('[deleteFileFromDisk] ✗ Error deleting from extracted path:', err.message);
+        }
+      }
+    }
+  }
+  
+  // If we couldn't delete, return failure
+  console.warn('[deleteFileFromDisk] ✗✗✗ Could not delete file:', filePath);
+  console.warn('[deleteFileFromDisk] Tried paths:', {
+    resolved: resolveFilePathFromUrl(filePath),
+    dynamic: patientId && filename ? resolveFilePath(patientId, filename, role, module) : 'N/A'
+  });
+  
+  return { 
+    success: false, 
+    deleted: false, 
+    path: null, 
+    error: error || 'File not found or could not be deleted' 
+  };
+};
+
 class PatientFileController {
   // Get patient files
   static async getPatientFiles(req, res) {
@@ -158,7 +316,7 @@ class PatientFileController {
       }
       
       // Files are already in the correct location (multer handles it via dynamic storage)
-      // Directory structure: /fileupload/{role}/{document_type}/PATIENT_ID_{patient_id}/
+      // Directory structure: /fileupload/{role}/{document_type}/{patient_id}/
       // Just need to get the file paths and store them in database
       const filePaths = [];
       
@@ -166,7 +324,7 @@ class PatientFileController {
         console.log('[createPatientFiles] Processing file:', file.originalname, 'Path:', file.path);
         
         // File is already in the correct directory structure:
-        // /fileupload/{role}/{document_type}/PATIENT_ID_{patient_id}/{filename}
+        // /fileupload/{role}/{document_type}/{patient_id}/{filename}
         // Just get the URL path for database storage
         const relativePath = uploadConfig.getPatientFileUrl(file.path, userRole, documentType);
         console.log('[createPatientFiles] File saved with URL path:', relativePath);
@@ -301,11 +459,45 @@ class PatientFileController {
       if (files.length > 0) {
         console.log('[updatePatientFiles] Processing', files.length, 'new file(s)');
         
+        // Get existing files before adding new ones
+        let existingFiles = existing ? [...(existing.attachment || [])] : [];
+        
         // Files are already in the correct location (multer handles it via dynamic storage)
-        // Directory structure: /fileupload/{role}/{document_type}/PATIENT_ID_{patient_id}/
+        // Directory structure: /fileupload/{role}/{document_type}/{patient_id}/
         // Just need to get the file paths and store them in database
         for (const file of files) {
           console.log('[updatePatientFiles] Processing file:', file.originalname, 'Path:', file.path);
+          
+          // Extract filename to check if a file with the same name already exists
+          const filename = file.originalname || path.basename(file.path);
+          
+          // Check if a file with the same name already exists in the database
+          // If so, delete the old file from filesystem before saving the new one
+          const existingFileWithSameName = existingFiles.find(existingFile => {
+            const existingFilename = path.basename(existingFile);
+            return existingFilename === filename || existingFile.endsWith(`/${filename}`);
+          });
+          
+          if (existingFileWithSameName) {
+            console.log('[updatePatientFiles] File with same name exists, deleting old file:', existingFileWithSameName);
+            
+            // Delete the old file from filesystem
+            const deleteResult = deleteFileFromDisk(existingFileWithSameName, {
+              patientId: patientIdInt,
+              filename: filename,
+              role: userRole,
+              module: documentType
+            });
+            
+            if (deleteResult.deleted) {
+              console.log('[updatePatientFiles] ✓ Old file deleted successfully:', deleteResult.path);
+            } else {
+              console.warn('[updatePatientFiles] Warning: Could not delete old file:', deleteResult.error);
+            }
+            
+            // Remove the old file from the existing files array
+            existingFiles = existingFiles.filter(f => f !== existingFileWithSameName);
+          }
           
           // File is already in the correct directory structure
           // Just get the URL path for database storage
@@ -315,8 +507,22 @@ class PatientFileController {
         }
       }
 
-      // Get existing files
+      // Get existing files (may have been modified if files were replaced)
       let updatedFiles = existing ? [...(existing.attachment || [])] : [];
+      
+      // If we removed files during replacement, update the array
+      if (files.length > 0 && existing) {
+        // Rebuild updatedFiles to exclude files that were replaced
+        updatedFiles = existing.attachment.filter(existingFile => {
+          // Check if this file was replaced by a new upload
+          const wasReplaced = files.some(newFile => {
+            const newFilename = newFile.originalname || path.basename(newFile.path);
+            const existingFilename = path.basename(existingFile);
+            return existingFilename === newFilename || existingFile.endsWith(`/${newFilename}`);
+          });
+          return !wasReplaced; // Keep files that weren't replaced
+        });
+      }
 
       // Add new files
       updatedFiles = [...updatedFiles, ...newFiles];
@@ -324,28 +530,110 @@ class PatientFileController {
       // Remove specified files
       if (filesToRemove.length > 0) {
         console.log('[updatePatientFiles] Removing', filesToRemove.length, 'file(s)');
-        const filesToRemoveSet = new Set(filesToRemove);
-        updatedFiles = updatedFiles.filter(file => {
-          if (filesToRemoveSet.has(file)) {
-            console.log('[updatePatientFiles] Deleting file:', file);
-            // Delete physical file - convert URL path to absolute path
-            // File path might be like /uploads/patient_files/Admin/123/file.jpg
-            const absolutePath = uploadConfig.getAbsolutePath(file.replace(/^\//, ''));
-            console.log('[updatePatientFiles] Absolute path for deletion:', absolutePath);
-            if (fs.existsSync(absolutePath)) {
-              try {
-                fs.unlinkSync(absolutePath);
-                console.log('[updatePatientFiles] File deleted successfully');
-              } catch (unlinkError) {
-                console.error('[updatePatientFiles] Error deleting file:', unlinkError);
-              }
-            } else {
-              console.warn('[updatePatientFiles] File not found at path:', absolutePath);
+        console.log('[updatePatientFiles] Files to remove:', filesToRemove);
+        console.log('[updatePatientFiles] Current files in database:', updatedFiles);
+        
+        // Normalize file paths for comparison
+        const normalizeFilePath = (filePath) => {
+          if (!filePath) return '';
+          let normalized = String(filePath).trim();
+          
+          // Remove leading/trailing whitespace
+          normalized = normalized.trim();
+          
+          // If it's a full URL, extract the path
+          if (normalized.startsWith('http://') || normalized.startsWith('http://')) {
+            try {
+              const url = new URL(normalized);
+              normalized = url.pathname;
+            } catch (e) {
+              // If URL parsing fails, try to extract path manually
+              const match = normalized.match(/\/fileupload\/.*/) || normalized.match(/\/uploads\/.*/);
+              if (match) normalized = match[0];
             }
-            return false;
           }
-          return true;
+          
+          // If it's an absolute file system path, extract relative path
+          if (normalized.includes('/fileupload/')) {
+            const fileuploadIndex = normalized.indexOf('/fileupload/');
+            normalized = normalized.substring(fileuploadIndex);
+          } else if (normalized.includes('/uploads/')) {
+            const uploadsIndex = normalized.indexOf('/uploads/');
+            normalized = normalized.substring(uploadsIndex);
+          }
+          
+          // Ensure it starts with /
+          if (!normalized.startsWith('/')) {
+            normalized = '/' + normalized;
+          }
+          
+          // Normalize path separators (use forward slashes)
+          normalized = normalized.replace(/\\/g, '/');
+          
+          // Remove duplicate slashes
+          normalized = normalized.replace(/\/+/g, '/');
+          
+          return normalized;
+        };
+        
+        // Normalize all files to remove
+        const normalizedFilesToRemove = filesToRemove.map(normalizeFilePath).filter(Boolean);
+        const filesToRemoveSet = new Set(normalizedFilesToRemove);
+        
+        console.log('[updatePatientFiles] Normalized files to remove:', Array.from(filesToRemoveSet));
+        
+        // Track deletion results
+        const deletionResults = [];
+        
+        updatedFiles = updatedFiles.filter(file => {
+          const normalizedFile = normalizeFilePath(file);
+          const shouldRemove = filesToRemoveSet.has(normalizedFile);
+          
+          if (shouldRemove) {
+            console.log('[updatePatientFiles] Deleting file:', file, '(normalized:', normalizedFile, ')');
+            
+            // Extract filename from path for dynamic resolution
+            let filename = path.basename(normalizedFile);
+            if (!filename || filename === '.' || filename === '..') {
+              const parts = normalizedFile.split(/[\/\\]/);
+              filename = parts[parts.length - 1];
+            }
+            
+            // Delete physical file using helper function
+            const deleteResult = deleteFileFromDisk(normalizedFile, {
+              patientId: patientIdInt,
+              filename: filename,
+              role: userRole,
+              module: documentType
+            });
+            
+            deletionResults.push({
+              file: file,
+              deleted: deleteResult.deleted,
+              path: deleteResult.path,
+              error: deleteResult.error
+            });
+            
+            if (!deleteResult.deleted) {
+              console.warn('[updatePatientFiles] Warning: Could not delete physical file:', file, '-', deleteResult.error);
+              // Continue with database removal even if physical deletion failed
+            }
+            
+            return false; // Remove from array
+          }
+          return true; // Keep in array
         });
+        
+        // Log deletion summary
+        const successfulDeletions = deletionResults.filter(r => r.deleted).length;
+        const failedDeletions = deletionResults.filter(r => !r.deleted).length;
+        console.log('[updatePatientFiles] Deletion summary:', {
+          total: deletionResults.length,
+          successful: successfulDeletions,
+          failed: failedDeletions
+        });
+        
+        console.log('[updatePatientFiles] Files after removal:', updatedFiles);
       }
 
       // Update or create record
@@ -420,45 +708,119 @@ class PatientFileController {
 
       // Get existing record
       const existing = await PatientFile.findByPatientId(patientIdInt);
-      if (!existing || !existing.attachment.includes(file_path)) {
-        return res.status(404).json({
-          success: false,
-          message: 'File not found in patient record'
+      
+      // Normalize file path for comparison (decode URL encoding if present)
+      const normalizedFilePath = decodeURIComponent(file_path);
+      
+      // Check if file exists in attachment array (if record exists)
+      let fileInRecord = null;
+      if (existing) {
+        fileInRecord = existing.attachment.find(f => {
+          const normalized = decodeURIComponent(f);
+          return f === file_path || f === normalizedFilePath || normalized === file_path || normalized === normalizedFilePath;
         });
       }
 
-      // Check permissions
-      if (!canEditDelete(req.user, existing)) {
-        return res.status(403).json({
-          success: false,
-          message: 'You do not have permission to delete this file. You can only delete files you uploaded.'
-        });
+      // If file is in database, check permissions
+      if (fileInRecord && existing) {
+        if (!canEditDelete(req.user, existing)) {
+          return res.status(403).json({
+            success: false,
+            message: 'You do not have permission to delete this file. You can only delete files you uploaded.'
+          });
+        }
+      } else if (!fileInRecord && existing) {
+        // File not in database but record exists - might be an orphan file
+        // Still try to delete from filesystem, but don't update database
+        console.log('[deletePatientFile] File not found in database record, attempting to delete orphan file from filesystem');
+      } else if (!existing) {
+        // No record exists - might be an orphan file
+        // Still try to delete from filesystem
+        console.log('[deletePatientFile] No patient file record exists, attempting to delete orphan file from filesystem');
       }
 
-      // Delete physical file - convert URL path to absolute path using config
-      const absolutePath = uploadConfig.getAbsolutePath(file_path.replace(/^\//, ''));
-      if (fs.existsSync(absolutePath)) {
-        try {
-          fs.unlinkSync(absolutePath);
-        } catch (unlinkError) {
-          console.error('Error deleting file:', unlinkError);
+      // Extract filename from path
+      // file_path could be: /fileupload/role/module/patient_id/filename or just filename
+      let filename = path.basename(normalizedFilePath);
+      if (!filename || filename === '.' || filename === '..') {
+        // If basename extraction failed, try to extract from the full path
+        const parts = normalizedFilePath.split(/[\/\\]/);
+        filename = parts[parts.length - 1];
+      }
+
+      // Get user role and module from request or use defaults
+      const userRole = req.user?.role?.trim() || req.body.role || 'Admin';
+      const documentType = req.body.document_type || req.body.file_type || req.body.module || 'Patient_Details';
+
+      console.log('[deletePatientFile] Deleting file:', {
+        patientId: patientIdInt,
+        filename: filename,
+        role: userRole,
+        module: documentType,
+        filePath: normalizedFilePath
+      });
+
+      // Delete physical file from disk using helper function
+      const deleteResult = deleteFileFromDisk(normalizedFilePath, {
+        patientId: patientIdInt,
+        filename: filename,
+        role: userRole,
+        module: documentType
+      });
+
+      if (!deleteResult.deleted) {
+        console.warn('[deletePatientFile] Warning: Could not delete physical file:', deleteResult.error);
+        
+        // If file was not found in database and not found on disk, return error
+        if (!fileInRecord) {
+          return res.status(404).json({
+            success: false,
+            message: 'File not found in database or filesystem',
+            error: deleteResult.error
+          });
         }
       }
 
-      // Remove from database
-      const updatedFiles = existing.attachment.filter(f => f !== file_path);
-      const userId = parseInt(req.user?.id, 10);
-      const patientFile = await PatientFile.update(existing.id, {
-        attachment: updatedFiles,
-        user_id: userId
-      });
+      // Update database only if file was in the record
+      let updatedFiles = [];
+      let patientFile = null;
+      
+      if (fileInRecord && existing) {
+        // Remove from database - remove all matching variations
+        updatedFiles = existing.attachment.filter(f => {
+          const normalized = decodeURIComponent(f);
+          return f !== file_path && 
+                 f !== normalizedFilePath && 
+                 normalized !== file_path && 
+                 normalized !== normalizedFilePath;
+        });
+
+        const userId = parseInt(req.user?.id, 10);
+        patientFile = await PatientFile.update(existing.id, {
+          attachment: updatedFiles,
+          user_id: userId
+        });
+      } else if (existing) {
+        // File was not in database but record exists - just return success
+        updatedFiles = existing.attachment;
+        patientFile = existing;
+      }
 
       res.status(200).json({
         success: true,
-        message: 'File deleted successfully',
+        message: deleteResult.deleted 
+          ? (fileInRecord 
+              ? 'File deleted successfully from filesystem and database' 
+              : 'Orphan file deleted successfully from filesystem')
+          : (fileInRecord
+              ? 'File removed from database (physical file may not have been found)'
+              : 'Could not delete file from filesystem'),
         data: {
           files: updatedFiles,
-          record: patientFile.toJSON()
+          record: patientFile ? patientFile.toJSON() : null,
+          file_deleted: deleteResult.deleted,
+          deletion_path: deleteResult.path,
+          was_orphan: !fileInRecord
         }
       });
     } catch (error) {

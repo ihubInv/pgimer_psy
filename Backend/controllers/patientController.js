@@ -937,11 +937,15 @@ class PatientController {
       // Perform the update
       await patient.update(updateData);
   
-      // Handle file uploads if any files are present
+      // Handle file uploads if any files are present OR if files need to be removed
       console.log('[updatePatient] Checking for files. req.files:', req.files ? (Array.isArray(req.files) ? req.files.length + ' files' : 'object with keys: ' + Object.keys(req.files).join(', ')) : 'no files');
       console.log('[updatePatient] req.body keys:', Object.keys(req.body || {}));
+      console.log('[updatePatient] files_to_remove in body:', req.body.files_to_remove || req.body['files_to_remove[]'] || 'none');
       
-      if (req.files && req.files.length > 0) {
+      const hasFiles = req.files && (Array.isArray(req.files) ? req.files.length > 0 : Object.keys(req.files).length > 0);
+      const hasFilesToRemove = !!(req.body.files_to_remove || req.body['files_to_remove[]']);
+      
+      if (hasFiles || hasFilesToRemove) {
         console.log('[updatePatient] Processing', req.files.length, 'file(s) for patient', id);
         try {
           const PatientFileController = require('./patientFileController');
@@ -1011,35 +1015,6 @@ class PatientController {
           console.error('[updatePatient] Error stack:', fileError.stack);
           // Don't fail the entire update if file upload fails
           // The patient data update was successful
-        }
-      } else if (req.body.files_to_remove) {
-        // Handle file removal even if no new files are uploaded
-        try {
-          const PatientFileController = require('./patientFileController');
-          const filesToRemove = Array.isArray(req.body.files_to_remove) 
-            ? req.body.files_to_remove 
-            : JSON.parse(req.body.files_to_remove);
-          
-          const fileUpdateReq = {
-            params: { patient_id: id },
-            body: { files_to_remove: filesToRemove },
-            files: [],
-            user: req.user
-          };
-          
-          const fileUpdateRes = {
-            status: (code) => ({
-              json: (data) => {
-                if (code >= 400) {
-                  console.error('[updatePatient] File removal error:', data);
-                }
-              }
-            })
-          };
-          
-          await PatientFileController.updatePatientFiles(fileUpdateReq, fileUpdateRes);
-        } catch (fileError) {
-          console.error('[updatePatient] Error removing files:', fileError);
         }
       }
   

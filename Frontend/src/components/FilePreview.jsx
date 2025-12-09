@@ -1,136 +1,249 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import { FiX, FiDownload, FiImage, FiFile, FiFileText } from 'react-icons/fi';
 import Modal from './Modal';
 import Button from './Button';
+import { selectCurrentToken } from '../features/auth/authSlice';
+import { toast } from 'react-toastify';
 
-const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) => {
+// Component to load images with authentication
+const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onError, onLoad }) => {
+  const [imageSrc, setImageSrc] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    if (!urlPath || !baseUrl) {
+      setImageSrc(src);
+      setIsLoading(false);
+      return;
+    }
+
+    // If we have a token, fetch with authentication
+    if (token) {
+      const fullUrl = `${baseUrl}${urlPath}`;
+      fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: 'include',
+      })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          return response.blob();
+        })
+        .then(blob => {
+          const blobUrl = URL.createObjectURL(blob);
+          setImageSrc(blobUrl);
+          setIsLoading(false);
+        })
+        .catch(error => {
+          console.error('[AuthenticatedImage] Failed to load image:', error);
+          setHasError(true);
+          setIsLoading(false);
+          setImageSrc(src); // Fallback to direct URL
+        });
+    } else {
+      // No token, use direct URL
+      setImageSrc(src);
+      setIsLoading(false);
+    }
+
+    // Cleanup blob URL on unmount
+    return () => {
+      if (imageSrc && imageSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(imageSrc);
+      }
+    };
+  }, [urlPath, baseUrl, token, src]);
+
+  if (hasError && !imageSrc) {
+    return (
+      <div className={className} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
+        <FiImage className="w-8 h-8 text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageSrc || src}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      onError={onError}
+      onLoad={onLoad}
+      style={{ display: isLoading ? 'none' : 'block' }}
+    />
+  );
+};
+
+const FilePreview = ({ 
+  files = [], 
+  onDelete, 
+  canDelete = true,
+  baseUrl = '',
+  patient_id = null,
+  onFileDeleted = null, // Optional callback after successful deletion
+  refetchFiles = null // Optional function to refetch files after deletion
+}) => {
   const [previewFile, setPreviewFile] = useState(null);
   const [previewType, setPreviewType] = useState(null);
+  const [blobUrls, setBlobUrls] = useState(new Map()); // Cache blob URLs
+  const [isDeletingFile, setIsDeletingFile] = useState(false);
+  const token = useSelector(selectCurrentToken);
 
-  // Get file URL
-  const getFileUrl = (filePath) => {
+  // Get base URL without /api
+  const baseUrlWithoutApi = useMemo(() => {
+    const apiUrl = baseUrl || import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api';
+    let url = apiUrl.replace(/\/api$/, '');
+    
+    if (!url || url === '/' || url.startsWith('/')) {
+      const apiUrlMatch = apiUrl.match(/http[s]?:\/\/([^\/]+)/);
+      if (apiUrlMatch) {
+        const hostAndPort = apiUrlMatch[1];
+        if (!hostAndPort.includes(':')) {
+          const currentPort = window.location.port;
+          if (currentPort === '8001') {
+            url = `http://${hostAndPort}:8002`;
+          } else {
+            url = `http://${hostAndPort}`;
+          }
+        } else {
+          url = `http://${hostAndPort}`;
+        }
+      } else {
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname;
+        const currentPort = window.location.port;
+        if (currentPort === '8001') {
+          url = `${protocol}//${hostname}:8002`;
+        } else {
+          url = `${protocol}//${hostname}${currentPort ? `:${currentPort}` : ''}`;
+        }
+      }
+    }
+    return url;
+  }, [baseUrl]);
+
+  // Get file URL path (relative path for authenticated fetch)
+  const getFileUrlPath = (filePath) => {
+    if (!filePath) return '';
+    
+    // If it's already a full URL, extract the path
+    if (filePath.startsWith('http://') || filePath.startsWith('http://')) {
+      try {
+        const url = new URL(filePath);
+        return url.pathname;
+      } catch {
+        return '';
+      }
+    }
+    
+    // Handle absolute file system paths
+    if (filePath.startsWith('/var/') || filePath.startsWith('/usr/') || filePath.startsWith('/home/') || 
+        filePath.includes('/Backend/fileupload/') || filePath.includes('/Backend/uploads/')) {
+      let relativePath = filePath;
+      
+      const fileuploadIndex = filePath.indexOf('/fileupload/');
+      if (fileuploadIndex !== -1) {
+        relativePath = filePath.substring(fileuploadIndex);
+      } else {
+        const backendFileuploadIndex = filePath.indexOf('/Backend/fileupload/');
+        if (backendFileuploadIndex !== -1) {
+          relativePath = filePath.substring(backendFileuploadIndex + '/Backend'.length);
+        } else {
+          const uploadsIndex = filePath.indexOf('/uploads/');
+          if (uploadsIndex !== -1) {
+            relativePath = filePath.substring(uploadsIndex);
+          } else {
+            const backendUploadsIndex = filePath.indexOf('/Backend/uploads/');
+            if (backendUploadsIndex !== -1) {
+              relativePath = filePath.substring(backendUploadsIndex + '/Backend'.length);
+            }
+          }
+        }
+      }
+      return relativePath;
+    }
+    
+    // If it starts with /fileupload or /uploads, use it directly
+    if (filePath.startsWith('/fileupload/') || filePath.startsWith('/uploads/')) {
+      return filePath;
+    }
+    
+    // If it's a relative path starting with fileupload or uploads
+    if (filePath.startsWith('fileupload/') || filePath.startsWith('uploads/')) {
+      return `/${filePath}`;
+    }
+    
+    // Otherwise prepend /fileupload
+    if (filePath.startsWith('/')) {
+      return `/fileupload${filePath}`;
+    }
+    
+    return `/fileupload/${filePath}`;
+  };
+
+  // Get authenticated file URL (creates blob URL if needed)
+  const getFileUrl = async (filePath) => {
     if (!filePath) {
       console.warn('[FilePreview] Empty file path provided');
       return '';
     }
     
-    // If it's already a full URL, return as is
-    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-      return filePath;
+    // If we already have a blob URL cached, return it
+    if (blobUrls.has(filePath)) {
+      return blobUrls.get(filePath);
     }
     
-    // Get base URL and remove /api if present
-    // For file URLs, we need the backend server URL (not the frontend dev server)
-    const apiUrl = baseUrl || import.meta.env.VITE_API_URL || 'http://localhost:2025/api';
+    const urlPath = getFileUrlPath(filePath);
+    if (!urlPath) return '';
     
-    // Extract the backend server URL from the API URL
-    // API URL format: http://host:port/api -> we need http://host:port
-    let baseUrlWithoutApi = apiUrl.replace(/\/api$/, ''); // Remove /api if present
+    const fullUrl = `${baseUrlWithoutApi}${urlPath}`;
     
-    // If the API URL contains a port, use it; otherwise, try to determine backend port
-    // In development, frontend is on 8001, backend is on 8002
-    // In production, they might be on the same server
-    if (!baseUrlWithoutApi || baseUrlWithoutApi === '/' || baseUrlWithoutApi.startsWith('/')) {
-      // Extract hostname and port from API URL
-      const apiUrlMatch = apiUrl.match(/http[s]?:\/\/([^\/]+)/);
-      if (apiUrlMatch) {
-        const hostAndPort = apiUrlMatch[1];
-        // If API URL doesn't have a port, try to determine backend port
-        if (!hostAndPort.includes(':')) {
-          // Check if we're in development (frontend on 8001, backend on 8002)
-          const currentPort = window.location.port;
-          if (currentPort === '8001') {
-            // Frontend dev server, backend is on 8002
-            baseUrlWithoutApi = `http://${hostAndPort}:8002`;
-          } else {
-            // Production or other setup, use same host
-            baseUrlWithoutApi = `http://${hostAndPort}`;
-          }
-        } else {
-          baseUrlWithoutApi = `http://${hostAndPort}`;
-        }
-      } else {
-        // Fallback: use current hostname with backend port
-        const protocol = window.location.protocol;
-        const hostname = window.location.hostname;
-        const currentPort = window.location.port;
-        if (currentPort === '8001') {
-          baseUrlWithoutApi = `${protocol}//${hostname}:8002`; // Backend port
-        } else {
-          baseUrlWithoutApi = `${protocol}//${hostname}${currentPort ? `:${currentPort}` : ''}`;
-        }
-      }
+    // If no token, return the URL (will fail with 401, but that's expected)
+    if (!token) {
+      return fullUrl;
     }
     
-    // Handle absolute file system paths (e.g., /var/www/pgimer_psy/Backend/uploads/...)
-    // Extract the relative path from the absolute path
-    if (filePath.startsWith('/var/') || filePath.startsWith('/usr/') || filePath.startsWith('/home/') || filePath.includes('/Backend/uploads/')) {
-      // Extract the path after /Backend/uploads/ or /uploads/
-      let relativePath = filePath;
+    // Fetch file with authentication and create blob URL
+    try {
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: 'include',
+      });
       
-      // Try to extract relative path from absolute path
-      const uploadsIndex = filePath.indexOf('/uploads/');
-      if (uploadsIndex !== -1) {
-        relativePath = filePath.substring(uploadsIndex);
-      } else {
-        // If it contains Backend/uploads, extract from there
-        const backendUploadsIndex = filePath.indexOf('/Backend/uploads/');
-        if (backendUploadsIndex !== -1) {
-          relativePath = filePath.substring(backendUploadsIndex + '/Backend'.length);
-        } else {
-          // Fallback: try to find uploads directory
-          const lastUploadsIndex = filePath.lastIndexOf('/uploads/');
-          if (lastUploadsIndex !== -1) {
-            relativePath = filePath.substring(lastUploadsIndex);
-          }
-        }
+      if (!response.ok) {
+        console.error('[FilePreview] Failed to fetch file:', response.status, response.statusText);
+        return fullUrl; // Fallback to direct URL
       }
       
-      const fullUrl = `${baseUrlWithoutApi}${relativePath}`;
-      return fullUrl;
-    }
-    
-    // If it starts with /uploads, use it directly (backend serves from /uploads)
-    if (filePath.startsWith('/uploads/')) {
-      const fullUrl = `${baseUrlWithoutApi}${filePath}`;
-      return fullUrl;
-    }
-    
-    // If it's a relative path starting with uploads (no leading slash)
-    if (filePath.startsWith('uploads/')) {
-      const fullUrl = `${baseUrlWithoutApi}/${filePath}`;
-      return fullUrl;
-    }
-    
-    // If it starts with /, check if it's a path that needs /uploads prefix
-    if (filePath.startsWith('/')) {
-      // If it's already a full path starting with /uploads, use it
-      if (filePath.startsWith('/uploads/')) {
-        const fullUrl = `${baseUrlWithoutApi}${filePath}`;
-        return fullUrl;
-      }
-      // If it's a patient_files path, it should already include /uploads prefix
-      // But if it doesn't, add it
-      if (filePath.startsWith('/patient_files/') || filePath.startsWith('/patients/')) {
-        // Check if it already has /uploads prefix
-        if (!filePath.startsWith('/uploads/')) {
-          const fullUrl = `${baseUrlWithoutApi}/uploads${filePath}`;
-;
-          return fullUrl;
-        }
-        const fullUrl = `${baseUrlWithoutApi}${filePath}`;
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
       
-        return fullUrl;
-      }
-      // Otherwise, prepend /uploads
-      const fullUrl = `${baseUrlWithoutApi}/uploads${filePath}`;
-      return fullUrl;
+      // Cache the blob URL
+      setBlobUrls(prev => new Map(prev).set(filePath, blobUrl));
+      
+      return blobUrl;
+    } catch (error) {
+      console.error('[FilePreview] Error fetching file:', error);
+      return fullUrl; // Fallback to direct URL
     }
-    
-    // Otherwise assume it's a relative path and prepend /uploads
-    const fullUrl = `${baseUrlWithoutApi}/uploads/${filePath}`;
-    return fullUrl;
   };
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      blobUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [blobUrls]);
 
   // Get file type
   const getFileType = (filePath) => {
@@ -146,9 +259,10 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
   };
 
   // Open preview modal
-  const openPreview = (filePath) => {
+  const openPreview = async (filePath) => {
     const fileType = getFileType(filePath);
-    setPreviewFile(getFileUrl(filePath));
+    const url = await getFileUrl(filePath);
+    setPreviewFile(url);
     setPreviewType(fileType);
   };
 
@@ -159,31 +273,175 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
   };
 
   // Download file
-  const downloadFile = (filePath, e) => {
+  const downloadFile = async (filePath, e) => {
     if (e && e.stopPropagation) {
       e.stopPropagation();
     }
-    const url = getFileUrl(filePath);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filePath.split('/').pop();
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const urlPath = getFileUrlPath(filePath);
+    if (!urlPath) return;
+    
+    const fullUrl = `${baseUrlWithoutApi}${urlPath}`;
+    const fileName = filePath.split('/').pop();
+    
+    try {
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: token ? {
+          'Authorization': `Bearer ${token}`,
+        } : {},
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        console.error('[FilePreview] Failed to download file:', response.status);
+        return;
+      }
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('[FilePreview] Error downloading file:', error);
+    }
   };
 
-  // Delete file
-  const handleDelete = (filePath, e) => {
+  // Extract file identifier from file path/object
+  // Backend will handle all path resolution, we just need to pass the file identifier
+  const getFileIdentifier = (filePath) => {
+    if (!filePath) return '';
+    
+    // Handle if filePath is an object with path/url property
+    if (typeof filePath === 'object' && filePath !== null) {
+      return filePath.path || filePath.url || filePath.filePath || String(filePath);
+    }
+    
+    // Return as-is - backend will handle path resolution
+    return String(filePath);
+  };
+
+  // Delete file - backend handles all path resolution
+  // Frontend just passes patient_id and file identifier
+  // Using direct fetch to ensure correct endpoint is called
+  const handleDelete = async (filePath, e) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this file?')) {
+    
+    if (!window.confirm('Are you sure you want to delete this file?')) {
+      return;
+    }
+
+    // Validate patient_id is provided
+    if (!patient_id) {
+      console.error('[FilePreview] Patient ID is missing');
+      toast.error('Patient ID is required to delete file');
       if (onDelete) {
         onDelete(filePath);
       }
+      return;
+    }
+
+    // Get file identifier - backend will handle path resolution
+    const fileIdentifier = getFileIdentifier(filePath);
+    if (!fileIdentifier) {
+      console.error('[FilePreview] File identifier is missing');
+      toast.error('File identifier is required');
+      return;
+    }
+
+    try {
+      setIsDeletingFile(true);
+      
+      const patientIdStr = String(patient_id);
+      
+      // Validate patient_id is not undefined/null
+      if (!patientIdStr || patientIdStr === 'undefined' || patientIdStr === 'null') {
+        console.error('[FilePreview] Invalid patient ID:', patient_id);
+        toast.error('Invalid patient ID');
+        setIsDeletingFile(false);
+        return;
+      }
+      
+      console.log('[FilePreview] Deleting file - backend will handle path resolution:', {
+        patient_id: patientIdStr,
+        file_identifier: fileIdentifier
+      });
+
+      // Use direct fetch to ensure correct endpoint: /api/patient-files/delete/{patient_id}/{file_path}
+      // Backend handles all path resolution using req.user.role and module
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api';
+      const apiToken = JSON.parse(localStorage.getItem('user'))?.token || localStorage.getItem('token');
+      
+      // Construct the correct URL
+      const encodedFilePath = encodeURIComponent(fileIdentifier);
+      const deleteUrl = `${baseUrl}/patient-files/delete/${patientIdStr}/${encodedFilePath}`;
+      
+      console.log('[FilePreview] Delete URL:', deleteUrl);
+      
+      const response = await fetch(deleteUrl, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw { data: result, status: response.status };
+      }
+
+      console.log('[FilePreview] File deleted successfully:', result);
+      
+      // Show success message
+      toast.success(result?.message || 'File deleted successfully');
+
+      // Refetch files if callback provided
+      if (refetchFiles) {
+        await refetchFiles();
+      }
+
+      // Call optional callback if provided
+      if (onFileDeleted) {
+        onFileDeleted(filePath, fileIdentifier);
+      }
+
+      // Also call onDelete callback if provided (for backward compatibility)
+      if (onDelete) {
+        onDelete(filePath);
+      }
+
+      // Remove blob URL from cache if it exists
+      if (blobUrls.has(filePath)) {
+        const blobUrl = blobUrls.get(filePath);
+        URL.revokeObjectURL(blobUrl);
+        setBlobUrls(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(filePath);
+          return newMap;
+        });
+      }
+    } catch (error) {
+      console.error('[FilePreview] Error deleting file:', error);
+      toast.error(
+        error?.data?.message || 
+        error?.data?.error || 
+        error?.message ||
+        'Failed to delete file. Please try again.'
+      );
+    } finally {
+      setIsDeletingFile(false);
     }
   };
 
 
+  // Empty state
   if (!files || files.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -207,17 +465,24 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
             
             const fileType = getFileType(actualPath);
             const fileName = actualPath.split('/').pop();
-            const fileUrl = getFileUrl(actualPath);
+            const urlPath = getFileUrlPath(actualPath);
+            const fileUrl = urlPath ? `${baseUrlWithoutApi}${urlPath}` : '';
             return {
               actualPath,
               fileType,
               fileName,
               fileUrl,
+              urlPath,
               index
             };
           })
           .filter(Boolean)
-          .map(({ actualPath, fileType, fileName, fileUrl, index }) => (
+          .map(({ actualPath, fileType, fileName, fileUrl, urlPath, index }) => {
+            // Use cached blob URL if available, otherwise use direct URL
+            const cachedBlobUrl = blobUrls.get(actualPath);
+            const displayUrl = cachedBlobUrl || fileUrl;
+            
+            return (
             <div
               key={`${actualPath}-${index}`}
               className="relative group bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-200 cursor-pointer"
@@ -226,11 +491,13 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
               {/* Image Preview */}
               {fileType === 'image' ? (
                 <div className="aspect-square relative bg-gray-100">
-                  <img
-                    src={fileUrl || ''}
+                  <AuthenticatedImage
+                    src={displayUrl}
+                    urlPath={urlPath}
+                    baseUrl={baseUrlWithoutApi}
+                    token={token}
                     alt={fileName || 'Image'}
                     className="w-full h-full object-cover"
-                    loading="lazy"
                     onError={(e) => {
                       const attemptedUrl = e.target?.src || fileUrl || 'unknown';
                       const errorInfo = {
@@ -259,9 +526,6 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
                     }}
                     onLoad={() => {}}
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                    <FiImage className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
                 </div>
               ) : (
                 /* PDF/File Icon */
@@ -276,6 +540,11 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
                   </p>
                 </div>
               )}
+              
+              {/* Hover Overlay */}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                <FiImage className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
 
               {/* File Name Overlay */}
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
@@ -291,9 +560,24 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
                 >
                   <FiDownload className="w-4 h-4" />
                 </button>
-                {canDelete && onDelete && (
+                {canDelete && patient_id && (
                   <button
                     onClick={(e) => handleDelete(actualPath, e)}
+                    disabled={isDeletingFile}
+                    className="p-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={isDeletingFile ? "Deleting..." : "Delete"}
+                  >
+                    <FiX className="w-4 h-4" />
+                  </button>
+                )}
+                {canDelete && !patient_id && onDelete && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm('Are you sure you want to delete this file?')) {
+                        onDelete(actualPath);
+                      }
+                    }}
                     className="p-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
                     title="Delete"
                   >
@@ -302,7 +586,8 @@ const FilePreview = ({ files = [], onDelete, canDelete = true, baseUrl = '' }) =
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
       </div>
 
       {/* Preview Modal */}

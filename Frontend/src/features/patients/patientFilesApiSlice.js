@@ -27,7 +27,7 @@ export const patientFilesApiSlice = apiSlice.injectEndpoints({
           formData.append('user_id', user_id);
         }
 
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:2025/api';
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api';
         const token = JSON.parse(localStorage.getItem('user'))?.token || localStorage.getItem('token');
 
         try {
@@ -81,7 +81,7 @@ export const patientFilesApiSlice = apiSlice.injectEndpoints({
           });
         }
 
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:2025/api';
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api';
         const token = JSON.parse(localStorage.getItem('user'))?.token || localStorage.getItem('token');
 
         try {

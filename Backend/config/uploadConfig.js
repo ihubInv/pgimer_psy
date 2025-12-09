@@ -10,7 +10,7 @@ const path = require('path');
  * Use forward slashes (/) for cross-platform compatibility.
  * 
  * File Structure:
- * /fileupload/{role}/{document_type}/PATIENT_ID_{patient_id}/{files}
+ * /fileupload/{role}/{document_type}/{patient_id}/{files}
  * 
  * Roles: admin, faculty, resident, psychiatric_welfare_officer
  * Document Types: Patient_Details, Walk-in_Clinical_Proforma, Out_Patient_Intake_Record
@@ -39,12 +39,45 @@ const getAbsolutePath = (relativePath) => {
 
 // Get relative URL path for serving files
 const getUrlPath = (filePath) => {
+  // If filePath is already a URL path (starts with /), return as-is
+  if (filePath.startsWith('/') && !filePath.startsWith('/var/') && !filePath.startsWith('/usr/') && !filePath.startsWith('/home/')) {
+    return filePath;
+  }
+  
   // Convert absolute path to relative URL path
-  // Remove project root and normalize slashes
   const projectRoot = path.join(__dirname, '..');
-  const relativePath = path.relative(projectRoot, filePath);
-  // Use forward slashes for URLs
-  return '/' + relativePath.replace(/\\/g, '/');
+  
+  // Normalize paths for comparison
+  const normalizedFilePath = path.normalize(filePath);
+  const normalizedProjectRoot = path.normalize(projectRoot);
+  
+  // Check if filePath is within project root
+  if (normalizedFilePath.startsWith(normalizedProjectRoot)) {
+    // Get relative path from project root
+    const relativePath = path.relative(normalizedProjectRoot, normalizedFilePath);
+    // Use forward slashes for URLs and ensure it starts with /
+    return '/' + relativePath.replace(/\\/g, '/');
+  }
+  
+  // If filePath is an absolute path outside project root, try to extract fileupload path
+  // Look for /fileupload/ in the path
+  const fileuploadIndex = normalizedFilePath.indexOf('fileupload');
+  if (fileuploadIndex !== -1) {
+    // Extract everything from fileupload onwards
+    const fileuploadPath = normalizedFilePath.substring(fileuploadIndex);
+    return '/' + fileuploadPath.replace(/\\/g, '/');
+  }
+  
+  // Fallback: try to extract relative path from common patterns
+  // If it contains Backend/fileupload, extract from there
+  const backendFileuploadIndex = normalizedFilePath.indexOf('Backend' + path.sep + 'fileupload');
+  if (backendFileuploadIndex !== -1) {
+    const fileuploadPath = normalizedFilePath.substring(backendFileuploadIndex + 'Backend'.length);
+    return fileuploadPath.replace(/\\/g, '/');
+  }
+  
+  // Last resort: return as relative path with forward slashes
+  return '/' + normalizedFilePath.replace(/\\/g, '/').replace(/^\/+/, '');
 };
 
 /**
@@ -68,11 +101,11 @@ const mapRoleToFolder = (role) => {
 };
 
 /**
- * Format patient ID as PATIENT_ID_{patient_id}
+ * Format patient ID - return original ID as-is (no PATIENT_ID_ prefix)
  */
 const formatPatientId = (patientId) => {
-  const id = String(patientId).padStart(3, '0');
-  return `PATIENT_ID_${id}`;
+  // Return the original patient ID as-is (e.g., 50 instead of PATIENT_ID_050)
+  return String(patientId);
 };
 
 /**
@@ -130,7 +163,7 @@ module.exports = {
     const docType = getDocumentType(documentType);
     const patientFolder = formatPatientId(patientId);
     
-    // Structure: /fileupload/{role}/{document_type}/PATIENT_ID_{patient_id}/
+    // Structure: /fileupload/{role}/{document_type}/{patient_id}/
     return path.join(baseDir, roleFolder, docType, patientFolder);
   },
   
@@ -154,6 +187,28 @@ module.exports = {
     const roleFolder = role ? mapRoleToFolder(role) : 'admin';
     const docType = getDocumentType(documentType);
     return `/${PATIENT_FILES_PATH}/${roleFolder}/${docType}`;
+  },
+  
+  // Convert URL path to absolute file system path
+  // Input: /fileupload/psychiatric_welfare_officer/Patient_Details/50/file.png
+  // Output: /var/www/pgimer_psy/Backend/fileupload/psychiatric_welfare_officer/Patient_Details/50/file.png
+  urlPathToAbsolutePath: (urlPath) => {
+    if (!urlPath) return null;
+    
+    // If already absolute, return as-is
+    if (path.isAbsolute(urlPath) && !urlPath.startsWith('/fileupload/') && !urlPath.startsWith('/uploads/')) {
+      return urlPath;
+    }
+    
+    // Remove leading slash if present
+    let relativePath = urlPath.startsWith('/') ? urlPath.substring(1) : urlPath;
+    
+    // If it starts with fileupload or uploads, use it directly
+    // Otherwise, it might already be a relative path
+    const projectRoot = path.join(__dirname, '..');
+    const absolutePath = path.join(projectRoot, relativePath);
+    
+    return path.normalize(absolutePath);
   }
 };
 

@@ -49,7 +49,7 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
     }),
     updatePatient: builder.mutation({
       queryFn: async ({ id, files, files_to_remove, ...data }, _queryApi, _extraOptions, fetchWithBQ) => {
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:2025/api';
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api';
         const state = _queryApi.getState();
         const token = state.auth.token;
         

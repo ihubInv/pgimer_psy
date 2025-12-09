@@ -76,8 +76,59 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   const existingFiles = patientFilesData?.data?.files || [];
   const canEditFiles = patientFilesData?.data?.can_edit !== false; // Default to true if not specified
   
+  // Helper function to normalize file paths for comparison
+  const normalizeFilePath = (filePath) => {
+    if (!filePath) return '';
+    
+    // Handle if filePath is an object with path/url property
+    if (typeof filePath === 'object' && filePath !== null) {
+      filePath = filePath.path || filePath.url || filePath.filePath || String(filePath);
+    }
+    
+    // Convert to string if not already
+    filePath = String(filePath);
+    
+    // If it's a full URL, extract the path
+    if (filePath.startsWith('http://') || filePath.startsWith('http://')) {
+      try {
+        const url = new URL(filePath);
+        return url.pathname;
+      } catch {
+        // If URL parsing fails, try to extract path manually
+        const match = filePath.match(/\/fileupload\/.*/) || filePath.match(/\/uploads\/.*/);
+        return match ? match[0] : filePath;
+      }
+    }
+    
+    // If it's an absolute file system path, extract relative path
+    if (filePath.includes('/fileupload/')) {
+      const fileuploadIndex = filePath.indexOf('/fileupload/');
+      return filePath.substring(fileuploadIndex);
+    }
+    if (filePath.includes('/uploads/')) {
+      const uploadsIndex = filePath.indexOf('/uploads/');
+      return filePath.substring(uploadsIndex);
+    }
+    
+    // If it starts with /, return as-is (already a relative path)
+    if (filePath.startsWith('/')) {
+      return filePath;
+    }
+    
+    // Otherwise, assume it needs /fileupload prefix
+    return `/fileupload/${filePath}`;
+  };
+  
   useEffect(() => {
-  }, [patientFilesData, existingFiles]);
+    // Debug logging
+    if (patientFilesData) {
+      console.log('[PatientDetailsEdit] Patient files data:', {
+        files: existingFiles,
+        canEdit: canEditFiles,
+        filesToRemove: filesToRemove
+      });
+    }
+  }, [patientFilesData, existingFiles, canEditFiles, filesToRemove]);
 
   const isAdminUser = isAdmin(currentUser?.role);
   const isResident = isJR(currentUser?.role);
@@ -2158,13 +2209,23 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       const hasFiles = selectedFiles && selectedFiles.length > 0;
       const hasFilesToRemove = filesToRemove && filesToRemove.length > 0;
       
+      // Normalize files to remove before sending
+      const normalizedFilesToRemove = filesToRemove.map(file => normalizeFilePath(file)).filter(Boolean);
+      
+      console.log('[PatientDetailsEdit] Submitting update:', {
+        hasFiles,
+        hasFilesToRemove,
+        filesToRemove: normalizedFilesToRemove,
+        selectedFilesCount: selectedFiles?.length || 0
+      });
+      
       if (hasFiles || hasFilesToRemove) {
         // Update patient with files using FormData
         await updatePatient({
           id: patient.id,
           ...updatePatientData,
           files: selectedFiles,
-          files_to_remove: filesToRemove
+          files_to_remove: normalizedFilesToRemove
         }).unwrap();
         
         // Refetch files after update with a small delay to ensure backend processing is complete
@@ -2182,7 +2243,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       }
 
       // If we reach here, the update was successful
-      toast.success('Patient updated successfully!' + (hasFiles ? ` ${selectedFiles.length} file(s) uploaded.` : ''));
+      const successMessage = 'Patient updated successfully!' + 
+        (hasFiles ? ` ${selectedFiles.length} file(s) uploaded.` : '') +
+        (hasFilesToRemove ? ` ${normalizedFilesToRemove.length} file(s) removed.` : '');
+      toast.success(successMessage);
       
       // Clear file selection after successful update
       if (hasFiles) {
@@ -3193,19 +3257,32 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                       {/* Existing Files Preview */}
                       {existingFiles && existingFiles.length > 0 && (
                         <div className="mt-6">
-                          <h5 className="text-lg font-semibold text-gray-800 mb-4">Existing Files</h5>
+                          <h5 className="text-lg font-semibold text-gray-800 mb-4">
+                            Existing Files
+                            {!canEditFiles && (
+                              <span className="ml-2 text-sm text-gray-500 font-normal">
+                                (Read-only - You don't have permission to delete files)
+                              </span>
+                            )}
+                          </h5>
                           <FilePreview
-                            files={existingFiles.filter(file => !filesToRemove.includes(file))}
-                            onDelete={canEditFiles ? (filePath) => {
-                              setFilesToRemove(prev => {
-                                if (!prev.includes(filePath)) {
-                                  return [...prev, filePath];
-                                }
-                                return prev;
-                              });
-                            } : undefined}
+                            files={existingFiles.filter(file => {
+                              const normalizedFile = normalizeFilePath(file);
+                              return !filesToRemove.some(removed => normalizeFilePath(removed) === normalizedFile);
+                            })}
+                            patient_id={patient?.id}
                             canDelete={canEditFiles}
-                            baseUrl={import.meta.env.VITE_API_URL || 'http://localhost:2025/api'}
+                            baseUrl={import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api'}
+                            onFileDeleted={async (filePath, normalizedPath) => {
+                              // Refetch files to update the UI immediately
+                              await refetchFiles();
+                              
+                              // Also remove from filesToRemove if it was there
+                              setFilesToRemove(prev => prev.filter(removed => {
+                                const normalizedRemoved = normalizeFilePath(removed);
+                                return normalizedRemoved !== normalizedPath;
+                              }));
+                            }}
                           />
                         </div>
                       )}
