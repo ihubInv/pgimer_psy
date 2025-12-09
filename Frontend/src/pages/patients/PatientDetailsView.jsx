@@ -2885,13 +2885,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           </div>
                         </div>
                         <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Assigned Doctor</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.assigned_doctor_name ? `${displayData.assigned_doctor_name}${displayData.assigned_doctor_role ? ` (${displayData.assigned_doctor_role})` : ''}` : 'Not assigned'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
                           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
@@ -3153,16 +3146,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                 </label>
                                 <p className="text-base font-medium text-gray-900">{formData.local_address || 'N/A'}</p>
                           </div>
-                            </div>
-                            <div className="relative">
-                              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                              <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                  <FiUser className="w-4 h-4 text-primary-600" />
-                                  Assigned Doctor
-                                </label>
-                                <p className="text-base font-medium text-gray-900">{formData.assigned_doctor_name || displayData.assigned_doctor_name || 'N/A'}</p>
-                              </div>
                             </div>
                             <div className="relative">
                               <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
