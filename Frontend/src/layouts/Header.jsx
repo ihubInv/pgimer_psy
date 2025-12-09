@@ -31,14 +31,14 @@ const Header = ({ onMenuClick, sidebarMinimized = false, sidebarOpen = false }) 
   };
 
   return (
-    <header className={`relative backdrop-blur-2xl bg-white/70 border-b border-white/40 shadow-2xl z-10 transition-all duration-300 ease-in-out overflow-hidden ${sidebarMinimized ? 'lg:ml-20' : 'lg:ml-64'}`}>
+    <header className={`relative backdrop-blur-2xl bg-white/70 border border-white/40 shadow-2xl z-10 transition-all duration-300 ease-in-out overflow-hidden rounded-2xl mx-4 mt-4 ${sidebarMinimized ? 'lg:ml-24' : 'lg:ml-72'}`}>
       {/* Decorative background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-400/10 to-transparent rounded-full blur-3xl"></div>
         <div className="absolute bottom-0 left-0 w-72 h-72 bg-gradient-to-tr from-indigo-400/10 to-transparent rounded-full blur-3xl"></div>
       </div>
       
-      <div className="relative px-4 sm:px-6 lg:px-8">
+      <div className="relative px-4 sm:px-6 lg:px-8 rounded-2xl">
         <div className="flex justify-between items-center h-20 sm:h-24">
           <div className="flex items-center flex-1 min-w-0">
             <button

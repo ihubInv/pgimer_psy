@@ -157,6 +157,29 @@ const MWONavigation = ({ onClose, isMinimized }) => {
         </div>
         {!isMinimized && <span>Room Management</span>}
       </NavLink>
+
+      {/* Profile */}
+      <NavLink
+        to="/profile"
+        onClick={onClose}
+        className={({ isActive }) =>
+          `group flex items-center ${isMinimized ? 'justify-center px-2' : 'px-4'} py-3.5 text-sm font-medium rounded-xl transition-all duration-200 ${
+            isActive
+              ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30'
+              : 'text-gray-700 hover:bg-white/40 hover:text-primary-700 hover:shadow-md'
+          }`
+        }
+        title={isMinimized ? 'Profile' : ''}
+      >
+        <div className={`p-2 rounded-lg ${isMinimized ? '' : 'mr-3'} transition-colors ${
+          location.pathname === '/profile'
+            ? 'bg-white/20'
+            : 'bg-gray-100 group-hover:bg-primary-100'
+        }`}>
+          <FiUser className="h-5 w-5" />
+        </div>
+        {!isMinimized && <span>Profile</span>}
+      </NavLink>
     </>
   );
 };
@@ -165,6 +188,7 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
   const dispatch = useDispatch();
   const user = useSelector(selectCurrentUser);
   const navigate = useNavigate();
+  const location = useLocation();
   const { handleLogout: handleSessionLogout } = useSession();
 
   const handleLogout = async () => {
@@ -236,6 +260,12 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
       icon: FiHome, 
       roles: ['Admin'] 
     },
+    { 
+      name: 'Profile', 
+      to: '/profile', 
+      icon: FiUser, 
+      roles: ['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'] 
+    },
   ];
 
   // Helper function to check if user role matches navigation item
@@ -262,15 +292,18 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
       {/* Sidebar */}
       <aside
         className={`
-          fixed inset-y-0 left-0 z-30 backdrop-blur-2xl bg-white/80 border-r border-white/40 shadow-2xl transform transition-all duration-300 ease-in-out
-          lg:translate-x-0 lg:fixed lg:inset-y-0
+          fixed z-30 backdrop-blur-2xl bg-white/80 border border-white/40 shadow-2xl transform transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           ${isMinimized ? 'w-20' : 'w-64'}
+          rounded-t-xl rounded-b-xl rounded-l-2xl rounded-r-2xl
+          top-1 bottom-1 left-0
+          lg:ml-4 lg:mt-4 lg:mb-4
+          lg:translate-x-0
         `}
       >
-        <div className="h-full mt-6 flex flex-col">
+        <div className="h-full flex flex-col overflow-hidden rounded-t-xl rounded-b-xl rounded-l-2xl rounded-r-2xl">
           {/* Logo and Title Section */}
-          <div className={`flex items-center ${isMinimized ? 'justify-center px-1' : 'justify-between px-4'} h-16 border-b border-white/20 flex-shrink-0`}>
+          <div className={`flex items-center ${isMinimized ? 'justify-center px-1 mt-8' : 'justify-between px-4'} h-16 border-b border-white/20 flex-shrink-0 rounded-t-xl`}>
             {!isMinimized ? (
               <>
                 <div className="flex items-center">
@@ -397,14 +430,18 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
           </nav>
 
           {/* User info and actions - ABSOLUTELY FIXED at bottom - NOT scrollable */}
-          <div className={`absolute bottom-0 left-0 right-0 border-t border-gray-200 bg-white/80 backdrop-blur-md shadow-lg ${isMinimized ? 'p-2' : 'p-4'} space-y-3`}>
+          <div className={`absolute bottom-0 left-0 right-0 border-t border-gray-200 bg-white/80 backdrop-blur-md shadow-lg rounded-b-xl ${isMinimized ? 'p-2' : 'p-4'} space-y-3`}>
             {/* User Profile Section - Clickable to open profile settings */}
             <div 
               onClick={() => {
                 navigate('/profile');
                 onClose();
               }}
-              className={`bg-white/90 backdrop-blur-sm rounded-xl shadow-md border border-gray-200 cursor-pointer hover:bg-white transition-all duration-200 ${isMinimized ? 'p-2' : 'p-3'}`}
+              className={`bg-white/90 backdrop-blur-sm rounded-xl shadow-md border cursor-pointer hover:bg-white transition-all duration-200 ${isMinimized ? 'p-2' : 'p-3'} ${
+                location.pathname === '/profile' 
+                  ? 'border-primary-500 bg-primary-50/50 shadow-lg shadow-primary-500/20' 
+                  : 'border-gray-200'
+              }`}
               title={isMinimized ? 'Profile Settings' : ''}
             >
               <div className={`flex items-center ${isMinimized ? 'justify-center' : 'space-x-3'}`}>
