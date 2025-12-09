@@ -20,10 +20,12 @@ import * as XLSX from 'xlsx-js-style';
 
 import { useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 import { useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
+import { useGetPatientFilesQuery } from '../../features/patients/patientFilesApiSlice';
 import ViewADL from '../adl/ViewADL';
 import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
 import PrescriptionView from '../PrescribeMedication/PrescriptionView';
 import EditClinicalProforma from '../clinical/EditClinicalProforma';
+import FilePreview from '../../components/FilePreview';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useSelector } from 'react-redux';
 import PGI_Logo from '../../assets/PGI_Logo.png';
@@ -170,6 +172,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   const canViewPrescriptions = canViewAllSections;
   const patientAdlFiles = adlData?.data?.adlFiles || [];
 
+  // Fetch patient files for image preview (available for all roles including MWO)
+  const { data: patientFilesData, refetch: refetchFiles } = useGetPatientFilesQuery(patient?.id, {
+    skip: !patient?.id,
+    refetchOnMountOrArgChange: true
+  });
+  const existingFiles = patientFilesData?.data?.files || [];
 
  
   const patientProformas = Array.isArray(clinicalData?.data?.proformas)
@@ -3173,6 +3181,24 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                     {/* Divider */}
                     <div className="border-t border-white/30 my-6"></div>
 
+                    {/* Patient Documents & Files Section - Image Preview */}
+                    {patient?.id && (
+                      <div className="space-y-6 pt-6 border-t border-white/30">
+                        <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                          <div className="p-2.5 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
+                            <FiFileText className="w-5 h-5 text-indigo-600" />
+                          </div>
+                          Patient Documents & Files
+                        </h4>
+                        <FilePreview
+                          files={existingFiles}
+                          patient_id={patient?.id}
+                          canDelete={false}
+                          baseUrl={import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api'}
+                          refetchFiles={refetchFiles}
+                        />
+                      </div>
+                    )}
 
                   </div>
                 </Card>
