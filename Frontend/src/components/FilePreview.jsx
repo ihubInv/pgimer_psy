@@ -22,6 +22,8 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
     // If we have a token, fetch with authentication
     if (token) {
       const fullUrl = `${baseUrl}${urlPath}`;
+     
+      
       fetch(fullUrl, {
         method: 'GET',
         headers: {
@@ -30,24 +32,40 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
         credentials: 'include',
       })
         .then(response => {
+        
           if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            // Try to get error message from response
+            return response.text().then(text => {
+              let errorMessage = `HTTP ${response.status}`;
+              try {
+                const json = JSON.parse(text);
+                errorMessage = json.message || errorMessage;
+              } catch {
+                errorMessage = text || errorMessage;
+              }
+              throw new Error(errorMessage);
+            });
           }
           return response.blob();
         })
         .then(blob => {
+         
           const blobUrl = URL.createObjectURL(blob);
           setImageSrc(blobUrl);
           setIsLoading(false);
+          setHasError(false);
         })
         .catch(error => {
-          console.error('[AuthenticatedImage] Failed to load image:', error);
+        
           setHasError(true);
           setIsLoading(false);
-          setImageSrc(src); // Fallback to direct URL
+          // Don't fallback to src if it's the same URL that failed
+          // Instead, set a placeholder or let the error handler show the error
+          setImageSrc(null);
         });
     } else {
       // No token, use direct URL
+    
       setImageSrc(src);
       setIsLoading(false);
     }
@@ -62,8 +80,21 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
 
   if (hasError && !imageSrc) {
     return (
-      <div className={className} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
-        <FiImage className="w-8 h-8 text-gray-400" />
+      <div className={className} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6', minHeight: '100%' }}>
+        <div className="text-center p-2">
+          <FiImage className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+          <p className="text-xs text-gray-500">Failed to load</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className={className} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6', minHeight: '100%' }}>
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400"></div>
+        </div>
       </div>
     );
   }
@@ -74,9 +105,19 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
       alt={alt}
       className={className}
       loading="lazy"
-      onError={onError}
-      onLoad={onLoad}
-      style={{ display: isLoading ? 'none' : 'block' }}
+      onError={(e) => {
+       
+        if (onError) {
+          onError(e);
+        }
+      }}
+      onLoad={(e) => {
+       
+        if (onLoad) {
+          onLoad(e);
+        }
+      }}
+      style={{ display: 'block' }}
     />
   );
 };
@@ -94,7 +135,18 @@ const FilePreview = ({
   const [previewType, setPreviewType] = useState(null);
   const [blobUrls, setBlobUrls] = useState(new Map()); // Cache blob URLs
   const [isDeletingFile, setIsDeletingFile] = useState(false);
-  const token = useSelector(selectCurrentToken);
+  const reduxToken = useSelector(selectCurrentToken);
+  
+  // Get token from Redux or localStorage as fallback
+  const token = useMemo(() => {
+    if (reduxToken) return reduxToken;
+    try {
+      const user = JSON.parse(localStorage.getItem('user'));
+      return user?.token || localStorage.getItem('token') || null;
+    } catch {
+      return localStorage.getItem('token') || null;
+    }
+  }, [reduxToken]);
 
   // Get base URL without /api
   const baseUrlWithoutApi = useMemo(() => {
@@ -191,7 +243,7 @@ const FilePreview = ({
   // Get authenticated file URL (creates blob URL if needed)
   const getFileUrl = async (filePath) => {
     if (!filePath) {
-      console.warn('[FilePreview] Empty file path provided');
+   
       return '';
     }
     
@@ -331,9 +383,9 @@ const FilePreview = ({
   const handleDelete = async (filePath, e) => {
     e.stopPropagation();
     
-    if (!window.confirm('Are you sure you want to delete this file?')) {
-      return;
-    }
+    // if (!window.confirm('Are you sure you want to delete this file?')) {
+    //   return;
+    // }
 
     // Validate patient_id is provided
     if (!patient_id) {
@@ -380,7 +432,7 @@ const FilePreview = ({
       const encodedFilePath = encodeURIComponent(fileIdentifier);
       const deleteUrl = `${baseUrl}/patient-files/delete/${patientIdStr}/${encodedFilePath}`;
       
-      console.log('[FilePreview] Delete URL:', deleteUrl);
+    
       
       const response = await fetch(deleteUrl, {
         method: 'DELETE',
@@ -397,7 +449,7 @@ const FilePreview = ({
         throw { data: result, status: response.status };
       }
 
-      console.log('[FilePreview] File deleted successfully:', result);
+ 
       
       // Show success message
       toast.success(result?.message || 'File deleted successfully');
@@ -574,9 +626,10 @@ const FilePreview = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (window.confirm('Are you sure you want to delete this file?')) {
+                      // if (window.confirm('Are you sure you want to delete this file?')) {
                         onDelete(actualPath);
-                      }
+                        
+                      // }
                     }}
                     className="p-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
                     title="Delete"
