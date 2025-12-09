@@ -10,7 +10,7 @@ import {
   FiNavigation,  FiEdit3, FiSave, FiX, FiLayers, 
   FiChevronDown, FiChevronUp, FiArrowRight, 
 } from 'react-icons/fi';
-import {  useCreatePatientCompleteMutation, useUpdatePatientMutation } from '../../features/patients/patientsApiSlice';
+import {  useCreatePatientCompleteMutation, useUpdatePatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { updatePatientRegistrationForm, resetPatientRegistrationForm, selectPatientRegistrationForm } from '../../features/form/formSlice';
@@ -49,6 +49,10 @@ const CreatePatient = () => {
   const [expandedPatientDetails, setExpandedPatientDetails] = useState(true);
   const [currentStep, setCurrentStep] = useState(1); // 1 for Out Patient Card, 2 for remaining sections
   const [patientId, setPatientId] = useState(null); // Store patient ID after step 1
+  const [hasLoadedPatientData, setHasLoadedPatientData] = useState(false); // Track if we've loaded patient data
+  const { data: patientDataResponse, isLoading: isLoadingPatientData } = useGetPatientByIdQuery(patientId, {
+    skip: !patientId || !token || hasLoadedPatientData, // Skip if no patientId, no token, or already loaded
+  });
   const [showOccupationOther, setShowOccupationOther] = useState(false); // Show custom occupation input when "Others" is selected
   const [occupationOther, setOccupationOther] = useState(''); // Custom occupation value
   const [showFamilyTypeOther, setShowFamilyTypeOther] = useState(false);
@@ -105,12 +109,15 @@ const CreatePatient = () => {
             setPatientId(savedPatientId);
             setCurrentStep(2);
             setExpandedPatientDetails(true);
+            // Reset the loaded flag so we can fetch patient data
+            setHasLoadedPatientData(false);
           } else {
             // Patient doesn't exist, clear localStorage and reset to step 1
             localStorage.removeItem('createPatient_patientId');
             localStorage.removeItem('createPatient_step');
             setCurrentStep(1);
             setPatientId(null);
+            setHasLoadedPatientData(false);
           }
         } catch (error) {
           console.error('Error verifying patient:', error);
@@ -118,6 +125,8 @@ const CreatePatient = () => {
           setPatientId(savedPatientId);
           setCurrentStep(2);
           setExpandedPatientDetails(true);
+          // Reset the loaded flag so we can fetch patient data
+          setHasLoadedPatientData(false);
         }
       };
 
@@ -128,8 +137,144 @@ const CreatePatient = () => {
       setPatientId(savedPatientId);
       setCurrentStep(2);
       setExpandedPatientDetails(true);
+      // Reset the loaded flag so we can fetch patient data when token is available
+      setHasLoadedPatientData(false);
     }
   }, [token]); // Run when token changes (after login or session expiration)
+
+  // Populate form with patient data when it's fetched (for step 2 restoration)
+  useEffect(() => {
+    if (patientDataResponse?.data?.patient && patientId && currentStep === 2 && !hasLoadedPatientData) {
+      const patient = patientDataResponse.data.patient;
+      
+      // Helper function to safely convert null/undefined to empty string
+      const safeString = (value) => (value === null || value === undefined) ? '' : String(value);
+      
+      // Map patient data to form fields
+      const formFields = {
+        // Step 1 fields
+        cr_no: safeString(patient.cr_no),
+        date: safeString(patient.date),
+        name: safeString(patient.name),
+        contact_number: safeString(patient.contact_number),
+        age: safeString(patient.age),
+        sex: safeString(patient.sex),
+        category: safeString(patient.category),
+        father_name: safeString(patient.father_name),
+        department: safeString(patient.department) || 'Psychiatry',
+        unit_consit: safeString(patient.unit_consit),
+        room_no: safeString(patient.room_no),
+        serial_no: safeString(patient.serial_no),
+        file_no: safeString(patient.file_no),
+        unit_days: safeString(patient.unit_days),
+        patient_income: safeString(patient.patient_income),
+        family_income: safeString(patient.family_income),
+        address_line: safeString(patient.address_line),
+        country: safeString(patient.country),
+        state: safeString(patient.state),
+        district: safeString(patient.district),
+        city: safeString(patient.city),
+        pin_code: safeString(patient.pin_code),
+        
+        // Step 2 fields
+        psy_no: safeString(patient.psy_no),
+        seen_in_walk_in_on: safeString(patient.seen_in_walk_in_on),
+        worked_up_on: safeString(patient.worked_up_on),
+        special_clinic_no: safeString(patient.special_clinic_no),
+        age_group: safeString(patient.age_group),
+        marital_status: safeString(patient.marital_status),
+        year_of_marriage: safeString(patient.year_of_marriage),
+        no_of_children_male: safeString(patient.no_of_children_male),
+        no_of_children_female: safeString(patient.no_of_children_female),
+        occupation: safeString(patient.occupation),
+        education: safeString(patient.education),
+        religion: safeString(patient.religion),
+        family_type: safeString(patient.family_type),
+        locality: safeString(patient.locality),
+        head_name: safeString(patient.head_name),
+        head_age: safeString(patient.head_age),
+        head_relationship: safeString(patient.head_relationship),
+        head_education: safeString(patient.head_education),
+        head_occupation: safeString(patient.head_occupation),
+        head_income: safeString(patient.head_income),
+        distance_from_hospital: safeString(patient.distance_from_hospital),
+        mobility: safeString(patient.mobility),
+        referred_by: safeString(patient.referred_by),
+        
+        // Address fields
+        permanent_address_line_1: safeString(patient.permanent_address_line_1),
+        permanent_city_town_village: safeString(patient.permanent_city_town_village),
+        permanent_district: safeString(patient.permanent_district),
+        permanent_state: safeString(patient.permanent_state),
+        permanent_pin_code: safeString(patient.permanent_pin_code),
+        permanent_country: safeString(patient.permanent_country),
+        present_address_line_1: safeString(patient.present_address_line_1),
+        present_address_line_2: safeString(patient.present_address_line_2),
+        present_city_town_village: safeString(patient.present_city_town_village),
+        present_city_town_village_2: safeString(patient.present_city_town_village_2),
+        present_district: safeString(patient.present_district),
+        present_district_2: safeString(patient.present_district_2),
+        present_state: safeString(patient.present_state),
+        present_state_2: safeString(patient.present_state_2),
+        present_pin_code: safeString(patient.present_pin_code),
+        present_pin_code_2: safeString(patient.present_pin_code_2),
+        present_country: safeString(patient.present_country),
+        present_country_2: safeString(patient.present_country_2),
+        local_address: safeString(patient.local_address),
+        assigned_room: safeString(patient.assigned_room),
+      };
+
+      // Update form with patient data
+      dispatch(updatePatientRegistrationForm(formFields));
+
+      // Handle "other" fields - check if values match "other" options
+      const checkOtherFields = (fieldName, options, otherFieldName, setShowOther, setOtherValue) => {
+        const value = patient[fieldName];
+        if (!value) return;
+        
+        // Check if the value matches any option (by value or label)
+        const matchesOption = options.some(opt => 
+          opt.value === value || 
+          opt.label === value ||
+          opt.value?.toLowerCase() === value?.toLowerCase() ||
+          opt.label?.toLowerCase() === value?.toLowerCase()
+        );
+        
+        if (!matchesOption && value !== 'others' && value !== 'other') {
+          // Value doesn't match any option, it's a custom "other" value
+          // Find if there's an "others" or "other" option
+          const otherOption = options.find(opt => opt.value === 'others' || opt.value === 'other');
+          if (otherOption) {
+            dispatch(updatePatientRegistrationForm({
+              [fieldName]: otherOption.value,
+              [otherFieldName]: value
+            }));
+            // Set local state for "other" fields
+            if (setShowOther) setShowOther(true);
+            if (setOtherValue) setOtherValue(value);
+          }
+        } else if (value === 'others' || value === 'other') {
+          // Field is already set to "others"/"other", show the custom input
+          if (setShowOther) setShowOther(true);
+          // The custom value should be in the _other field if it exists, otherwise check formFields
+          const customValue = patient[otherFieldName] || formFields[otherFieldName] || '';
+          if (setOtherValue && customValue) setOtherValue(customValue);
+        }
+      };
+
+      // Check and handle "other" fields
+      checkOtherFields('occupation', OCCUPATION_OPTIONS, 'occupation_other', setShowOccupationOther, setOccupationOther);
+      checkOtherFields('family_type', FAMILY_TYPE_OPTIONS, 'family_type_other', setShowFamilyTypeOther, setFamilyTypeOther);
+      checkOtherFields('locality', LOCALITY_OPTIONS, 'locality_other', setShowLocalityOther, setLocalityOther);
+      checkOtherFields('religion', RELIGION_OPTIONS, 'religion_other', setShowReligionOther, setReligionOther);
+      checkOtherFields('head_relationship', HEAD_RELATIONSHIP_OPTIONS, 'head_relationship_other', setShowHeadRelationshipOther, setHeadRelationshipOther);
+      checkOtherFields('mobility', MOBILITY_OPTIONS, 'mobility_other', setShowMobilityOther, setMobilityOther);
+      checkOtherFields('referred_by', REFERRED_BY_OPTIONS, 'referred_by_other', setShowReferredByOther, setReferredByOther);
+
+      // Mark as loaded to prevent re-fetching
+      setHasLoadedPatientData(true);
+    }
+  }, [patientDataResponse, patientId, currentStep, hasLoadedPatientData, dispatch]);
 
   // Check if fields with "others"/"other" are selected to show custom inputs
   useEffect(() => {
@@ -253,6 +398,7 @@ const CreatePatient = () => {
   const handleCancel = () => {
     localStorage.removeItem('createPatient_patientId');
     localStorage.removeItem('createPatient_step');
+    setHasLoadedPatientData(false);
     navigate('/patients');
   };
 
@@ -468,6 +614,9 @@ const CreatePatient = () => {
       localStorage.setItem('createPatient_patientId', String(createdPatientId));
       localStorage.setItem('createPatient_step', '2');
 
+      // Mark as loaded since we already have the form data in Redux
+      setHasLoadedPatientData(true);
+
       toast.success('Out Patient Card saved successfully!');
 
       // Move to step 2
@@ -645,6 +794,7 @@ const CreatePatient = () => {
       dispatch(resetPatientRegistrationForm());
       setCurrentStep(1);
       setPatientId(null);
+      setHasLoadedPatientData(false);
       setSelectedFiles([]); // Clear selected files
 
       // Navigate to patients list
@@ -1246,7 +1396,7 @@ const CreatePatient = () => {
                                   </span>
                                 }
                                 name="occupation"
-                                value={formData.occupation}
+                                value={formData.occupation || ''}
                                 onChange={handleChange}
                                 options={OCCUPATION_OPTIONS}
                                 placeholder="Select Occupation"

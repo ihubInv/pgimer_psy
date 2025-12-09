@@ -23,7 +23,8 @@ export const SelectWithOther = ({
     const [menuStyle, setMenuStyle] = useState({ top: 0, left: 0, width: 0 });
   
     // Check if "others" or "other" is selected
-    const isOthersSelected = selectProps.value === 'others' || selectProps.value === 'other';
+    const safeValue = selectProps.value ?? '';
+    const isOthersSelected = safeValue === 'others' || safeValue === 'other';
     // Auto-detect if custom input should be shown (if showCustomInput is not explicitly provided)
     const shouldShowCustomInput = showCustomInput !== undefined ? showCustomInput : isOthersSelected;
   
@@ -108,7 +109,7 @@ export const SelectWithOther = ({
       }
     }, [isOpen, selectProps.value]);
   
-    const selectedOption = selectProps.options.find(opt => opt.value === selectProps.value);
+    const selectedOption = selectProps.options.find(opt => opt.value === safeValue);
   
     const handleSelect = (optionValue) => {
       const event = {
@@ -170,21 +171,21 @@ export const SelectWithOther = ({
             .map((option, index) => (
               <button
                 key={option.value}
-                ref={selectProps.value === option.value ? selectedOptionRef : null}
+                ref={safeValue === option.value ? selectedOptionRef : null}
                 type="button"
                 onClick={() => handleSelect(option.value)}
                 className={`
                   w-full px-4 py-3 text-left
                   flex items-center justify-between
                   transition-colors duration-150
-                  ${selectProps.value === option.value
+                  ${safeValue === option.value
                     ? 'bg-primary-50 text-primary-700 font-semibold'
                     : 'text-gray-700 hover:bg-gray-50'}
                   ${index !== 0 ? 'border-t border-gray-100' : ''}
                 `}
               >
                 <span className="flex-1 truncate">{option.label}</span>
-                {selectProps.value === option.value && (
+                {safeValue === option.value && (
                   <FiCheck className="h-5 w-5 text-primary-600 flex-shrink-0 ml-2" />
                 )}
               </button>
@@ -256,7 +257,7 @@ export const SelectWithOther = ({
           <select
             id={selectProps.name}
             name={selectProps.name}
-            value={selectProps.value}
+            value={selectProps.value ?? ''}
             onChange={selectProps.onChange}
             required={selectProps.required}
             disabled={selectProps.disabled}
@@ -293,7 +294,7 @@ export const SelectWithOther = ({
               hover:border-primary-400
               disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:border-gray-300
               ${selectProps.error ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300'}
-              ${!selectProps.value ? 'text-gray-500' : 'text-gray-900'}
+              ${!safeValue ? 'text-gray-500' : 'text-gray-900'}
               ${isOpen ? 'border-primary-500 ring-2 ring-primary-500/20' : ''}
               ${selectProps.className}
               overflow-hidden
