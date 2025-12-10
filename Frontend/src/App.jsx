@@ -85,8 +85,13 @@ function App() {
               {/* Patient Routes - All authenticated users */}
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/patients/new" element={<CreatePatient />} />
-              <Route path="/patients/select" element={<SelectExistingPatient />} />
               <Route path="/patients/:id" element={<PatientDetails />} />
+              
+              {/* SECURITY FIX: Existing Patient Selection - Psychiatric Welfare Officer ONLY */}
+              {/* Admin and other roles should NOT have access to this endpoint */}
+              <Route element={<ProtectedRoute allowedRoles={['Psychiatric Welfare Officer']} />}>
+                <Route path="/patients/select" element={<SelectExistingPatient />} />
+              </Route>
 
 
               {/* Walk-in Clinical Proforma - Faculty, Resident and Admin */}

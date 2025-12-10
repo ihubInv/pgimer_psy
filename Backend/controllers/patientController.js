@@ -53,8 +53,21 @@ class PatientController {
     try {
       const { name, sex, age, assigned_room, cr_no, psy_no, patient_id } = req.body;
 
-      // If patient_id is provided, this is a visit for an existing patient
+      // SECURITY FIX: Broken Access Control - Restrict existing patient selection to Psychiatric Welfare Officers ONLY
+      // If patient_id is provided, this is a visit for an existing patient (SelectExistingPatient functionality)
+      // CRITICAL: Only Psychiatric Welfare Officers can access this - Admin, Faculty, and Resident are NOT allowed
       if (patient_id) {
+        // Check if user role is EXACTLY Psychiatric Welfare Officer (Admin is NOT allowed)
+        const userRole = req.user?.role;
+        if (userRole !== 'Psychiatric Welfare Officer') {
+          console.warn(`[createPatient] Unauthorized attempt to create visit for existing patient by role: ${userRole}, user: ${req.user?.email || 'unknown'}`);
+          return res.status(403).json({
+            success: false,
+            message: 'Access denied. Only Psychiatric Welfare Officers can select existing patients to create visits.',
+            code: 'UNAUTHORIZED_EXISTING_PATIENT_ACCESS'
+          });
+        }
+        
         const existingPatient = await Patient.findById(patient_id);
         if (!existingPatient) {
           return res.status(404).json({

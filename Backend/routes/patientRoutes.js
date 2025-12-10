@@ -153,6 +153,8 @@ const { handleUpload } = require('../middleware/upload');
  *         description: Server error
  */
 // Basic patient creation (for doctors)
+// SECURITY NOTE: When patient_id is provided (existing patient selection), access is restricted to
+// Psychiatric Welfare Officer and Admin only (enforced in controller)
 router.post('/', authenticateToken, requireMWOOrDoctor, validatePatient, PatientController.createPatient);
 
 /**
@@ -825,8 +827,8 @@ router.get('/:id/adl-files', authenticateToken, authorizeRoles('Admin', 'Psychia
  * @swagger
  * /api/patients/assign:
  *   post:
- *     summary: Assign patient to Psychiatric Welfare Officer (Psychiatric Welfare Officer/Admin only)
- *     description: Assign a patient to a specific Psychiatric Welfare Officer for tracking purposes
+ *     summary: Assign patient to Psychiatric Welfare Officer (Psychiatric Welfare Officer only)
+ *     description: Assign a patient to a specific Psychiatric Welfare Officer for tracking purposes. Only Psychiatric Welfare Officers can use this endpoint.
  *     tags: [Patient Management]
  *     security:
  *       - bearerAuth: []
@@ -880,7 +882,7 @@ router.get('/:id/adl-files', authenticateToken, authorizeRoles('Admin', 'Psychia
  *             schema:
  *               $ref: '#/components/schemas/Error'
  *       403:
- *         description: Psychiatric Welfare Officer or Admin access required
+ *         description: Psychiatric Welfare Officer access required
  *         content:
  *           application/json:
  *             schema:
@@ -898,7 +900,10 @@ router.get('/:id/adl-files', authenticateToken, authorizeRoles('Admin', 'Psychia
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/assign', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), PatientController.assignPatient);
+// SECURITY FIX: Broken Access Control - Restrict assign endpoint to Psychiatric Welfare Officer ONLY
+// CRITICAL: Only Psychiatric Welfare Officers can assign patients - Admin is NOT allowed
+// The documentation was incorrect - this should be Psychiatric Welfare Officer only
+router.post('/assign', authenticateToken, authorizeRoles('Psychiatric Welfare Officer'), PatientController.assignPatient);
 
 // Routes for finding patients by specific numbers
 /**

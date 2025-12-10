@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiEdit2, FiCheck, FiX, FiSearch, FiHeart, FiClock, 
@@ -10,12 +11,31 @@ import {
 } from 'react-icons/fi';
 import { useSearchPatientsQuery, useAssignPatientMutation, useUpdatePatientMutation,useCreatePatientCompleteMutation, useGetAllPatientsQuery, useGetPatientByIdQuery, useCreatePatientMutation, useGetPatientVisitCountQuery } from '../../features/patients/patientsApiSlice';
 import { useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
+import { selectCurrentUser } from '../../features/auth/authSlice';
 import Card from '../../components/Card';
 import Select from '../../components/Select';
 import Button from '../../components/Button';
 
 const SelectExistingPatient = () => {
   const navigate = useNavigate();
+  const user = useSelector(selectCurrentUser);
+  
+  // SECURITY FIX: Defense-in-depth - Check user role even if route guard is bypassed
+  // ONLY Psychiatric Welfare Officer should have access - Admin and other roles are NOT allowed
+  useEffect(() => {
+    if (!user || user.role !== 'Psychiatric Welfare Officer') {
+      console.warn('[SelectExistingPatient] Unauthorized access attempt by role:', user?.role, 'user:', user?.email);
+      toast.error('Access denied. This page is only available to Psychiatric Welfare Officers.');
+      navigate('/', { replace: true });
+      return;
+    }
+  }, [user, navigate]);
+  
+  // Don't render if user doesn't have permission
+  // ONLY Psychiatric Welfare Officer - Admin is explicitly NOT allowed
+  if (!user || user.role !== 'Psychiatric Welfare Officer') {
+    return null; // Component will redirect via useEffect
+  }
 
 
   const [createRecord, { isLoading }] = useCreatePatientMutation();
