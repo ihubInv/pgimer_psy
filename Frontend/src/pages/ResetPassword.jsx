@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lock, Eye, EyeOff, CheckCircle, ArrowLeft } from 'lucide-react';
 import PGI_Logo from '../assets/PGI_Logo.png';
+import { validatePassword, getPasswordRequirements } from '../utils/passwordValidation';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -22,27 +23,6 @@ const ResetPassword = () => {
     // If cookie is missing, backend will return error
   }, [navigate]);
 
-  const validatePassword = (password) => {
-    const errors = [];
-
-    if (password.length < 6) {
-      errors.push('Password must be at least 6 characters long');
-    }
-
-    if (!/(?=.*[a-z])/.test(password)) {
-      errors.push('Password must contain at least one lowercase letter');
-    }
-
-    if (!/(?=.*[A-Z])/.test(password)) {
-      errors.push('Password must contain at least one uppercase letter');
-    }
-
-    if (!/(?=.*\d)/.test(password)) {
-      errors.push('Password must contain at least one number');
-    }
-
-    return errors;
-  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -268,22 +248,12 @@ const ResetPassword = () => {
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <h4 className="font-medium text-gray-900 mb-2">Password Requirements:</h4>
                   <ul className="text-sm space-y-1">
-                    <li className={`flex items-center ${formData.newPassword.length >= 6 ? 'text-green-600' : 'text-gray-500'}`}>
-                      <span className="mr-2">{formData.newPassword.length >= 6 ? '✓' : '○'}</span>
-                      At least 6 characters
-                    </li>
-                    <li className={`flex items-center ${/(?=.*[a-z])/.test(formData.newPassword) ? 'text-green-600' : 'text-gray-500'}`}>
-                      <span className="mr-2">{/(?=.*[a-z])/.test(formData.newPassword) ? '✓' : '○'}</span>
-                      One lowercase letter
-                    </li>
-                    <li className={`flex items-center ${/(?=.*[A-Z])/.test(formData.newPassword) ? 'text-green-600' : 'text-gray-500'}`}>
-                      <span className="mr-2">{/(?=.*[A-Z])/.test(formData.newPassword) ? '✓' : '○'}</span>
-                      One uppercase letter
-                    </li>
-                    <li className={`flex items-center ${/(?=.*\d)/.test(formData.newPassword) ? 'text-green-600' : 'text-gray-500'}`}>
-                      <span className="mr-2">{/(?=.*\d)/.test(formData.newPassword) ? '✓' : '○'}</span>
-                      One number
-                    </li>
+                    {getPasswordRequirements(formData.newPassword).map((req, index) => (
+                      <li key={index} className={`flex items-center ${req.met ? 'text-green-600' : 'text-gray-500'}`}>
+                        <span className="mr-2">{req.met ? '✓' : '○'}</span>
+                        {req.text}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}

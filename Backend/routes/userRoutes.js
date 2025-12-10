@@ -567,9 +567,9 @@ router.post('/verify-otp', UserController.verifyOTP);
  *                 example: "abc123def456..."
  *               newPassword:
  *                 type: string
- *                 minLength: 6
- *                 description: New password (minimum 6 characters)
- *                 example: "NewSecurePassword123"
+ *                 minLength: 8
+ *                 description: New password (must be at least 8 characters with uppercase, lowercase, number, and special character)
+ *                 example: "NewSecurePassword123!"
  *     responses:
  *       200:
  *         description: Password reset successfully
@@ -734,9 +734,9 @@ router.put('/profile', authenticateToken, UserController.updateProfile);
  *                 example: "currentPassword123"
  *               newPassword:
  *                 type: string
- *                 minLength: 6
- *                 description: New password
- *                 example: "newPassword123"
+ *                 minLength: 8
+ *                 description: New password (must be at least 8 characters with uppercase, lowercase, number, and special character)
+ *                 example: "NewSecurePassword123!"
  *     responses:
  *       200:
  *         description: Password changed successfully

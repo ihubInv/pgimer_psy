@@ -19,6 +19,7 @@ import Button from '../components/Button';
 import Badge from '../components/Badge';
 import Modal from '../components/Modal';
 import { formatDate } from '../utils/formatters';
+import { validatePassword, getPasswordRequirements } from '../utils/passwordValidation';
 
 const Profile = () => {
   const user = useSelector(selectCurrentUser);
@@ -48,6 +49,7 @@ const Profile = () => {
     newPassword: '',
     confirmPassword: '',
   });
+  const [passwordErrors, setPasswordErrors] = useState([]);
   
   // 2FA disable OTP modal state
   const [showDisable2FAModal, setShowDisable2FAModal] = useState(false);
@@ -62,6 +64,12 @@ const Profile = () => {
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
     setPasswordForm((prev) => ({ ...prev, [name]: value }));
+    
+    // Validate password when newPassword changes
+    if (name === 'newPassword') {
+      const errors = validatePassword(value);
+      setPasswordErrors(errors);
+    }
   };
 
   const handleProfileSubmit = async (e) => {
@@ -79,6 +87,14 @@ const Profile = () => {
 
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       toast.error('Passwords do not match');
+      return;
+    }
+
+    // Validate password strength
+    const errors = validatePassword(passwordForm.newPassword);
+    if (errors.length > 0) {
+      toast.error('Password does not meet requirements. Please check the requirements below.');
+      setPasswordErrors(errors);
       return;
     }
 
@@ -388,15 +404,38 @@ const Profile = () => {
                       name="newPassword"
                       value={passwordForm.newPassword}
                       onChange={handlePasswordChange}
-                      placeholder="Minimum 8 characters"
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+                      placeholder="Enter new password"
+                      className={`w-full pl-10 pr-3 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white ${
+                        passwordErrors.length > 0 && passwordForm.newPassword ? 'border-red-300' : 'border-gray-300'
+                      }`}
                       required
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-                    <FiAlertCircle className="w-3 h-3" />
-                    Password must be at least 8 characters long
-                  </p>
+                  {/* Password Requirements */}
+                  {passwordForm.newPassword && (
+                    <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <h5 className="text-xs font-medium text-gray-700 mb-2">Password Requirements:</h5>
+                      <ul className="text-xs space-y-1">
+                        {getPasswordRequirements(passwordForm.newPassword).map((req, index) => (
+                          <li key={index} className={`flex items-center ${req.met ? 'text-green-600' : 'text-gray-500'}`}>
+                            <span className="mr-2">{req.met ? '✓' : '○'}</span>
+                            {req.text}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {/* Show validation errors if any */}
+                  {passwordErrors.length > 0 && passwordForm.newPassword && (
+                    <div className="mt-2">
+                      {passwordErrors.map((error, index) => (
+                        <p key={index} className="text-xs text-red-600 flex items-center gap-1">
+                          <FiAlertCircle className="w-3 h-3" />
+                          {error}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -431,8 +470,13 @@ const Profile = () => {
                   type="submit" 
                   loading={isChangingPassword}
                   className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg"
-                  disabled={passwordForm.newPassword && passwordForm.confirmPassword && 
-                           passwordForm.newPassword !== passwordForm.confirmPassword}
+                  disabled={
+                    (passwordForm.newPassword && passwordForm.confirmPassword && 
+                     passwordForm.newPassword !== passwordForm.confirmPassword) ||
+                    passwordErrors.length > 0 ||
+                    !passwordForm.newPassword ||
+                    !passwordForm.currentPassword
+                  }
                 >
                   <FiLock className="mr-2" />
                   {isChangingPassword ? 'Changing...' : 'Change Password'}
