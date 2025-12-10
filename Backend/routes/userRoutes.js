@@ -61,8 +61,8 @@ const otpRateLimiter = rateLimit({
  *       required:
  *         - name
  *         - email
- *         - password
  *         - role
+ *         - mobile
  *       properties:
  *         name:
  *           type: string
@@ -71,12 +71,16 @@ const otpRateLimiter = rateLimit({
  *         email:
  *           type: string
  *           format: email
- *         password:
+ *         mobile:
  *           type: string
- *           minLength: 6
+ *           pattern: '^[6-9]\d{9}$'
+ *           description: 10-digit mobile number starting with 6-9
  *         role:
  *           type: string
  *           enum: ['Psychiatric Welfare Officer', 'Faculty', 'Resident', 'Admin']
+ *       description: |
+ *         SECURITY FIX #2.11: Password is no longer required. User will receive a secure password setup link via email.
+ *         The link expires in 24 hours and enforces strong password policy.
  *     
  *     UserLogin:
  *       type: object
@@ -189,8 +193,19 @@ const otpRateLimiter = rateLimit({
  * @swagger
  * /api/users/register:
  *   post:
- *     summary: Register a new user
+ *     summary: Register a new user (Admin only)
+ *     description: |
+ *       Creates a new user account. The user will receive a secure password setup link via email.
+ *       
+ *       **SECURITY FIX #2.11:** Password is no longer required. Admin creates user without password,
+ *       and user receives a secure setup link to set their own password. This ensures:
+ *       - Admin never knows user's password
+ *       - Password is set through secure channel
+ *       - Strong password policy is enforced
+ *       - Setup link expires in 24 hours
  *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -199,13 +214,27 @@ const otpRateLimiter = rateLimit({
  *             $ref: '#/components/schemas/UserRegistration'
  *     responses:
  *       201:
- *         description: User registered successfully
+ *         description: User created successfully. Password setup link sent to user's email.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "User created successfully. Password setup link has been sent to the user's email."
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
  *       400:
  *         description: Validation error
+ *       401:
+ *         description: Unauthorized (Admin required)
  *       409:
  *         description: Email already exists
  *       500:
@@ -598,6 +627,74 @@ router.post('/verify-otp', UserController.verifyOTP);
  *               $ref: '#/components/schemas/Error'
  */
 router.post('/reset-password', UserController.resetPassword);
+
+/**
+ * @swagger
+ * /api/users/setup-password:
+ *   post:
+ *     summary: Set password for new user (using setup token)
+ *     description: |
+ *       Sets the password for a newly created user account using the secure setup token sent via email.
+ *       
+ *       **Requirements:**
+ *       - Use the `token` from the password setup email
+ *       - Token must not be expired (valid for 24 hours)
+ *       - Password must meet strong password policy requirements
+ *       
+ *       **Password Requirements:**
+ *       - Minimum 8 characters
+ *       - At least one uppercase letter
+ *       - At least one lowercase letter
+ *       - At least one number
+ *       - At least one special character
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - newPassword
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Setup token from password setup email
+ *                 example: "abc123def456..."
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 8
+ *                 description: New password (must meet strong password policy)
+ *                 example: "NewSecurePassword123!"
+ *     responses:
+ *       200:
+ *         description: Password set successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Password set successfully. You can now log in with your new password."
+ *       400:
+ *         description: Invalid or expired token, or password doesn't meet requirements
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/setup-password', UserController.setupPassword);
 
 // Protected routes (require authentication)
 /**

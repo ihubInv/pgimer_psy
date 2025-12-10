@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { normalizeEmail } = require('../utils/helpers');
 
 class User {
@@ -26,9 +27,10 @@ class User {
   }
 
   // Create a new user
+  // SECURITY FIX #2.11: Password is optional - user will set it via secure setup link
   static async create(userData) {
     try {
-      const { name, role, email, password ,mobile} = userData;
+      const { name, role, email, password, mobile } = userData;
       
       // Normalize email for comparison only (lowercase, preserves dots and plus signs)
       // Store the original email as entered by the user
@@ -45,15 +47,28 @@ class User {
         throw new Error('User with this email already exists');
       }
 
-      // Hash password
-      const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
-      const password_hash = await bcrypt.hash(password, saltRounds);
+      // SECURITY FIX #2.11: Password is optional - if not provided, user will set it via secure setup link
+      // Use a secure random hash that can never be used for login (acts as placeholder)
+      // This allows user creation without password, and user must set password via setup link
+      let password_hash;
+      if (password) {
+        // Hash password if provided (for backward compatibility, though this shouldn't be used in new flow)
+        const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
+        password_hash = await bcrypt.hash(password, saltRounds);
+      } else {
+        // Generate a secure random hash that can never match a real password
+        // This is a placeholder until user sets their password via setup link
+        const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
+        const randomString = crypto.randomBytes(32).toString('hex');
+        password_hash = await bcrypt.hash(randomString, saltRounds);
+      }
 
       // Store email exactly as received (already lowercased by validation middleware)
       // Dots and plus signs are preserved
       const emailToStore = email.trim();
 
       // Insert user - store email exactly as entered (lowercase, but with dots/plus preserved)
+      // password_hash can be NULL if user needs to set password via setup link
       const result = await db.query(
         `INSERT INTO users (name, role, email, password_hash, mobile) 
          VALUES ($1, $2, $3, $4, $5) 

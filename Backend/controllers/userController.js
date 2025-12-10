@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const PasswordResetToken = require('../models/PasswordResetToken');
+const PasswordSetupToken = require('../models/PasswordSetupToken');
 const LoginOTP = require('../models/LoginOTP');
 const RefreshToken = require('../models/RefreshToken');
 const { sendEmail } = require('../config/email');
@@ -8,26 +9,44 @@ const db = require('../config/database');
 
 class UserController {
   // Register a new user
+  // SECURITY FIX #2.11: Secure user onboarding - admin creates user without password
+  // User receives secure password setup link via email
   static async register(req, res) {
     try {
-      const { name, role, email, password } = req.body;
+      const { name, role, email, mobile } = req.body;
 
+      // SECURITY FIX #2.11: Create user without password - user will set it via secure setup link
       const user = await User.create({
         name,
         role,
         email,
-        password
+        mobile,
+        // password is NOT included - user must set it via secure setup link
       });
 
-      // Generate token
-      const token = user.generateToken();
+      // Generate password setup token (24 hour expiration)
+      const setupToken = await PasswordSetupToken.create(user.id);
+
+      // Send password setup email to user
+      try {
+        // Use server IP for setup link (production server)
+        const setupLink = `${process.env.FRONTEND_URL || 'http://122.186.76.102:8001'}/setup-password?token=${setupToken.token}`;
+        await sendEmail(user.email, 'passwordSetup', { 
+          userName: user.name, 
+          setupLink,
+          expiresIn: '24 hours'
+        });
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        // Don't fail user creation if email fails - admin can resend setup link
+      }
 
       res.status(201).json({
         success: true,
-        message: 'User registered successfully',
+        message: 'User created successfully. Password setup link has been sent to the user\'s email.',
         data: {
-          user: user.toJSON(),
-          token
+          user: user.toJSON()
+          // No token returned - user must set password before they can login
         }
       });
     } catch (error) {
@@ -1206,6 +1225,84 @@ class UserController {
       res.status(500).json({
         success: false,
         message: 'Failed to reset password',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  // Setup password for new user (using setup token)
+  // SECURITY FIX #2.11: Secure password setup for new users
+  static async setupPassword(req, res) {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token) {
+        return res.status(400).json({
+          success: false,
+          message: 'Setup token is required'
+        });
+      }
+
+      if (!newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'New password is required'
+        });
+      }
+
+      // Find valid setup token
+      const setupToken = await PasswordSetupToken.findByToken(token);
+      if (!setupToken) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid or expired setup token. Please request a new password setup link.'
+        });
+      }
+
+      // Get user
+      const user = await User.findById(setupToken.user_id);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // SECURITY FIX #2.12: Validate password strength
+      const { validatePasswordStrength } = require('../utils/passwordPolicy');
+      const passwordValidation = validatePasswordStrength(newPassword);
+      if (!passwordValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password does not meet requirements',
+          errors: passwordValidation.errors
+        });
+      }
+
+      // Update password
+      await user.updatePassword(newPassword);
+
+      // Mark token as used
+      await setupToken.markAsUsed();
+
+      // Send success email
+      try {
+        await sendEmail(user.email, 'passwordSetupSuccess', { userName: user.name });
+      } catch (emailError) {
+        console.error('Success email sending failed:', emailError);
+        // Don't fail the request if email fails
+      }
+
+      res.json({
+        success: true,
+        message: 'Password set successfully. You can now log in with your new password.'
+      });
+
+    } catch (error) {
+      console.error('Setup password error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to set password',
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
       });
     }

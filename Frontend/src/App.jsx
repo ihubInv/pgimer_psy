@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import VerifyOTP from './pages/VerifyOTP';
 import ResetPassword from './pages/ResetPassword';
+import SetupPassword from './pages/SetupPassword';
 import Dashboard from './pages/Dashboard';
 import NotFound from './pages/NotFound';
 
@@ -74,6 +75,10 @@ function App() {
           <Route
             path="/reset-password"
             element={isAuthenticated ? <Navigate to="/" replace /> : <ResetPassword />}
+          />
+          <Route
+            path="/setup-password"
+            element={isAuthenticated ? <Navigate to="/" replace /> : <SetupPassword />}
           />
 
           {/* Protected routes */}

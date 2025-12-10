@@ -39,9 +39,8 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
     name: '',
     email: '',
     mobile: '',
-    password: '',
-    confirmPassword: '',
     role: '',
+    // SECURITY FIX #2.11: Password fields removed - user will set password via secure setup link
   });
 
   const [errors, setErrors] = useState({});
@@ -53,9 +52,8 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
         name: currentUserData.name || '',
         email: currentUserData.email || '',
         mobile: currentUserData.mobile || '',
-        password: '',
-        confirmPassword: '',
         role: currentUserData.role || '',
+        // SECURITY FIX #2.11: Password fields removed
       });
     }
   }, [editMode, currentUserData]);
@@ -87,24 +85,8 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
       newErrors.email = 'Email is invalid';
     }
 
-    // Password validation - required for create, optional for edit
-    if (!editMode) {
-      if (!formData.password) {
-        newErrors.password = 'Password is required';
-      } else if (formData.password.length < 8) {
-        newErrors.password = 'Password must be at least 8 characters';
-      }
-    } else {
-      // In edit mode, if password is provided, validate it
-      if (formData.password && formData.password.length < 8) {
-        newErrors.password = 'Password must be at least 8 characters';
-      }
-    }
-
-    // Only validate confirm password if password is provided
-    if (formData.password && formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
+    // SECURITY FIX #2.11: Password validation removed - user will set password via secure setup link
+    // No password fields in create mode - user receives secure setup link via email
 
     if (!formData.role) {
       newErrors.role = 'Role is required';
@@ -124,16 +106,14 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
 
     try {
       if (editMode) {
-        // For edit mode, only send fields that can be updated (name, email, role)
+        // For edit mode, only send fields that can be updated (name, email, role, mobile)
         // Password is handled separately via reset-password endpoint
-        const { password, confirmPassword, ...submitData } = formData;
-        await updateUser({ id: userId, ...submitData }).unwrap();
+        await updateUser({ id: userId, ...formData }).unwrap();
         toast.success('User updated successfully!');
       } else {
-        // For create mode, include password
-        const { confirmPassword, ...submitData } = formData;
-        await createUser(submitData).unwrap();
-        toast.success('User created successfully!');
+        // SECURITY FIX #2.11: Create user without password - user will receive secure setup link
+        await createUser(formData).unwrap();
+        toast.success('User created successfully! Password setup link has been sent to the user\'s email.');
       }
       navigate('/users');
     } catch (err) {
@@ -320,44 +300,23 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
                     </div>
                   )}
 
-                  {/* Continue with password fields if not in edit mode */}
+                  {/* SECURITY FIX #2.11: Password fields removed - user will receive secure setup link via email */}
                   {!editMode && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-
-                      {/* Row 3: Password | Confirm Password (only in create mode) */}
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                        <div className="relative">
-                          <IconInput
-                            icon={<FiLock />}
-                            label="Password"
-                            type="password"
-                            name="password"
-                            value={formData.password}
-                            onChange={handleChange}
-                            placeholder="Minimum 8 characters"
-                            error={errors.password}
-                            required
-                             className="h-14"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                        <div className="relative">
-                          <IconInput
-                            icon={<FiLock />}
-                            label="Confirm Password"
-                            type="password"
-                            name="confirmPassword"
-                            value={formData.confirmPassword}
-                            onChange={handleChange}
-                            placeholder="Re-enter password"
-                            error={errors.confirmPassword}
-                            required
-                             className="h-14"
-                          />
+                    <div className="relative mt-6">
+                      <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-xl blur-sm"></div>
+                      <div className="relative backdrop-blur-sm bg-blue-50/80 border border-blue-200/60 rounded-xl p-5 shadow-lg">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 bg-blue-100/80 backdrop-blur-sm rounded-lg border border-blue-200/60">
+                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm text-blue-800 font-semibold mb-1">Secure Password Setup</p>
+                            <p className="text-sm text-blue-700">
+                              The user will receive a secure password setup link via email. They must set their own password using this link, which expires in 24 hours. This ensures the admin never knows the user's password.
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>

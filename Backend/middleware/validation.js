@@ -14,6 +14,7 @@ const handleValidationErrors = (req, res, next) => {
 };
 
 // User validation rules
+// SECURITY FIX #2.11: Password is no longer required - user will set it via secure setup link
 const validateUserRegistration = [
   body('name')
     .trim()
@@ -51,18 +52,8 @@ const validateUserRegistration = [
       // Only convert to lowercase, preserve all dots and plus signs
       return value ? value.trim().toLowerCase() : value;
     }),
-  body('password')
-    .isLength({ min: 8 })
-    .withMessage('Password must be at least 8 characters long')
-    .custom((value) => {
-      // SECURITY FIX #12: Strong password policy
-      const { validatePasswordStrength } = require('../utils/passwordPolicy');
-      const validation = validatePasswordStrength(value);
-      if (!validation.isValid) {
-        throw new Error(validation.errors.join('. '));
-      }
-      return true;
-    }),
+  // SECURITY FIX #2.11: Password is no longer required - removed from validation
+  // User will receive secure password setup link via email
   body('role')
     .isIn(['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'])
     .withMessage('Role must be one of: Admin, Faculty, Resident, Psychiatric Welfare Officer'),

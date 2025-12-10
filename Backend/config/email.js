@@ -191,6 +191,102 @@ Postgraduate Institute of Medical Education & Research, Chandigarh
     };
   },
 
+  // Password setup email template (for new user onboarding)
+  passwordSetup: ({ userName, setupLink, expiresIn }) => {
+    // SECURITY FIX #13: Sanitize user input
+    const safeUserName = sanitizeUserName(userName);
+    // setupLink is already a URL, but we'll validate it's safe
+    const safeLink = setupLink && typeof setupLink === 'string' ? setupLink.replace(/[<>"]/g, '') : setupLink;
+    
+    return {
+      subject: 'PGIMER EMR System - Set Up Your Account Password',
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #1e40af, #3b82f6); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">PGIMER EMR System</h1>
+          <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 16px;">Postgraduate Institute of Medical Education & Research</p>
+        </div>
+        
+        <div style="background: white; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
+          <h2 style="color: #1f2937; margin: 0 0 20px 0;">Welcome to PGIMER EMR System</h2>
+          
+          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
+            Hello <strong>${safeUserName}</strong>,
+          </p>
+          
+          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
+            Your account has been created in the PGIMER Electronic Medical Record System. 
+            To complete your account setup, please set your password using the secure link below.
+          </p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${safeLink}" 
+               style="display: inline-block; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+              Set Up Your Password
+            </a>
+          </div>
+          
+          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
+            <strong>Important:</strong>
+          </p>
+          <ul style="color: #4b5563; font-size: 14px; line-height: 1.6; padding-left: 20px;">
+            <li>This link is valid for <strong>${expiresIn || '24 hours'}</strong> only</li>
+            <li>Do not share this link with anyone</li>
+            <li>You will be required to set a strong password (minimum 8 characters with uppercase, lowercase, number, and special character)</li>
+            <li>After setting your password, you can log in to the system</li>
+          </ul>
+          
+          <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="color: #92400e; margin: 0; font-size: 14px;">
+              <strong>Security Notice:</strong> If you did not expect this email or suspect any unauthorized access, 
+              please contact the IT support team immediately.
+            </p>
+          </div>
+          
+          <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+            If the button above doesn't work, copy and paste this link into your browser:<br>
+            <span style="color: #3b82f6; word-break: break-all;">${safeLink}</span>
+          </p>
+          
+          <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+            Best regards,<br>
+            <strong>PGIMER IT Support Team</strong><br>
+            Postgraduate Institute of Medical Education & Research, Chandigarh
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px; padding: 15px; background: #f9fafb; border-radius: 6px;">
+          <p style="color: #6b7280; font-size: 12px; margin: 0;">
+            This is an automated message. Please do not reply to this email.
+          </p>
+        </div>
+      </div>
+    `,
+    text: `
+PGIMER EMR System - Set Up Your Account Password
+
+Hello ${safeUserName},
+
+Your account has been created in the PGIMER Electronic Medical Record System. 
+To complete your account setup, please set your password using the secure link below.
+
+Set Up Your Password: ${safeLink}
+
+Important:
+- This link is valid for ${expiresIn || '24 hours'} only
+- Do not share this link with anyone
+- You will be required to set a strong password (minimum 8 characters with uppercase, lowercase, number, and special character)
+- After setting your password, you can log in to the system
+
+If you did not expect this email or suspect any unauthorized access, please contact the IT support team immediately.
+
+Best regards,
+PGIMER IT Support Team
+Postgraduate Institute of Medical Education & Research, Chandigarh
+    `
+    };
+  },
+
   // Login OTP email template
   loginOTP: ({ userName, otp }) => {
     // SECURITY FIX #13: Sanitize user input to prevent HTML injection
