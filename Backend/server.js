@@ -34,10 +34,41 @@ const FRONTEND_PORT = process.env.FRONTEND_PORT || 8001;
 //   app.use(httpsRedirect);
 // }
 
-// SECURITY FIX #9: Web Application Firewall (WAF) middleware
-// Provides application-level protection against common attacks
-const wafMiddleware = require('./middleware/waf');
-app.use(wafMiddleware);
+// CORS configuration - MUST be before WAF so blocked requests still have CORS headers
+// This ensures browsers can read error responses even when requests are blocked
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Build allowed origins list
+    const allowedOrigins = [
+      `http://${process.env.SERVER_HOST || 'localhost'}:${FRONTEND_PORT}`,
+      `http://${process.env.SERVER_HOST || 'localhost'}:${PORT}`,
+      `http://122.186.76.102:${FRONTEND_PORT}`,
+      `http://122.186.76.102:${PORT}`,
+      `http://122.186.76.102:8001`,
+      `http://122.186.76.102:8002`,
+    ];
+    
+    // Remove duplicates and filter undefined
+    const uniqueOrigins = [...new Set(allowedOrigins.filter(Boolean))];
+    
+    if (uniqueOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // Log for debugging
+      console.warn(`[CORS] Blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
+  preflightContinue: false, // Let CORS handle preflight
+  optionsSuccessStatus: 200, // Some legacy browsers (IE11) choke on 204
+}));
 
 // Security middleware - configured to allow Google Fonts
 app.use(helmet({
@@ -59,22 +90,17 @@ app.use(helmet({
   contentTypeNosniff: false,
 }));
 
-
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? [
-        `${process.env.SERVER_HOST}:${FRONTEND_PORT}`,
-        `${process.env.SERVER_HOST}:${PORT}`,
-
-      ]
-    : [
-        `${process.env.SERVER_HOST}:${FRONTEND_PORT}`,
-        `${process.env.SERVER_HOST}:${PORT}`,
-      ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}));
+// SECURITY FIX #2.9: Enhanced Web Application Firewall (WAF) middleware
+// NOTE: WAF runs AFTER CORS so blocked requests still include CORS headers
+// Provides comprehensive application-level protection against:
+// - SQL Injection attacks
+// - XSS (Cross-Site Scripting) attacks
+// - Command Injection attacks
+// - Path Traversal attacks
+// - LDAP/XML Injection attacks
+// - Rate limiting for attack attempts
+const wafMiddleware = require('./middleware/waf');
+app.use(wafMiddleware);
 
 // SECURITY FIX #15: Rate limiting for OTP generation endpoints to prevent flooding
 // const otpRateLimiter = rateLimit({
