@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const rateLimit = require('express-rate-limit');
 const UserController = require('../controllers/userController');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const {
@@ -10,17 +9,8 @@ const {
   validatePagination
 } = require('../middleware/validation');
 
-// SECURITY FIX #15: Rate limiting for OTP generation endpoints
-const otpRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 3, // Maximum 3 OTP requests per minute per IP
-  message: {
-    success: false,
-    message: 'Too many OTP requests. Please wait 60 seconds before requesting another OTP.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// SECURITY FIX #2.15: Enhanced OTP rate limiting with per-IP, per-email, cooldown, and daily/hourly caps
+const { enhancedOTPRateLimit } = require('../middleware/otpRateLimit');
 
 /**
  * @swagger
@@ -388,6 +378,12 @@ router.post('/verify-login-otp', UserController.verifyLoginOTP);
  *       - User wants a fresh OTP
  *       
  *       **Note:** Requires the `user_id` from the initial login response.
+ *       
+ *       **Rate Limiting:**
+ *       - Maximum 2 requests per minute per IP address
+ *       - 60-second cooldown between requests for the same email
+ *       - Maximum 5 OTPs per hour per email
+ *       - Maximum 10 OTPs per day per email
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -433,7 +429,8 @@ router.post('/verify-login-otp', UserController.verifyLoginOTP);
  *       500:
  *         description: Server error
  */
-router.post('/resend-login-otp', otpRateLimiter, UserController.resendLoginOTP);
+// SECURITY FIX #2.15: Enhanced rate limiting with per-IP, per-email, cooldown, and daily/hourly caps
+router.post('/resend-login-otp', enhancedOTPRateLimit, UserController.resendLoginOTP);
 
 /**
  * @swagger
@@ -450,6 +447,12 @@ router.post('/resend-login-otp', otpRateLimiter, UserController.resendLoginOTP);
  *       4. Use the verified token in `/reset-password` endpoint
  *       
  *       **Security Note:** This endpoint always returns success (200) to prevent email enumeration attacks.
+ *       
+ *       **Rate Limiting:**
+ *       - Maximum 2 requests per minute per IP address
+ *       - 60-second cooldown between requests for the same email
+ *       - Maximum 5 OTPs per hour per email
+ *       - Maximum 10 OTPs per day per email
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -497,8 +500,8 @@ router.post('/resend-login-otp', otpRateLimiter, UserController.resendLoginOTP);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-// SECURITY FIX #15: Apply rate limiting to OTP generation endpoint
-router.post('/forgot-password', otpRateLimiter, UserController.forgotPassword);
+// SECURITY FIX #2.15: Enhanced rate limiting with per-IP, per-email, cooldown, and daily/hourly caps
+router.post('/forgot-password', enhancedOTPRateLimit, UserController.forgotPassword);
 
 /**
  * @swagger
