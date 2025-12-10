@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiLock, FiShield, FiCalendar, FiClock, 
-  FiKey, FiCheckCircle, FiAlertCircle, FiEdit3, FiSave 
+  FiKey, FiCheckCircle, FiAlertCircle, FiEdit3, FiSave, FiX
 } from 'react-icons/fi';
 import { selectCurrentUser } from '../features/auth/authSlice';
 import {
@@ -17,6 +17,7 @@ import Card from '../components/Card';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import Badge from '../components/Badge';
+import Modal from '../components/Modal';
 import { formatDate } from '../utils/formatters';
 
 const Profile = () => {
@@ -47,6 +48,11 @@ const Profile = () => {
     newPassword: '',
     confirmPassword: '',
   });
+  
+  // 2FA disable OTP modal state
+  const [showDisable2FAModal, setShowDisable2FAModal] = useState(false);
+  const [disable2FAOTP, setDisable2FAOTP] = useState('');
+  const [isDisabling2FA, setIsDisabling2FA] = useState(false);
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -103,13 +109,62 @@ const Profile = () => {
   };
 
   const handleDisable2FA = async () => {
-    if (window.confirm('Are you sure you want to disable 2FA?')) {
-      try {
-        await disable2FA().unwrap();
+    if (!window.confirm('Are you sure you want to disable 2FA?')) {
+      return;
+    }
+    
+    try {
+      // First request - backend will send OTP if none provided
+      const result = await disable2FA({}).unwrap();
+      
+      // If OTP is required, show modal
+      if (result.requires_otp || result.message?.includes('OTP has been sent')) {
+        setShowDisable2FAModal(true);
+        setDisable2FAOTP('');
+        toast.info('OTP has been sent to your email. Please enter it to disable 2FA.');
+      } else {
+        // 2FA disabled successfully (shouldn't happen, but handle it)
         toast.success('2FA disabled successfully');
-      } catch (err) {
+      }
+    } catch (err) {
+      // If error but OTP was sent, show modal
+      if (err?.data?.message?.includes('OTP') || err?.data?.requires_otp) {
+        setShowDisable2FAModal(true);
+        setDisable2FAOTP('');
+        toast.info('OTP has been sent to your email. Please enter it to disable 2FA.');
+      } else {
         toast.error(err?.data?.message || 'Failed to disable 2FA');
       }
+    }
+  };
+  
+  const handleDisable2FAWithOTP = async () => {
+    if (!disable2FAOTP || disable2FAOTP.trim().length !== 6) {
+      toast.error('Please enter a valid 6-digit OTP');
+      return;
+    }
+    
+    setIsDisabling2FA(true);
+    try {
+      await disable2FA({ otp: disable2FAOTP.trim() }).unwrap();
+      toast.success('2FA disabled successfully');
+      setShowDisable2FAModal(false);
+      setDisable2FAOTP('');
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to disable 2FA. Please check your OTP and try again.');
+    } finally {
+      setIsDisabling2FA(false);
+    }
+  };
+  
+  const handleResendDisable2FAOTP = async () => {
+    try {
+      // Request new OTP
+      await disable2FA({}).unwrap();
+      setDisable2FAOTP('');
+      toast.success('New OTP has been sent to your email');
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to resend OTP');
     }
   };
 
@@ -477,6 +532,74 @@ const Profile = () => {
           </Card>
         )}
       </div>
+      
+      {/* 2FA Disable OTP Modal */}
+      <Modal
+        isOpen={showDisable2FAModal}
+        onClose={() => {
+          setShowDisable2FAModal(false);
+          setDisable2FAOTP('');
+        }}
+        title="Disable Two-Factor Authentication"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-800">
+              <strong>OTP Verification Required</strong>
+            </p>
+            <p className="text-sm text-blue-700 mt-2">
+              An OTP has been sent to your email address. Please enter the 6-digit code to disable 2FA.
+            </p>
+          </div>
+          
+          <div>
+            <Input
+              label="Enter OTP"
+              name="otp"
+              type="text"
+              value={disable2FAOTP}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                setDisable2FAOTP(value);
+              }}
+              placeholder="000000"
+              maxLength={6}
+              className="text-center text-2xl font-mono tracking-widest"
+            />
+          </div>
+          
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDisable2FAModal(false);
+                setDisable2FAOTP('');
+              }}
+              className="flex-1"
+            >
+              <FiX className="mr-2" />
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleResendDisable2FAOTP}
+              className="flex-1"
+            >
+              Resend OTP
+            </Button>
+            <Button
+              onClick={handleDisable2FAWithOTP}
+              loading={isDisabling2FA}
+              disabled={isDisabling2FA || disable2FAOTP.length !== 6}
+              className="flex-1"
+            >
+              <FiShield className="mr-2" />
+              Disable 2FA
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

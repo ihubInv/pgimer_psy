@@ -1272,10 +1272,22 @@ class UserController {
 
       // SECURITY: Require OTP verification to disable 2FA
       const { otp } = req.body;
+      
+      // If no OTP provided, send one via email
       if (!otp) {
-        return res.status(400).json({
-          success: false,
-          message: 'OTP verification is required to disable 2FA. Please provide the OTP from your authenticator app or email.'
+        // Create and send OTP for disabling 2FA
+        const loginOTP = await LoginOTP.create(user.id);
+        
+        // Send OTP email
+        await sendEmail(user.email, 'loginOTP', { 
+          userName: user.name, 
+          otp: loginOTP.otp 
+        });
+        
+        return res.status(200).json({
+          success: true,
+          message: 'OTP has been sent to your email. Please provide the OTP to disable 2FA.',
+          requires_otp: true
         });
       }
 

@@ -45,7 +45,11 @@ const Modal = ({
       aria-labelledby="modal-title"
       role="dialog"
       aria-modal="true"
+      onClick={handleOverlayClick}
     >
+      {/* Backdrop overlay */}
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
+      
       {/* Modal panel - reduced glassmorphism effect */}
       <div
         className={`relative z-50 backdrop-blur-lg bg-gradient-to-br from-white/70 via-white/65 to-white/60 border border-white/40 rounded-2xl text-left overflow-hidden transform transition-all w-full mx-4 ${sizes[size]}`}

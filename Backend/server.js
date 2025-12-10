@@ -77,32 +77,32 @@ app.use(cors({
 }));
 
 // SECURITY FIX #15: Rate limiting for OTP generation endpoints to prevent flooding
-const otpRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 3, // Maximum 3 OTP requests per minute per IP
-  message: {
-    success: false,
-    message: 'Too many OTP requests. Please wait 60 seconds before requesting another OTP.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: false,
-});
+// const otpRateLimiter = rateLimit({
+//   windowMs: 60 * 1000, // 1 minute
+//   max: 3, // Maximum 3 OTP requests per minute per IP
+//   message: {
+//     success: false,
+//     message: 'Too many OTP requests. Please wait 60 seconds before requesting another OTP.',
+//   },
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   skipSuccessfulRequests: false,
+// });
 
-// General API rate limiting (more lenient)
-const apiRateLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // limit each IP to 1000 requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// // General API rate limiting (more lenient)
+// const apiRateLimiter = rateLimit({
+//   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
+//   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // limit each IP to 1000 requests per windowMs
+//   message: {
+//     success: false,
+//     message: 'Too many requests from this IP, please try again later.',
+//   },
+//   standardHeaders: true,
+//   legacyHeaders: false,
+// });
 
 // Apply general rate limiting to all API routes
-app.use('/api/', apiRateLimiter);
+// app.use('/api/', apiRateLimiter);
 
 // Compression middleware
 app.use(compression());
