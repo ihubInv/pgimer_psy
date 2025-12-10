@@ -332,30 +332,86 @@ app.use((req, res, next) => {
     });
   }
   
-  // Block configuration files and sensitive directories
+  // SECURITY FIX #2.16: Block configuration files and sensitive directories
+  // Comprehensive blocking of all internal configuration files
   const blockedPatterns = [
     '/package.json',
     '/package-lock.json',
+    '/yarn.lock',
+    '/pnpm-lock.yaml',
     '/.env',
+    '/.env.local',
+    '/.env.production',
+    '/.env.development',
     '/.git',
     '/node_modules',
     '/.vscode',
     '/.idea',
     '/.gitignore',
     '/.gitattributes',
+    '/.gitconfig',
     '/vite.config.js',
     '/vite.config.ts',
     '/tsconfig.json',
     '/jsconfig.json',
     '/.eslintrc',
+    '/.eslintrc.js',
+    '/.eslintrc.json',
     '/.prettierrc',
+    '/.prettierrc.js',
+    '/.prettierrc.json',
     '/tailwind.config.js',
-    '/postcss.config.js'
+    '/tailwind.config.ts',
+    '/postcss.config.js',
+    '/postcss.config.json',
+    '/webpack.config.js',
+    '/rollup.config.js',
+    '/.npmrc',
+    '/.yarnrc',
+    '/.nvmrc',
+    '/.node-version',
+    '/docker-compose.yml',
+    '/docker-compose.yaml',
+    '/Dockerfile',
+    '/.dockerignore',
+    '/.editorconfig',
+    '/.babelrc',
+    '/.babelrc.js',
+    '/babel.config.js',
+    '/jest.config.js',
+    '/jest.config.json',
+    '/.jestrc',
+    '/.nycrc',
+    '/.travis.yml',
+    '/.circleci',
+    '/.github',
+    '/README.md',
+    '/CHANGELOG.md',
+    '/LICENSE',
+    '/.npmignore'
   ];
   
+  // Check for blocked patterns (case-insensitive)
   for (const pattern of blockedPatterns) {
-    if (path.includes(pattern.toLowerCase())) {
-      console.warn(`[Security] Blocked configuration file access: ${originalPath} from IP: ${req.ip}`);
+    const patternLower = pattern.toLowerCase();
+    // Check exact match or if path contains the pattern
+    if (path === patternLower || 
+        path.startsWith(patternLower + '/') || 
+        path.includes(patternLower) ||
+        originalPath.toLowerCase().includes(patternLower)) {
+      console.warn(`[Security] Blocked configuration file access: ${originalPath} from IP: ${req.ip || req.socket?.remoteAddress || 'unknown'}`);
+      return res.status(404).json({
+        success: false,
+        message: 'Not found'
+      });
+    }
+  }
+  
+  // Also block any file ending with these configuration extensions
+  const configExtensions = ['.config.js', '.config.ts', '.config.json', '.rc', '.rc.js', '.rc.json'];
+  for (const ext of configExtensions) {
+    if (pathLower.endsWith(ext) && !pathLower.startsWith('/api/')) {
+      console.warn(`[Security] Blocked configuration file access: ${originalPath} from IP: ${req.ip || req.socket?.remoteAddress || 'unknown'}`);
       return res.status(404).json({
         success: false,
         message: 'Not found'

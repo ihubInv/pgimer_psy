@@ -59,6 +59,58 @@ export default function debugUriPlugin() {
             return;
           }
           
+          // SECURITY FIX #2.16: Block configuration files and sensitive directories
+          const configFilePatterns = [
+            '/package.json',
+            '/package-lock.json',
+            '/yarn.lock',
+            '/pnpm-lock.yaml',
+            '/.env',
+            '/.env.local',
+            '/.env.production',
+            '/.env.development',
+            '/vite.config.js',
+            '/vite.config.ts',
+            '/tsconfig.json',
+            '/jsconfig.json',
+            '/.eslintrc',
+            '/.prettierrc',
+            '/tailwind.config.js',
+            '/postcss.config.js',
+            '/.gitignore',
+            '/.gitattributes',
+            '/README.md',
+            '/CHANGELOG.md',
+            '/LICENSE'
+          ];
+          
+          const urlLower = url.toLowerCase();
+          for (const pattern of configFilePatterns) {
+            if (urlLower === pattern.toLowerCase() || urlLower.includes(pattern.toLowerCase())) {
+              console.warn(`[Security] BLOCKED configuration file access: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
+              res.statusCode = 404;
+              res.setHeader('Content-Type', 'text/plain');
+              res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+              res.setHeader('X-Content-Type-Options', 'nosniff');
+              res.end('Not Found');
+              return;
+            }
+          }
+          
+          // Block configuration file extensions
+          const configExtensions = ['.config.js', '.config.ts', '.config.json', '.rc', '.rc.js', '.rc.json'];
+          for (const ext of configExtensions) {
+            if (urlLower.endsWith(ext)) {
+              console.warn(`[Security] BLOCKED configuration file access: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
+              res.statusCode = 404;
+              res.setHeader('Content-Type', 'text/plain');
+              res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+              res.setHeader('X-Content-Type-Options', 'nosniff');
+              res.end('Not Found');
+              return;
+            }
+          }
+          
           // Also block source map files explicitly
           if (url && (url.endsWith('.map') || url.includes('.map?'))) {
             console.warn(`[Security] BLOCKED source map access: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);

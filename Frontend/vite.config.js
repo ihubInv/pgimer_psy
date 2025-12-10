@@ -126,6 +126,58 @@ export default defineConfig({
         return;
       }
       
+      // SECURITY FIX #2.16: Block configuration files and sensitive directories
+      const configFilePatterns = [
+        '/package.json',
+        '/package-lock.json',
+        '/yarn.lock',
+        '/pnpm-lock.yaml',
+        '/.env',
+        '/.env.local',
+        '/.env.production',
+        '/.env.development',
+        '/vite.config.js',
+        '/vite.config.ts',
+        '/tsconfig.json',
+        '/jsconfig.json',
+        '/.eslintrc',
+        '/.prettierrc',
+        '/tailwind.config.js',
+        '/postcss.config.js',
+        '/.gitignore',
+        '/.gitattributes',
+        '/README.md',
+        '/CHANGELOG.md',
+        '/LICENSE'
+      ];
+      
+      const urlLower = url.toLowerCase();
+      for (const pattern of configFilePatterns) {
+        if (urlLower === pattern.toLowerCase() || urlLower.includes(pattern.toLowerCase())) {
+          console.warn(`[Security] BLOCKED configuration file access: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'text/plain');
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          res.end('Not Found');
+          return;
+        }
+      }
+      
+      // Block configuration file extensions
+      const configExtensions = ['.config.js', '.config.ts', '.config.json', '.rc', '.rc.js', '.rc.json'];
+      for (const ext of configExtensions) {
+        if (urlLower.endsWith(ext)) {
+          console.warn(`[Security] BLOCKED configuration file access: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'text/plain');
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          res.end('Not Found');
+          return;
+        }
+      }
+      
       // Also block source map files explicitly
       if (url.endsWith('.map') || url.includes('.map?')) {
         console.warn(`[Security] BLOCKED source map access: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
@@ -147,14 +199,66 @@ export default defineConfig({
     // In preview mode, we serve from /dist/ - /src/ should not be accessible
     middlewareMode: false
   },
-  // SECURITY FIX #2.8: Configure preview server middleware to block /src/ access
+  // SECURITY FIX #2.8 & #2.16: Configure preview server middleware to block /src/ and config files
   configurePreviewServer(server) {
     server.middlewares.use((req, res, next) => {
       const url = req.url?.split('?')[0] || '';
+      const urlLower = url.toLowerCase();
       
       // In preview mode (production build), /src/ should NEVER be accessible
       if (url.startsWith('/src/')) {
         console.warn(`[Security] BLOCKED /src/ access in preview mode: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'text/plain');
+        res.end('Not Found');
+        return;
+      }
+      
+      // SECURITY FIX #2.16: Block configuration files in preview mode
+      const configFilePatterns = [
+        '/package.json',
+        '/package-lock.json',
+        '/yarn.lock',
+        '/pnpm-lock.yaml',
+        '/.env',
+        '/vite.config.js',
+        '/vite.config.ts',
+        '/tsconfig.json',
+        '/jsconfig.json',
+        '/.eslintrc',
+        '/.prettierrc',
+        '/tailwind.config.js',
+        '/postcss.config.js',
+        '/.gitignore',
+        '/README.md',
+        '/LICENSE'
+      ];
+      
+      for (const pattern of configFilePatterns) {
+        if (urlLower === pattern.toLowerCase() || urlLower.includes(pattern.toLowerCase())) {
+          console.warn(`[Security] BLOCKED configuration file access in preview: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'text/plain');
+          res.end('Not Found');
+          return;
+        }
+      }
+      
+      // Block configuration file extensions
+      const configExtensions = ['.config.js', '.config.ts', '.config.json', '.rc', '.rc.js', '.rc.json'];
+      for (const ext of configExtensions) {
+        if (urlLower.endsWith(ext)) {
+          console.warn(`[Security] BLOCKED configuration file access in preview: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'text/plain');
+          res.end('Not Found');
+          return;
+        }
+      }
+      
+      // Block source maps
+      if (url.endsWith('.map') || url.includes('.map?')) {
+        console.warn(`[Security] BLOCKED source map access in preview: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
         res.statusCode = 404;
         res.setHeader('Content-Type', 'text/plain');
         res.end('Not Found');
