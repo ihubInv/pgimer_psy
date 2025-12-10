@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { 
-  FiPlus, FiSearch, FiEdit, FiTrash2, FiCheck, FiX, FiHome,
-  FiInfo, FiUsers, FiMapPin
+  FiPlus, FiSearch, FiEdit, FiTrash2, FiCheck, FiX
 } from 'react-icons/fi';
 import {
   useGetAllRoomsQuery,
-  useGetRoomStatsQuery,
   useCreateRoomMutation,
   useUpdateRoomMutation,
   useDeleteRoomMutation,
@@ -46,11 +44,6 @@ const RoomManagementPage = () => {
     pollingInterval: 60000, // Increased from 30s to 60s
     refetchOnFocus: false,
     refetchOnMountOrArgChange: true,
-  });
-
-  const { data: statsData } = useGetRoomStatsQuery(undefined, {
-    pollingInterval: 60000, // Increased from 30s to 60s
-    refetchOnFocus: false,
   });
 
   const [createRoom, { isLoading: isCreating }] = useCreateRoomMutation();
@@ -154,7 +147,6 @@ const RoomManagementPage = () => {
 
   const rooms = data?.data?.rooms || [];
   const pagination = data?.data?.pagination || {};
-  const stats = statsData?.data || {};
 
   if (isLoading) {
     return (
@@ -194,46 +186,6 @@ const RoomManagementPage = () => {
             <FiPlus className="mr-2" />
             Add Room
           </Button>
-        </div>
-
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Rooms</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total_rooms || 0}</p>
-              </div>
-              <FiHome className="w-8 h-8 text-blue-600" />
-            </div>
-          </Card>
-          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Available</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.available_rooms || 0}</p>
-              </div>
-              <FiCheck className="w-8 h-8 text-green-600" />
-            </div>
-          </Card>
-          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Occupied</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.occupied_rooms || 0}</p>
-              </div>
-              <FiUsers className="w-8 h-8 text-orange-600" />
-            </div>
-          </Card>
-          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">With Patients</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.rooms_with_patients || 0}</p>
-              </div>
-              <FiMapPin className="w-8 h-8 text-purple-600" />
-            </div>
-          </Card>
         </div>
 
         {/* Filters and Search */}

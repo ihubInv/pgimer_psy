@@ -58,17 +58,13 @@ export const roomManagementApiSlice = apiSlice.injectEndpoints({
       query: (id) => `/rooms/${id}`,
       providesTags: (result, error, id) => [{ type: 'RoomManagement', id }],
     }),
-    getRoomStats: builder.query({
-      query: () => '/rooms/stats',
-      providesTags: ['RoomStats'],
-    }),
     createRoom: builder.mutation({
       query: (roomData) => ({
         url: '/rooms',
         method: 'POST',
         body: roomData,
       }),
-      invalidatesTags: ['RoomManagement', 'RoomStats', 'Rooms'],
+      invalidatesTags: ['RoomManagement', 'Rooms'],
     }),
     updateRoom: builder.mutation({
       query: ({ id, ...roomData }) => ({
@@ -79,7 +75,6 @@ export const roomManagementApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: (result, error, { id }) => [
         { type: 'RoomManagement', id },
         'RoomManagement',
-        'RoomStats',
         'Rooms',
       ],
     }),
@@ -91,7 +86,6 @@ export const roomManagementApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: (result, error, id) => [
         { type: 'RoomManagement', id },
         'RoomManagement',
-        'RoomStats',
         'Rooms',
       ],
     }),
@@ -108,7 +102,6 @@ export const {
 export const {
   useGetAllRoomsQuery,
   useGetRoomByIdQuery,
-  useGetRoomStatsQuery,
   useCreateRoomMutation,
   useUpdateRoomMutation,
   useDeleteRoomMutation,

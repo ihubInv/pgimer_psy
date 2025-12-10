@@ -70,20 +70,6 @@ router.get('/', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare 
 
 /**
  * @swagger
- * /api/rooms/stats:
- *   get:
- *     summary: Get room statistics
- *     tags: [Room Management]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Room statistics retrieved successfully
- */
-router.get('/stats', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer'), RoomController.getRoomStats);
-
-/**
- * @swagger
  * /api/rooms/{id}:
  *   get:
  *     summary: Get room by ID

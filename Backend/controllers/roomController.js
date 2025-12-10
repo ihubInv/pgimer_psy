@@ -260,54 +260,6 @@ class RoomController {
       });
     }
   }
-
-  // Get room statistics
-  static async getRoomStats(req, res) {
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-
-      // Get total rooms
-      const totalRoomsResult = await db.query('SELECT COUNT(*) as count FROM rooms WHERE is_active = true');
-      const totalRooms = parseInt(totalRoomsResult.rows[0].count);
-
-      // Get rooms assigned to doctors today
-      const occupiedRoomsResult = await db.query(
-        `SELECT COUNT(DISTINCT current_room) as count 
-         FROM users 
-         WHERE current_room IS NOT NULL 
-           AND DATE(room_assignment_time) = $1`,
-        [today]
-      );
-      const occupiedRooms = parseInt(occupiedRoomsResult.rows[0].count);
-
-      // Get rooms with patients today
-      const roomsWithPatientsResult = await db.query(
-        `SELECT COUNT(DISTINCT assigned_room) as count 
-         FROM registered_patient 
-         WHERE assigned_room IS NOT NULL 
-           AND DATE(created_at) = $1`,
-        [today]
-      );
-      const roomsWithPatients = parseInt(roomsWithPatientsResult.rows[0].count);
-
-      res.json({
-        success: true,
-        data: {
-          total_rooms: totalRooms,
-          occupied_rooms: occupiedRooms,
-          rooms_with_patients: roomsWithPatients,
-          available_rooms: totalRooms - occupiedRooms
-        }
-      });
-    } catch (error) {
-      console.error('Get room stats error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to get room statistics',
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-      });
-    }
-  }
 }
 
 module.exports = RoomController;

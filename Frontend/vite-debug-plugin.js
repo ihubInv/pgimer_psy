@@ -1,26 +1,73 @@
 export default function debugUriPlugin() {
     return {
       name: 'debug-uri-handler',
+      // Run this plugin early to block before Vite processes requests
+      enforce: 'pre',
       configureServer(server) {
+        // Insert middleware at the beginning to block before Vite serves files
         server.middlewares.use((req, res, next) => {
-          const url = req.url;
+          const url = req.url?.split('?')[0] || '';
+          const fullUrl = req.url || '';
           
-          // SECURITY FIX #2.8: Monitor /src access (allow in dev, log for security)
-          // In development, Vite needs /src/ access for the app to work
-          // Production should serve built files from /dist/, not /src/
+          // SECURITY FIX #2.8: Block direct /src file browsing while allowing module imports
+          // Strategy: Allow module imports (app functionality) but block direct browser navigation
           if (url && url.startsWith('/src/')) {
-            const accept = req.headers.accept || '';
-            const isDirectBrowse = accept.includes('text/html') && 
-                                   !accept.includes('application/javascript') && 
-                                   !accept.includes('text/javascript') &&
-                                   !accept.includes('*/*');
-            
-            if (isDirectBrowse && !url.includes('main.jsx') && !url.includes('main.tsx') && !url.startsWith('/src/assets/')) {
-              // Log direct browsing attempts for security monitoring
-              console.warn(`[Security] Direct source code browsing detected: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
-              // Note: In development we allow it (Vite needs it), but log it
-              // In production, ensure built files are served from /dist/
+            // 1. Always allow entry point (needed for app to work)
+            if (url === '/src/main.jsx' || url === '/src/main.tsx') {
+              return next();
             }
+            
+            // 2. Always allow assets folder (images, fonts, etc.)
+            if (url.startsWith('/src/assets/')) {
+              return next();
+            }
+            
+            // 3. Check if this is a module import (app functionality) vs direct browsing
+            const accept = req.headers.accept || '';
+            const referer = req.headers.referer || '';
+            const hasViteQueryParams = fullUrl.includes('?import') || 
+                                       fullUrl.includes('?t=') || 
+                                       fullUrl.includes('?v=') ||
+                                       fullUrl.includes('?raw') ||
+                                       fullUrl.includes('?url') ||
+                                       fullUrl.includes('?');
+            
+            // BLOCK ONLY if it's clearly direct browser navigation:
+            // - Accept header starts with or prioritizes text/html
+            // - AND no query params (not a Vite transform)
+            // - AND no referer (not from the app)
+            const acceptPrioritizesHtml = accept.startsWith('text/html') || 
+                                          (accept.includes('text/html') && accept.split(',')[0].trim().startsWith('text/html'));
+            const isDirectBrowse = acceptPrioritizesHtml && 
+                                  !hasViteQueryParams && 
+                                  !referer;
+            
+            // ALLOW everything else (module imports, Vite transforms, etc.)
+            if (!isDirectBrowse) {
+              // This is a legitimate module import or Vite transform - allow it
+              return next();
+            }
+            
+            // 4. BLOCK direct browsing attempts
+            // This blocks: Direct URL typing like /src/components/Button.jsx
+            console.warn(`[Security] BLOCKED direct source code browsing: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}, Accept: ${accept || 'none'}, Referer: ${referer || 'none'}`);
+            res.statusCode = 404;
+            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.end('Not Found');
+            return;
+          }
+          
+          // Also block source map files explicitly
+          if (url && (url.endsWith('.map') || url.includes('.map?'))) {
+            console.warn(`[Security] BLOCKED source map access: ${url} from IP: ${req.socket?.remoteAddress || 'unknown'}`);
+            res.statusCode = 404;
+            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.end('Not Found');
+            return;
           }
           
           console.log(`[DEBUG] Incoming request: ${url}`);
