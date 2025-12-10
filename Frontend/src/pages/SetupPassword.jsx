@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, Eye, EyeOff, CheckCircle, ArrowLeft } from 'lucide-react';
 import PGI_Logo from '../assets/PGI_Logo.png';
 import { validatePassword, getPasswordRequirements } from '../utils/passwordValidation';
+import { encryptPasswordForTransmission } from '../utils/passwordEncryption';
 
 const SetupPassword = () => {
   const navigate = useNavigate();
@@ -63,6 +64,9 @@ const SetupPassword = () => {
     setIsLoading(true);
 
     try {
+      // SECURITY FIX #2.17: Encrypt password before transmission
+      const passwordEncryption = await encryptPasswordForTransmission(formData.newPassword);
+      
       const response = await fetch('/api/users/setup-password', {
         method: 'POST',
         headers: {
@@ -71,7 +75,7 @@ const SetupPassword = () => {
         credentials: 'include',
         body: JSON.stringify({
           token,
-          newPassword: formData.newPassword
+          newPassword: passwordEncryption.encrypted
         }),
       });
 

@@ -73,6 +73,10 @@ class UserController {
     try {
       const { email, password } = req.body;
 
+      // SECURITY FIX #2.17: Decrypt password if it was encrypted on the client side
+      const { decryptPasswordIfNeeded } = require('../utils/passwordDecryption');
+      const decryptedPassword = await decryptPasswordIfNeeded(password);
+
       // Find user by email
       const user = await User.findByEmail(email);
       if (!user) {
@@ -109,8 +113,8 @@ class UserController {
         });
       }
 
-      // Verify password
-      const isValidPassword = await user.verifyPassword(password);
+      // Verify password (using decrypted password)
+      const isValidPassword = await user.verifyPassword(decryptedPassword);
       if (!isValidPassword) {
         // SECURITY FIX #6: Increment failed login attempts
         const failedAttempts = (user.failed_login_attempts || 0) + 1;
@@ -376,9 +380,14 @@ class UserController {
     try {
       const { currentPassword, newPassword } = req.body;
 
-      // SECURITY FIX #12: Validate password strength
+      // SECURITY FIX #2.17: Decrypt passwords if they were encrypted on the client side
+      const { decryptPasswordIfNeeded } = require('../utils/passwordDecryption');
+      const decryptedCurrentPassword = await decryptPasswordIfNeeded(currentPassword);
+      const decryptedNewPassword = await decryptPasswordIfNeeded(newPassword);
+
+      // SECURITY FIX #12: Validate password strength (using decrypted password)
       const { validatePasswordStrength } = require('../utils/passwordPolicy');
-      const passwordValidation = validatePasswordStrength(newPassword);
+      const passwordValidation = validatePasswordStrength(decryptedNewPassword);
       if (!passwordValidation.isValid) {
         return res.status(400).json({
           success: false,
@@ -395,7 +404,7 @@ class UserController {
         });
       }
 
-      await user.changePassword(currentPassword, newPassword);
+      await user.changePassword(decryptedCurrentPassword, decryptedNewPassword);
 
       res.json({
         success: true,
@@ -1138,6 +1147,10 @@ class UserController {
       const token = req.cookies?.passwordResetToken;
       const { newPassword } = req.body;
 
+      // SECURITY FIX #2.17: Decrypt password if it was encrypted on the client side
+      const { decryptPasswordIfNeeded } = require('../utils/passwordDecryption');
+      const decryptedNewPassword = await decryptPasswordIfNeeded(newPassword);
+
       if (!token) {
         return res.status(400).json({
           success: false,
@@ -1187,9 +1200,9 @@ class UserController {
         });
       }
 
-      // SECURITY FIX #12: Validate password strength before reset
+      // SECURITY FIX #12: Validate password strength before reset (using decrypted password)
       const { validatePasswordStrength } = require('../utils/passwordPolicy');
-      const passwordValidation = validatePasswordStrength(newPassword);
+      const passwordValidation = validatePasswordStrength(decryptedNewPassword);
       if (!passwordValidation.isValid) {
         return res.status(400).json({
           success: false,
@@ -1198,8 +1211,8 @@ class UserController {
         });
       }
 
-      // Update password
-      await user.updatePassword(newPassword);
+      // Update password (using decrypted password)
+      await user.updatePassword(decryptedNewPassword);
 
       // Mark token as used
       await resetToken.markAsUsed();
@@ -1236,6 +1249,10 @@ class UserController {
     try {
       const { token, newPassword } = req.body;
 
+      // SECURITY FIX #2.17: Decrypt password if it was encrypted on the client side
+      const { decryptPasswordIfNeeded } = require('../utils/passwordDecryption');
+      const decryptedNewPassword = await decryptPasswordIfNeeded(newPassword);
+
       if (!token) {
         return res.status(400).json({
           success: false,
@@ -1268,9 +1285,9 @@ class UserController {
         });
       }
 
-      // SECURITY FIX #2.12: Validate password strength
+      // SECURITY FIX #2.12: Validate password strength (using decrypted password)
       const { validatePasswordStrength } = require('../utils/passwordPolicy');
-      const passwordValidation = validatePasswordStrength(newPassword);
+      const passwordValidation = validatePasswordStrength(decryptedNewPassword);
       if (!passwordValidation.isValid) {
         return res.status(400).json({
           success: false,
@@ -1279,8 +1296,8 @@ class UserController {
         });
       }
 
-      // Update password
-      await user.updatePassword(newPassword);
+      // Update password (using decrypted password)
+      await user.updatePassword(decryptedNewPassword);
 
       // Mark token as used
       await setupToken.markAsUsed();

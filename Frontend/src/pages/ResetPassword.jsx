@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Lock, Eye, EyeOff, CheckCircle, ArrowLeft } from 'lucide-react';
 import PGI_Logo from '../assets/PGI_Logo.png';
 import { validatePassword, getPasswordRequirements } from '../utils/passwordValidation';
+import { encryptPasswordForTransmission } from '../utils/passwordEncryption';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -56,6 +57,9 @@ const ResetPassword = () => {
     setIsLoading(true);
 
     try {
+      // SECURITY FIX #2.17: Encrypt password before transmission
+      const passwordEncryption = await encryptPasswordForTransmission(formData.newPassword);
+      
       // SECURITY FIX: Token is stored in HttpOnly cookie by backend, not in localStorage
       // No need to send token in request body - backend reads from cookie
       const response = await fetch('/api/users/reset-password', {
@@ -65,7 +69,7 @@ const ResetPassword = () => {
         },
         credentials: 'include', // Important: Include cookies in request
         body: JSON.stringify({
-          newPassword: formData.newPassword
+          newPassword: passwordEncryption.encrypted
         }),
       });
 

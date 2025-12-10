@@ -5,6 +5,7 @@ import { flushSync } from 'react-dom';
 import { toast } from 'react-toastify';
 import { useLoginMutation, useVerifyLoginOTPMutation, useResendLoginOTPMutation } from '../features/auth/authApiSlice';
 import { setCredentials, setOTPRequired, selectOTPRequired, selectLoginData, selectIsAuthenticated } from '../features/auth/authSlice';
+import { encryptPasswordForTransmission } from '../utils/passwordEncryption';
 import {
   Eye,
   EyeOff,
@@ -84,9 +85,12 @@ const Login = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
+      // SECURITY FIX #2.17: Encrypt password before transmission
+      const passwordEncryption = await encryptPasswordForTransmission(formData.password);
+      
       const result = await login({
         email: formData.email,
-        password: formData.password,
+        password: passwordEncryption.encrypted,
       }).unwrap();
 
       // Check if accessToken is returned (direct login without OTP)

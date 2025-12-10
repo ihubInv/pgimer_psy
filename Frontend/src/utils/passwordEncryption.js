@@ -1,17 +1,18 @@
 /**
  * Password Encryption Utility
- * SECURITY FIX #17: Client-side password encryption before transmission
+ * SECURITY FIX #2.17: Client-side password encryption before transmission
  * 
- * Note: This is an optional enhancement. HTTPS already provides encryption
- * in transit. This adds an additional layer of defense-in-depth.
+ * This utility encrypts passwords on the client side before sending them to the server.
+ * This provides an additional layer of protection even if HTTPS/TLS fails or is compromised.
  * 
- * IMPORTANT: Currently disabled by default. To enable:
+ * Encryption uses AES-256-GCM with PBKDF2 key derivation for maximum security.
+ * 
+ * IMPORTANT: To enable password encryption:
  * 1. Set VITE_ENABLE_PASSWORD_ENCRYPTION=true in frontend .env
- * 2. Implement decryption on the backend (see Backend/utils/passwordDecryption.js)
- * 3. Update backend to handle encrypted passwords
+ * 2. Set ENABLE_PASSWORD_ENCRYPTION=true in backend .env
+ * 3. Set VITE_PASSWORD_ENCRYPTION_KEY and PASSWORD_ENCRYPTION_KEY to the same value in both .env files
  * 
- * For now, passwords are sent over HTTPS which provides adequate protection.
- * This utility is prepared for future enhancement if needed.
+ * The encryption key should be a strong, random string (at least 32 characters).
  */
 
 /**
@@ -20,10 +21,13 @@
  */
 async function encryptPasswordSimple(password) {
   try {
-    // Check if encryption is enabled
-    const encryptionEnabled = import.meta.env.VITE_ENABLE_PASSWORD_ENCRYPTION === 'true';
+    // SECURITY FIX #2.17: Enable encryption by default for better security
+    // Check if encryption is explicitly disabled
+    const encryptionDisabled = import.meta.env.VITE_ENABLE_PASSWORD_ENCRYPTION === 'false';
+    const encryptionKey = import.meta.env.VITE_PASSWORD_ENCRYPTION_KEY;
     
-    if (!encryptionEnabled) {
+    // If encryption is explicitly disabled OR no key is provided, use HTTPS only
+    if (encryptionDisabled || !encryptionKey) {
       // Return password as-is (HTTPS will encrypt it)
       return { encrypted: password, isEncrypted: false };
     }
@@ -35,11 +39,7 @@ async function encryptPasswordSimple(password) {
     }
 
     // Get encryption key from environment (must match backend)
-    const encryptionKey = import.meta.env.VITE_PASSWORD_ENCRYPTION_KEY;
-    if (!encryptionKey) {
-      console.warn('[Password Encryption] Encryption key not configured, using HTTPS only');
-      return { encrypted: password, isEncrypted: false };
-    }
+    // Already checked above, but keep for clarity
     
     // Derive a key from the encryption key using PBKDF2
     const keyMaterial = await crypto.subtle.importKey(

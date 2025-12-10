@@ -20,6 +20,7 @@ import Badge from '../components/Badge';
 import Modal from '../components/Modal';
 import { formatDate } from '../utils/formatters';
 import { validatePassword, getPasswordRequirements } from '../utils/passwordValidation';
+import { encryptPasswordForTransmission } from '../utils/passwordEncryption';
 
 const Profile = () => {
   const user = useSelector(selectCurrentUser);
@@ -99,9 +100,13 @@ const Profile = () => {
     }
 
     try {
+      // SECURITY FIX #2.17: Encrypt passwords before transmission
+      const currentPasswordEncryption = await encryptPasswordForTransmission(passwordForm.currentPassword);
+      const newPasswordEncryption = await encryptPasswordForTransmission(passwordForm.newPassword);
+      
       await changePassword({
-        currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword,
+        currentPassword: currentPasswordEncryption.encrypted,
+        newPassword: newPasswordEncryption.encrypted,
       }).unwrap();
       toast.success('Password changed successfully!');
       setPasswordForm({
