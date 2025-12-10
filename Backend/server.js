@@ -286,27 +286,71 @@ app.get('/', (req, res) => {
 });
 
 
-// SECURITY FIX #8 & #16: Block access to sensitive paths and prevent information leakage
-// Block /src paths and configuration files
+// SECURITY FIX #2.8 & #8 & #16: Block access to sensitive paths and prevent information leakage
+// Block /src paths and configuration files - comprehensive protection
 app.use((req, res, next) => {
   const path = req.path.toLowerCase();
+  const originalPath = req.path;
   
-  // Block frontend source code paths
-  if (path.startsWith('/src/') || path.includes('/src/')) {
+  // SECURITY FIX #2.8: Block all frontend source code paths (case-insensitive)
+  // This prevents source code exposure through the backend server
+  if (path.includes('/src/') || 
+      path.startsWith('/src/') || 
+      path.endsWith('/src') ||
+      originalPath.includes('/src/') ||
+      originalPath.startsWith('/src/')) {
+    console.warn(`[Security] Blocked source code access attempt: ${originalPath} from IP: ${req.ip}`);
     return res.status(404).json({
       success: false,
       message: 'Not found'
     });
   }
   
-  // Block configuration files
-  const blockedFiles = ['/package.json', '/package-lock.json', '/.env', '/.git', '/node_modules'];
-  for (const file of blockedFiles) {
-    if (path.includes(file)) {
+  // Block configuration files and sensitive directories
+  const blockedPatterns = [
+    '/package.json',
+    '/package-lock.json',
+    '/.env',
+    '/.git',
+    '/node_modules',
+    '/.vscode',
+    '/.idea',
+    '/.gitignore',
+    '/.gitattributes',
+    '/vite.config.js',
+    '/vite.config.ts',
+    '/tsconfig.json',
+    '/jsconfig.json',
+    '/.eslintrc',
+    '/.prettierrc',
+    '/tailwind.config.js',
+    '/postcss.config.js'
+  ];
+  
+  for (const pattern of blockedPatterns) {
+    if (path.includes(pattern.toLowerCase())) {
+      console.warn(`[Security] Blocked configuration file access: ${originalPath} from IP: ${req.ip}`);
       return res.status(404).json({
         success: false,
         message: 'Not found'
       });
+    }
+  }
+  
+  // Block common source file extensions if accessed directly
+  const blockedExtensions = ['.jsx', '.tsx', '.ts', '.js'];
+  const pathLower = path.toLowerCase();
+  for (const ext of blockedExtensions) {
+    // Only block if it's a direct file access (not API routes)
+    if (pathLower.endsWith(ext) && !pathLower.startsWith('/api/')) {
+      // Allow if it's a built asset (in dist or assets folder)
+      if (!pathLower.includes('/dist/') && !pathLower.includes('/assets/') && !pathLower.includes('/build/')) {
+        console.warn(`[Security] Blocked source file access: ${originalPath} from IP: ${req.ip}`);
+        return res.status(404).json({
+          success: false,
+          message: 'Not found'
+        });
+      }
     }
   }
   

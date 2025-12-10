@@ -3,48 +3,191 @@ const db = require('../config/database');
 const { verifyAccessToken } = require('../utils/tokenUtils');
 
 // Verify JWT token (access token)
+// SECURITY FIX #2.7: Strict token validation - reject all invalid tokens
 const authenticateToken = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-    if (!token) {
+    
+    // SECURITY: Validate Authorization header format
+    if (!authHeader) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Authorization header required' 
+      });
+    }
+    
+    // SECURITY: Ensure Bearer format
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid authorization format. Expected: Bearer <token>' 
+      });
+    }
+    
+    const token = authHeader.split(' ')[1]; // Bearer TOKEN
+    
+    // SECURITY: Validate token exists and is not empty
+    if (!token || token.trim().length === 0) {
       return res.status(401).json({ 
         success: false, 
         message: 'Access token required' 
       });
     }
-
-    const decoded = verifyAccessToken(token);
     
-    // Verify user still exists and get current role
-    const userResult = await db.query(
-      'SELECT id, name, role, email FROM users WHERE id = $1 AND email = $2',
-      [decoded.userId, decoded.email]
-    );
+    // SECURITY: Basic token format validation (JWT has 3 parts separated by dots)
+    const tokenParts = token.split('.');
+    if (tokenParts.length !== 3) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid token format' 
+      });
+    }
+    
+    // SECURITY FIX #2.7: Strict token validation - reject ALL invalid tokens
+    // Ensure JWT_SECRET is configured
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim().length === 0) {
+      console.error('[Auth] CRITICAL: JWT_SECRET is not configured');
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Server configuration error' 
+      });
+    }
+    
+    // SECURITY: Verify token signature and expiration
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch (verifyError) {
+      // SECURITY: Explicitly reject ALL invalid tokens - no exceptions
+      // Log all token verification failures for security monitoring
+      console.warn('[Auth] Token verification failed:', {
+        error: verifyError.name,
+        message: verifyError.message,
+        path: req.path,
+        method: req.method,
+        ip: req.ip
+      });
+      
+      // Reject all JWT-related errors
+      if (verifyError.name === 'JsonWebTokenError') {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Invalid token - authentication failed' 
+        });
+      }
+      if (verifyError.name === 'TokenExpiredError') {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Token expired - please login again' 
+        });
+      }
+      if (verifyError.name === 'NotBeforeError') {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Token not yet valid' 
+        });
+      }
+      // SECURITY: Reject ANY other error during token verification
+      // This ensures that malformed tokens, wrong secrets, or any other issues result in rejection
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid token - authentication failed' 
+      });
+    }
+    
+    // SECURITY: Additional validation - ensure decoded token is not null/undefined
+    if (!decoded) {
+      console.warn('[Auth] Token decoded to null/undefined');
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid token - authentication failed' 
+      });
+    }
+    
+    // SECURITY: Validate decoded token structure - strict validation
+    if (!decoded.userId || typeof decoded.userId !== 'number' || decoded.userId <= 0) {
+      console.warn('[Auth] Invalid userId in token:', decoded.userId);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid token payload' 
+      });
+    }
+    
+    if (!decoded.email || typeof decoded.email !== 'string' || decoded.email.trim().length === 0) {
+      console.warn('[Auth] Invalid email in token');
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid token payload' 
+      });
+    }
+    
+    // SECURITY: Verify token type is access token (not refresh token)
+    if (decoded.type !== 'access') {
+      console.warn('[Auth] Wrong token type:', decoded.type);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid token type - access token required' 
+      });
+    }
+    
+    // SECURITY: Verify user still exists and get current role from database
+    // Use parameterized query to prevent SQL injection
+    let userResult;
+    try {
+      userResult = await db.query(
+        'SELECT id, name, role, email, is_active FROM users WHERE id = $1 AND email = $2',
+        [decoded.userId, decoded.email]
+      );
+    } catch (dbError) {
+      console.error('[Auth] Database error during user verification:', dbError);
+      return res.status(503).json({ 
+        success: false, 
+        message: 'Database connection error. Please try again.' 
+      });
+    }
 
-    if (userResult.rows.length === 0) {
+    // SECURITY: Strict validation - user must exist
+    if (!userResult || !userResult.rows || userResult.rows.length === 0) {
+      console.warn('[Auth] Token valid but user not found:', { 
+        userId: decoded.userId, 
+        email: decoded.email,
+        path: req.path,
+        method: req.method,
+        ip: req.ip
+      });
       return res.status(401).json({ 
         success: false, 
         message: 'Invalid token - user not found' 
       });
     }
+    
+    // SECURITY: Check if user account is active - reject deactivated accounts
+    if (userResult.rows[0].is_active === false) {
+      console.warn('[Auth] Attempted access with deactivated account:', {
+        userId: decoded.userId,
+        email: decoded.email,
+        path: req.path,
+        ip: req.ip
+      });
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Account is deactivated' 
+      });
+    }
+    
+    // SECURITY: Additional validation - ensure user data is valid
+    if (!userResult.rows[0].id || !userResult.rows[0].email) {
+      console.error('[Auth] Invalid user data retrieved from database');
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid user data' 
+      });
+    }
 
+    // SECURITY: Set user from database (not from token) to prevent role manipulation
     req.user = userResult.rows[0];
     next();
   } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid token' 
-      });
-    }
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Token expired' 
-      });
-    }
     // Handle database connection errors
     if (error.message && (
       error.message.includes('timeout') || 
@@ -59,9 +202,10 @@ const authenticateToken = async (req, res, next) => {
       });
     }
     console.error('Authentication error:', error);
-    return res.status(500).json({ 
+    // SECURITY: Don't expose error details in production
+    return res.status(401).json({ 
       success: false, 
-      message: 'Authentication failed',
+      message: 'Authentication failed - invalid token',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
