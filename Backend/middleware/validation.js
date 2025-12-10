@@ -52,8 +52,17 @@ const validateUserRegistration = [
       return value ? value.trim().toLowerCase() : value;
     }),
   body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long')
+    .custom((value) => {
+      // SECURITY FIX #12: Strong password policy
+      const { validatePasswordStrength } = require('../utils/passwordPolicy');
+      const validation = validatePasswordStrength(value);
+      if (!validation.isValid) {
+        throw new Error(validation.errors.join('. '));
+      }
+      return true;
+    }),
   body('role')
     .isIn(['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'])
     .withMessage('Role must be one of: Admin, Faculty, Resident, Psychiatric Welfare Officer'),

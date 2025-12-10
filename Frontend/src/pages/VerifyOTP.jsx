@@ -43,26 +43,27 @@ const VerifyOTP = () => {
     setError('');
 
     try {
-      const token = localStorage.getItem('resetToken');
-      if (!token) {
-        setError('Reset session expired. Please request a new OTP.');
-        navigate('/forgot-password');
-        return;
-      }
-
+      // SECURITY FIX: Token is stored in HttpOnly cookie by backend
+      // Backend will read from cookie, but we can send token as fallback if cookie fails
+      // Check if we have a token stored (from before the security fix)
+      const storedToken = localStorage.getItem('resetToken');
+      
       const response = await fetch('/api/users/verify-otp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token, otp }),
+        credentials: 'include', // Important: Include cookies in request
+        body: JSON.stringify({ 
+          otp,
+          ...(storedToken && { token: storedToken }) // Fallback: send token if available
+        }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        // Store verified token for password reset
-        localStorage.setItem('resetToken', data.data.token);
+        // Token remains in HttpOnly cookie, no need to store client-side
         navigate('/reset-password');
       } else {
         setError(data.message || 'Invalid OTP. Please try again.');
@@ -102,10 +103,7 @@ const VerifyOTP = () => {
         setError('');
         setTimeLeft(900); // Reset timer
         setOtp('');
-        // Store the new token
-        if (data.data?.token) {
-          localStorage.setItem('resetToken', data.data.token);
-        }
+        // SECURITY FIX: Token is stored in HttpOnly cookie by backend, not in localStorage
       } else {
         setError(data.message || 'Failed to resend OTP');
       }

@@ -21,6 +21,7 @@ const ForgotPassword = () => {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Important: Include cookies in request
         body: JSON.stringify({ email }),
       });
 
@@ -28,10 +29,8 @@ const ForgotPassword = () => {
 
       if (data.success) {
         setIsSuccess(true);
-        // Store the token for the next step
-        if (data.data?.token) {
-          localStorage.setItem('resetToken', data.data.token);
-        }
+        // SECURITY FIX: Token is stored in HttpOnly cookie by backend, not in localStorage
+        // No need to store token client-side
       } else {
         setError(data.message || 'Failed to send reset email');
       }
@@ -52,6 +51,7 @@ const ForgotPassword = () => {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Important: Include cookies in request
         body: JSON.stringify({ email }),
       });
 
@@ -59,10 +59,7 @@ const ForgotPassword = () => {
 
       if (data.success) {
         setError('');
-        // Store the new token
-        if (data.data?.token) {
-          localStorage.setItem('resetToken', data.data.token);
-        }
+        // SECURITY FIX: Token is stored in HttpOnly cookie by backend, not in localStorage
       } else {
         setError(data.message || 'Failed to resend OTP');
       }

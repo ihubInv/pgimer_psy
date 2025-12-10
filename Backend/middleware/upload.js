@@ -51,6 +51,7 @@ const storage = multer.diskStorage({
 });
 
 // File filter - allow images and common document types
+// SECURITY FIX #4: Enhanced file validation to prevent malicious file uploads
 const fileFilter = (req, file, cb) => {
   // Allow images and common document types
   const allowedMimes = [
@@ -65,11 +66,36 @@ const fileFilter = (req, file, cb) => {
     'text/plain'
   ];
 
-  if (allowedMimes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} is not allowed. Allowed types: images (jpeg, jpg, png, gif, webp), PDF, Word documents, and text files.`), false);
+  // SECURITY: Validate file extension matches MIME type
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.txt'];
+  
+  // Check if extension is allowed
+  if (!allowedExtensions.includes(ext)) {
+    return cb(new Error(`File extension ${ext} is not allowed. Allowed extensions: ${allowedExtensions.join(', ')}`), false);
   }
+
+  // Check if MIME type is allowed
+  if (!allowedMimes.includes(file.mimetype)) {
+    return cb(new Error(`File type ${file.mimetype} is not allowed. Allowed types: images (jpeg, jpg, png, gif, webp), PDF, Word documents, and text files.`), false);
+  }
+
+  // SECURITY: Additional validation - check for suspicious file names
+  const suspiciousPatterns = [
+    /\.\./,           // Directory traversal
+    /<script/i,        // XSS attempts
+    /javascript:/i,    // JavaScript protocol
+    /onerror=/i,       // Event handlers
+    /onload=/i
+  ];
+
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(file.originalname)) {
+      return cb(new Error('File name contains suspicious characters'), false);
+    }
+  }
+
+  cb(null, true);
 };
 
 // Configure multer

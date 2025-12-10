@@ -9,6 +9,7 @@ class PasswordResetToken {
     this.otp = data.otp;
     this.expires_at = data.expires_at;
     this.used = data.used;
+    this.otp_verified = data.otp_verified || false;
     this.created_at = data.created_at;
   }
 
@@ -49,14 +50,14 @@ class PasswordResetToken {
     }
   }
 
-  // Find a valid token by token string
+  // Find a valid token by token string (for password reset - requires OTP verification)
   static async findByToken(token) {
     try {
       const result = await db.query(
         `SELECT prt.*, u.name, u.email 
          FROM password_reset_tokens prt 
          JOIN users u ON prt.user_id = u.id 
-         WHERE prt.token = $1 AND prt.used = false AND prt.expires_at > NOW()`,
+         WHERE prt.token = $1 AND prt.used = false AND prt.expires_at > NOW() AND prt.otp_verified = true`,
         [token]
       );
 
@@ -116,7 +117,14 @@ class PasswordResetToken {
         return null;
       }
 
+      // Mark OTP as verified in the database
+      await db.query(
+        'UPDATE password_reset_tokens SET otp_verified = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [result.rows[0].id]
+      );
+
       const tokenInstance = new PasswordResetToken(result.rows[0]);
+      tokenInstance.otp_verified = true;
       tokenInstance.user_name = result.rows[0].name;
       tokenInstance.user_email = result.rows[0].email;
       return tokenInstance;

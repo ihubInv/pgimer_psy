@@ -20,10 +20,11 @@ import {
   FiChevronRight,
   FiMapPin,
 } from 'react-icons/fi';
-import { selectCurrentUser, logout } from '../features/auth/authSlice';
+import { selectCurrentUser, logout, updateUser } from '../features/auth/authSlice';
 import { isMWO } from '../utils/constants';
 import { apiSlice } from '../app/api/apiSlice';
 import { useSession } from '../contexts/SessionContext';
+import { useGetProfileQuery } from '../features/auth/authApiSlice';
 import PGI_Logo from '../assets/PGI_Logo.png';
 
 // MWO Sidebar Navigation Component
@@ -189,7 +190,20 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
   const user = useSelector(selectCurrentUser);
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { handleLogout: handleSessionLogout } = useSession();
+  
+  // Fetch profile if role is missing (fallback)
+  const { data: profileData } = useGetProfileQuery(undefined, {
+    skip: !user || !!user?.role, // Skip if user doesn't exist or role is already present
+  });
+
+  // Update user with role from profile if missing
+  useEffect(() => {
+    if (user && !user.role && profileData?.data?.user?.role) {
+      dispatch(updateUser({ role: profileData.data.user.role }));
+    }
+  }, [user, profileData, dispatch]);
 
   const handleLogout = async () => {
     try {
@@ -359,15 +373,13 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
               <MWONavigation onClose={onClose} isMinimized={isMinimized} />
             ) : (
               // Other roles navigation (Admin, JR, SR)
-              (() => {
-                const location = window.location.pathname;
-                const [searchParams] = useSearchParams();
-                const editParam = searchParams.get('edit');
-                const modeParam = searchParams.get('mode');
-                
-                return filteredNavigation.map((item) => {
+              filteredNavigation.length > 0 ? (
+                filteredNavigation.map((item) => {
                   // Special handling for "Today's Patients" and "Patients" tabs based on URL params
                   let isActive = false;
+                  const currentLocation = location.pathname;
+                  const editParam = searchParams.get('edit');
+                  const modeParam = searchParams.get('mode');
                   
                   if (item.to === '/clinical-today-patients') {
                     // "Today's Patients" should be active when:
@@ -376,13 +388,13 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                     // - On patient detail page with edit=false&mode=view (viewing from Today's Patients)
                     // - On Create Proforma page
                     // - On Prescribe Medication page
-                    const isPatientDetailPage = location.startsWith('/patients/') && location !== '/patients/new' && location !== '/patients/select';
+                    const isPatientDetailPage = currentLocation.startsWith('/patients/') && currentLocation !== '/patients/new' && currentLocation !== '/patients/select';
                     const isCreateMode = editParam === 'true' && modeParam === 'create';
                     const isViewMode = editParam === 'false' && modeParam === 'view';
                     
-                    isActive = location === item.to || 
-                               location === '/clinical/new' ||
-                               location.startsWith('/prescriptions') ||
+                    isActive = currentLocation === item.to || 
+                               currentLocation === '/clinical/new' ||
+                               currentLocation.startsWith('/prescriptions') ||
                                (isPatientDetailPage && (isCreateMode || isViewMode));
                   } else if (item.to === '/patients') {
                     // "Patients" tab should be active when:
@@ -390,42 +402,48 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                     // - On patient detail page with edit=true (without mode=create) - editing patient
                     // - On patient detail page with edit=false (without mode=view) - viewing from All Patients
                     // - On patient detail page without edit params
-                    const isPatientDetailPage = location.startsWith('/patients/') && location !== '/patients/new' && location !== '/patients/select';
+                    const isPatientDetailPage = currentLocation.startsWith('/patients/') && currentLocation !== '/patients/new' && currentLocation !== '/patients/select';
                     const isEditMode = editParam === 'true' && modeParam !== 'create';
                     const isViewFromAllPatients = editParam === 'false' && modeParam !== 'view';
                     const hasNoEditParams = !editParam;
                     
-                    isActive = location === item.to || 
+                    isActive = currentLocation === item.to || 
                                (isPatientDetailPage && (isEditMode || isViewFromAllPatients || hasNoEditParams));
                   } else {
                     // For other routes, use standard matching
-                    isActive = location === item.to || location.startsWith(item.to + '/');
+                    isActive = currentLocation === item.to || currentLocation.startsWith(item.to + '/');
                   }
 
-                return (
-                  <NavLink
-                    key={item.name}
-                    to={item.to}
-                    onClick={onClose}
-                    className={`group flex items-center ${isMinimized ? 'justify-center px-2' : 'px-4'} py-3.5 text-sm font-medium rounded-xl transition-all duration-200 ${
-                      isActive
-                        ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30'
-                        : 'text-gray-700 hover:bg-white/40 hover:text-primary-700 hover:shadow-md'
-                    }`}
-                    title={isMinimized ? item.name : ''}
-                  >
-                    <div className={`p-2 rounded-lg ${isMinimized ? '' : 'mr-3'} transition-colors ${
-                      isActive
-                        ? 'bg-white/20'
-                        : 'bg-gray-100 group-hover:bg-primary-100'
-                    }`}>
-                      <item.icon className="h-5 w-5" />
-                    </div>
-                    {!isMinimized && <span>{item.name}</span>}
-                  </NavLink>
-                );
-              })
-              })()
+                  return (
+                    <NavLink
+                      key={item.name}
+                      to={item.to}
+                      onClick={onClose}
+                      className={`group flex items-center ${isMinimized ? 'justify-center px-2' : 'px-4'} py-3.5 text-sm font-medium rounded-xl transition-all duration-200 ${
+                        isActive
+                          ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30'
+                          : 'text-gray-700 hover:bg-white/40 hover:text-primary-700 hover:shadow-md'
+                      }`}
+                      title={isMinimized ? item.name : ''}
+                    >
+                      <div className={`p-2 rounded-lg ${isMinimized ? '' : 'mr-3'} transition-colors ${
+                        isActive
+                          ? 'bg-white/20'
+                          : 'bg-gray-100 group-hover:bg-primary-100'
+                      }`}>
+                        <item.icon className="h-5 w-5" />
+                      </div>
+                      {!isMinimized && <span>{item.name}</span>}
+                    </NavLink>
+                  );
+                })
+              ) : (
+                // Fallback: Show message if no navigation items match user role
+                <div className="text-center text-gray-500 text-sm py-8">
+                  <p>No menu items available</p>
+                  <p className="text-xs mt-2">Role: {user?.role || 'Unknown'}</p>
+                </div>
+              )
             )}
           </nav>
 

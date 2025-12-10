@@ -3145,7 +3145,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                   Local Address
                                 </label>
                                 <p className="text-base font-medium text-gray-900">{formData.local_address || 'N/A'}</p>
-                          </div>
+                              </div>
                             </div>
                             <div className="relative">
                               <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>

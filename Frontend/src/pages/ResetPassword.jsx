@@ -17,11 +17,9 @@ const ResetPassword = () => {
   const [passwordErrors, setPasswordErrors] = useState([]);
 
   useEffect(() => {
-    // Check if user has a valid reset token
-    const token = localStorage.getItem('resetToken');
-    if (!token) {
-      navigate('/forgot-password');
-    }
+    // SECURITY FIX: Token is stored in HttpOnly cookie, not localStorage
+    // No need to check localStorage - backend will validate cookie
+    // If cookie is missing, backend will return error
   }, [navigate]);
 
   const validatePassword = (password) => {
@@ -78,20 +76,15 @@ const ResetPassword = () => {
     setIsLoading(true);
 
     try {
-      const token = localStorage.getItem('resetToken');
-      if (!token) {
-        setError('Reset session expired. Please start over.');
-        navigate('/forgot-password');
-        return;
-      }
-
+      // SECURITY FIX: Token is stored in HttpOnly cookie by backend, not in localStorage
+      // No need to send token in request body - backend reads from cookie
       const response = await fetch('/api/users/reset-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Important: Include cookies in request
         body: JSON.stringify({
-          token,
           newPassword: formData.newPassword
         }),
       });
@@ -100,9 +93,7 @@ const ResetPassword = () => {
 
       if (data.success) {
         setIsSuccess(true);
-        // Clear stored tokens
-        localStorage.removeItem('resetToken');
-        localStorage.removeItem('resetEmail');
+        // Cookie is cleared by backend after successful reset
       } else {
         setError(data.message || 'Failed to reset password');
       }

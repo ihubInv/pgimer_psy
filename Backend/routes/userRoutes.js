@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const UserController = require('../controllers/userController');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const {
@@ -8,6 +9,18 @@ const {
   validateId,
   validatePagination
 } = require('../middleware/validation');
+
+// SECURITY FIX #15: Rate limiting for OTP generation endpoints
+const otpRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 3, // Maximum 3 OTP requests per minute per IP
+  message: {
+    success: false,
+    message: 'Too many OTP requests. Please wait 60 seconds before requesting another OTP.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * @swagger
@@ -198,7 +211,9 @@ const {
  *       500:
  *         description: Server error
  */
-router.post('/register', validateUserRegistration, UserController.register);
+// SECURITY FIX #7 & #11: User registration requires admin authentication
+// Only admins can create new user accounts to prevent unauthorized account creation
+router.post('/register', authenticateToken, requireAdmin, validateUserRegistration, UserController.register);
 
 /**
  * @swagger
@@ -389,7 +404,7 @@ router.post('/verify-login-otp', UserController.verifyLoginOTP);
  *       500:
  *         description: Server error
  */
-router.post('/resend-login-otp', UserController.resendLoginOTP);
+router.post('/resend-login-otp', otpRateLimiter, UserController.resendLoginOTP);
 
 /**
  * @swagger
@@ -453,7 +468,8 @@ router.post('/resend-login-otp', UserController.resendLoginOTP);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/forgot-password', UserController.forgotPassword);
+// SECURITY FIX #15: Apply rate limiting to OTP generation endpoint
+router.post('/forgot-password', otpRateLimiter, UserController.forgotPassword);
 
 /**
  * @swagger

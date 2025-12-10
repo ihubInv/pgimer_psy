@@ -20,6 +20,9 @@ class User {
     this.updated_at = data.updated_at;
     this.current_room = data.current_room || null;
     this.room_assignment_time = data.room_assignment_time || null;
+    // SECURITY FIX #6: Account lockout fields
+    this.failed_login_attempts = data.failed_login_attempts || 0;
+    this.account_locked_until = data.account_locked_until || null;
   }
 
   // Create a new user

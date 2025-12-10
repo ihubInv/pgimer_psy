@@ -49,6 +49,7 @@ class UserController {
   }
 
   // Login user - Conditional 2FA based on user settings
+  // SECURITY FIX #6: Account lockout after failed attempts
   static async login(req, res) {
     try {
       const { email, password } = req.body;
@@ -62,6 +63,25 @@ class UserController {
         });
       }
 
+      // SECURITY FIX #6: Check if account is locked
+      if (user.account_locked_until) {
+        const lockUntil = new Date(user.account_locked_until);
+        const now = new Date();
+        if (lockUntil > now) {
+          const minutesRemaining = Math.ceil((lockUntil - now) / 1000 / 60);
+          return res.status(423).json({
+            success: false,
+            message: `Account is temporarily locked due to multiple failed login attempts. Please try again in ${minutesRemaining} minute(s).`
+          });
+        } else {
+          // Lock period expired, reset failed attempts
+          await db.query(
+            'UPDATE users SET failed_login_attempts = 0, account_locked_until = NULL WHERE id = $1',
+            [user.id]
+          );
+        }
+      }
+
       // Check if user is active
       if (!user.is_active) {
         return res.status(401).json({
@@ -73,11 +93,41 @@ class UserController {
       // Verify password
       const isValidPassword = await user.verifyPassword(password);
       if (!isValidPassword) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid email or password'
-        });
+        // SECURITY FIX #6: Increment failed login attempts
+        const failedAttempts = (user.failed_login_attempts || 0) + 1;
+        const maxAttempts = 5;
+        const lockoutMinutes = 30;
+
+        if (failedAttempts >= maxAttempts) {
+          // Lock account for 30 minutes
+          const lockUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
+          await db.query(
+            'UPDATE users SET failed_login_attempts = $1, account_locked_until = $2 WHERE id = $3',
+            [failedAttempts, lockUntil, user.id]
+          );
+          return res.status(423).json({
+            success: false,
+            message: `Account has been temporarily locked due to ${maxAttempts} failed login attempts. Please try again in ${lockoutMinutes} minutes.`
+          });
+        } else {
+          // Update failed attempts count
+          await db.query(
+            'UPDATE users SET failed_login_attempts = $1 WHERE id = $2',
+            [failedAttempts, user.id]
+          );
+          const remainingAttempts = maxAttempts - failedAttempts;
+          return res.status(401).json({
+            success: false,
+            message: `Invalid email or password. ${remainingAttempts} attempt(s) remaining before account lockout.`
+          });
+        }
       }
+
+      // SECURITY FIX #6: Reset failed attempts on successful password verification
+      await db.query(
+        'UPDATE users SET failed_login_attempts = 0, account_locked_until = NULL WHERE id = $1',
+        [user.id]
+      );
 
       // Check if 2FA is enabled for this user
       if (user.two_factor_enabled) {
@@ -306,6 +356,17 @@ class UserController {
   static async changePassword(req, res) {
     try {
       const { currentPassword, newPassword } = req.body;
+
+      // SECURITY FIX #12: Validate password strength
+      const { validatePasswordStrength } = require('../utils/passwordPolicy');
+      const passwordValidation = validatePasswordStrength(newPassword);
+      if (!passwordValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password does not meet requirements',
+          errors: passwordValidation.errors
+        });
+      }
 
       const user = await User.findById(req.user.id);
       if (!user) {
@@ -943,13 +1004,20 @@ class UserController {
       try {
         await sendEmail(user.email, 'passwordResetOTP', { userName: user.name, otp: resetToken.otp });
         
+        // SECURITY FIX: Store token in HttpOnly cookie instead of exposing in response
+        // This prevents token theft via XSS or network interception
+        res.cookie('passwordResetToken', resetToken.token, {
+          httpOnly: true,
+          secure: false, // Set to true when using HTTPS
+          sameSite: 'lax', // Changed from 'strict' to allow cross-origin requests
+          maxAge: 15 * 60 * 1000, // 15 minutes (matches token expiration)
+          path: '/' // Ensure cookie is available for all paths
+        });
+        
         res.json({
           success: true,
-          message: 'If an account with this email exists, a password reset OTP has been sent.',
-          data: {
-            token: resetToken.token, // Send token for frontend to use
-            expires_at: resetToken.expires_at
-          }
+          message: 'If an account with this email exists, a password reset OTP has been sent.'
+          // Token is stored in HttpOnly cookie, not exposed in response
         });
       } catch (emailError) {
         console.error('Email sending failed:', emailError);
@@ -972,27 +1040,66 @@ class UserController {
   // Verify OTP for password reset
   static async verifyOTP(req, res) {
     try {
-      const { token, otp } = req.body;
+      // SECURITY FIX: Get token from HttpOnly cookie (preferred) or request body (fallback for debugging)
+      let token = req.cookies?.passwordResetToken;
+      const { token: bodyToken, otp } = req.body;
+
+      // Fallback: If cookie is not available, use token from body (for debugging)
+      // This helps identify if the issue is cookie-related
+      if (!token && bodyToken) {
+        console.warn('[verifyOTP] Token not found in cookie, using token from request body (fallback mode)');
+        token = bodyToken;
+      }
+
+      // Debug logging
+      console.log('[verifyOTP] Cookies received:', Object.keys(req.cookies || {}));
+      console.log('[verifyOTP] Token from cookie:', token ? 'present' : 'missing');
+      console.log('[verifyOTP] OTP received:', otp);
+
+      if (!token) {
+        return res.status(400).json({
+          success: false,
+          message: 'Reset session expired. Please request a new password reset.'
+        });
+      }
+
+      if (!otp || otp.length !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid 6-digit OTP'
+        });
+      }
 
       // Verify OTP
       const resetToken = await PasswordResetToken.verifyOTP(token, otp);
       if (!resetToken) {
+        // Clear invalid token cookie
+        res.clearCookie('passwordResetToken');
+        console.log('[verifyOTP] OTP verification failed. Token:', token.substring(0, 10) + '...', 'OTP:', otp);
         return res.status(400).json({
           success: false,
-          message: 'Invalid or expired OTP'
+          message: 'Invalid or expired OTP. Please check your OTP and try again.'
         });
       }
 
+      // If token was from body (fallback), set it in cookie for next step
+      if (!req.cookies?.passwordResetToken && bodyToken) {
+        res.cookie('passwordResetToken', token, {
+          httpOnly: true,
+          secure: false,
+          sameSite: 'lax',
+          maxAge: 15 * 60 * 1000,
+          path: '/'
+        });
+      }
+
+      // Token is already in cookie, no need to send it in response
+      // Cookie will be used for password reset
       res.json({
         success: true,
-        message: 'OTP verified successfully',
-        data: {
-          token: resetToken.token,
-          user: {
-            name: resetToken.user_name,
-            email: resetToken.user_email
-          }
-        }
+        message: 'OTP verified successfully'
+        // Token remains in HttpOnly cookie, not exposed in response
+        // User info removed for security
       });
 
     } catch (error) {
@@ -1008,14 +1115,47 @@ class UserController {
   // Reset password with verified token
   static async resetPassword(req, res) {
     try {
-      const { token, newPassword } = req.body;
+      // SECURITY FIX: Get token from HttpOnly cookie instead of request body
+      const token = req.cookies?.passwordResetToken;
+      const { newPassword } = req.body;
 
-      // Find valid token
+      if (!token) {
+        return res.status(400).json({
+          success: false,
+          message: 'Reset session expired. Please complete OTP verification first.'
+        });
+      }
+
+      // SECURITY FIX #2: Ensure token is NOT a JWT access token
+      // Reset tokens are stored in database, not JWT tokens
+      // This prevents using a user's access token to reset their password
+      const jwt = require('jsonwebtoken');
+      try {
+        // If token can be decoded as JWT, reject it (reset tokens are not JWTs)
+        jwt.verify(token, process.env.JWT_SECRET);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid reset token format. Please use the token from password reset email.'
+        });
+      } catch (jwtError) {
+        // Token is not a JWT, which is expected for reset tokens - continue
+      }
+
+      // SECURITY FIX #1: Find valid token that has been verified via OTP
+      // This prevents bypassing OTP verification by manipulating client responses
       const resetToken = await PasswordResetToken.findByToken(token);
       if (!resetToken) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid or expired reset token'
+          message: 'Invalid or expired reset token. Please complete OTP verification first.'
+        });
+      }
+
+      // Additional security check: Ensure OTP was verified
+      if (!resetToken.otp_verified) {
+        return res.status(400).json({
+          success: false,
+          message: 'OTP verification required before password reset'
         });
       }
 
@@ -1028,11 +1168,25 @@ class UserController {
         });
       }
 
+      // SECURITY FIX #12: Validate password strength before reset
+      const { validatePasswordStrength } = require('../utils/passwordPolicy');
+      const passwordValidation = validatePasswordStrength(newPassword);
+      if (!passwordValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password does not meet requirements',
+          errors: passwordValidation.errors
+        });
+      }
+
       // Update password
       await user.updatePassword(newPassword);
 
       // Mark token as used
       await resetToken.markAsUsed();
+
+      // SECURITY FIX: Clear the reset token cookie after successful password reset
+      res.clearCookie('passwordResetToken');
 
       // Send success email
       try {
@@ -1097,6 +1251,7 @@ class UserController {
   }
 
   // Disable 2FA for user
+  // SECURITY FIX #14: Require OTP verification before disabling 2FA
   static async disable2FA(req, res) {
     try {
       const user = await User.findById(req.user.id);
@@ -1114,6 +1269,27 @@ class UserController {
           message: '2FA is already disabled for this account'
         });
       }
+
+      // SECURITY: Require OTP verification to disable 2FA
+      const { otp } = req.body;
+      if (!otp) {
+        return res.status(400).json({
+          success: false,
+          message: 'OTP verification is required to disable 2FA. Please provide the OTP from your authenticator app or email.'
+        });
+      }
+
+      // Verify OTP using login OTP system
+      const loginOTP = await LoginOTP.verifyOTP(user.id, otp);
+      if (!loginOTP) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid or expired OTP. Please provide a valid OTP to disable 2FA.'
+        });
+      }
+
+      // Mark OTP as used
+      await loginOTP.markAsUsed();
 
       // Disable 2FA
       await user.disable2FA();
@@ -1234,10 +1410,13 @@ class UserController {
       const ipAddress = getIpAddress(req);
       const refreshTokenRecord = await RefreshToken.create(user.id, deviceInfo, ipAddress);
 
+      // SECURITY FIX #20: Set Secure flag based on HTTPS (DISABLED - using HTTP)
       // Set refresh token in HttpOnly cookie
+      // const isHTTPS = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https';
+      const isHTTPS = false; // Using HTTP, not HTTPS
       res.cookie('refreshToken', refreshTokenRecord.token, {
         httpOnly: true,
-        secure: false, // Set to false for HTTP (not HTTPS)
+        secure: false, // Set to false for HTTP
         sameSite: 'lax', // Changed from 'strict' to allow cross-origin requests
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
@@ -1255,11 +1434,23 @@ class UserController {
         redirectUrl = '/patients';
       }
 
+      // SECURITY FIX #3: Role is included in response for frontend navigation
+      // Role is also in JWT token for authorization, but we include it here for UI purposes
+      // All authorization is still validated server-side from database
+      const userResponse = user.toJSON();
+      
       res.json({
         success: true,
         message: 'Login successful',
         data: {
-          user: user.toJSON(),
+          user: {
+            id: userResponse.id,
+            name: userResponse.name,
+            email: userResponse.email,
+            role: userResponse.role, // Include role for frontend navigation
+            two_factor_enabled: userResponse.two_factor_enabled,
+            created_at: userResponse.created_at
+          },
           accessToken,
           expiresIn: 600, // 10 minutes in seconds (consistent with session timeout)
           redirectUrl: redirectUrl // Add redirect URL for frontend

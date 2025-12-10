@@ -27,6 +27,18 @@ const roomRoutes = require('./routes/roomRoutes');
 const app = express();
 const PORT = process.env.PORT || 8000;
 const FRONTEND_PORT = process.env.FRONTEND_PORT || 8001;
+
+// SECURITY FIX #5: HTTPS redirect in production (DISABLED - using HTTP)
+// const httpsRedirect = require('./middleware/httpsRedirect');
+// if (process.env.NODE_ENV === 'production') {
+//   app.use(httpsRedirect);
+// }
+
+// SECURITY FIX #9: Web Application Firewall (WAF) middleware
+// Provides application-level protection against common attacks
+const wafMiddleware = require('./middleware/waf');
+app.use(wafMiddleware);
+
 // Security middleware - configured to allow Google Fonts
 app.use(helmet({
   contentSecurityPolicy: {
@@ -64,10 +76,21 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 
-// Rate limiting - DISABLED for unrestricted API access
-// Uncomment and configure below if you need to enable rate limiting in production
-/*
-const limiter = rateLimit({
+// SECURITY FIX #15: Rate limiting for OTP generation endpoints to prevent flooding
+const otpRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 3, // Maximum 3 OTP requests per minute per IP
+  message: {
+    success: false,
+    message: 'Too many OTP requests. Please wait 60 seconds before requesting another OTP.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+});
+
+// General API rate limiting (more lenient)
+const apiRateLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // limit each IP to 1000 requests per windowMs
   message: {
@@ -78,8 +101,8 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use('/api/', limiter);
-*/
+// Apply general rate limiting to all API routes
+app.use('/api/', apiRateLimiter);
 
 // Compression middleware
 app.use(compression());
@@ -196,7 +219,9 @@ app.use('/api-docs', (req, res, next) => {
   res.removeHeader('Content-Security-Policy');
   res.removeHeader('X-Content-Type-Options');
   res.removeHeader('X-Frame-Options');
-  res.removeHeader('X-XSS-Protection');
+  // SECURITY FIX #18: Set X-XSS-Protection header properly
+  // Modern browsers have built-in XSS protection, but we set it for legacy support
+  res.setHeader('X-XSS-Protection', '1; mode=block');
   res.removeHeader('Cross-Origin-Opener-Policy');
   res.removeHeader('Origin-Agent-Cluster');
   
@@ -261,29 +286,38 @@ app.get('/', (req, res) => {
 });
 
 
-// 404 handler
+// SECURITY FIX #8 & #16: Block access to sensitive paths and prevent information leakage
+// Block /src paths and configuration files
+app.use((req, res, next) => {
+  const path = req.path.toLowerCase();
+  
+  // Block frontend source code paths
+  if (path.startsWith('/src/') || path.includes('/src/')) {
+    return res.status(404).json({
+      success: false,
+      message: 'Not found'
+    });
+  }
+  
+  // Block configuration files
+  const blockedFiles = ['/package.json', '/package-lock.json', '/.env', '/.git', '/node_modules'];
+  for (const file of blockedFiles) {
+    if (path.includes(file)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Not found'
+      });
+    }
+  }
+  
+  next();
+});
+
+// 404 handler - SECURITY FIX #19: Don't expose route information
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route ${req.originalUrl} not found`,
-    availableRoutes: [
-      'GET /',
-      'GET /health',
-      'GET /api-docs',
-      'POST /api/users/register',
-      'POST /api/users/login',
-      'GET /api/users/profile',
-      'GET /api/patients',
-      'POST /api/patients',
-      'GET /api/outpatient-records',
-      'POST /api/outpatient-records',
-      'GET /api/clinical-proformas',
-      'POST /api/clinical-proformas',
-      'GET /api/adl-files',
-      'POST /api/adl-files',
-      'GET /api/prescriptions',
-      'POST /api/prescriptions',
-    ]
+    message: 'Route not found'
   });
 });
 
@@ -333,11 +367,13 @@ app.use((err, req, res, next) => {
     });
   }
 
+  // SECURITY FIX #19: Generic error messages in production to prevent information leakage
   // Default error response
+  const isDevelopment = process.env.NODE_ENV === 'development';
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Internal Server Error',
-    error: process.env.NODE_ENV === 'development' ? err.stack : 'Something went wrong'
+    message: isDevelopment ? (err.message || 'Internal Server Error') : 'An unexpected error occurred. Please try again later.',
+    error: isDevelopment ? err.stack : undefined // Never expose stack traces in production
   });
 });
 
