@@ -1406,6 +1406,17 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     return proformaDate && proformaDate === todayDateString;
   });
   
+  // Get the latest proforma for current visit (most recent today's proforma)
+  // This is used to identify which visit is currently being edited/viewed
+  // Must be defined before trulyPastProformas which uses it
+  const currentVisitProforma = todayProformas.length > 0 
+    ? todayProformas.sort((a, b) => {
+        const dateA = new Date(a.visit_date || a.created_at || 0);
+        const dateB = new Date(b.visit_date || b.created_at || 0);
+        return dateB - dateA; // Most recent first
+      })[0]
+    : null;
+  
   // For existing patients, show ALL proformas in history (including today's) from registration date
   // For new patients, only show past proformas (exclude today's)
   const pastProformas = isExistingPatient
@@ -1418,27 +1429,25 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         return proformaDate !== todayDateString;
       });
 
-  // For Past History card: exclude today's proformas (only show truly past visits)
+  // For Past History card: show all proformas except the one currently being edited
+  // This ensures that newly created visits appear in Past History once they're saved
+  // We exclude only the currentVisitProforma (if it exists) to avoid showing it in both sections
   const trulyPastProformas = patientProformas.filter(proforma => {
     if (!proforma) return false;
-    const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
-    if (!proformaDate) return true; // Include proformas without date as past
-    return proformaDate !== todayDateString;
+    // Exclude the current visit proforma if it exists (to avoid duplication)
+    // All other proformas (including today's saved visits) should appear in Past History
+    if (currentVisitProforma && proforma.id === currentVisitProforma.id) {
+      return false; // Exclude current visit being edited
+    }
+    return true; // Include all other proformas (past and today's saved visits)
   });
-
-  // Get the latest proforma for current visit (most recent today's proforma)
-  const currentVisitProforma = todayProformas.length > 0 
-    ? todayProformas.sort((a, b) => {
-        const dateA = new Date(a.visit_date || a.created_at || 0);
-        const dateB = new Date(b.visit_date || b.created_at || 0);
-        return dateB - dateA; // Most recent first
-      })[0]
-    : null;
 
   // Get the last visit's proforma for pre-filling form (for existing patients)
   // This is used as reference only - will create a NEW record when submitted
-  const lastVisitProforma = trulyPastProformas.length > 0
-    ? trulyPastProformas.sort((a, b) => {
+  // IMPORTANT: Use ALL proformas (including today's) to get the most recent one for pre-filling
+  // We want to pre-fill with the most recent visit data, even if it's today's visit
+  const lastVisitProforma = patientProformas.length > 0
+    ? [...patientProformas].sort((a, b) => {
         const dateA = new Date(a.visit_date || a.created_at || 0);
         const dateB = new Date(b.visit_date || b.created_at || 0);
         return dateB - dateA; // Most recent first
@@ -1457,6 +1466,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
   // State to control showing form (only show if no current visit proforma or editing)
   const [showProformaForm, setShowProformaForm] = useState(() => {
+    // If mode=create is passed, always show form directly
+    if (isCreateMode) {
+      return true;
+    }
     // If there's a current visit proforma, don't show form initially
     // Otherwise, show form for new proforma
     // For new patients, always show form initially
@@ -1472,6 +1485,15 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
   // Update showProformaForm when currentVisitProforma changes (after data loads)
   useEffect(() => {
+    // If mode=create is passed (from Today's Patients), always show form directly
+    if (isCreateMode) {
+      setSelectedProformaId(null);
+      setShowProformaForm(true);
+      // Ensure the clinical proforma card is expanded
+      setExpandedCards(prev => ({ ...prev, clinical: true }));
+      return;
+    }
+    
     if (currentVisitProforma?.id) {
       // If current visit proforma exists, don't show form initially
       // User must click "Create New" to open blank form
@@ -1481,7 +1503,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       setSelectedProformaId(null);
       setShowProformaForm(true);
     }
-  }, [currentVisitProforma]);
+  }, [currentVisitProforma, isCreateMode]);
 
   // Ensure form is shown for new patients without history
   useEffect(() => {
@@ -3524,6 +3546,51 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
             treatment_prescribed: selectedProforma.treatment_prescribed || '',
             mse_delusions: selectedProforma.mse_delusions || '',
             adl_reasoning: selectedProforma.adl_reasoning || '',
+          } : isCreateMode ? {
+            // CASE 2A: mode=create from Today's Patients - Always use blank/empty form
+            // This ensures a completely fresh form with no pre-filled data
+            patient_id: patient?.id?.toString() || '',
+            visit_date: new Date().toISOString().split('T')[0], // Always use today's date for new visit
+            visit_type: 'follow_up', // Existing patients are always follow-ups
+            room_no: patient?.room_no || '',
+            assigned_doctor: patient?.assigned_doctor_id?.toString() || '',
+            informant_present: true,
+            nature_of_information: '',
+            onset_duration: '',
+            course: '',
+            precipitating_factor: '',
+            illness_duration: '',
+            current_episode_since: '',
+            mood: [],
+            behaviour: [],
+            speech: [],
+            thought: [],
+            perception: [],
+            somatic: [],
+            bio_functions: [],
+            adjustment: [],
+            cognitive_function: [],
+            fits: [],
+            sexual_problem: [],
+            substance_use: [],
+            past_history: '',
+            family_history: '',
+            associated_medical_surgical: [],
+            mse_behaviour: [],
+            mse_affect: [],
+            mse_thought: '',
+            mse_delusions: '',
+            mse_perception: [],
+            mse_cognitive_function: [],
+            gpe: '',
+            diagnosis: '',
+            icd_code: '',
+            disposal: '',
+            workup_appointment: '',
+            referred_to: '',
+            treatment_prescribed: '',
+            doctor_decision: 'simple_case',
+            // NOTE: No id field - this ensures a NEW record is created on submit
           } : lastVisitProforma && !isNewPatientWithNoHistory ? {
             // CASE 2: Existing patient - Pre-fill with last visit's data (as reference only)
             // CRITICAL: Do NOT include id - this ensures a NEW record is created on submit

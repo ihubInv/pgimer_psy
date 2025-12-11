@@ -194,15 +194,16 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   // Get today's date string for filtering
   const todayDateString = toISTDateString(new Date());
 
-  // For Past History card: exclude today's proformas (only show truly past visits)
+  // For Past History card: show all proformas (including today's saved visits)
+  // This ensures that newly created visits appear in Past History once they're saved
+  // In view mode, we show all proformas since there's no "current visit being edited"
   const trulyPastProformas = useMemo(() => {
     return patientProformas.filter(proforma => {
       if (!proforma) return false;
-      const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
-      if (!proformaDate) return true; // Include proformas without date as past
-      return proformaDate !== todayDateString;
+      // Include all proformas in view mode (no current visit to exclude)
+      return true;
     });
-  }, [patientProformas, todayDateString]);
+  }, [patientProformas]);
 
   // Get the last visit proforma (most recent one)
   const lastVisitProforma = useMemo(() => {
