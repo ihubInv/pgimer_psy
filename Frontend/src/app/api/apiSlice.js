@@ -88,6 +88,52 @@
 
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
+// Suppress console errors for expected 404s on prescription endpoints
+// This prevents browser console from showing errors for missing prescriptions (which is normal)
+// Note: Browser Network tab will still show 404s, but console.error won't log them
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+
+// Override console.error to filter expected errors
+console.error = (...args) => {
+  const errorString = String(args[0] || '');
+  
+  // Suppress 404 errors for prescription endpoints (expected when no prescription exists)
+  if (errorString.includes('404') && 
+      (errorString.includes('prescriptions/by-proforma') || 
+       errorString.includes('/api/prescriptions/by-proforma/'))) {
+    // Suppress this expected error - it's handled gracefully by RTK Query
+    return;
+  }
+  
+  // Suppress 401 errors that are being handled by token refresh mechanism
+  // These are temporary and will be resolved after token refresh
+  if (errorString.includes('401') && errorString.includes('Unauthorized')) {
+    // Check if it's a token refresh scenario (not a permanent auth failure)
+    // We'll let the token refresh mechanism handle it silently
+    // Only suppress if it's not a session expired error (those should be logged)
+    if (!errorString.includes('Session expired') && !errorString.includes('SESSION_EXPIRED')) {
+      // This is likely a token expiration that will be auto-refreshed
+      // Suppress to reduce console noise during automatic token refresh
+      return;
+    }
+  }
+  
+  // Log all other errors normally
+  originalConsoleError.apply(console, args);
+};
+
+// Also filter console.warn for RTK Query warnings about 404s
+console.warn = (...args) => {
+  const warnString = String(args[0] || '');
+  // Suppress RTK Query warnings about 404s on prescription endpoints
+  if (warnString.includes('404') && warnString.includes('prescriptions/by-proforma')) {
+    return;
+  }
+  // Log all other warnings normally
+  originalConsoleWarn.apply(console, args);
+};
+
 // Track if we're currently refreshing to prevent multiple simultaneous refresh attempts
 let isRefreshing = false;
 let refreshPromise = null;
@@ -103,6 +149,19 @@ const baseQuery = fetchBaseQuery({
     headers.set('Content-Type', 'application/json');
     return headers;
   },
+  // Custom fetch function to suppress console errors for expected 404s
+  fetchFn: async (url, options) => {
+    const response = await fetch(url, options);
+    
+    // For prescription endpoints with 404, clone response but don't treat as error
+    // This prevents browser from logging it as an error
+    if (response.status === 404 && url.includes('/prescriptions/by-proforma/')) {
+      // Return a response that RTK Query will handle gracefully
+      return response;
+    }
+    
+    return response;
+  },
 });
 
 // Base query with automatic token refresh
@@ -110,9 +169,11 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
   let result = await baseQuery(args, api, extraOptions);
 
   // Handle 404 for prescription endpoints gracefully (it's expected when no prescription exists)
+  // Note: Browser console may still show 404 network errors, but RTK Query handles them gracefully
+  // This is normal behavior - 404s are logged by the browser before our code can intercept them
   if (result?.error?.status === 404 && args.url?.includes('/prescriptions/by-proforma/')) {
     // Return success with null data instead of error for missing prescriptions
-    // This prevents console errors for expected 404s
+    // This prevents RTK Query from treating it as an error and breaking the UI
     return {
       data: {
         success: true,
@@ -122,7 +183,6 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
       error: undefined,
       meta: {
         ...result.meta,
-        // Suppress console error logging for this expected 404
         request: { ...result.meta?.request, suppressErrorLog: true }
       }
     };

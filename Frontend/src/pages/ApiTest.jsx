@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useGetAllPatientsQuery } from '../features/patients/patientsApiSlice';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import { isProduction, getEnvironment } from '../utils/constants';
 
 
 const ApiTest = () => {
@@ -20,9 +21,13 @@ const ApiTest = () => {
       {/* API Base URL */}
       <Card title="Configuration">
         <div className="space-y-2">
-          <p><strong>API Base URL:</strong> {import.meta.env.VITE_API_URL || 'http://31.97.60.2:2025/api'}</p>
+          <p><strong>API Base URL:</strong> {import.meta.env.VITE_API_URL}</p>
           <p><strong>Frontend URL:</strong> {window.location.origin}</p>
-          <p><strong>Environment:</strong> {import.meta.env.MODE}</p>
+          <p><strong>Environment:</strong> {getEnvironment()}</p>
+          <p><strong>Is Production:</strong> {isProduction() ? 'Yes' : 'No'}</p>
+          <p><strong>Vite MODE:</strong> {import.meta.env.MODE}</p>
+          <p><strong>Vite PROD:</strong> {import.meta.env.PROD ? 'true' : 'false'}</p>
+          <p><strong>VITE_NODE_ENV:</strong> {import.meta.env.VITE_NODE_ENV || 'not set'}</p>
         </div>
       </Card>
 

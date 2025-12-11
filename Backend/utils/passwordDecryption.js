@@ -12,9 +12,15 @@ const crypto = require('crypto');
 
 /**
  * Check if password encryption is enabled
+ * SECURITY FIX #2.17: Enable by default for better security
  */
 function isEncryptionEnabled() {
-  return process.env.ENABLE_PASSWORD_ENCRYPTION === 'true';
+  // Enable encryption by default unless explicitly disabled
+  if (process.env.ENABLE_PASSWORD_ENCRYPTION === 'false') {
+    return false;
+  }
+  // If no env var is set, enable encryption (default behavior)
+  return true;
 }
 
 /**
@@ -30,10 +36,11 @@ async function decryptPassword(encryptedPassword) {
     }
 
     // Get encryption key from environment (must match frontend)
-    const encryptionKey = process.env.PASSWORD_ENCRYPTION_KEY;
+    let encryptionKey = process.env.PASSWORD_ENCRYPTION_KEY;
     if (!encryptionKey) {
-      console.warn('[Password Decryption] Encryption key not configured, assuming plain password');
-      return encryptedPassword;
+      // Use default key if not set (should be set in production)
+      encryptionKey = 'PGIMER_PSY_DEFAULT_ENCRYPTION_KEY_2024_SECURE_CHANGE_IN_PRODUCTION';
+      console.warn('[Password Decryption] Using default encryption key. Set PASSWORD_ENCRYPTION_KEY in production!');
     }
 
     // Decode base64

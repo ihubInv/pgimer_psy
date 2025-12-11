@@ -7,13 +7,16 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "node server-preview.js",
+    "preview:vite": "vite preview"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.0.1",
     "@supabase/supabase-js": "^2.58.0",
     "chart.js": "^4.4.1",
+    "crypto-js": "^4.2.0",
     "date-fns": "^2.30.0",
+    "express": "^5.2.1",
     "file-saver": "^2.0.5",
     "lucide-react": "^0.545.0",
     "react": "^18.2.0",
@@ -32,12 +35,16 @@
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
+    "baseline-browser-mapping": "^2.9.6",
     "eslint": "^8.55.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "javascript-obfuscator": "^5.0.1",
     "postcss": "^8.4.32",
+    "rollup-plugin-obfuscator": "^1.1.0",
     "tailwindcss": "^3.4.0",
+    "terser": "^5.44.1",
     "vite": "^5.0.8"
   }
 }

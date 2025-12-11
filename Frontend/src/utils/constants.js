@@ -56,6 +56,33 @@ export const isJrSr = (role) => {
   return isJR(role) || isSR(role);
 };
 
+// Environment detection utilities
+// Check if we're in production mode
+// Supports both Vite's built-in PROD flag and custom VITE_NODE_ENV variable
+export const isProduction = () => {
+  // Check Vite's built-in production flag (automatically set during build)
+  if (import.meta.env.PROD) {
+    return true;
+  }
+  // Check custom VITE_NODE_ENV variable from .env file
+  if (import.meta.env.VITE_NODE_ENV === 'production') {
+    return true;
+  }
+  // Check MODE (should be 'production' in production builds)
+  if (import.meta.env.MODE === 'production') {
+    return true;
+  }
+  return false;
+};
+
+// Get current environment mode
+export const getEnvironment = () => {
+  if (isProduction()) {
+    return 'production';
+  }
+  return import.meta.env.MODE || 'development';
+};
+
 export const VISIT_TYPES = [
   { value: 'first_visit', label: 'First Visit' },
   { value: 'follow_up', label: 'Follow Up' },

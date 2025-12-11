@@ -38,7 +38,6 @@ const ADLFilesPage = () => {
     pollingInterval: 60000, // Increased from 30s to 60s to reduce API calls
     refetchOnFocus: false, // Disable auto-refetch on focus
     refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
     refetchOnReconnect: true,
   });
   

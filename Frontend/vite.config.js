@@ -33,12 +33,36 @@ export default defineConfig({
     outDir: 'dist',
     // CRITICAL: Disable source maps in production to prevent source code exposure
     sourcemap: false, // Never expose source maps in production
-    // Minify code in production
+    // Minify code in production with aggressive obfuscation
     minify: 'terser',
     terserOptions: {
       compress: {
         drop_console: true, // Remove console.log in production
-        drop_debugger: true
+        drop_debugger: true,
+        passes: 3, // Multiple passes for better minification
+        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.trace'],
+        unsafe: true, // Enable unsafe optimizations
+        unsafe_comps: true,
+        unsafe_math: true,
+        unsafe_methods: true,
+        unsafe_proto: true,
+        unsafe_regexp: true,
+        unsafe_undefined: true,
+        dead_code: true,
+        unused: true
+      },
+      mangle: {
+        toplevel: true, // Mangle top-level variable names
+        properties: {
+          regex: /^_/ // Mangle properties starting with underscore
+        },
+        safari10: true
+      },
+      format: {
+        comments: false, // Remove all comments
+        ascii_only: true, // Escape unicode characters
+        beautify: false,
+        preserve_annotations: false
       }
     },
     // Rollup options for better security
@@ -52,8 +76,19 @@ export default defineConfig({
         banner: '',
         footer: '',
         // Compact output - remove whitespace
-        compact: true
-      }
+        compact: true,
+        // Generate minimal code
+        generatedCode: {
+          constBindings: true,
+          objectShorthand: true,
+          arrowFunctions: true
+        },
+        // Prevent source code exposure
+        sourcemap: false,
+        sourcemapExcludeSources: true
+      },
+      // Additional security: externalize nothing, bundle everything
+      external: []
     },
     // Don't expose build information
     reportCompressedSize: false,
@@ -201,9 +236,62 @@ export default defineConfig({
   },
   // SECURITY FIX #2.8 & #2.16: Configure preview server middleware to block /src/ and config files
   configurePreviewServer(server) {
+    // SECURITY FIX #2.18: Set security headers for ALL responses - MUST be first middleware
+    server.middlewares.use((req, res, next) => {
+      // Intercept the response to ensure headers are always set
+      const originalEnd = res.end.bind(res);
+      const originalWriteHead = res.writeHead.bind(res);
+      
+      // Override writeHead to inject our headers
+      res.writeHead = function(code, reason, headers) {
+        if (typeof reason === 'object') {
+          headers = reason;
+          reason = undefined;
+        }
+        if (!headers) headers = {};
+        
+        // CRITICAL: Force set X-XSS-Protection header
+        headers['X-XSS-Protection'] = '1; mode=block';
+        headers['X-Content-Type-Options'] = 'nosniff';
+        headers['X-Frame-Options'] = 'DENY';
+        headers['Referrer-Policy'] = 'strict-origin-when-cross-origin';
+        
+        return originalWriteHead(code, reason, headers);
+      };
+      
+      // Also set headers directly (for responses that don't use writeHead)
+      res.setHeader('X-XSS-Protection', '1; mode=block');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+      
+      // Ensure headers persist even after other middleware
+      res.on('finish', () => {
+        if (!res.headersSent) {
+          res.setHeader('X-XSS-Protection', '1; mode=block');
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          res.setHeader('X-Frame-Options', 'DENY');
+        }
+      });
+      
+      next();
+    });
+    
     server.middlewares.use((req, res, next) => {
       const url = req.url?.split('?')[0] || '';
       const urlLower = url.toLowerCase();
+      
+      // Ensure security headers are set (in case they were removed)
+      res.setHeader('X-XSS-Protection', '1; mode=block');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      
+      // Prevent caching of JavaScript files to avoid source code exposure
+      if (url.endsWith('.js') || url.endsWith('.jsx') || url.endsWith('.ts') || url.endsWith('.tsx')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
       
       // In preview mode (production build), /src/ should NEVER be accessible
       if (url.startsWith('/src/')) {

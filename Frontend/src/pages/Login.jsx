@@ -83,10 +83,22 @@ const Login = () => {
   };
 
   const handleLogin = async (e) => {
+    
     e.preventDefault();
     try {
       // SECURITY FIX #2.17: Encrypt password before transmission
       const passwordEncryption = await encryptPasswordForTransmission(formData.password);
+      
+      // Log encryption status for verification (remove in production if desired)
+      if (passwordEncryption.isEncrypted) {
+        console.log('[Security] Password encrypted before transmission:', {
+          originalLength: formData.password.length,
+          encryptedLength: passwordEncryption.encrypted.length,
+          isEncrypted: true
+        });
+      } else {
+        console.warn('[Security] Password NOT encrypted - sent in plaintext (HTTPS only protection)');
+      }
       
       const result = await login({
         email: formData.email,

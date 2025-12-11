@@ -21,15 +21,25 @@
  */
 async function encryptPasswordSimple(password) {
   try {
-    // SECURITY FIX #2.17: Enable encryption by default for better security
+    // SECURITY FIX #2.17: Always encrypt passwords for transmission
+    // Use a default encryption key if not provided in env (for development)
+    // In production, VITE_PASSWORD_ENCRYPTION_KEY should be set
+    let encryptionKey = import.meta.env.VITE_PASSWORD_ENCRYPTION_KEY;
+    
     // Check if encryption is explicitly disabled
     const encryptionDisabled = import.meta.env.VITE_ENABLE_PASSWORD_ENCRYPTION === 'false';
-    const encryptionKey = import.meta.env.VITE_PASSWORD_ENCRYPTION_KEY;
     
-    // If encryption is explicitly disabled OR no key is provided, use HTTPS only
-    if (encryptionDisabled || !encryptionKey) {
-      // Return password as-is (HTTPS will encrypt it)
+    // If encryption is explicitly disabled, use HTTPS only
+    if (encryptionDisabled) {
       return { encrypted: password, isEncrypted: false };
+    }
+    
+    // If no key provided, use a default key (should be set in production)
+    // This ensures encryption always works, even if env var is missing
+    if (!encryptionKey) {
+      // Use a default key - in production this should be set via env var
+      encryptionKey = 'PGIMER_PSY_DEFAULT_ENCRYPTION_KEY_2024_SECURE_CHANGE_IN_PRODUCTION';
+      console.warn('[Password Encryption] Using default encryption key. Set VITE_PASSWORD_ENCRYPTION_KEY in production!');
     }
 
     // Check if Web Crypto API is available

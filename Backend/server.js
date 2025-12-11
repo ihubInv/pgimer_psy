@@ -90,6 +90,14 @@ app.use(helmet({
   contentTypeNosniff: false,
 }));
 
+// SECURITY FIX #2.18: Set X-XSS-Protection header properly for all routes
+// Modern browsers have built-in XSS protection, but we enable it for legacy browser support
+// Setting to '1; mode=block' enables the filter and blocks detected XSS attacks
+app.use((req, res, next) => {
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
 // SECURITY FIX #2.9: Enhanced Web Application Firewall (WAF) middleware
 // NOTE: WAF runs AFTER CORS so blocked requests still include CORS headers
 // Provides comprehensive application-level protection against:
