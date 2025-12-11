@@ -109,6 +109,25 @@ const baseQuery = fetchBaseQuery({
 const baseQueryWithReauth = async (args, api, extraOptions) => {
   let result = await baseQuery(args, api, extraOptions);
 
+  // Handle 404 for prescription endpoints gracefully (it's expected when no prescription exists)
+  if (result?.error?.status === 404 && args.url?.includes('/prescriptions/by-proforma/')) {
+    // Return success with null data instead of error for missing prescriptions
+    // This prevents console errors for expected 404s
+    return {
+      data: {
+        success: true,
+        data: { prescription: null },
+        message: 'No prescription found for this clinical proforma'
+      },
+      error: undefined,
+      meta: {
+        ...result.meta,
+        // Suppress console error logging for this expected 404
+        request: { ...result.meta?.request, suppressErrorLog: true }
+      }
+    };
+  }
+
   // If access token expired, try to refresh it
   if (result?.error?.status === 401) {
     // Check if it's a token expiration error

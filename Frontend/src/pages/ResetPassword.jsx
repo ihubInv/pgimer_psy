@@ -256,7 +256,7 @@ const ResetPassword = () => {
                       <li key={index} className={`flex items-center ${req.met ? 'text-green-600' : 'text-gray-500'}`}>
                         <span className="mr-2">{req.met ? '✓' : '○'}</span>
                         {req.text}
-                      </li>
+                    </li>
                     ))}
                   </ul>
                 </div>

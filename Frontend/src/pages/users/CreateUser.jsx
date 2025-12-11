@@ -310,13 +310,13 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
                             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                          </div>
+                        </div>
                           <div className="flex-1">
                             <p className="text-sm text-blue-800 font-semibold mb-1">Secure Password Setup</p>
                             <p className="text-sm text-blue-700">
                               The user will receive a secure password setup link via email. They must set their own password using this link, which expires in 24 hours. This ensures the admin never knows the user's password.
                             </p>
-                          </div>
+                      </div>
                         </div>
                       </div>
                     </div>

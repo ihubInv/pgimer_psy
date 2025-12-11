@@ -156,67 +156,94 @@ app.get('/fileupload/*',
   SecureFileController.servePatientFile
 );
 
-// Legacy /uploads route - also secured (for backward compatibility)
-const uploadsPath = path.join(__dirname, 'fileupload');
 const fileuploadPath = path.join(__dirname, 'fileupload');
 console.log('[Server] Secure file serving enabled for /fileupload');
 console.log('[Server] Fileupload directory:', fileuploadPath);
-console.log('[Server] Legacy uploads directory:', uploadsPath);
 
-// Legacy /uploads route - secured (if files exist in old location)
-app.get('/fileupload/*',
+// Legacy /uploads route - handle legacy file paths and convert to /fileupload/ format
+// Path format: /uploads/patient_files/{role}/{patient_id}/{filename}
+// Convert to: /fileupload/{role}/Patient_Details/{patient_id}/{filename}
+app.get('/uploads/*',
   authenticateToken,
   authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'),
-  (req, res, next) => {
-    // For legacy files, use similar security but simpler path validation
-    const requestedPath = req.path;
-    const legacyPath = path.join(__dirname, 'fileupload', requestedPath.replace(/^\/fileupload\//, ''));
-    const normalizedRequested = path.normalize(legacyPath);
-    const normalizedBase = path.normalize(uploadsPath);
-    
-    // Prevent directory traversal
-    if (!normalizedRequested.startsWith(normalizedBase)) {
-      return res.status(403).json({
+  async (req, res) => {
+    try {
+      const requestedPath = req.path;
+      
+      // Convert /uploads/patient_files/{role}/{patient_id}/{filename} to /fileupload/{role}/Patient_Details/{patient_id}/{filename}
+      if (requestedPath.startsWith('/uploads/patient_files/')) {
+        const pathParts = requestedPath.replace('/uploads/patient_files/', '').split('/');
+        if (pathParts.length >= 2) {
+          const role = pathParts[0].toLowerCase().replace(/\s+/g, '_');
+          const patientId = pathParts[1];
+          const filename = pathParts.slice(2).join('/');
+          
+          // Redirect to the correct /fileupload/ path
+          const correctPath = `/fileupload/${role}/Patient_Details/${patientId}${filename ? '/' + filename : ''}`;
+          return res.redirect(302, correctPath);
+        }
+      }
+      
+      // For other /uploads/ paths, try to serve from fileupload directory
+      const uploadsPath = path.join(__dirname, 'fileupload');
+      if (!fs.existsSync(uploadsPath)) {
+        fs.mkdirSync(uploadsPath, { recursive: true });
+      }
+      
+      const legacyPath = path.join(uploadsPath, requestedPath.replace(/^\/uploads\//, ''));
+      const normalizedRequested = path.normalize(legacyPath);
+      const normalizedBase = path.normalize(uploadsPath);
+      
+      // Prevent directory traversal
+      if (!normalizedRequested.startsWith(normalizedBase)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: Invalid file path'
+        });
+      }
+      
+      // Check if file exists
+      if (!fs.existsSync(normalizedRequested)) {
+        return res.status(404).json({
+          success: false,
+          message: 'File not found'
+        });
+      }
+      
+      // Serve file with appropriate headers
+      const ext = path.extname(normalizedRequested).toLowerCase();
+      const contentTypes = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.pdf': 'application/pdf',
+        '.doc': 'application/msword',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.txt': 'text/plain'
+      };
+      
+      res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      
+      if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf'].includes(ext)) {
+        res.setHeader('Content-Disposition', 'inline');
+      } else {
+        const filename = path.basename(normalizedRequested);
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      }
+      
+      const fileStream = require('fs').createReadStream(normalizedRequested);
+      fileStream.pipe(res);
+    } catch (error) {
+      console.error('[Server] Error serving legacy upload file:', error);
+      res.status(500).json({
         success: false,
-        message: 'Access denied: Invalid file path'
+        message: 'Error serving file'
       });
     }
-    
-    // Check if file exists
-    if (!fs.existsSync(normalizedRequested)) {
-      return res.status(404).json({
-        success: false,
-        message: 'File not found'
-      });
-    }
-    
-    // Serve file with appropriate headers
-    const ext = path.extname(normalizedRequested).toLowerCase();
-    const contentTypes = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-      '.pdf': 'application/pdf',
-      '.doc': 'application/msword',
-      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      '.txt': 'text/plain'
-    };
-    
-    res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'private, max-age=3600');
-    
-    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf'].includes(ext)) {
-      res.setHeader('Content-Disposition', 'inline');
-    } else {
-      const filename = path.basename(normalizedRequested);
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    }
-    
-    const fileStream = require('fs').createReadStream(normalizedRequested);
-    fileStream.pipe(res);
   }
 );
 

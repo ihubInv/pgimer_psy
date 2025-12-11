@@ -58,7 +58,7 @@ class User {
       } else {
         // Generate a secure random hash that can never match a real password
         // This is a placeholder until user sets their password via setup link
-        const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
+      const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
         const randomString = crypto.randomBytes(32).toString('hex');
         password_hash = await bcrypt.hash(randomString, saltRounds);
       }

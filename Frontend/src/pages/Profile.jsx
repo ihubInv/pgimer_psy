@@ -435,9 +435,9 @@ const Profile = () => {
                     <div className="mt-2">
                       {passwordErrors.map((error, index) => (
                         <p key={index} className="text-xs text-red-600 flex items-center gap-1">
-                          <FiAlertCircle className="w-3 h-3" />
+                    <FiAlertCircle className="w-3 h-3" />
                           {error}
-                        </p>
+                  </p>
                       ))}
                     </div>
                   )}

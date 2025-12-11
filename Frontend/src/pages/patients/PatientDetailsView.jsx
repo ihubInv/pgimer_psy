@@ -178,6 +178,19 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     refetchOnMountOrArgChange: true
   });
   const existingFiles = patientFilesData?.data?.files || [];
+  
+  // Debug logging for files
+  useEffect(() => {
+    if (patientFilesData) {
+      console.log('[PatientDetailsView] Patient files data:', {
+        patientFilesData,
+        existingFiles,
+        filesCount: existingFiles.length,
+        patientId: patient?.id,
+        sampleFile: existingFiles[0]
+      });
+    }
+  }, [patientFilesData, existingFiles, patient?.id]);
 
  
   const patientProformas = Array.isArray(clinicalData?.data?.proformas)
@@ -3178,7 +3191,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           files={existingFiles}
                           patient_id={patient?.id}
                           canDelete={false}
-                          baseUrl={import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api'}
+                          baseUrl={(import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api').replace(/\/api$/, '')}
                           refetchFiles={refetchFiles}
                         />
                       </div>

@@ -135,9 +135,9 @@ const authenticateToken = async (req, res, next) => {
     let userResult;
     try {
       userResult = await db.query(
-        'SELECT id, name, role, email, is_active FROM users WHERE id = $1 AND email = $2',
-        [decoded.userId, decoded.email]
-      );
+      'SELECT id, name, role, email, is_active FROM users WHERE id = $1 AND email = $2',
+      [decoded.userId, decoded.email]
+    );
     } catch (dbError) {
       console.error('[Auth] Database error during user verification:', dbError);
       return res.status(503).json({ 

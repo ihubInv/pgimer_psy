@@ -2251,9 +2251,15 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         }).unwrap();
         
         // Refetch files after update with a small delay to ensure backend processing is complete
+        // Only refetch if patient ID exists (query was started)
         setTimeout(() => {
-          if (refetchFiles) {
-            refetchFiles();
+          if (refetchFiles && patient?.id) {
+            try {
+              refetchFiles();
+            } catch (error) {
+              // Query might not have been started (was skipped), ignore error
+              console.warn('[PatientDetailsEdit] Could not refetch files:', error.message);
+            }
           }
         }, 1000);
       } else {
@@ -3294,10 +3300,18 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                             })}
                             patient_id={patient?.id}
                             canDelete={canEditFiles}
-                            baseUrl={import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api'}
+                            baseUrl={(import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api').replace(/\/api$/, '')}
                             onFileDeleted={async (filePath, normalizedPath) => {
                               // Refetch files to update the UI immediately
-                              await refetchFiles();
+                              // Only refetch if patient ID exists (query was started)
+                              if (patient?.id && refetchFiles) {
+                                try {
+                                  await refetchFiles();
+                                } catch (error) {
+                                  // Query might not have been started (was skipped), ignore error
+                                  console.warn('[PatientDetailsEdit] Could not refetch files after delete:', error.message);
+                                }
+                              }
                               
                               // Also remove from filesToRemove if it was there
                               setFilesToRemove(prev => prev.filter(removed => {

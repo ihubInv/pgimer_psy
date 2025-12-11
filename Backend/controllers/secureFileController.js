@@ -43,6 +43,15 @@ class SecureFileController {
 
       // Extract patient ID from path (4th component: role/doc_type/patient_id/filename)
       const patientIdStr = pathParts[2]; // role is [0], doc_type is [1], patient_id is [2]
+      
+      // Handle "temp" patient ID (temporary files) - return 404 instead of 400
+      if (patientIdStr === 'temp' || patientIdStr.toLowerCase() === 'temp') {
+        return res.status(404).json({
+          success: false,
+          message: 'File not found (temporary file)'
+        });
+      }
+      
       const patientId = parseInt(patientIdStr, 10);
 
       if (isNaN(patientId) || patientId <= 0) {

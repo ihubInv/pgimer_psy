@@ -421,16 +421,30 @@ class PatientFileController {
       // Get existing record
       const existing = await PatientFile.findByPatientId(patientIdInt);
       
-      // Check permissions for edit/delete
-      if (existing && !canEditDelete(req.user, existing)) {
-        return res.status(403).json({
-          success: false,
-          message: 'You do not have permission to edit/delete these files. You can only edit/delete files you uploaded.'
+      // Parse files to remove (already parsed above, but ensure it's an array)
+      const filesToRemove = files_to_remove || [];
+      
+      // Check permissions for files being removed (not for adding new files)
+      // Users can always add new files, but can only remove files they uploaded
+      if (existing && filesToRemove.length > 0) {
+        // Check if user has permission to remove the requested files
+        const unauthorizedRemovals = filesToRemove.filter(filePath => {
+          // If user can't edit/delete the record, they can't remove any files
+          if (!canEditDelete(req.user, existing)) {
+            return true;
+          }
+          return false;
         });
+        
+        if (unauthorizedRemovals.length > 0) {
+          return res.status(403).json({
+            success: false,
+            message: 'You do not have permission to remove these files. You can only remove files you uploaded.'
+          });
+        }
       }
 
       const newFiles = [];
-      const filesToRemove = files_to_remove; // Already parsed above
 
       // Get user role for folder structure
       const userRole = req.user?.role?.trim() || 'Admin';

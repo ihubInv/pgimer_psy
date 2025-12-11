@@ -186,7 +186,7 @@ const FilePreview = ({
     if (!filePath) return '';
     
     // If it's already a full URL, extract the path
-    if (filePath.startsWith('http://') || filePath.startsWith('http://')) {
+    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
       try {
         const url = new URL(filePath);
         return url.pathname;
@@ -222,14 +222,50 @@ const FilePreview = ({
       return relativePath;
     }
     
-    // If it starts with /fileupload or /uploads, use it directly
-    if (filePath.startsWith('/fileupload/') || filePath.startsWith('/uploads/')) {
+    // Handle /uploads/patient_files/ paths (legacy format) and convert to /fileupload/
+    // Format: /uploads/patient_files/{role}/{patient_id}/{filename}
+    // Should be: /fileupload/{role}/Patient_Details/{patient_id}/{filename}
+    if (filePath.startsWith('/uploads/patient_files/')) {
+      const pathParts = filePath.replace('/uploads/patient_files/', '').split('/');
+      if (pathParts.length >= 2) {
+        const role = pathParts[0].toLowerCase().replace(/\s+/g, '_');
+        const patientId = pathParts[1];
+        const filename = pathParts.slice(2).join('/');
+        // Convert to correct format: /fileupload/{role}/Patient_Details/{patient_id}/{filename}
+        return `/fileupload/${role}/Patient_Details/${patientId}${filename ? '/' + filename : ''}`;
+      }
+    }
+    
+    // If it starts with /fileupload, use it directly
+    if (filePath.startsWith('/fileupload/')) {
       return filePath;
     }
     
+    // If it starts with /uploads/ (other formats), try to convert
+    if (filePath.startsWith('/uploads/')) {
+      // Try to extract the path after /uploads/ and convert to /fileupload/
+      const pathAfterUploads = filePath.replace('/uploads/', '');
+      // If it looks like a patient file path, convert it
+      if (pathAfterUploads.includes('patient_files') || pathAfterUploads.match(/^[^\/]+\/\d+\//)) {
+        const parts = pathAfterUploads.split('/');
+        if (parts.length >= 2) {
+          const role = parts[0].toLowerCase().replace(/\s+/g, '_');
+          const patientId = parts[1];
+          const filename = parts.slice(2).join('/');
+          return `/fileupload/${role}/Patient_Details/${patientId}${filename ? '/' + filename : ''}`;
+        }
+      }
+      // Otherwise, just convert /uploads/ to /fileupload/
+      return filePath.replace('/uploads/', '/fileupload/');
+    }
+    
     // If it's a relative path starting with fileupload or uploads
-    if (filePath.startsWith('fileupload/') || filePath.startsWith('uploads/')) {
+    if (filePath.startsWith('fileupload/')) {
       return `/${filePath}`;
+    }
+    if (filePath.startsWith('uploads/')) {
+      // Convert uploads/ to fileupload/
+      return `/${filePath.replace('uploads/', 'fileupload/')}`;
     }
     
     // Otherwise prepend /fileupload
@@ -243,7 +279,6 @@ const FilePreview = ({
   // Get authenticated file URL (creates blob URL if needed)
   const getFileUrl = async (filePath) => {
     if (!filePath) {
-   
       return '';
     }
     
@@ -253,12 +288,16 @@ const FilePreview = ({
     }
     
     const urlPath = getFileUrlPath(filePath);
-    if (!urlPath) return '';
+    if (!urlPath) {
+      console.warn('[FilePreview] Could not determine URL path for:', filePath);
+      return '';
+    }
     
     const fullUrl = `${baseUrlWithoutApi}${urlPath}`;
     
     // If no token, return the URL (will fail with 401, but that's expected)
     if (!token) {
+      console.warn('[FilePreview] No token available, using direct URL');
       return fullUrl;
     }
     
@@ -273,11 +312,28 @@ const FilePreview = ({
       });
       
       if (!response.ok) {
-        console.error('[FilePreview] Failed to fetch file:', response.status, response.statusText);
-        return fullUrl; // Fallback to direct URL
+        console.error('[FilePreview] Failed to fetch file:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: fullUrl,
+          urlPath: urlPath,
+          originalPath: filePath
+        });
+        // Don't fallback to direct URL if it's a 404 or 403 - file doesn't exist or no permission
+        if (response.status === 404 || response.status === 403) {
+          return null; // Return null to trigger error handling
+        }
+        return fullUrl; // Fallback to direct URL for other errors
       }
       
       const blob = await response.blob();
+      
+      // Check if blob is valid
+      if (blob.size === 0) {
+        console.error('[FilePreview] Received empty blob for:', fullUrl);
+        return null;
+      }
+      
       const blobUrl = URL.createObjectURL(blob);
       
       // Cache the blob URL
@@ -285,15 +341,36 @@ const FilePreview = ({
       
       return blobUrl;
     } catch (error) {
-      console.error('[FilePreview] Error fetching file:', error);
+      console.error('[FilePreview] Error fetching file:', {
+        error: error.message,
+        url: fullUrl,
+        urlPath: urlPath,
+        originalPath: filePath
+      });
       return fullUrl; // Fallback to direct URL
     }
   };
 
+  // Clear blob cache when files change (to reload newly uploaded files)
+  useEffect(() => {
+    // Clear all cached blob URLs when files array changes
+    // This ensures newly uploaded files are fetched fresh
+    blobUrls.forEach(url => {
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    setBlobUrls(new Map());
+  }, [files]);
+
   // Cleanup blob URLs on unmount
   useEffect(() => {
     return () => {
-      blobUrls.forEach(url => URL.revokeObjectURL(url));
+      blobUrls.forEach(url => {
+        if (url && url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
     };
   }, [blobUrls]);
 
@@ -507,6 +584,17 @@ const FilePreview = ({
     <>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
         {files
+          .filter((filePath) => {
+            // Filter out temporary files (files with "temp" in the path)
+            const actualPath = typeof filePath === 'string' ? filePath : (filePath?.path || filePath?.url || filePath);
+            if (!actualPath) return false;
+            // Skip files with "temp" in the path (temporary uploads that haven't been assigned to a patient yet)
+            if (actualPath.includes('/temp/') || actualPath.includes('\\temp\\') || 
+                actualPath.match(/\/temp\/|\/temp$|\\temp\\|\\temp$/i)) {
+              return false;
+            }
+            return true;
+          })
           .map((filePath, index) => {
             // Handle both string paths and object with path property
             const actualPath = typeof filePath === 'string' ? filePath : (filePath?.path || filePath?.url || filePath);
@@ -519,6 +607,7 @@ const FilePreview = ({
             const fileName = actualPath.split('/').pop();
             const urlPath = getFileUrlPath(actualPath);
             const fileUrl = urlPath ? `${baseUrlWithoutApi}${urlPath}` : '';
+            
             return {
               actualPath,
               fileType,
