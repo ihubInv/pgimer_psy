@@ -1444,6 +1444,49 @@ router.get('/patient/:patient_id', authenticateToken, ClinicalController.getClin
 
 /**
  * @swagger
+ * /api/clinical-proformas/patient/{patient_id}/last-visit:
+ *   get:
+ *     summary: Get last visit details (proforma + ADL) for auto-fill
+ *     tags: [Walk-in Clinical Proforma]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: patient_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Patient ID
+ *     responses:
+ *       200:
+ *         description: Last visit details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     proforma:
+ *                       $ref: '#/components/schemas/ClinicalProforma'
+ *                       nullable: true
+ *                     adl_file:
+ *                       $ref: '#/components/schemas/ADLFile'
+ *                       nullable: true
+ *       400:
+ *         description: Invalid patient ID
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.get('/patient/:patient_id/last-visit', authenticateToken, ClinicalController.getLastVisitDetails);
+
+/**
+ * @swagger
  * /api/clinical-proformas/options/{group}:
  *   post:
  *     summary: Add an option to a clinical group

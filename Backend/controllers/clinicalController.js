@@ -607,6 +607,71 @@ class ClinicalController {
     }
   }
 
+  // Get last visit details (proforma + ADL) for auto-fill
+  static async getLastVisitDetails(req, res) {
+    try {
+      const { patient_id } = req.params;
+      
+      // Validate patient_id
+      const patientIdInt = parseInt(patient_id, 10);
+      if (isNaN(patientIdInt) || patientIdInt <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid patient ID'
+        });
+      }
+
+      // Get all proformas for this patient, ordered by visit_date DESC
+      const proformas = await ClinicalProforma.findByPatientId(patient_id);
+      
+      if (!proformas || proformas.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            proforma: null,
+            adl_file: null,
+            message: 'No previous visits found'
+          }
+        });
+      }
+
+      // Sort by visit_date descending to get the most recent visit
+      const sortedProformas = proformas.sort((a, b) => {
+        const dateA = new Date(a.visit_date || a.created_at || 0);
+        const dateB = new Date(b.visit_date || b.created_at || 0);
+        return dateB - dateA;
+      });
+
+      const lastProforma = sortedProformas[0];
+      let lastAdlFile = null;
+
+      // If the last proforma has an ADL file, fetch it
+      if (lastProforma.adl_file_id) {
+        try {
+          lastAdlFile = await ADLFile.findById(lastProforma.adl_file_id);
+        } catch (error) {
+          console.error('Error fetching ADL file:', error);
+          // Continue without ADL file if it doesn't exist
+        }
+      }
+
+      res.json({
+        success: true,
+        data: {
+          proforma: lastProforma ? lastProforma.toJSON() : null,
+          adl_file: lastAdlFile ? lastAdlFile.toJSON() : null
+        }
+      });
+    } catch (error) {
+      console.error('Get last visit details error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get last visit details',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
   // Update clinical proforma
   static async updateClinicalProforma(req, res) {
     try {

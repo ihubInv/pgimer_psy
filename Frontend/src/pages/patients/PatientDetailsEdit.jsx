@@ -68,6 +68,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   // File upload state and API hooks
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [filesToRemove, setFilesToRemove] = useState([]);
+  const [autoFillAdlData, setAutoFillAdlData] = useState(null);
   const { data: patientFilesData, refetch: refetchFiles } = useGetPatientFilesQuery(patient?.id, {
     skip: !patient?.id,
     refetchOnMountOrArgChange: true
@@ -3536,6 +3537,11 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                     // 1. Only pass initialData with id when editing a PAST visit performa (corrections)
                     // 2. Current visit "Edit" = Create New (blank form, no old data)
                     // 3. Never load current visit performa data - always create fresh
+                    onAutoFillADL={(adlData) => {
+                      // Store ADL data for auto-filling the ADL form
+                      // This will be used when the ADL form is rendered
+                      setAutoFillAdlData(adlData);
+                    }}
                     initialData={selectedProforma && selectedProforma.id && isEditingPastProforma ? {
             // CASE 1: Editing a PAST visit performa (corrections only) - includes id for update
             // Pass full existing proforma data if available
@@ -3794,6 +3800,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                   isEmbedded={true}
                   patientId={patient?.id?.toString()}
                   clinicalProformaId={selectedProforma?.id?.toString()}
+                  initialAdlData={autoFillAdlData}
+                  key={autoFillAdlData ? `adl-auto-fill-${Date.now()}` : `adl-new-${patient?.id}`}
                 />
               )}
             </div>

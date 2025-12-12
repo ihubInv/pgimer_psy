@@ -80,8 +80,9 @@ const PatientDetails = () => {
   const { data: patientData, isLoading: patientLoading } = useGetPatientByIdQuery(patientId, {
     skip: !isValidPatientId(patientId), // Skip query if id is not available or invalid
   });
-  const { data: clinicalData } = useGetClinicalProformaByPatientIdQuery(patientId, {
+  const { data: clinicalData, refetch: refetchClinicalData } = useGetClinicalProformaByPatientIdQuery(patientId, {
     skip: !isValidPatientId(patientId),
+    refetchOnMountOrArgChange: true, // Always refetch when component mounts or patientId changes
   });
   const { data: adlData } = useGetADLFileByPatientIdQuery(patientId, {
     skip: !isValidPatientId(patientId),

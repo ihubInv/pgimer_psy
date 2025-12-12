@@ -67,7 +67,7 @@ const ConditionalTextarea = ({ readOnly, label, value, icon, rows, ...textareaPr
   return <Textarea label={label} value={value} rows={rows} {...textareaProps} />;
 };
 
-const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = null, clinicalProformaId: propClinicalProformaId = null, readOnly = false }) => {
+const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = null, clinicalProformaId: propClinicalProformaId = null, readOnly = false, initialAdlData = null }) => {
   const navigate = useNavigate();
   const { id: urlId } = useParams();
   const [searchParams] = useSearchParams();
@@ -141,7 +141,10 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
 
   // Prepare initial form data from existing ADL file
   const initialFormData = useMemo(() => {
-    if (!adlFile) {
+    // Use initialAdlData if provided (for auto-fill from last visit)
+    const sourceData = initialAdlData || adlFile;
+    
+    if (!sourceData) {
       
       return null;
     }
@@ -187,32 +190,32 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
     };
 
     return {
-      patient_id: adlFile.patient_id || '',
-      clinical_proforma_id: adlFile.clinical_proforma_id || '',
+      patient_id: sourceData.patient_id || '',
+      clinical_proforma_id: sourceData.clinical_proforma_id || '',
       // History
-      history_narrative: adlFile.history_narrative || '',
-      history_specific_enquiry: adlFile.history_specific_enquiry || '',
-      history_drug_intake: adlFile.history_drug_intake || '',
-      history_treatment_place: adlFile.history_treatment_place || '',
-      history_treatment_dates: formatDateField(adlFile.history_treatment_dates),
-      history_treatment_drugs: adlFile.history_treatment_drugs || '',
-      history_treatment_response: adlFile.history_treatment_response || '',
+      history_narrative: sourceData.history_narrative || '',
+      history_specific_enquiry: sourceData.history_specific_enquiry || '',
+      history_drug_intake: sourceData.history_drug_intake || '',
+      history_treatment_place: sourceData.history_treatment_place || '',
+      history_treatment_dates: formatDateField(sourceData.history_treatment_dates),
+      history_treatment_drugs: sourceData.history_treatment_drugs || '',
+      history_treatment_response: sourceData.history_treatment_response || '',
       // Informants
-      informants: parseArray(adlFile.informants).length > 0 ? parseArray(adlFile.informants) : [{ relationship: '', name: '', reliability: '' }],
+      informants: parseArray(sourceData.informants).length > 0 ? parseArray(sourceData.informants) : [{ relationship: '', name: '', reliability: '' }],
       // Complaints
-      complaints_patient: parseArray(adlFile.complaints_patient).length > 0 ? parseArray(adlFile.complaints_patient) : [{ complaint: '', duration: '' }],
-      complaints_informant: parseArray(adlFile.complaints_informant).length > 0 ? parseArray(adlFile.complaints_informant) : [{ complaint: '', duration: '' }],
+      complaints_patient: parseArray(sourceData.complaints_patient).length > 0 ? parseArray(sourceData.complaints_patient) : [{ complaint: '', duration: '' }],
+      complaints_informant: parseArray(sourceData.complaints_informant).length > 0 ? parseArray(sourceData.complaints_informant) : [{ complaint: '', duration: '' }],
       // Onset, Precipitating Factor, Course
-      onset_duration: adlFile.onset_duration || '',
-      precipitating_factor: adlFile.precipitating_factor || '',
-      course: adlFile.course || '',
+      onset_duration: sourceData.onset_duration || '',
+      precipitating_factor: sourceData.precipitating_factor || '',
+      course: sourceData.course || '',
       // Past History
-      past_history_medical: adlFile.past_history_medical || '',
-      past_history_psychiatric_dates: formatDateField(adlFile.past_history_psychiatric_dates),
-      past_history_psychiatric_diagnosis: adlFile.past_history_psychiatric_diagnosis || '',
-      past_history_psychiatric_treatment: adlFile.past_history_psychiatric_treatment || '',
-      past_history_psychiatric_interim: adlFile.past_history_psychiatric_interim || '',
-      past_history_psychiatric_recovery: adlFile.past_history_psychiatric_recovery || '',
+      past_history_medical: sourceData.past_history_medical || '',
+      past_history_psychiatric_dates: formatDateField(sourceData.past_history_psychiatric_dates),
+      past_history_psychiatric_diagnosis: sourceData.past_history_psychiatric_diagnosis || '',
+      past_history_psychiatric_treatment: sourceData.past_history_psychiatric_treatment || '',
+      past_history_psychiatric_interim: sourceData.past_history_psychiatric_interim || '',
+      past_history_psychiatric_recovery: sourceData.past_history_psychiatric_recovery || '',
       // Family History - Father
       family_history_father_age: adlFile.family_history_father_age || '',
       family_history_father_education: adlFile.family_history_father_education || '',
@@ -379,7 +382,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
       treatment_plan: adlFile.treatment_plan || '',
       consultant_comments: adlFile.consultant_comments || '',
     };
-  }, [adlFile]);
+  }, [adlFile, initialAdlData]);
 
   // Initialize form data with default values or from ADL file
   const defaultFormData = {
@@ -553,7 +556,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
 
   const [formData, setFormData] = useState(defaultFormData);
 
-  // Update formData when ADL file is loaded
+  // Update formData when ADL file is loaded or initialAdlData is provided
   useEffect(() => {
     if (initialFormData) {
       setFormData(initialFormData);
@@ -562,7 +565,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
       setFormData(defaultFormData);
     }
     // Note: If id exists but adlFile is not loaded yet, wait for it to load
-  }, [initialFormData, id, adlFile, isLoadingADL]);
+  }, [initialFormData, id, adlFile, isLoadingADL, initialAdlData]);
 
   // Ensure formData is always defined
   const safeFormData = formData || defaultFormData;

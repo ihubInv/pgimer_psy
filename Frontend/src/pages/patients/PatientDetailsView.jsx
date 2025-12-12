@@ -197,6 +197,18 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     ? clinicalData.data.proformas
     : [];
 
+  // Debug: Log proformas to verify data is being fetched
+  useEffect(() => {
+    if (patientProformas.length > 0) {
+      console.log('[PatientDetailsView] Patient proformas:', patientProformas.length, patientProformas.map(p => ({
+        id: p.id,
+        visit_date: p.visit_date,
+        created_at: p.created_at,
+        patient_id: p.patient_id
+      })));
+    }
+  }, [patientProformas]);
+
   // Fetch patient visit history
   const { data: visitHistoryData } = useGetPatientVisitHistoryQuery(
     patient?.id,

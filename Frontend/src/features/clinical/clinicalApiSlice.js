@@ -62,13 +62,29 @@ export const clinicalApiSlice = apiSlice.injectEndpoints({
         'Clinical',
       ],
     }),
+    getLastVisitDetails: builder.query({
+      query: (patientId) => `/clinical-proformas/patient/${patientId}/last-visit`,
+      providesTags: (result, error, patientId) => [
+        { type: 'Clinical', id: `last-visit-${patientId}` },
+      ],
+    }),
     createClinicalProforma: builder.mutation({
       query: (proformaData) => ({
         url: '/clinical-proformas',
         method: 'POST',
         body: proformaData,
       }),
-      invalidatesTags: ['Clinical', 'Patient', 'Stats', 'ADL'],
+      invalidatesTags: (result, error, proformaData) => {
+        const tags = ['Clinical', 'Patient', 'Stats', 'ADL'];
+        // Get patient_id from either the request data or the result
+        const patientId = result?.data?.clinical_proforma?.patient_id || proformaData?.patient_id;
+        // Invalidate patient-specific query to ensure fresh data
+        if (patientId) {
+          tags.push({ type: 'Clinical', id: `patient-${patientId}` });
+          tags.push({ type: 'Clinical', id: `last-visit-${patientId}` });
+        }
+        return tags;
+      },
     }),
     updateClinicalProforma: builder.mutation({
       query: ({ id, ...data }) => ({
@@ -84,13 +100,12 @@ export const clinicalApiSlice = apiSlice.injectEndpoints({
           'Stats',
           'ADL'
         ];
+        // Get patient_id from either the request data or the result
+        const pid = result?.data?.proforma?.patient_id || patient_id;
         // Also invalidate patient-specific clinical proforma query
-        if (patient_id) {
-          tags.push({ type: 'Clinical', id: `patient-${patient_id}` });
-        }
-        // If we have the result, get patient_id from it
-        if (result?.data?.proforma?.patient_id) {
-          tags.push({ type: 'Clinical', id: `patient-${result.data.proforma.patient_id}` });
+        if (pid) {
+          tags.push({ type: 'Clinical', id: `patient-${pid}` });
+          tags.push({ type: 'Clinical', id: `last-visit-${pid}` });
         }
         return tags;
       },
@@ -150,6 +165,7 @@ export const {
   useGetAllClinicalProformasQuery,
   useGetClinicalProformaByIdQuery,
   useGetClinicalProformaByPatientIdQuery,
+  useGetLastVisitDetailsQuery,
   useCreateClinicalProformaMutation,
   useUpdateClinicalProformaMutation,
   useDeleteClinicalProformaMutation,

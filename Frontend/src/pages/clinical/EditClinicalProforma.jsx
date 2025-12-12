@@ -10,7 +10,8 @@ import {
   useAddClinicalOptionMutation,
   useUpdateClinicalOptionMutation,
   useDeleteClinicalOptionMutation,
-  useGetAllClinicalProformasQuery
+  useGetAllClinicalProformasQuery,
+  useGetLastVisitDetailsQuery
 } from '../../features/clinical/clinicalApiSlice';
 import { useGetADLFileByIdQuery, useGetAllADLFilesQuery,useUpdateADLFileMutation, useCreateADLFileMutation } from '../../features/adl/adlApiSlice';
 import { useGetPatientByIdQuery, useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
@@ -41,7 +42,7 @@ import PatientClinicalHistory from '../../components/PatientClinicalHistory';
 
 
 
-const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: propOnUpdate = null, onFormDataChange = null, hideFileUpload = false }) => {
+const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: propOnUpdate = null, onFormDataChange = null, hideFileUpload = false, onAutoFillADL = null }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -390,7 +391,138 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
   const [formData, setFormData] = useState(initialFormData || defaultFormData);
   const [errors, setErrors] = useState({});
+  const [autoFillEnabled, setAutoFillEnabled] = useState(false);
   const currentUser = useSelector(selectCurrentUser);
+  
+  // Ref to track the latest formData to ensure we always use current values in submit
+  const formDataRef = useRef(formData);
+  
+  // Update ref whenever formData changes
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
+
+  // Fetch last visit details when auto-fill is enabled and we're in create mode
+  const { data: lastVisitData, isLoading: isLoadingLastVisit } = useGetLastVisitDetailsQuery(
+    patientId,
+    { skip: !autoFillEnabled || !patientId || !isCreateMode || !!propInitialData?.id }
+  );
+
+  // Auto-fill form with last visit data when enabled
+  useEffect(() => {
+    if (autoFillEnabled && lastVisitData?.data && isCreateMode && !propInitialData?.id) {
+      const lastProforma = lastVisitData.data.proforma;
+      const lastAdlFile = lastVisitData.data.adl_file;
+
+      if (lastProforma) {
+        // Helper to normalize array fields
+        const normalizeArrayField = (value) => {
+          if (Array.isArray(value)) return value;
+          if (typeof value === 'string') {
+            try {
+              const parsed = JSON.parse(value);
+              return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+            } catch {
+              if (value.includes(',')) {
+                return value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+              }
+              return value.trim() ? [value.trim()] : [];
+            }
+          }
+          return value ? [value] : [];
+        };
+
+        // Helper to format date
+        const formatDate = (dateVal) => {
+          if (!dateVal) return new Date().toISOString().split('T')[0];
+          if (typeof dateVal === 'string') {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return dateVal;
+            if (dateVal.includes('T')) return dateVal.split('T')[0];
+            return dateVal;
+          }
+          return new Date().toISOString().split('T')[0];
+        };
+
+        // Populate form with last visit proforma data (but keep today's date)
+        const autoFilledData = {
+          visit_date: new Date().toISOString().split('T')[0], // Always use today's date
+          visit_type: 'follow_up', // Existing patients are always follow-ups
+          room_no: lastProforma.room_no || '',
+          assigned_doctor: lastProforma.assigned_doctor?.toString() || '',
+          informant_present: lastProforma.informant_present ?? true,
+          nature_of_information: lastProforma.nature_of_information || '',
+          onset_duration: lastProforma.onset_duration || '',
+          course: lastProforma.course || '',
+          precipitating_factor: lastProforma.precipitating_factor || '',
+          illness_duration: lastProforma.illness_duration || '',
+          current_episode_since: formatDate(lastProforma.current_episode_since),
+          mood: normalizeArrayField(lastProforma.mood),
+          behaviour: normalizeArrayField(lastProforma.behaviour),
+          speech: normalizeArrayField(lastProforma.speech),
+          thought: normalizeArrayField(lastProforma.thought),
+          perception: normalizeArrayField(lastProforma.perception),
+          somatic: normalizeArrayField(lastProforma.somatic),
+          bio_functions: normalizeArrayField(lastProforma.bio_functions),
+          adjustment: normalizeArrayField(lastProforma.adjustment),
+          cognitive_function: normalizeArrayField(lastProforma.cognitive_function),
+          fits: normalizeArrayField(lastProforma.fits),
+          sexual_problem: normalizeArrayField(lastProforma.sexual_problem),
+          substance_use: normalizeArrayField(lastProforma.substance_use),
+          past_history: lastProforma.past_history || '',
+          family_history: lastProforma.family_history || '',
+          associated_medical_surgical: normalizeArrayField(lastProforma.associated_medical_surgical),
+          mse_behaviour: normalizeArrayField(lastProforma.mse_behaviour),
+          mse_affect: normalizeArrayField(lastProforma.mse_affect),
+          mse_thought: lastProforma.mse_thought || '',
+          mse_delusions: lastProforma.mse_delusions || '',
+          mse_perception: normalizeArrayField(lastProforma.mse_perception),
+          mse_cognitive_function: normalizeArrayField(lastProforma.mse_cognitive_function),
+          gpe: lastProforma.gpe || '',
+          diagnosis: lastProforma.diagnosis || '',
+          icd_code: lastProforma.icd_code || '',
+          disposal: lastProforma.disposal || '',
+          workup_appointment: formatDate(lastProforma.workup_appointment),
+          referred_to: lastProforma.referred_to || '',
+          treatment_prescribed: lastProforma.treatment_prescribed || '',
+          doctor_decision: lastProforma.doctor_decision || 'simple_case',
+        };
+
+        setFormData(prev => {
+          const updated = {
+            ...prev,
+            ...autoFilledData,
+            // Preserve patient_id and other critical fields
+            patient_id: prev.patient_id || patientId?.toString() || '',
+          };
+          
+          // Mark that form has been populated (even if auto-filled) to prevent reset
+          // This ensures user edits after auto-fill are preserved
+          userHasEditedRef.current = true;
+
+          // Update formDataRef immediately to ensure submit uses latest data
+          formDataRef.current = updated;
+
+          // Update prevInitialDataRef to prevent the useEffect from resetting formData
+          // Use the updated data, not stale formData
+          prevInitialDataRef.current = {
+            ...updated,
+            proformaId: propInitialData?.id || null
+          };
+          
+          return updated;
+        });
+
+        // If there's an ADL file and callback is provided, populate ADL form
+        if (lastAdlFile && onAutoFillADL) {
+          onAutoFillADL(lastAdlFile);
+        }
+
+        toast.success('Form auto-filled with last visit details');
+      } else {
+        toast.info('No previous visit found to auto-fill');
+      }
+    }
+  }, [autoFillEnabled, lastVisitData, isCreateMode, propInitialData?.id, onAutoFillADL]);
 
   // Debug logging (moved here after formData is defined)
   useEffect(() => {
@@ -783,7 +915,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         [name]: newValue,
       };
       
-       
+      // Update formDataRef immediately to ensure submit uses latest data
+      formDataRef.current = updated;
       
       // Notify parent component of form data changes, especially doctor_decision
       // Defer to avoid setState during render warning
@@ -804,11 +937,15 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     
     e.preventDefault();
 
+    // Get the latest formData from ref to ensure we're using current values
+    // This ensures we capture any recent changes that might not be in the closure yet
+    const currentFormData = formDataRef.current;
+
     // Prevent changing from complex case to simple case
     // Only block if the user actually changed from complex_case to something else
     const originalDecision = proforma?.doctor_decision || propInitialData?.doctor_decision;
     const isChangingFromComplexToSimple = originalDecision === 'complex_case' && 
-                                          formData.doctor_decision === 'simple_case' &&
+                                          currentFormData.doctor_decision === 'simple_case' &&
                                           isAlreadyComplex;
     
     if (isChangingFromComplexToSimple) {
@@ -818,8 +955,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     }
 
     const newErrors = {};
-    if (!formData.patient_id) newErrors.patient_id = 'Patient is required';
-    if (!formData.visit_date) newErrors.visit_date = 'Visit date is required';
+    if (!currentFormData.patient_id) newErrors.patient_id = 'Patient is required';
+    if (!currentFormData.visit_date) newErrors.visit_date = 'Visit date is required';
 
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
@@ -830,48 +967,48 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
       // CASE 1: Using parent-provided update through props  
       if (propInitialData && propOnUpdate) {
         const updateData = {
-          patient_id: formData.patient_id,
-          visit_date: formData.visit_date,
-          visit_type: formData.visit_type,
-          room_no: formData.room_no,
-          assigned_doctor: formData.assigned_doctor,
-          informant_present: formData.informant_present,
-          nature_of_information: formData.nature_of_information,
-          onset_duration: formData.onset_duration,
-          course: formData.course,
-          precipitating_factor: formData.precipitating_factor,
-          illness_duration: formData.illness_duration,
-          current_episode_since: formData.current_episode_since,
-          mood: join(formData.mood),
-          behaviour: join(formData.behaviour),
-          speech: join(formData.speech),
-          thought: join(formData.thought),
-          perception: join(formData.perception),
-          somatic: join(formData.somatic),
-          bio_functions: join(formData.bio_functions),
-          adjustment: join(formData.adjustment),
-          cognitive_function: join(formData.cognitive_function),
-          fits: join(formData.fits),
-          sexual_problem: join(formData.sexual_problem),
-          substance_use: join(formData.substance_use),
-          past_history: formData.past_history,
-          family_history: formData.family_history,
-          associated_medical_surgical: join(formData.associated_medical_surgical),
-          mse_behaviour: join(formData.mse_behaviour),
-          mse_affect: join(formData.mse_affect),
-          mse_thought: formData.mse_thought,
-          mse_delusions: formData.mse_delusions,
-          mse_perception: join(formData.mse_perception),
-          mse_cognitive_function: join(formData.mse_cognitive_function),
-          gpe: formData.gpe,
-          diagnosis: formData.diagnosis,
-          icd_code: formData.icd_code,
-          disposal: formData.disposal,
-          workup_appointment: formData.workup_appointment,
-          referred_to: formData.referred_to,
-          treatment_prescribed: formData.treatment_prescribed,
-          doctor_decision: formData.doctor_decision,
-          // case_severity: formData.case_severity,
+          patient_id: currentFormData.patient_id,
+          visit_date: currentFormData.visit_date,
+          visit_type: currentFormData.visit_type,
+          room_no: currentFormData.room_no,
+          assigned_doctor: currentFormData.assigned_doctor,
+          informant_present: currentFormData.informant_present,
+          nature_of_information: currentFormData.nature_of_information,
+          onset_duration: currentFormData.onset_duration,
+          course: currentFormData.course,
+          precipitating_factor: currentFormData.precipitating_factor,
+          illness_duration: currentFormData.illness_duration,
+          current_episode_since: currentFormData.current_episode_since,
+          mood: join(currentFormData.mood),
+          behaviour: join(currentFormData.behaviour),
+          speech: join(currentFormData.speech),
+          thought: join(currentFormData.thought),
+          perception: join(currentFormData.perception),
+          somatic: join(currentFormData.somatic),
+          bio_functions: join(currentFormData.bio_functions),
+          adjustment: join(currentFormData.adjustment),
+          cognitive_function: join(currentFormData.cognitive_function),
+          fits: join(currentFormData.fits),
+          sexual_problem: join(currentFormData.sexual_problem),
+          substance_use: join(currentFormData.substance_use),
+          past_history: currentFormData.past_history,
+          family_history: currentFormData.family_history,
+          associated_medical_surgical: join(currentFormData.associated_medical_surgical),
+          mse_behaviour: join(currentFormData.mse_behaviour),
+          mse_affect: join(currentFormData.mse_affect),
+          mse_thought: currentFormData.mse_thought,
+          mse_delusions: currentFormData.mse_delusions,
+          mse_perception: join(currentFormData.mse_perception),
+          mse_cognitive_function: join(currentFormData.mse_cognitive_function),
+          gpe: currentFormData.gpe,
+          diagnosis: currentFormData.diagnosis,
+          icd_code: currentFormData.icd_code,
+          disposal: currentFormData.disposal,
+          workup_appointment: currentFormData.workup_appointment,
+          referred_to: currentFormData.referred_to,
+          treatment_prescribed: currentFormData.treatment_prescribed,
+          doctor_decision: currentFormData.doctor_decision,
+          // case_severity: currentFormData.case_severity,
         };
 
         try {
@@ -886,48 +1023,48 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
       // CASE 2: Create new proforma or Update existing proforma
       const proformaData = {
-        patient_id: parseInt(formData.patient_id, 10),
-        visit_date: formData.visit_date,
-        visit_type: formData.visit_type,
-        room_no: formData.room_no || null,
-        assigned_doctor: formData.assigned_doctor ? parseInt(formData.assigned_doctor, 10) : null,
-        informant_present: formData.informant_present ?? true,
-        nature_of_information: formData.nature_of_information || null,
-        onset_duration: formData.onset_duration || null,
-        course: formData.course || null,
-        precipitating_factor: formData.precipitating_factor || null,
-        illness_duration: formData.illness_duration || null,
-        current_episode_since: formData.current_episode_since || null,
-        mood: join(formData.mood) || null,
-        behaviour: join(formData.behaviour) || null,
-        speech: join(formData.speech) || null,
-        thought: join(formData.thought) || null,
-        perception: join(formData.perception) || null,
-        somatic: join(formData.somatic) || null,
-        bio_functions: join(formData.bio_functions) || null,
-        adjustment: join(formData.adjustment) || null,
-        cognitive_function: join(formData.cognitive_function) || null,
-        fits: join(formData.fits) || null,
-        sexual_problem: join(formData.sexual_problem) || null,
-        substance_use: join(formData.substance_use) || null,
-        past_history: formData.past_history || null,
-        family_history: formData.family_history || null,
-        associated_medical_surgical: join(formData.associated_medical_surgical) || null,
-        mse_behaviour: join(formData.mse_behaviour) || null,
-        mse_affect: join(formData.mse_affect) || null,
-        mse_thought: formData.mse_thought || null,
-        mse_delusions: formData.mse_delusions || null,
-        mse_perception: join(formData.mse_perception) || null,
-        mse_cognitive_function: join(formData.mse_cognitive_function) || null,
-        gpe: formData.gpe || null,
-        diagnosis: formData.diagnosis || null,
-        icd_code: formData.icd_code || null,
-        disposal: formData.disposal || null,
-        workup_appointment: formData.workup_appointment || null,
-        referred_to: formData.referred_to || null,
-        treatment_prescribed: formData.treatment_prescribed || null,
-        doctor_decision: formData.doctor_decision || 'simple_case',
-        // case_severity: formData.case_severity || null,
+        patient_id: parseInt(currentFormData.patient_id, 10),
+        visit_date: currentFormData.visit_date,
+        visit_type: currentFormData.visit_type,
+        room_no: currentFormData.room_no || null,
+        assigned_doctor: currentFormData.assigned_doctor ? parseInt(currentFormData.assigned_doctor, 10) : null,
+        informant_present: currentFormData.informant_present ?? true,
+        nature_of_information: currentFormData.nature_of_information || null,
+        onset_duration: currentFormData.onset_duration || null,
+        course: currentFormData.course || null,
+        precipitating_factor: currentFormData.precipitating_factor || null,
+        illness_duration: currentFormData.illness_duration || null,
+        current_episode_since: currentFormData.current_episode_since || null,
+        mood: join(currentFormData.mood) || null,
+        behaviour: join(currentFormData.behaviour) || null,
+        speech: join(currentFormData.speech) || null,
+        thought: join(currentFormData.thought) || null,
+        perception: join(currentFormData.perception) || null,
+        somatic: join(currentFormData.somatic) || null,
+        bio_functions: join(currentFormData.bio_functions) || null,
+        adjustment: join(currentFormData.adjustment) || null,
+        cognitive_function: join(currentFormData.cognitive_function) || null,
+        fits: join(currentFormData.fits) || null,
+        sexual_problem: join(currentFormData.sexual_problem) || null,
+        substance_use: join(currentFormData.substance_use) || null,
+        past_history: currentFormData.past_history || null,
+        family_history: currentFormData.family_history || null,
+        associated_medical_surgical: join(currentFormData.associated_medical_surgical) || null,
+        mse_behaviour: join(currentFormData.mse_behaviour) || null,
+        mse_affect: join(currentFormData.mse_affect) || null,
+        mse_thought: currentFormData.mse_thought || null,
+        mse_delusions: currentFormData.mse_delusions || null,
+        mse_perception: join(currentFormData.mse_perception) || null,
+        mse_cognitive_function: join(currentFormData.mse_cognitive_function) || null,
+        gpe: currentFormData.gpe || null,
+        diagnosis: currentFormData.diagnosis || null,
+        icd_code: currentFormData.icd_code || null,
+        disposal: currentFormData.disposal || null,
+        workup_appointment: currentFormData.workup_appointment || null,
+        referred_to: currentFormData.referred_to || null,
+        treatment_prescribed: currentFormData.treatment_prescribed || null,
+        doctor_decision: currentFormData.doctor_decision || 'simple_case',
+        // case_severity: currentFormData.case_severity || null,
       };
 
       let savedProforma = null;
@@ -965,6 +1102,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           const result = await createProforma(proformaData).unwrap();
           savedProforma = result?.data?.clinical_proforma;
           toast.success("Clinical proforma created successfully!");
+          // Reset user edited flag after successful save to allow future updates
+          userHasEditedRef.current = false;
           // Refetch proformas to get the new one
           refetch();
         }
@@ -1178,7 +1317,43 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           {isEmbedded ? (
             // When embedded, render form content directly without Card wrapper
             <div ref={printSectionRef} className="space-y-6">
-              {/* {!isEmbedded && <h1 className="text-3xl font-bold text-gray-900 mb-6">Edit Walk-in Clinical Proforma</h1>} */}
+              {/* Form Header with Auto-Fill Button */}
+              {isCreateMode && !propInitialData?.id && patientId && (
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Walk-in Clinical Proforma</h3>
+                    <p className="text-sm text-gray-500 mt-1">Create a new clinical proforma for this visit</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {isLoadingLastVisit && (
+                      <div className="flex items-center gap-2 text-blue-600">
+                        <FiLoader className="w-4 h-4 animate-spin" />
+                        <span className="text-sm">Loading...</span>
+                      </div>
+                    )}
+                    <label className="flex items-center gap-2 cursor-pointer px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-lg transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={autoFillEnabled}
+                      onChange={(e) => {
+                        setAutoFillEnabled(e.target.checked);
+                        if (!e.target.checked) {
+                          // Reset form to initial state when unchecked
+                          setFormData(initialFormData || defaultFormData);
+                          // Reset the edited flag when user explicitly unchecks
+                          userHasEditedRef.current = false;
+                        }
+                      }}
+                        disabled={isLoadingLastVisit}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium text-gray-900 whitespace-nowrap">
+                        Auto-Fill Last Visit Details
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
 
               {/* Basic Information Section */}
               <div className="space-y-4">
