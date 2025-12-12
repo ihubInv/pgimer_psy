@@ -295,9 +295,9 @@ router.get('/by-proforma/:clinical_proforma_id', authenticateToken, [
   param('clinical_proforma_id').isInt().withMessage('Clinical proforma ID must be an integer')
 ], handleValidationErrors, async (req, res, next) => {
   try {
-    // Call the controller with clinical_proforma_id in query
-    req.query.clinical_proforma_id = req.params.clinical_proforma_id;
-    req.params.id = '1'; // Placeholder, will be ignored by controller when clinical_proforma_id is present
+  // Call the controller with clinical_proforma_id in query
+  req.query.clinical_proforma_id = req.params.clinical_proforma_id;
+  req.params.id = '1'; // Placeholder, will be ignored by controller when clinical_proforma_id is present
     await prescriptionController.getPrescriptionById(req, res);
   } catch (error) {
     next(error);

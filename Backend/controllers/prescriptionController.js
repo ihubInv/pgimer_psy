@@ -157,10 +157,10 @@ const getPrescriptionById = async (req, res) => {
           }
         });
       } else {
-        return res.status(404).json({
-          success: false,
-          message: 'Prescription not found'
-        });
+      return res.status(404).json({
+        success: false,
+        message: 'Prescription not found'
+      });
       }
     }
 

@@ -506,21 +506,21 @@ const Profile = () => {
               {passwordChangeStep === 1 && (
                 <form onSubmit={handleRequestOTP} className="space-y-6">
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200/50">
-                    <div className="bg-white rounded-xl border border-gray-200 p-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Current Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
-                          <FiKey className="w-5 h-5 text-gray-400" />
-                        </div>
-                        <input
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Current Password <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
+                      <FiKey className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <input
                           type={showCurrentPassword ? "text" : "password"}
-                          name="currentPassword"
-                          value={passwordForm.currentPassword}
-                          onChange={handlePasswordChange}
+                      name="currentPassword"
+                      value={passwordForm.currentPassword}
+                      onChange={handlePasswordChange}
                           className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
-                          required
+                      required
                           autoFocus
                         />
                         <button
@@ -550,7 +550,7 @@ const Profile = () => {
                       <FiLock className="mr-2" />
                       {isRequestingOTP ? 'Sending OTP...' : 'Request OTP'}
                     </Button>
-                  </div>
+                </div>
                 </form>
               )}
 
@@ -563,7 +563,7 @@ const Profile = () => {
                         <strong>OTP Sent!</strong> Check your email ({profile?.email}) for the verification code.
                       </p>
                     </div>
-                    <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Enter OTP <span className="text-red-500">*</span>
                       </label>
@@ -638,23 +638,23 @@ const Profile = () => {
                     </div>
                     <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          New Password <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
-                            <FiKey className="w-5 h-5 text-gray-400" />
-                          </div>
-                          <input
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    New Password <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
+                      <FiKey className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <input
                             type={showNewPassword ? "text" : "password"}
-                            name="newPassword"
-                            value={passwordForm.newPassword}
-                            onChange={handlePasswordChange}
-                            placeholder="Enter new password"
+                      name="newPassword"
+                      value={passwordForm.newPassword}
+                      onChange={handlePasswordChange}
+                      placeholder="Enter new password"
                             className={`w-full pl-10 pr-10 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white ${
-                              passwordErrors.length > 0 && passwordForm.newPassword ? 'border-red-300' : 'border-gray-300'
-                            }`}
-                            required
+                        passwordErrors.length > 0 && passwordForm.newPassword ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      required
                             autoFocus
                           />
                           <button
@@ -668,50 +668,50 @@ const Profile = () => {
                               <FiEye className="w-5 h-5" />
                             )}
                           </button>
-                        </div>
-                        {/* Password Requirements */}
-                        {passwordForm.newPassword && (
-                          <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                            <h5 className="text-xs font-medium text-gray-700 mb-2">Password Requirements:</h5>
-                            <ul className="text-xs space-y-1">
-                              {getPasswordRequirements(passwordForm.newPassword).map((req, index) => (
-                                <li key={index} className={`flex items-center ${req.met ? 'text-green-600' : 'text-gray-500'}`}>
-                                  <span className="mr-2">{req.met ? '✓' : '○'}</span>
-                                  {req.text}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {/* Show validation errors if any */}
-                        {passwordErrors.length > 0 && passwordForm.newPassword && (
-                          <div className="mt-2">
-                            {passwordErrors.map((error, index) => (
-                              <p key={index} className="text-xs text-red-600 flex items-center gap-1">
-                                <FiAlertCircle className="w-3 h-3" />
-                                {error}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                  </div>
+                  {/* Password Requirements */}
+                  {passwordForm.newPassword && (
+                    <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <h5 className="text-xs font-medium text-gray-700 mb-2">Password Requirements:</h5>
+                      <ul className="text-xs space-y-1">
+                        {getPasswordRequirements(passwordForm.newPassword).map((req, index) => (
+                          <li key={index} className={`flex items-center ${req.met ? 'text-green-600' : 'text-gray-500'}`}>
+                            <span className="mr-2">{req.met ? '✓' : '○'}</span>
+                            {req.text}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {/* Show validation errors if any */}
+                  {passwordErrors.length > 0 && passwordForm.newPassword && (
+                    <div className="mt-2">
+                      {passwordErrors.map((error, index) => (
+                        <p key={index} className="text-xs text-red-600 flex items-center gap-1">
+                    <FiAlertCircle className="w-3 h-3" />
+                          {error}
+                  </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Confirm New Password <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
-                            <FiKey className="w-5 h-5 text-gray-400" />
-                          </div>
-                          <input
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Confirm New Password <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
+                      <FiKey className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <input
                             type={showConfirmPassword ? "text" : "password"}
-                            name="confirmPassword"
-                            value={passwordForm.confirmPassword}
-                            onChange={handlePasswordChange}
+                      name="confirmPassword"
+                      value={passwordForm.confirmPassword}
+                      onChange={handlePasswordChange}
                             className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
-                            required
-                          />
+                      required
+                    />
                           <button
                             type="button"
                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -723,16 +723,16 @@ const Profile = () => {
                               <FiEye className="w-5 h-5" />
                             )}
                           </button>
-                        </div>
-                        {passwordForm.newPassword && passwordForm.confirmPassword && 
-                         passwordForm.newPassword !== passwordForm.confirmPassword && (
-                          <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
-                            <FiAlertCircle className="w-3 h-3" />
-                            Passwords do not match
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                  </div>
+                  {passwordForm.newPassword && passwordForm.confirmPassword && 
+                   passwordForm.newPassword !== passwordForm.confirmPassword && (
+                    <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+                      <FiAlertCircle className="w-3 h-3" />
+                      Passwords do not match
+                    </p>
+                  )}
+                </div>
+              </div>
                   </div>
                   <div className="flex justify-between pt-4">
                     <Button 
@@ -746,23 +746,23 @@ const Profile = () => {
                       <FiX className="mr-2" />
                       Back
                     </Button>
-                    <Button 
-                      type="submit" 
-                      loading={isChangingPassword}
-                      className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg"
-                      disabled={
-                        (passwordForm.newPassword && passwordForm.confirmPassword && 
-                         passwordForm.newPassword !== passwordForm.confirmPassword) ||
-                        passwordErrors.length > 0 ||
-                        !passwordForm.newPassword ||
+                <Button 
+                  type="submit" 
+                  loading={isChangingPassword}
+                  className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg"
+                  disabled={
+                    (passwordForm.newPassword && passwordForm.confirmPassword && 
+                     passwordForm.newPassword !== passwordForm.confirmPassword) ||
+                    passwordErrors.length > 0 ||
+                    !passwordForm.newPassword ||
                         !passwordForm.confirmPassword
-                      }
-                    >
-                      <FiLock className="mr-2" />
-                      {isChangingPassword ? 'Changing...' : 'Change Password'}
-                    </Button>
-                  </div>
-                </form>
+                  }
+                >
+                  <FiLock className="mr-2" />
+                  {isChangingPassword ? 'Changing...' : 'Change Password'}
+                </Button>
+              </div>
+            </form>
               )}
             </div>
           </Card>
