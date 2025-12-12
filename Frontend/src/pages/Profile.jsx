@@ -3,12 +3,15 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiLock, FiShield, FiCalendar, FiClock, 
-  FiKey, FiCheckCircle, FiAlertCircle, FiEdit3, FiSave, FiX
+  FiKey, FiCheckCircle, FiAlertCircle, FiEdit3, FiSave, FiX,
+  FiEye, FiEyeOff
 } from 'react-icons/fi';
 import { selectCurrentUser } from '../features/auth/authSlice';
 import {
   useGetProfileQuery,
   useUpdateProfileMutation,
+  useRequestPasswordChangeOTPMutation,
+  useVerifyPasswordChangeOTPMutation,
   useChangePasswordMutation,
   useEnable2FAMutation,
   useDisable2FAMutation,
@@ -26,6 +29,8 @@ const Profile = () => {
   const user = useSelector(selectCurrentUser);
   const { data: profileData, isLoading } = useGetProfileQuery();
   const [updateProfile, { isLoading: isUpdating }] = useUpdateProfileMutation();
+  const [requestPasswordChangeOTP, { isLoading: isRequestingOTP }] = useRequestPasswordChangeOTPMutation();
+  const [verifyPasswordChangeOTP, { isLoading: isVerifyingOTP }] = useVerifyPasswordChangeOTPMutation();
   const [changePassword, { isLoading: isChangingPassword }] = useChangePasswordMutation();
   const [enable2FA] = useEnable2FAMutation();
   const [disable2FA] = useDisable2FAMutation();
@@ -45,12 +50,21 @@ const Profile = () => {
       });
     }
   }, [profileData]);
+  // Password change workflow state
+  const [passwordChangeStep, setPasswordChangeStep] = useState(1); // 1: current password, 2: OTP, 3: new password
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
+    otp: '',
     newPassword: '',
     confirmPassword: '',
   });
   const [passwordErrors, setPasswordErrors] = useState([]);
+  const [verificationToken, setVerificationToken] = useState(null);
+  
+  // Password visibility states
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // 2FA disable OTP modal state
   const [showDisable2FAModal, setShowDisable2FAModal] = useState(false);
@@ -83,6 +97,53 @@ const Profile = () => {
     }
   };
 
+  // Step 1: Request OTP after verifying current password
+  const handleRequestOTP = async (e) => {
+    e.preventDefault();
+    
+    if (!passwordForm.currentPassword) {
+      toast.error('Please enter your current password');
+      return;
+    }
+
+    try {
+      // SECURITY FIX #2.17: Encrypt password before transmission
+      const currentPasswordEncryption = await encryptPasswordForTransmission(passwordForm.currentPassword);
+      
+      await requestPasswordChangeOTP({
+        currentPassword: currentPasswordEncryption.encrypted,
+      }).unwrap();
+      
+      toast.success('OTP has been sent to your registered email address');
+      setPasswordChangeStep(2); // Move to OTP verification step
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to send OTP');
+    }
+  };
+
+  // Step 2: Verify OTP
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    
+    if (!passwordForm.otp || passwordForm.otp.length !== 6) {
+      toast.error('Please enter a valid 6-digit OTP');
+      return;
+    }
+
+    try {
+      const result = await verifyPasswordChangeOTP({
+        otp: passwordForm.otp.trim(),
+      }).unwrap();
+      
+      setVerificationToken(result.data.verification_token);
+      toast.success('OTP verified successfully! You can now set your new password');
+      setPasswordChangeStep(3); // Move to new password step
+    } catch (err) {
+      toast.error(err?.data?.message || 'Invalid or expired OTP. Please try again.');
+    }
+  };
+
+  // Step 3: Change password with verified token
   const handlePasswordSubmit = async (e) => {
     e.preventDefault();
 
@@ -99,23 +160,55 @@ const Profile = () => {
       return;
     }
 
+    if (!verificationToken) {
+      toast.error('Verification token missing. Please start the process again.');
+      setPasswordChangeStep(1);
+      return;
+    }
+
     try {
-      // SECURITY FIX #2.17: Encrypt passwords before transmission
-      const currentPasswordEncryption = await encryptPasswordForTransmission(passwordForm.currentPassword);
+      // SECURITY FIX #2.17: Encrypt password before transmission
       const newPasswordEncryption = await encryptPasswordForTransmission(passwordForm.newPassword);
       
       await changePassword({
-        currentPassword: currentPasswordEncryption.encrypted,
         newPassword: newPasswordEncryption.encrypted,
+        verification_token: verificationToken,
       }).unwrap();
+      
       toast.success('Password changed successfully!');
+      
+      // Reset form and workflow
       setPasswordForm({
         currentPassword: '',
+        otp: '',
         newPassword: '',
         confirmPassword: '',
       });
+      setPasswordErrors([]);
+      setVerificationToken(null);
+      setPasswordChangeStep(1);
     } catch (err) {
       toast.error(err?.data?.message || 'Failed to change password');
+    }
+  };
+
+  // Resend OTP
+  const handleResendOTP = async () => {
+    if (!passwordForm.currentPassword) {
+      toast.error('Please enter your current password first');
+      return;
+    }
+
+    try {
+      const currentPasswordEncryption = await encryptPasswordForTransmission(passwordForm.currentPassword);
+      await requestPasswordChangeOTP({
+        currentPassword: currentPasswordEncryption.encrypted,
+      }).unwrap();
+      
+      setPasswordForm(prev => ({ ...prev, otp: '' }));
+      toast.success('New OTP has been sent to your email');
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to resend OTP');
     }
   };
 
@@ -375,119 +468,303 @@ const Profile = () => {
               <p className="text-gray-600 ml-12">Update your password to keep your account secure</p>
             </div>
 
-            <form onSubmit={handlePasswordSubmit} className="space-y-6">
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200/50 space-y-6">
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Current Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
-                      <FiKey className="w-5 h-5 text-gray-400" />
+            {/* Multi-step Password Change Workflow */}
+            <div className="space-y-6">
+              {/* Step Indicator */}
+              <div className="flex items-center justify-center mb-6">
+                <div className="flex items-center space-x-4">
+                  <div className={`flex items-center ${passwordChangeStep >= 1 ? 'text-primary-600' : 'text-gray-400'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
+                      passwordChangeStep >= 1 ? 'border-primary-600 bg-primary-50' : 'border-gray-300 bg-white'
+                    }`}>
+                      {passwordChangeStep > 1 ? <FiCheckCircle className="w-6 h-6" /> : <span>1</span>}
                     </div>
-                    <input
-                      type="password"
-                      name="currentPassword"
-                      value={passwordForm.currentPassword}
-                      onChange={handlePasswordChange}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
-                      required
-                    />
+                    <span className="ml-2 text-sm font-medium">Current Password</span>
                   </div>
-                </div>
-
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    New Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
-                      <FiKey className="w-5 h-5 text-gray-400" />
+                  <div className={`w-12 h-0.5 ${passwordChangeStep >= 2 ? 'bg-primary-600' : 'bg-gray-300'}`}></div>
+                  <div className={`flex items-center ${passwordChangeStep >= 2 ? 'text-primary-600' : 'text-gray-400'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
+                      passwordChangeStep >= 2 ? 'border-primary-600 bg-primary-50' : 'border-gray-300 bg-white'
+                    }`}>
+                      {passwordChangeStep > 2 ? <FiCheckCircle className="w-6 h-6" /> : <span>2</span>}
                     </div>
-                    <input
-                      type="password"
-                      name="newPassword"
-                      value={passwordForm.newPassword}
-                      onChange={handlePasswordChange}
-                      placeholder="Enter new password"
-                      className={`w-full pl-10 pr-3 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white ${
-                        passwordErrors.length > 0 && passwordForm.newPassword ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                      required
-                    />
+                    <span className="ml-2 text-sm font-medium">OTP Verification</span>
                   </div>
-                  {/* Password Requirements */}
-                  {passwordForm.newPassword && (
-                    <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                      <h5 className="text-xs font-medium text-gray-700 mb-2">Password Requirements:</h5>
-                      <ul className="text-xs space-y-1">
-                        {getPasswordRequirements(passwordForm.newPassword).map((req, index) => (
-                          <li key={index} className={`flex items-center ${req.met ? 'text-green-600' : 'text-gray-500'}`}>
-                            <span className="mr-2">{req.met ? '✓' : '○'}</span>
-                            {req.text}
-                          </li>
-                        ))}
-                      </ul>
+                  <div className={`w-12 h-0.5 ${passwordChangeStep >= 3 ? 'bg-primary-600' : 'bg-gray-300'}`}></div>
+                  <div className={`flex items-center ${passwordChangeStep >= 3 ? 'text-primary-600' : 'text-gray-400'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
+                      passwordChangeStep >= 3 ? 'border-primary-600 bg-primary-50' : 'border-gray-300 bg-white'
+                    }`}>
+                      <span>3</span>
                     </div>
-                  )}
-                  {/* Show validation errors if any */}
-                  {passwordErrors.length > 0 && passwordForm.newPassword && (
-                    <div className="mt-2">
-                      {passwordErrors.map((error, index) => (
-                        <p key={index} className="text-xs text-red-600 flex items-center gap-1">
-                    <FiAlertCircle className="w-3 h-3" />
-                          {error}
-                  </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Confirm New Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
-                      <FiKey className="w-5 h-5 text-gray-400" />
-                    </div>
-                    <input
-                      type="password"
-                      name="confirmPassword"
-                      value={passwordForm.confirmPassword}
-                      onChange={handlePasswordChange}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
-                      required
-                    />
+                    <span className="ml-2 text-sm font-medium">New Password</span>
                   </div>
-                  {passwordForm.newPassword && passwordForm.confirmPassword && 
-                   passwordForm.newPassword !== passwordForm.confirmPassword && (
-                    <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
-                      <FiAlertCircle className="w-3 h-3" />
-                      Passwords do not match
-                    </p>
-                  )}
                 </div>
               </div>
 
-              <div className="flex justify-end pt-4">
-                <Button 
-                  type="submit" 
-                  loading={isChangingPassword}
-                  className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg"
-                  disabled={
-                    (passwordForm.newPassword && passwordForm.confirmPassword && 
-                     passwordForm.newPassword !== passwordForm.confirmPassword) ||
-                    passwordErrors.length > 0 ||
-                    !passwordForm.newPassword ||
-                    !passwordForm.currentPassword
-                  }
-                >
-                  <FiLock className="mr-2" />
-                  {isChangingPassword ? 'Changing...' : 'Change Password'}
-                </Button>
-              </div>
-            </form>
+              {/* Step 1: Current Password */}
+              {passwordChangeStep === 1 && (
+                <form onSubmit={handleRequestOTP} className="space-y-6">
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200/50">
+                    <div className="bg-white rounded-xl border border-gray-200 p-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Current Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
+                          <FiKey className="w-5 h-5 text-gray-400" />
+                        </div>
+                        <input
+                          type={showCurrentPassword ? "text" : "password"}
+                          name="currentPassword"
+                          value={passwordForm.currentPassword}
+                          onChange={handlePasswordChange}
+                          className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+                          required
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                        >
+                          {showCurrentPassword ? (
+                            <FiEyeOff className="w-5 h-5" />
+                          ) : (
+                            <FiEye className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-sm text-gray-600">
+                        Enter your current password to receive an OTP via email
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-4">
+                    <Button 
+                      type="submit" 
+                      loading={isRequestingOTP}
+                      className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg"
+                      disabled={!passwordForm.currentPassword}
+                    >
+                      <FiLock className="mr-2" />
+                      {isRequestingOTP ? 'Sending OTP...' : 'Request OTP'}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {/* Step 2: OTP Verification */}
+              {passwordChangeStep === 2 && (
+                <form onSubmit={handleVerifyOTP} className="space-y-6">
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200/50">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-blue-800">
+                        <strong>OTP Sent!</strong> Check your email ({profile?.email}) for the verification code.
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-gray-200 p-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Enter OTP <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
+                          <FiKey className="w-5 h-5 text-gray-400" />
+                        </div>
+                        <input
+                          type="text"
+                          name="otp"
+                          value={passwordForm.otp}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                            setPasswordForm(prev => ({ ...prev, otp: value }));
+                          }}
+                          placeholder="000000"
+                          maxLength={6}
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-center text-2xl font-mono tracking-widest"
+                          required
+                          autoFocus
+                        />
+                      </div>
+                      <p className="mt-2 text-sm text-gray-600">
+                        Enter the 6-digit code sent to your email
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex justify-between pt-4">
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setPasswordChangeStep(1);
+                        setPasswordForm(prev => ({ ...prev, otp: '' }));
+                      }}
+                    >
+                      <FiX className="mr-2" />
+                      Back
+                    </Button>
+                    <div className="flex gap-3">
+                      <Button 
+                        type="button"
+                        variant="outline"
+                        onClick={handleResendOTP}
+                        disabled={isRequestingOTP}
+                      >
+                        Resend OTP
+                      </Button>
+                      <Button 
+                        type="submit" 
+                        loading={isVerifyingOTP}
+                        className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg"
+                        disabled={passwordForm.otp.length !== 6}
+                      >
+                        <FiLock className="mr-2" />
+                        {isVerifyingOTP ? 'Verifying...' : 'Verify OTP'}
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+              )}
+
+              {/* Step 3: New Password */}
+              {passwordChangeStep === 3 && (
+                <form onSubmit={handlePasswordSubmit} className="space-y-6">
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200/50">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-green-800 flex items-center gap-2">
+                        <FiCheckCircle className="w-4 h-4" />
+                        <strong>OTP Verified!</strong> You can now set your new password.
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          New Password <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
+                            <FiKey className="w-5 h-5 text-gray-400" />
+                          </div>
+                          <input
+                            type={showNewPassword ? "text" : "password"}
+                            name="newPassword"
+                            value={passwordForm.newPassword}
+                            onChange={handlePasswordChange}
+                            placeholder="Enter new password"
+                            className={`w-full pl-10 pr-10 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white ${
+                              passwordErrors.length > 0 && passwordForm.newPassword ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            required
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                          >
+                            {showNewPassword ? (
+                              <FiEyeOff className="w-5 h-5" />
+                            ) : (
+                              <FiEye className="w-5 h-5" />
+                            )}
+                          </button>
+                        </div>
+                        {/* Password Requirements */}
+                        {passwordForm.newPassword && (
+                          <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                            <h5 className="text-xs font-medium text-gray-700 mb-2">Password Requirements:</h5>
+                            <ul className="text-xs space-y-1">
+                              {getPasswordRequirements(passwordForm.newPassword).map((req, index) => (
+                                <li key={index} className={`flex items-center ${req.met ? 'text-green-600' : 'text-gray-500'}`}>
+                                  <span className="mr-2">{req.met ? '✓' : '○'}</span>
+                                  {req.text}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {/* Show validation errors if any */}
+                        {passwordErrors.length > 0 && passwordForm.newPassword && (
+                          <div className="mt-2">
+                            {passwordErrors.map((error, index) => (
+                              <p key={index} className="text-xs text-red-600 flex items-center gap-1">
+                                <FiAlertCircle className="w-3 h-3" />
+                                {error}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Confirm New Password <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none mt-0">
+                            <FiKey className="w-5 h-5 text-gray-400" />
+                          </div>
+                          <input
+                            type={showConfirmPassword ? "text" : "password"}
+                            name="confirmPassword"
+                            value={passwordForm.confirmPassword}
+                            onChange={handlePasswordChange}
+                            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                          >
+                            {showConfirmPassword ? (
+                              <FiEyeOff className="w-5 h-5" />
+                            ) : (
+                              <FiEye className="w-5 h-5" />
+                            )}
+                          </button>
+                        </div>
+                        {passwordForm.newPassword && passwordForm.confirmPassword && 
+                         passwordForm.newPassword !== passwordForm.confirmPassword && (
+                          <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+                            <FiAlertCircle className="w-3 h-3" />
+                            Passwords do not match
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between pt-4">
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setPasswordChangeStep(2);
+                        setPasswordForm(prev => ({ ...prev, newPassword: '', confirmPassword: '' }));
+                      }}
+                    >
+                      <FiX className="mr-2" />
+                      Back
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      loading={isChangingPassword}
+                      className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg"
+                      disabled={
+                        (passwordForm.newPassword && passwordForm.confirmPassword && 
+                         passwordForm.newPassword !== passwordForm.confirmPassword) ||
+                        passwordErrors.length > 0 ||
+                        !passwordForm.newPassword ||
+                        !passwordForm.confirmPassword
+                      }
+                    >
+                      <FiLock className="mr-2" />
+                      {isChangingPassword ? 'Changing...' : 'Change Password'}
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
           </Card>
         )}
 

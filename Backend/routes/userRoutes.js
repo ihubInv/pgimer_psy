@@ -810,10 +810,10 @@ router.put('/profile', authenticateToken, UserController.updateProfile);
 
 /**
  * @swagger
- * /api/users/change-password:
- *   put:
- *     summary: Change user password
- *     description: Change the password of the currently authenticated user
+ * /api/users/change-password/request-otp:
+ *   post:
+ *     summary: Request OTP for password change (Step 1)
+ *     description: Verify current password and send OTP to user's email for password change
  *     tags: [User Management]
  *     security:
  *       - bearerAuth: []
@@ -825,50 +825,92 @@ router.put('/profile', authenticateToken, UserController.updateProfile);
  *             type: object
  *             required:
  *               - currentPassword
- *               - newPassword
  *             properties:
  *               currentPassword:
  *                 type: string
- *                 minLength: 6
  *                 description: Current password for verification
  *                 example: "currentPassword123"
+ *     responses:
+ *       200:
+ *         description: OTP sent successfully
+ *       400:
+ *         description: Invalid current password
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.post('/change-password/request-otp', authenticateToken, UserController.requestPasswordChangeOTP);
+
+/**
+ * @swagger
+ * /api/users/change-password/verify-otp:
+ *   post:
+ *     summary: Verify OTP for password change (Step 2)
+ *     description: Verify the OTP received via email and get verification token
+ *     tags: [User Management]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - otp
+ *             properties:
+ *               otp:
+ *                 type: string
+ *                 description: 6-digit OTP received via email
+ *                 example: "123456"
+ *     responses:
+ *       200:
+ *         description: OTP verified successfully, returns verification token
+ *       401:
+ *         description: Invalid or expired OTP
+ *       500:
+ *         description: Server error
+ */
+router.post('/change-password/verify-otp', authenticateToken, UserController.verifyPasswordChangeOTP);
+
+/**
+ * @swagger
+ * /api/users/change-password:
+ *   put:
+ *     summary: Change user password (Step 3)
+ *     description: Change the password using verified OTP token
+ *     tags: [User Management]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - newPassword
+ *               - verification_token
+ *             properties:
  *               newPassword:
  *                 type: string
  *                 minLength: 8
  *                 description: New password (must be at least 8 characters with uppercase, lowercase, number, and special character)
  *                 example: "NewSecurePassword123!"
+ *               verification_token:
+ *                 type: string
+ *                 description: Verification token received from verify-otp endpoint
+ *                 example: "abc123def456..."
  *     responses:
  *       200:
  *         description: Password changed successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: "Password changed successfully"
  *       400:
- *         description: Validation error or incorrect current password
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Validation error or invalid token
  *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Unauthorized or invalid token
  *       500:
  *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
 router.put('/change-password', authenticateToken, UserController.changePassword);
 

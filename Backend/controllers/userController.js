@@ -375,17 +375,150 @@ class UserController {
     }
   }
 
-  // Change password
-  static async changePassword(req, res) {
+  // Request OTP for password change (Step 1: Verify current password and send OTP)
+  static async requestPasswordChangeOTP(req, res) {
     try {
-      const { currentPassword, newPassword } = req.body;
+      const { currentPassword } = req.body;
 
-      // SECURITY FIX #2.17: Decrypt passwords if they were encrypted on the client side
+      if (!currentPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'Current password is required'
+        });
+      }
+
+      // SECURITY FIX #2.17: Decrypt password if encrypted
       const { decryptPasswordIfNeeded } = require('../utils/passwordDecryption');
       const decryptedCurrentPassword = await decryptPasswordIfNeeded(currentPassword);
+
+      const user = await User.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Verify current password
+      const bcrypt = require('bcryptjs');
+      const isValidPassword = await bcrypt.compare(decryptedCurrentPassword, user.password_hash);
+      if (!isValidPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'Current password is incorrect'
+        });
+      }
+
+      // Create OTP
+      const PasswordChangeOTP = require('../models/PasswordChangeOTP');
+      const otpRecord = await PasswordChangeOTP.create(user.id);
+
+      // Send OTP via email
+      const { sendEmail } = require('../config/email');
+      try {
+        await sendEmail(user.email, 'passwordChangeOTP', {
+          userName: user.name,
+          otp: otpRecord.otp
+        });
+      } catch (emailError) {
+        console.error('Failed to send password change OTP email:', emailError);
+        // In development, log OTP to console
+        if (process.env.NODE_ENV === 'development') {
+          console.log('\n🔐 ======================');
+          console.log('🔐 Password Change OTP:', otpRecord.otp);
+          console.log('🔐 ======================\n');
+        }
+        // Continue even if email fails (for development)
+      }
+
+      res.json({
+        success: true,
+        message: 'OTP has been sent to your registered email address'
+      });
+    } catch (error) {
+      console.error('Request password change OTP error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send OTP',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  // Verify OTP for password change (Step 2: Verify OTP and return token)
+  static async verifyPasswordChangeOTP(req, res) {
+    try {
+      const { otp } = req.body;
+
+      if (!otp) {
+        return res.status(400).json({
+          success: false,
+          message: 'OTP is required'
+        });
+      }
+
+      const PasswordChangeOTP = require('../models/PasswordChangeOTP');
+      const otpRecord = await PasswordChangeOTP.verifyOTP(req.user.id, otp);
+
+      if (!otpRecord) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid or expired OTP. Please request a new one.'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'OTP verified successfully',
+        data: {
+          verification_token: otpRecord.verification_token
+        }
+      });
+    } catch (error) {
+      console.error('Verify password change OTP error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to verify OTP',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  // Change password (Step 3: Change password with verified token)
+  static async changePassword(req, res) {
+    try {
+      const { newPassword, verification_token } = req.body;
+
+      if (!newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'New password is required'
+        });
+      }
+
+      if (!verification_token) {
+        return res.status(400).json({
+          success: false,
+          message: 'Verification token is required. Please verify OTP first.'
+        });
+      }
+
+      // Verify token
+      const PasswordChangeOTP = require('../models/PasswordChangeOTP');
+      const otpRecord = await PasswordChangeOTP.verifyToken(req.user.id, verification_token);
+
+      if (!otpRecord) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid or expired verification token. Please verify OTP again.'
+        });
+      }
+
+      // SECURITY FIX #2.17: Decrypt password if encrypted
+      const { decryptPasswordIfNeeded } = require('../utils/passwordDecryption');
       const decryptedNewPassword = await decryptPasswordIfNeeded(newPassword);
 
-      // SECURITY FIX #12: Validate password strength (using decrypted password)
+      // SECURITY FIX #12: Validate password strength
       const { validatePasswordStrength } = require('../utils/passwordPolicy');
       const passwordValidation = validatePasswordStrength(decryptedNewPassword);
       if (!passwordValidation.isValid) {
@@ -404,7 +537,18 @@ class UserController {
         });
       }
 
-      await user.changePassword(decryptedCurrentPassword, decryptedNewPassword);
+      // Change password (no need to verify current password since OTP was already verified)
+      const bcrypt = require('bcryptjs');
+      const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
+      const newPasswordHash = await bcrypt.hash(decryptedNewPassword, saltRounds);
+
+      await require('../config/database').query(
+        'UPDATE users SET password_hash = $1 WHERE id = $2',
+        [newPasswordHash, user.id]
+      );
+
+      // Mark OTP as used
+      await otpRecord.markAsUsed();
 
       res.json({
         success: true,
@@ -412,14 +556,6 @@ class UserController {
       });
     } catch (error) {
       console.error('Change password error:', error);
-      
-      if (error.message === 'Current password is incorrect') {
-        return res.status(400).json({
-          success: false,
-          message: error.message
-        });
-      }
-
       res.status(500).json({
         success: false,
         message: 'Failed to change password',

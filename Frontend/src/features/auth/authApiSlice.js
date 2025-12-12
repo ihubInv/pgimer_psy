@@ -43,6 +43,20 @@ export const authApiSlice = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ['User'],
     }),
+    requestPasswordChangeOTP: builder.mutation({
+      query: (data) => ({
+        url: '/users/change-password/request-otp',
+        method: 'POST',
+        body: data,
+      }),
+    }),
+    verifyPasswordChangeOTP: builder.mutation({
+      query: (data) => ({
+        url: '/users/change-password/verify-otp',
+        method: 'POST',
+        body: data,
+      }),
+    }),
     changePassword: builder.mutation({
       query: (data) => ({
         url: '/users/change-password',
@@ -103,6 +117,8 @@ export const {
   useRegisterMutation,
   useGetProfileQuery,
   useUpdateProfileMutation,
+  useRequestPasswordChangeOTPMutation,
+  useVerifyPasswordChangeOTPMutation,
   useChangePasswordMutation,
   useEnable2FAMutation,
   useDisable2FAMutation,
