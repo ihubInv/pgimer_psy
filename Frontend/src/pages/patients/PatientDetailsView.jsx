@@ -113,10 +113,13 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   // State for past history cards
   const [expandedPastHistoryCards, setExpandedPastHistoryCards] = useState({
     patientDetails: false,
-    clinicalProforma: false,
-    intakeRecord: false,
-    prescription: false
   });
+
+  // State to track which visit cards are expanded (visit-based structure)
+  const [expandedVisitCards, setExpandedVisitCards] = useState({});
+  
+  // State to track which sections within each visit are expanded
+  const [expandedVisitSections, setExpandedVisitSections] = useState({});
 
 
   const isAdminUser = isAdmin(currentUser?.role);
@@ -148,6 +151,56 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   const isVisitExpanded = (cardType, visitId) => {
     const key = `${cardType}-${visitId}`;
     return expandedVisits[key] === true;
+  };
+
+  // New functions for visit-based structure
+  const toggleVisitCard = (visitId) => {
+    const isCurrentlyExpanded = expandedVisitCards[visitId] === true;
+    
+    // Toggle the visit card
+    setExpandedVisitCards(prev => ({
+      ...prev,
+      [visitId]: !prev[visitId]
+    }));
+
+    // If expanding the card, automatically expand all form sections
+    if (!isCurrentlyExpanded) {
+      // Find the visit to check which forms exist
+      const visit = unifiedVisits.find(v => v.visitId === visitId);
+      if (visit) {
+        // Expand all sections that exist for this visit
+        const sectionsToExpand = ['clinicalProforma']; // Always present
+        if (visit.hasAdl) sectionsToExpand.push('adl');
+        if (visit.hasPrescription) sectionsToExpand.push('prescription');
+        
+        // Set all sections to expanded
+        setExpandedVisitSections(prev => {
+          const newSections = { ...prev };
+          sectionsToExpand.forEach(section => {
+            const key = `${visitId}-${section}`;
+            newSections[key] = true;
+          });
+          return newSections;
+        });
+      }
+    }
+  };
+
+  const toggleVisitSection = (visitId, section) => {
+    const key = `${visitId}-${section}`;
+    setExpandedVisitSections(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const isVisitCardExpanded = (visitId) => {
+    return expandedVisitCards[visitId] === true;
+  };
+
+  const isVisitSectionExpanded = (visitId, section) => {
+    const key = `${visitId}-${section}`;
+    return expandedVisitSections[key] === true;
   };
 
   // Helper function to convert date to IST date string (YYYY-MM-DD)
@@ -304,7 +357,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     });
   }, [prescriptionResults, patientProformas, proformaIds]);
 
-  // Group prescriptions by visit date
+  // Group prescriptions by visit date (keep for backward compatibility if needed)
   const prescriptionsByVisit = useMemo(() => {
     const grouped = {};
     allPrescriptions.forEach(prescription => {
@@ -323,6 +376,41 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     return grouped;
   }, [allPrescriptions]);
 
+  // Create unified visit structure: group proformas, ADL files, and prescriptions by visit
+  const unifiedVisits = useMemo(() => {
+    // Sort proformas chronologically (newest first - latest visit at top)
+    const sortedProformas = [...trulyPastProformas].sort((a, b) => {
+      const dateA = new Date(a.visit_date || a.created_at || 0);
+      const dateB = new Date(b.visit_date || b.created_at || 0);
+      return dateB - dateA; // Newest first (latest visit at top)
+    });
+
+    // Create visit objects with all associated forms
+    return sortedProformas.map((proforma) => {
+      const visitId = proforma.id;
+      const visitDate = proforma.visit_date || proforma.created_at;
+      
+      // Find associated ADL file
+      const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === visitId);
+      
+      // Find associated prescription
+      const prescriptionResult = prescriptionResults.find((result, idx) => {
+        return proformaIds[idx] === visitId && result.data?.data?.prescription?.prescription;
+      });
+      const prescription = prescriptionResult?.data?.data?.prescription?.prescription || null;
+
+      return {
+        visitId,
+        visitDate,
+        proforma,
+        adlFile: adlFile || null,
+        prescription: prescription || null,
+        hasAdl: !!adlFile,
+        hasPrescription: !!prescription,
+      };
+    });
+  }, [trulyPastProformas, patientAdlFiles, prescriptionResults, proformaIds]);
+
   // Print functionality refs
   const patientDetailsPrintRef = useRef(null);
   const clinicalProformaPrintRef = useRef(null);
@@ -331,31 +419,48 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   
   // Past History print refs
   const pastHistoryPatientDetailsPrintRef = useRef(null);
-  const pastHistoryClinicalProformaPrintRef = useRef(null);
-  const pastHistoryADLPrintRef = useRef(null);
-  const pastHistoryPrescriptionPrintRef = useRef(null);
+  // Visit-based print refs (using Map to store refs for each visit)
+  const visitPrintRefs = useRef(new Map());
 
   // Hide submit buttons, Add buttons, and disable checkboxes in embedded clinical proforma view
   useEffect(() => {
-    if (expandedCards.clinical && clinicalProformaPrintRef.current) {
-      const form = clinicalProformaPrintRef.current.querySelector('form');
-      if (form) {
-        // Hide submit button section (last div with flex justify-end)
-        const allDivs = form.querySelectorAll('div.flex.justify-end');
-        allDivs.forEach(div => {
-          const hasSubmitButton = div.querySelector('button[type="submit"]');
-          if (hasSubmitButton) {
-            div.style.display = 'none';
-          }
-        });
-        // Also hide any submit buttons directly
-        const submitButtons = form.querySelectorAll('button[type="submit"]');
-        submitButtons.forEach(btn => {
-          btn.style.display = 'none';
-        });
-        // Hide cancel buttons, Add buttons, and cross (X) buttons
-        const allButtons = form.querySelectorAll('button');
-        allButtons.forEach(btn => {
+    // Check if component is still mounted and ref exists
+    if (!expandedCards.clinical || !clinicalProformaPrintRef.current) {
+      return;
+    }
+
+    // Use a flag to track if component is still mounted
+    let isMounted = true;
+
+    // Use requestAnimationFrame to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      if (!isMounted || !clinicalProformaPrintRef.current) {
+        return;
+      }
+
+      try {
+        const form = clinicalProformaPrintRef.current.querySelector('form');
+        if (form && isMounted) {
+          // Hide submit button section (last div with flex justify-end)
+          const allDivs = form.querySelectorAll('div.flex.justify-end');
+          allDivs.forEach(div => {
+            if (!isMounted) return;
+            const hasSubmitButton = div.querySelector('button[type="submit"]');
+            if (hasSubmitButton) {
+              div.style.display = 'none';
+            }
+          });
+          // Also hide any submit buttons directly
+          const submitButtons = form.querySelectorAll('button[type="submit"]');
+          submitButtons.forEach(btn => {
+            if (isMounted) {
+              btn.style.display = 'none';
+            }
+          });
+          // Hide cancel buttons, Add buttons, and cross (X) buttons
+          const allButtons = form.querySelectorAll('button');
+          allButtons.forEach(btn => {
+            if (!isMounted) return;
           const text = btn.textContent?.trim() || '';
           // Check for buttons with X icon or cross symbol
           const svg = btn.querySelector('svg');
@@ -407,29 +512,51 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               text === 'X' ||
               hasXIcon ||
               isCloseButton) {
-            btn.style.display = 'none';
+            if (isMounted) {
+              btn.style.display = 'none';
+            }
           }
         });
         // Disable all checkboxes
-        const checkboxes = form.querySelectorAll('input[type="checkbox"]');
-        checkboxes.forEach(checkbox => {
-          checkbox.disabled = true;
-          checkbox.style.cursor = 'not-allowed';
-        });
-        // Disable all radio buttons
-        const radioButtons = form.querySelectorAll('input[type="radio"]');
-        radioButtons.forEach(radio => {
-          radio.disabled = true;
-          radio.style.cursor = 'not-allowed';
-        });
-        // Disable all text inputs and textareas
-        const textInputs = form.querySelectorAll('input[type="text"], input[type="number"], textarea, select');
-        textInputs.forEach(input => {
-          input.disabled = true;
-          input.style.cursor = 'not-allowed';
-        });
+        if (isMounted) {
+          const checkboxes = form.querySelectorAll('input[type="checkbox"]');
+          checkboxes.forEach(checkbox => {
+            if (isMounted) {
+              checkbox.disabled = true;
+              checkbox.style.cursor = 'not-allowed';
+            }
+          });
+          // Disable all radio buttons
+          const radioButtons = form.querySelectorAll('input[type="radio"]');
+          radioButtons.forEach(radio => {
+            if (isMounted) {
+              radio.disabled = true;
+              radio.style.cursor = 'not-allowed';
+            }
+          });
+          // Disable all text inputs and textareas
+          const textInputs = form.querySelectorAll('input[type="text"], input[type="number"], textarea, select');
+          textInputs.forEach(input => {
+            if (isMounted) {
+              input.disabled = true;
+              input.style.cursor = 'not-allowed';
+            }
+          });
+        }
       }
-    }
+      } catch (error) {
+        // Silently handle errors if DOM node is not available (component unmounted)
+        if (isMounted) {
+          console.warn('[PatientDetailsView] DOM manipulation error:', error);
+        }
+      }
+    }, 0);
+
+    // Cleanup function to prevent accessing DOM after unmount
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
   }, [expandedCards.clinical, lastVisitProforma]);
 
   // Print functionality for Patient Details section
@@ -2402,6 +2529,626 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     }
   };
 
+  // Print handler for unified visit cards
+  const handlePrintVisit = async (visitId, visitDate) => {
+    // Find the visit data
+    const visit = unifiedVisits.find(v => v.visitId === visitId);
+    if (!visit) {
+      toast.error('Visit not found');
+      return;
+    }
+
+    // Ensure visit card is expanded first
+    if (!isVisitCardExpanded(visitId)) {
+      toggleVisitCard(visitId);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    // Expand all sections for this visit to ensure they're in the DOM
+    // Use setState directly to ensure all sections are expanded
+    const sectionsToExpand = ['clinicalProforma'];
+    if (visit.hasAdl) sectionsToExpand.push('adl');
+    if (visit.hasPrescription) sectionsToExpand.push('prescription');
+    
+    const newExpandedSections = { ...expandedVisitSections };
+    sectionsToExpand.forEach(section => {
+      const key = `${visitId}-${section}`;
+      newExpandedSections[key] = true;
+    });
+    setExpandedVisitSections(newExpandedSections);
+
+    // Wait for React to render - use multiple wait cycles
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Retry mechanism: check if content exists, if not wait more
+    // We need to check for the actual content components, not just containers
+    let retries = 0;
+    const maxRetries = 10;
+    let visitPrintRef = visitPrintRefs.current.get(visitId);
+    
+    while (retries < maxRetries) {
+      visitPrintRef = visitPrintRefs.current.get(visitId);
+      if (visitPrintRef) {
+        // Check for actual content - look for specific elements that indicate content is rendered
+        const hasClinicalContent = visitPrintRef.querySelector('div.mt-3') && 
+          (visitPrintRef.textContent.includes('Visit Type') || 
+           visitPrintRef.textContent.includes('Room No') ||
+           visitPrintRef.querySelector('[class*="ClinicalProforma"]') ||
+           visitPrintRef.querySelector('table') ||
+           visitPrintRef.querySelector('div[class*="grid"]'));
+        
+        if (hasClinicalContent) {
+          console.log('Content found after', retries, 'retries');
+          break;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 200));
+      retries++;
+    }
+
+    if (!visitPrintRef) {
+      toast.error('Please expand the visit card first');
+      console.error('Print ref not available for visit:', visitId);
+      return;
+    }
+
+    // Final verification - check if we have actual content
+    const finalCheck = visitPrintRef.querySelector('div.mt-3');
+    if (!finalCheck) {
+      console.warn('Content sections not found, but proceeding with print...');
+      // Still proceed - maybe the content is there but selector is different
+    }
+
+    try {
+      let logoBase64 = '';
+      try {
+        const logoResponse = await fetch(PGI_Logo);
+        const logoBlob = await logoResponse.blob();
+        const logoReader = new FileReader();
+        logoBase64 = await new Promise((resolve) => {
+          logoReader.onloadend = () => resolve(logoReader.result);
+          logoReader.readAsDataURL(logoBlob);
+        });
+      } catch (e) {
+        console.warn('Could not load logo for print:', e);
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error('Please allow pop-ups to print this visit');
+        return;
+      }
+
+      // Clone the element to avoid modifying the original
+      const clonedElement = visitPrintRef.cloneNode(true);
+      
+      // IMPORTANT: First, ensure all content divs with mt-3 class are visible
+      // These contain the actual form content (ClinicalProformaDetails, ViewADL, etc.)
+      const contentDivs = clonedElement.querySelectorAll('div.mt-3');
+      contentDivs.forEach(div => {
+        div.style.display = '';
+        div.style.visibility = 'visible';
+        // Remove any parent that might be hiding it
+        let parent = div.parentElement;
+        while (parent && parent !== clonedElement) {
+          if (parent.style.display === 'none') {
+            parent.style.display = '';
+          }
+          parent = parent.parentElement;
+        }
+      });
+
+      // Remove all interactive elements and chevrons, but PRESERVE content divs
+      const elementsToRemove = clonedElement.querySelectorAll(
+        'button, .no-print, [class*="no-print"], nav, header, aside, [class*="Button"], ' +
+        '[class*="chevron"], [class*="Chevron"], [class*="Printer"], [role="button"], ' +
+        'input[type="button"], input[type="submit"], ' +
+        '.cursor-pointer:not(.print-keep):not(div.mt-3):not(div.mt-3 *), [onclick]'
+      );
+      elementsToRemove.forEach(el => {
+        // Don't remove if it's inside a content div
+        if (!el.closest('div.mt-3')) {
+          el.remove();
+        }
+      });
+
+      // Remove chevron icons from section headers (but keep the headers themselves)
+      const chevrons = clonedElement.querySelectorAll('svg[class*="chevron"], svg[class*="Chevron"]');
+      chevrons.forEach(chevron => {
+        // Only remove if not inside content
+        if (!chevron.closest('div.mt-3')) {
+          chevron.remove();
+        }
+      });
+
+      // Clean up header divs that only contain chevrons, but keep headers with content
+      const headerDivs = clonedElement.querySelectorAll('div.flex.items-center.justify-between');
+      headerDivs.forEach(div => {
+        // Only remove if it's a header div with just chevron, not content
+        const hasOnlyChevron = div.children.length === 1 && div.querySelector('svg[class*="chevron"]');
+        const isContentHeader = div.querySelector('h5') && !div.closest('div.mt-3');
+        if (hasOnlyChevron && !isContentHeader) {
+          // Check if this div is just for chevron, not a real header
+          const hasTitle = div.textContent.trim().length > 10; // Has meaningful text
+          if (!hasTitle) {
+            div.remove();
+          }
+        }
+      });
+
+      // Ensure all conditional sections are visible (remove display:none if any)
+      const allElements = clonedElement.querySelectorAll('*');
+      allElements.forEach(el => {
+        if (el.style.display === 'none' && el.closest('div.mt-3')) {
+          el.style.display = '';
+        }
+      });
+
+      // Transform checkbox/radio groups to compact format
+      // Find all checkbox/radio groups and make them display in grid
+      const checkboxGroups = clonedElement.querySelectorAll('div.flex.flex-wrap, div[class*="flex-wrap"]');
+      checkboxGroups.forEach(group => {
+        const hasCheckboxes = group.querySelector('input[type="checkbox"], input[type="radio"]');
+        if (hasCheckboxes) {
+          group.style.display = 'grid';
+          group.style.gridTemplateColumns = 'repeat(4, 1fr)';
+          group.style.gap = '4px 8px';
+          group.style.marginBottom = '8px';
+        }
+      });
+
+      // Find all labels with checkboxes/radios and make them compact
+      const checkboxLabels = clonedElement.querySelectorAll('label:has(input[type="checkbox"]), label:has(input[type="radio"])');
+      checkboxLabels.forEach(label => {
+        const input = label.querySelector('input[type="checkbox"], input[type="radio"]');
+        if (input && !input.checked) {
+          // Hide unchecked items
+          label.style.display = 'none';
+        } else if (input && input.checked) {
+          // Style checked items compactly
+          label.style.display = 'inline-flex';
+          label.style.alignItems = 'center';
+          label.style.margin = '2px 8px 2px 0';
+          label.style.padding = '3px 6px';
+          label.style.fontSize = '9pt';
+          label.style.background = '#e0f2fe';
+          label.style.border = '1px solid #0ea5e9';
+          label.style.borderRadius = '3px';
+          label.style.fontWeight = '500';
+          if (input.type === 'checkbox' || input.type === 'radio') {
+            input.style.width = '12px';
+            input.style.height = '12px';
+            input.style.marginRight = '6px';
+            input.style.marginBottom = '0';
+          }
+        }
+      });
+
+      // Also handle space-y containers that might have checkboxes
+      const spaceYContainers = clonedElement.querySelectorAll('.space-y-2, .space-y-3, .space-y-4');
+      spaceYContainers.forEach(container => {
+        const hasCheckboxes = container.querySelector('input[type="checkbox"], input[type="radio"]');
+        if (hasCheckboxes) {
+          container.style.display = 'grid';
+          container.style.gridTemplateColumns = 'repeat(4, 1fr)';
+          container.style.gap = '4px 8px';
+        }
+      });
+
+      // Debug: Log what we're about to print
+      const contentCheck = clonedElement.querySelectorAll('div.mt-3');
+      console.log('Content divs found:', contentCheck.length);
+      contentCheck.forEach((div, idx) => {
+        console.log(`Content div ${idx}:`, div.textContent.substring(0, 100));
+      });
+
+      const sectionElement = clonedElement;
+      
+      // Get patient info for header
+      const patientName = patient?.name || 'N/A';
+      const patientCRNo = patient?.cr_no || 'N/A';
+      const patientAge = patient?.age || 'N/A';
+      const patientSex = patient?.sex || 'N/A';
+      
+      const printContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Visit Record - ${visitDate}</title>
+            <meta charset="UTF-8">
+            <style>
+              @page { 
+                margin: 12mm 15mm; 
+                size: A4;
+                @top-center {
+                  content: "PGIMER - Patient Visit Record";
+                  font-size: 9pt;
+                  color: #666;
+                }
+                @bottom-right {
+                  content: "Page " counter(page) " of " counter(pages);
+                  font-size: 9pt;
+                  color: #666;
+                }
+              }
+              * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+              }
+              body { 
+                font-family: 'Times New Roman', 'Georgia', serif; 
+                margin: 0; 
+                padding: 0;
+                font-size: 10.5pt;
+                line-height: 1.6;
+                color: #1a1a1a;
+                background: #fff;
+              }
+              .print-header { 
+                text-align: center; 
+                margin-bottom: 20px;
+                padding-bottom: 12px;
+                border-bottom: 3px solid #2563eb;
+                page-break-after: avoid;
+              }
+              .logo { 
+                max-width: 100px; 
+                height: auto;
+                margin-bottom: 8px;
+                display: block;
+                margin-left: auto;
+                margin-right: auto;
+              }
+              .hospital-name {
+                font-size: 16pt;
+                font-weight: bold;
+                color: #1e40af;
+                margin: 5px 0;
+                letter-spacing: 0.5px;
+              }
+              .document-title {
+                font-size: 14pt;
+                font-weight: 600;
+                color: #374151;
+                margin-top: 5px;
+              }
+              .patient-info-box {
+                background: linear-gradient(to right, #eff6ff, #f0f9ff);
+                border: 2px solid #3b82f6;
+                border-radius: 4px;
+                padding: 12px 15px;
+                margin-bottom: 20px;
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 12px;
+                page-break-after: avoid;
+              }
+              .patient-info-item {
+                display: flex;
+                flex-direction: column;
+              }
+              .patient-info-label {
+                font-size: 8.5pt;
+                color: #64748b;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 3px;
+              }
+              .patient-info-value {
+                font-size: 10pt;
+                color: #1e293b;
+                font-weight: 600;
+              }
+              .visit-header { 
+                background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+                color: white;
+                padding: 10px 15px; 
+                border-radius: 4px; 
+                margin-bottom: 20px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                page-break-after: avoid;
+              }
+              .visit-header p {
+                margin: 0;
+                font-size: 11pt;
+                font-weight: 600;
+              }
+              .form-section {
+                margin-bottom: 25px;
+                page-break-inside: avoid;
+                border: 2px solid #e5e7eb;
+                border-radius: 6px;
+                padding: 18px;
+                background: #ffffff;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+              }
+              .form-section-title {
+                font-size: 13pt;
+                font-weight: bold;
+                margin-bottom: 12px;
+                padding-bottom: 8px;
+                border-bottom: 3px solid;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .form-section.clinical-proforma .form-section-title {
+                color: #059669;
+                border-bottom-color: #059669;
+              }
+              .form-section.adl .form-section-title {
+                color: #ea580c;
+                border-bottom-color: #ea580c;
+              }
+              .form-section.prescription .form-section-title {
+                color: #d97706;
+                border-bottom-color: #d97706;
+              }
+              h2 { 
+                color: #1e40af; 
+                margin: 18px 0 10px 0; 
+                border-bottom: 2px solid #3b82f6; 
+                padding-bottom: 6px;
+                font-size: 12pt;
+                font-weight: bold;
+                page-break-after: avoid;
+              }
+              h3 { 
+                color: #059669; 
+                margin: 14px 0 8px 0;
+                font-size: 11pt;
+                font-weight: 600;
+                page-break-after: avoid;
+              }
+              h4 { 
+                color: #7c3aed; 
+                margin: 12px 0 6px 0;
+                font-size: 10.5pt;
+                font-weight: 600;
+              }
+              h5 {
+                font-size: 10.5pt;
+                margin: 10px 0 5px 0;
+                font-weight: 600;
+                color: #374151;
+              }
+              .field-group {
+                margin-bottom: 12px;
+                padding: 8px;
+                background: #f9fafb;
+                border-left: 3px solid #3b82f6;
+                page-break-inside: avoid;
+              }
+              .field-label {
+                font-weight: 600;
+                color: #475569;
+                font-size: 9pt;
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
+                margin-bottom: 4px;
+              }
+              .field-value {
+                color: #1e293b;
+                font-size: 10pt;
+                line-height: 1.5;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 12px 0;
+                font-size: 9.5pt;
+                page-break-inside: avoid;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+              }
+              table td, table th {
+                padding: 10px 12px;
+                border: 1px solid #cbd5e1;
+                text-align: left;
+                vertical-align: top;
+              }
+              table th {
+                background: linear-gradient(to bottom, #f1f5f9, #e2e8f0);
+                font-weight: bold;
+                color: #1e293b;
+                font-size: 9.5pt;
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
+                border-bottom: 2px solid #3b82f6;
+              }
+              table tr:nth-child(even) {
+                background-color: #f8fafc;
+              }
+              table tr:hover {
+                background-color: #f1f5f9;
+              }
+              .section { 
+                margin-bottom: 20px; 
+                page-break-inside: avoid; 
+              }
+              .border-l-4 {
+                border-left: 4px solid #3b82f6 !important;
+                padding-left: 12px !important;
+                margin-left: 0 !important;
+              }
+              .grid {
+                display: grid;
+                gap: 10px;
+              }
+              .grid-cols-2 {
+                grid-template-columns: repeat(2, 1fr);
+              }
+              .grid-cols-3 {
+                grid-template-columns: repeat(3, 1fr);
+              }
+              .grid-cols-4 {
+                grid-template-columns: repeat(4, 1fr);
+              }
+              input[disabled], textarea[disabled], select[disabled] {
+                background: #f1f5f9 !important;
+                color: #1e293b !important;
+                border: 1px solid #cbd5e1 !important;
+                padding: 6px 10px !important;
+                border-radius: 4px !important;
+                font-size: 10pt !important;
+              }
+              /* Compact checkbox/radio button groups */
+              label:has(input[type="checkbox"]), 
+              label:has(input[type="radio"]),
+              label input[type="checkbox"],
+              label input[type="radio"] {
+                display: inline-flex !important;
+                align-items: center !important;
+              }
+              input[type="checkbox"], input[type="radio"] {
+                width: 12px !important;
+                height: 12px !important;
+                margin-right: 6px !important;
+                margin-bottom: 0 !important;
+                flex-shrink: 0 !important;
+                cursor: default !important;
+              }
+              /* Checkbox/radio groups container - make them display in columns */
+              .flex.flex-wrap, 
+              [class*="flex-wrap"],
+              .space-y-2,
+              .space-y-3,
+              .space-y-4 {
+                display: grid !important;
+                grid-template-columns: repeat(4, 1fr) !important;
+                gap: 4px 8px !important;
+                margin-bottom: 8px !important;
+                page-break-inside: avoid !important;
+              }
+              /* Hide unchecked checkboxes/radios in print - only show checked ones */
+              input[type="checkbox"]:not(:checked),
+              input[type="radio"]:not(:checked) {
+                display: none !important;
+              }
+              /* Style checked items - compact display */
+              label:has(input[type="checkbox"]:checked),
+              label:has(input[type="radio"]:checked) {
+                display: inline-flex !important;
+                align-items: center !important;
+                margin: 2px 4px 2px 0 !important;
+                padding: 3px 6px !important;
+                font-size: 9pt !important;
+                line-height: 1.2 !important;
+                background: #e0f2fe !important;
+                border: 1px solid #0ea5e9 !important;
+                border-radius: 3px !important;
+                font-weight: 500 !important;
+                page-break-inside: avoid !important;
+              }
+              /* Hide labels with unchecked inputs */
+              label:has(input[type="checkbox"]:not(:checked)),
+              label:has(input[type="radio"]:not(:checked)) {
+                display: none !important;
+              }
+              button, .no-print, [class*="no-print"], nav, header, aside, 
+              [class*="Button"], [class*="chevron"], [class*="Chevron"], 
+              [class*="Printer"], [role="button"], input[type="button"],
+              input[type="submit"], .cursor-pointer:not(.print-keep),
+              svg[class*="chevron"], svg[class*="Chevron"] {
+                display: none !important;
+              }
+              .mt-3 {
+                margin-top: 12px !important;
+              }
+              .mb-3 {
+                margin-bottom: 12px !important;
+              }
+              .p-4, .p-6 {
+                padding: 12px !important;
+              }
+              .space-y-4 > * + * {
+                margin-top: 12px;
+              }
+              .space-y-6 > * + * {
+                margin-top: 18px;
+              }
+              @media print {
+                body { 
+                  padding: 0;
+                  font-size: 10pt;
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+                .form-section {
+                  page-break-inside: avoid;
+                  margin-bottom: 15px;
+                  border: 1.5px solid #cbd5e1;
+                }
+                .section { 
+                  page-break-inside: avoid; 
+                }
+                .patient-info-box {
+                  page-break-after: avoid;
+                }
+                .visit-header {
+                  page-break-after: avoid;
+                }
+                @page {
+                  margin: 12mm 15mm;
+                }
+                a {
+                  color: #1e40af;
+                  text-decoration: underline;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="print-header">
+              ${logoBase64 ? `<img src="${logoBase64}" alt="PGIMER Logo" class="logo" />` : ''}
+              <div class="hospital-name">POSTGRADUATE INSTITUTE OF MEDICAL EDUCATION & RESEARCH</div>
+              <div class="document-title">PATIENT VISIT RECORD</div>
+            </div>
+            <div class="patient-info-box">
+              <div class="patient-info-item">
+                <span class="patient-info-label">Patient Name</span>
+                <span class="patient-info-value">${patientName}</span>
+              </div>
+              <div class="patient-info-item">
+                <span class="patient-info-label">CR No.</span>
+                <span class="patient-info-value">${patientCRNo}</span>
+              </div>
+              <div class="patient-info-item">
+                <span class="patient-info-label">Age</span>
+                <span class="patient-info-value">${patientAge}</span>
+              </div>
+              <div class="patient-info-item">
+                <span class="patient-info-label">Sex</span>
+                <span class="patient-info-value">${patientSex}</span>
+              </div>
+            </div>
+            <div class="visit-header">
+              <p><strong>Visit Date:</strong> ${visitDate}</p>
+            </div>
+            ${sectionElement.innerHTML}
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+          toast.success('Print dialog opened');
+        }, 500);
+      };
+    } catch (error) {
+      console.error('Print error:', error);
+      toast.error('Failed to print visit. Please try again.');
+    }
+  };
+
   const handlePrintPastHistoryPrescription = async () => {
     // Ensure card is expanded first
     if (!expandedPastHistoryCards.prescription) {
@@ -3490,25 +4237,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
           {expandedCards.pastHistory && (
             <div className="p-6 space-y-4">
-              {trulyPastProformas.length > 0 ? (
-                <>
-                  {/* Sort past proformas by visit date (oldest first - chronological order) */}
-                  {(() => {
-                    const sortedProformas = [...trulyPastProformas].sort((a, b) => {
-                      const dateA = new Date(a.visit_date || a.created_at || 0);
-                      const dateB = new Date(b.visit_date || b.created_at || 0);
-                      return dateA - dateB; // Oldest first (chronological order)
-                    });
-
-                    // Check if any ADL files exist
-                    const hasAdlFiles = sortedProformas.some(proforma => 
-                      patientAdlFiles.some(adl => adl.clinical_proforma_id === proforma.id)
-                    );
-
-                    return (
-                      <>
-                        {/* 1. Patient Details Card - Show once only, expandable/collapsible */}
-                        <Card className="shadow-md border-2 border-blue-200">
+              {/* Patient Details Card - Show once only, expandable/collapsible */}
+              <Card className="shadow-md border-2 border-blue-200">
                           <div
                             className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors"
                           >
@@ -3610,279 +4340,167 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           )}
                         </Card>
 
-                        {/* 2. Walk-in Clinical Proforma Card - Show all visit-wise proformas, expandable/collapsible */}
-                        <Card className="shadow-md border-2 border-green-200">
-                          <div
-                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                          >
-                            <div 
-                              className="flex items-center gap-3 cursor-pointer flex-1"
-                              onClick={() => togglePastHistoryCard('clinicalProforma')}
-                            >
-                              <div className="p-2 bg-green-100 rounded-lg">
-                                <FiFileText className="h-5 w-5 text-green-600" />
-                              </div>
-                              <h4 className="text-lg font-bold text-gray-900">Walk-in Clinical Proforma</h4>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handlePrintPastHistoryClinicalProforma();
-                                }}
-                                className="h-8 w-8 p-0 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border border-green-200 hover:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                                title="Print Walk-in Clinical Proforma - Past History"
-                              >
-                                <FiPrinter className="w-3.5 h-3.5 text-green-600" />
-                              </Button>
-                              <div 
-                                className="cursor-pointer"
-                                onClick={() => togglePastHistoryCard('clinicalProforma')}
-                              >
-                                {expandedPastHistoryCards.clinicalProforma ? (
-                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
-                                ) : (
-                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          {expandedPastHistoryCards.clinicalProforma && (
-                            <div ref={pastHistoryClinicalProformaPrintRef} className="p-6">
-                              <div className="space-y-4">
-                                {sortedProformas.map((proforma, index) => {
-                                  const visitNumber = index + 1;
-                                  const visitDate = formatDate(proforma.visit_date || proforma.created_at);
-                                  const visitId = proforma.id || `proforma-${index}`;
-                                  const isExpanded = isVisitExpanded('clinicalProforma', visitId);
-                                  return (
-                                    <Card key={visitId} className="border border-gray-200 shadow-sm">
-                                      <div
-                                        className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                                        onClick={() => toggleVisit('clinicalProforma', visitId)}
-                                      >
-                                        <div className="flex items-center gap-3">
-                                          <div className="p-2 bg-green-100 rounded-lg">
-                                            <FiHash className="h-4 w-4 text-green-600" />
-                                          </div>
-                                          <div>
-                                            <h5 className="text-md font-semibold text-gray-800">
-                                              Visit {visitNumber} - Walk-in Clinical Proforma
-                                            </h5>
-                                            <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          {isExpanded ? (
-                                            <FiChevronUp className="h-5 w-5 text-gray-500" />
-                                          ) : (
-                                            <FiChevronDown className="h-5 w-5 text-gray-500" />
-              )}
-            </div>
+                        {/* Unified Visit Cards - Each visit shows all forms completed during that visit */}
+                        {unifiedVisits.length > 0 ? (
+                          <div className="space-y-6">
+                            {unifiedVisits.map((visit) => {
+                              const visitDate = formatDate(visit.visitDate);
+                              const isExpanded = isVisitCardExpanded(visit.visitId);
+                              
+                              return (
+                                <Card key={visit.visitId} className="shadow-lg border-2 border-purple-200">
+                                  {/* Visit Header */}
+                                  <div
+                                    className="flex items-center justify-between p-5 border-b border-gray-200 hover:bg-purple-50 transition-colors cursor-pointer"
+                                    onClick={() => toggleVisitCard(visit.visitId)}
+                                  >
+                                    <div className="flex items-center gap-4">
+                                      <div className="p-3 bg-purple-100 rounded-lg">
+                                        <FiClock className="h-6 w-6 text-purple-600" />
                                       </div>
-                                      {isExpanded && (
-                                        <div className="p-4">
-                                          {/* View-only when not in edit mode */}
-                                          <ClinicalProformaDetails proforma={proforma} />
-                                        </div>
-          )}
-        </Card>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </Card>
-
-                        {/* 3. Out Patient Intake Record Card - Only if ADL files exist, expandable/collapsible */}
-                        {hasAdlFiles && (
-                          <Card className="shadow-md border-2 border-orange-200">
-                            <div
-                              className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                            >
-                              <div 
-                                className="flex items-center gap-3 cursor-pointer flex-1"
-                                onClick={() => togglePastHistoryCard('intakeRecord')}
-                              >
-                                <div className="p-2 bg-orange-100 rounded-lg">
-                                  <FiFolder className="h-5 w-5 text-orange-600" />
-                                </div>
-                                <h4 className="text-lg font-bold text-gray-900">Out Patient Intake Record</h4>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handlePrintPastHistoryADL();
-                                  }}
-                                  className="h-8 w-8 p-0 bg-gradient-to-r from-orange-50 to-amber-50 hover:from-orange-100 hover:to-amber-100 border border-orange-200 hover:border-orange-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                                  title="Print Out Patient Intake Record - Past History"
-                                >
-                                  <FiPrinter className="w-3.5 h-3.5 text-orange-600" />
-                                </Button>
-                                <div 
-                                  className="cursor-pointer"
-                                  onClick={() => togglePastHistoryCard('intakeRecord')}
-                                >
-                                  {expandedPastHistoryCards.intakeRecord ? (
-                                    <FiChevronUp className="h-5 w-5 text-gray-500" />
-                                  ) : (
-                                    <FiChevronDown className="h-5 w-5 text-gray-500" />
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            {expandedPastHistoryCards.intakeRecord && (
-                              <div ref={pastHistoryADLPrintRef} className="p-6">
-                                <div className="space-y-4">
-                                  {sortedProformas.map((proforma, index) => {
-                                    const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === proforma.id);
-                                    if (!adlFile) return null;
-                                    
-                                    const visitNumber = index + 1;
-                                    const visitDate = formatDate(proforma.visit_date || proforma.created_at);
-                                    const visitId = adlFile.id || adlFile.adl_file_id || adlFile.adlFileId || `adl-${index}`;
-                                    const isExpanded = isVisitExpanded('intakeRecord', visitId);
-                                    return (
-                                      <Card key={visitId} className="border border-gray-200 shadow-sm">
-                                        <div
-                                          className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                                          onClick={() => toggleVisit('intakeRecord', visitId)}
-                                        >
-                                          <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-orange-100 rounded-lg">
-                                              <FiHash className="h-4 w-4 text-orange-600" />
-                                            </div>
-                                            <div>
-                                              <h5 className="text-md font-semibold text-gray-800">
-                                                Visit {visitNumber} - Out Patient Intake Record
-                                              </h5>
-                                              <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            {isExpanded ? (
-                                              <FiChevronUp className="h-5 w-5 text-gray-500" />
-                                            ) : (
-                                              <FiChevronDown className="h-5 w-5 text-gray-500" />
-                                            )}
-                                          </div>
-                                        </div>
-                                        {isExpanded && (
-                                          <div className="p-4">
-                                            {/* View-only when not in edit mode */}
-                                            <ViewADL adlFiles={adlFile} />
-                                          </div>
-                                        )}
-                                      </Card>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </Card>
-                        )}
-
-                        {/* 4. Prescription Card - Show all visit-wise prescriptions, expandable/collapsible */}
-                        <Card className="shadow-md border-2 border-amber-200">
-                          <div
-                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                          >
-                            <div 
-                              className="flex items-center gap-3 cursor-pointer flex-1"
-                              onClick={() => togglePastHistoryCard('prescription')}
-                            >
-                              <div className="p-2 bg-amber-100 rounded-lg">
-                                <FiPackage className="h-5 w-5 text-amber-600" />
-                              </div>
-                              <h4 className="text-lg font-bold text-gray-900">Prescription</h4>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handlePrintPastHistoryPrescription();
-                                }}
-                                className="h-8 w-8 p-0 bg-gradient-to-r from-amber-50 to-yellow-50 hover:from-amber-100 hover:to-yellow-100 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                                title="Print Prescription - Past History"
-                              >
-                                <FiPrinter className="w-3.5 h-3.5 text-amber-600" />
-                              </Button>
-                              <div 
-                                className="cursor-pointer"
-                                onClick={() => togglePastHistoryCard('prescription')}
-                              >
-                                {expandedPastHistoryCards.prescription ? (
-                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
-                                ) : (
-                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          {expandedPastHistoryCards.prescription && (
-                            <div ref={pastHistoryPrescriptionPrintRef} className="p-6">
-                              <div className="space-y-4">
-                                {sortedProformas.map((proforma, index) => {
-                                  const visitNumber = index + 1;
-                                  const visitDate = formatDate(proforma.visit_date || proforma.created_at);
-                                  const visitId = proforma.id || `prescription-${index}`;
-                                  const isExpanded = isVisitExpanded('prescription', visitId);
-                                  return (
-                                    <Card key={visitId} className="border border-gray-200 shadow-sm">
-                                      <div
-                                        className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                                        onClick={() => toggleVisit('prescription', visitId)}
-                                      >
-                                        <div className="flex items-center gap-3">
-                                          <div className="p-2 bg-amber-100 rounded-lg">
-                                            <FiHash className="h-4 w-4 text-amber-600" />
-</div>
-                                          <div>
-                                            <h5 className="text-md font-semibold text-gray-800">
-                                              Visit {visitNumber} - Prescription
-                                            </h5>
-                                            <p className="text-xs text-gray-500 mt-1">{visitDate}</p>
-      </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          {isExpanded ? (
-                                            <FiChevronUp className="h-5 w-5 text-gray-500" />
-                                          ) : (
-                                            <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                      <div>
+                                        <h4 className="text-xl font-bold text-gray-900">
+                                          {visitDate}
+                                        </h4>
+                                        <div className="flex items-center gap-3 mt-2">
+                                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+                                            <FiFileText className="w-3 h-3" />
+                                            Clinical Proforma
+                                          </span>
+                                          {visit.hasAdl && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                                              <FiFolder className="w-3 h-3" />
+                                              ADL Record
+                                            </span>
+                                          )}
+                                          {visit.hasPrescription && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-medium">
+                                              <FiPackage className="w-3 h-3" />
+                                              Prescription
+                                            </span>
                                           )}
                                         </div>
                                       </div>
-                                      {isExpanded && (
-                                        <div className="p-4">
-                                          {/* View-only when not in edit mode */}
-                                          <PrescriptionView 
-                                            clinicalProformaId={proforma.id}
-                                            patientId={patient?.id}
-                                          />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handlePrintVisit(visit.visitId, visitDate);
+                                        }}
+                                        className="h-8 w-8 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                                        title={`Print Visit - ${visitDate}`}
+                                      >
+                                        <FiPrinter className="w-3.5 h-3.5 text-purple-600" />
+                                      </Button>
+                                      {isExpanded ? (
+                                        <FiChevronUp className="h-6 w-6 text-gray-500" />
+                                      ) : (
+                                        <FiChevronDown className="h-6 w-6 text-gray-500" />
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Visit Content - All forms for this visit */}
+                                  {isExpanded && (
+                                    <div ref={(el) => {
+                                      if (el) visitPrintRefs.current.set(visit.visitId, el);
+                                      else visitPrintRefs.current.delete(visit.visitId);
+                                    }} className="p-6 space-y-6">
+                                      {/* 1. Clinical Proforma Section */}
+                                      <div className="border-l-4 border-green-500 pl-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                          <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                            <FiFileText className="h-5 w-5 text-green-600" />
+                                            Walk-in Clinical Proforma
+                                          </h5>
+                                          {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') ? (
+                                            <FiChevronUp 
+                                              className="h-5 w-5 text-gray-500 cursor-pointer"
+                                              onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
+                                            />
+                                          ) : (
+                                            <FiChevronDown 
+                                              className="h-5 w-5 text-gray-500 cursor-pointer"
+                                              onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
+                                            />
+                                          )}
+                                        </div>
+                                        {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') && (
+                                          <div className="mt-3">
+                                            <ClinicalProformaDetails proforma={visit.proforma} />
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* 2. ADL File Section (if exists) */}
+                                      {visit.hasAdl && (
+                                        <div className="border-l-4 border-orange-500 pl-4">
+                                          <div className="flex items-center justify-between mb-3">
+                                            <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                              <FiFolder className="h-5 w-5 text-orange-600" />
+                                              Out Patient Intake Record (ADL)
+                                            </h5>
+                                            {isVisitSectionExpanded(visit.visitId, 'adl') ? (
+                                              <FiChevronUp 
+                                                className="h-5 w-5 text-gray-500 cursor-pointer"
+                                                onClick={() => toggleVisitSection(visit.visitId, 'adl')}
+                                              />
+                                            ) : (
+                                              <FiChevronDown 
+                                                className="h-5 w-5 text-gray-500 cursor-pointer"
+                                                onClick={() => toggleVisitSection(visit.visitId, 'adl')}
+                                              />
+                                            )}
+                                          </div>
+                                          {isVisitSectionExpanded(visit.visitId, 'adl') && (
+                                            <div className="mt-3">
+                                              <ViewADL adlFiles={visit.adlFile} />
+                                            </div>
+                                          )}
                                         </div>
                                       )}
-                                    </Card>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </Card>
-                      </>
-                    );
-                  })()}
-                </>
-              ) : (
+
+                                      {/* 3. Prescription Section (if exists) */}
+                                      {visit.hasPrescription && (
+                                        <div className="border-l-4 border-amber-500 pl-4">
+                                          <div className="flex items-center justify-between mb-3">
+                                            <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                              <FiPackage className="h-5 w-5 text-amber-600" />
+                                              Prescription
+                                            </h5>
+                                            {isVisitSectionExpanded(visit.visitId, 'prescription') ? (
+                                              <FiChevronUp 
+                                                className="h-5 w-5 text-gray-500 cursor-pointer"
+                                                onClick={() => toggleVisitSection(visit.visitId, 'prescription')}
+                                              />
+                                            ) : (
+                                              <FiChevronDown 
+                                                className="h-5 w-5 text-gray-500 cursor-pointer"
+                                                onClick={() => toggleVisitSection(visit.visitId, 'prescription')}
+                                              />
+                                            )}
+                                          </div>
+                                          {isVisitSectionExpanded(visit.visitId, 'prescription') && (
+                                            <div className="mt-3">
+                                              <PrescriptionView 
+                                                clinicalProformaId={visit.proforma.id}
+                                                patientId={patient?.id}
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        ) : (
                 <div className="text-center py-12">
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 max-w-2xl mx-auto">
                     <FiClock className="h-12 w-12 mx-auto mb-4 text-purple-500" />
