@@ -500,6 +500,13 @@ const Dashboard = () => {
         ticks: {
           stepSize: 1
         }
+      },
+      x: {
+        ticks: {
+          autoSkip: true,
+          maxRotation: 0,
+          minRotation: 0
+        }
       }
     }
   };
@@ -647,10 +654,10 @@ const Dashboard = () => {
   const adminStateChartData = useMemo(() => {
     if (!isAdminUser || !adminStateDistribution || adminStateDistribution.length === 0) {
       return {
-        labels: [],
+        labels: ['No Data'],
         datasets: [{
           label: 'Number of Patients',
-          data: [],
+          data: [0],
           backgroundColor: 'rgba(59, 130, 246, 0.8)',
           borderColor: 'rgba(29, 78, 216, 1)',
           borderWidth: 2,
@@ -673,10 +680,10 @@ const Dashboard = () => {
   const stateChartData = useMemo(() => {
     if (!isMwo || !stateDistribution || stateDistribution.length === 0) {
       return {
-        labels: [],
+        labels: ['No Data'],
         datasets: [{
           label: 'Number of Patients',
-          data: [],
+          data: [0],
           backgroundColor: 'rgba(139, 92, 246, 0.8)',
           borderColor: 'rgba(124, 58, 237, 1)',
           borderWidth: 2,
@@ -833,11 +840,19 @@ const Dashboard = () => {
                       }
                     },
                     scales: {
-                      ...barChartOptions.scales,
+                      y: {
+                        ...(barChartOptions.scales?.y || {}),
+                        beginAtZero: true,
+                        ticks: {
+                          stepSize: 1
+                        }
+                      },
                       x: {
+                        ...(barChartOptions.scales?.x || {}),
                         ticks: {
                           maxRotation: 45,
-                          minRotation: 45
+                          minRotation: 45,
+                          autoSkip: true
                         }
                       }
                     }
@@ -1861,11 +1876,19 @@ const Dashboard = () => {
                       }
                     },
                     scales: {
-                      ...barChartOptions.scales,
+                      y: {
+                        ...(barChartOptions.scales?.y || {}),
+                        beginAtZero: true,
+                        ticks: {
+                          stepSize: 1
+                        }
+                      },
                       x: {
+                        ...(barChartOptions.scales?.x || {}),
                         ticks: {
                           maxRotation: 45,
-                          minRotation: 45
+                          minRotation: 45,
+                          autoSkip: true
                         }
                       }
                     }

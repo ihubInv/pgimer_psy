@@ -145,11 +145,23 @@ const getPrescriptionById = async (req, res) => {
     }
 
     if (!prescription) {
-      console.log('[getPrescriptionById] Prescription not found');
-      return res.status(404).json({
-        success: false,
-        message: 'Prescription not found'
-      });
+      console.log('[getPrescriptionById] Prescription not found for clinical_proforma_id:', clinical_proforma_id || 'N/A');
+      // Return 200 with null prescription when querying by clinical_proforma_id (not an error)
+      // Return 404 when querying by prescription ID (resource not found)
+      if (clinical_proforma_id) {
+        return res.status(200).json({
+          success: true,
+          message: 'No prescription found for this clinical proforma',
+          data: {
+            prescription: null
+          }
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: 'Prescription not found'
+        });
+      }
     }
 
     console.log('[getPrescriptionById] Prescription found:', prescription.id);

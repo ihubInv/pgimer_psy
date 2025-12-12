@@ -3,6 +3,7 @@ const router = express.Router();
 const prescriptionController = require('../controllers/prescriptionController');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const { body, param } = require('express-validator');
+const { handleValidationErrors } = require('../middleware/validation');
 
 /**
  * @swagger
@@ -292,11 +293,15 @@ router.get('/',authenticateToken, authorizeRoles(['Faculty', 'Resident', 'Admin'
 // Route to get prescription by clinical_proforma_id (path parameter)
 router.get('/by-proforma/:clinical_proforma_id', authenticateToken, [
   param('clinical_proforma_id').isInt().withMessage('Clinical proforma ID must be an integer')
-], async (req, res) => {
-  // Call the controller with clinical_proforma_id in query
-  req.query.clinical_proforma_id = req.params.clinical_proforma_id;
-  req.params.id = '1'; // Placeholder, will be ignored by controller when clinical_proforma_id is present
-  return prescriptionController.getPrescriptionById(req, res);
+], handleValidationErrors, async (req, res, next) => {
+  try {
+    // Call the controller with clinical_proforma_id in query
+    req.query.clinical_proforma_id = req.params.clinical_proforma_id;
+    req.params.id = '1'; // Placeholder, will be ignored by controller when clinical_proforma_id is present
+    await prescriptionController.getPrescriptionById(req, res);
+  } catch (error) {
+    next(error);
+  }
 });
 
 /**
