@@ -4026,7 +4026,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                             })}
                             patient_id={patient?.id}
                             canDelete={canEditFiles}
-                            baseUrl={(import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api').replace(/\/api$/, '')}
+                            baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
                             onFileDeleted={async (filePath, normalizedPath) => {
                               // Refetch files to update the UI immediately
                               // Only refetch if patient ID exists (query was started)

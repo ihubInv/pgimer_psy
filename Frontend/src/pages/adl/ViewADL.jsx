@@ -1059,7 +1059,7 @@ const ViewADL = ( {adlFiles} ) => {
               <FilePreview
                 files={existingFiles}
                 canDelete={false}
-                baseUrl={import.meta.env.VITE_API_URL || 'http://localhost:2025/api'}
+                baseUrl={import.meta.env.VITE_API_URL || '/api'}
               />
             </div>
           </Card>

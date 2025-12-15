@@ -3950,7 +3950,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           files={existingFiles}
                           patient_id={patient?.id}
                           canDelete={false}
-                          baseUrl={(import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api').replace(/\/api$/, '')}
+                          baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
                           refetchFiles={refetchFiles}
                         />
                       </div>

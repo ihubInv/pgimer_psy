@@ -3347,7 +3347,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                         });
                       } : undefined}
                       canDelete={canEditFiles}
-                      baseUrl={import.meta.env.VITE_API_URL || 'http://localhost:2025/api'}
+                      baseUrl={import.meta.env.VITE_API_URL || '/api'}
                     />
                   </div>
                 )}
@@ -5533,7 +5533,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                         });
                       } : undefined}
                       canDelete={canEditFiles}
-                      baseUrl={import.meta.env.VITE_API_URL || 'http://localhost:2025/api'}
+                      baseUrl={import.meta.env.VITE_API_URL || '/api'}
                     />
                   </div>
                 )}

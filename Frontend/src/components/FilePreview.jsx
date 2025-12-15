@@ -149,36 +149,19 @@ const FilePreview = ({
   }, [reduxToken]);
 
   // Get base URL without /api
+  // Since we're using relative paths now, just remove /api suffix
+  // If result is empty or '/', it means we're using relative paths (which is correct)
   const baseUrlWithoutApi = useMemo(() => {
-    const apiUrl = baseUrl || import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api';
-    let url = apiUrl.replace(/\/api$/, '');
+    const apiUrl = baseUrl || import.meta.env.VITE_API_URL || '/api';
+    const url = apiUrl.replace(/\/api$/, '');
     
+    // If it's a relative path (empty or starts with /), return empty string for relative URLs
+    // If it's an absolute URL, return it without /api
     if (!url || url === '/' || url.startsWith('/')) {
-      const apiUrlMatch = apiUrl.match(/http[s]?:\/\/([^\/]+)/);
-      if (apiUrlMatch) {
-        const hostAndPort = apiUrlMatch[1];
-        if (!hostAndPort.includes(':')) {
-          const currentPort = window.location.port;
-          if (currentPort === '8001') {
-            url = `http://${hostAndPort}:8002`;
-          } else {
-            url = `http://${hostAndPort}`;
-          }
-        } else {
-          url = `http://${hostAndPort}`;
-        }
-      } else {
-        const protocol = window.location.protocol;
-        const hostname = window.location.hostname;
-        const currentPort = window.location.port;
-        if (currentPort === '8001') {
-          url = `${protocol}//${hostname}:8002`;
-        } else {
-          url = `${protocol}//${hostname}${currentPort ? `:${currentPort}` : ''}`;
-        }
-      }
+      return ''; // Empty string means relative to current origin
     }
-    return url;
+    
+    return url; // Absolute URL without /api
   }, [baseUrl]);
 
   // Get file URL path (relative path for authenticated fetch)
@@ -502,7 +485,7 @@ const FilePreview = ({
 
       // Use direct fetch to ensure correct endpoint: /api/patient-files/delete/{patient_id}/{file_path}
       // Backend handles all path resolution using req.user.role and module
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api';
+      const baseUrl = import.meta.env.VITE_API_URL || '/api';
       const apiToken = JSON.parse(localStorage.getItem('user'))?.token || localStorage.getItem('token');
       
       // Construct the correct URL

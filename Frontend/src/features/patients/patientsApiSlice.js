@@ -49,7 +49,7 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
     }),
     updatePatient: builder.mutation({
       queryFn: async ({ id, files, files_to_remove, ...data }, _queryApi, _extraOptions, fetchWithBQ) => {
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://122.186.76.102:8002/api';
+        const baseUrl = import.meta.env.VITE_API_URL || '/api';
         const state = _queryApi.getState();
         const token = state.auth.token;
         
@@ -187,7 +187,7 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
           formData.append('files', file);
         });
 
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://31.97.60.2:2025/api';
+        const baseUrl = import.meta.env.VITE_API_URL || '/api';
         const token = JSON.parse(localStorage.getItem('user'))?.token || localStorage.getItem('token');
 
         try {

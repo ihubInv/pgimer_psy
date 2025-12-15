@@ -1718,7 +1718,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                           });
                         } : undefined}
                         canDelete={canEditFiles}
-                        baseUrl={import.meta.env.VITE_API_URL || 'http://localhost:2025/api'}
+                        baseUrl={import.meta.env.VITE_API_URL || '/api'}
                       />
                     </div>
                   )}
@@ -2149,7 +2149,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                           });
                         } : undefined}
                         canDelete={canEditFiles}
-                        baseUrl={import.meta.env.VITE_API_URL || 'http://localhost:2025/api'}
+                        baseUrl={import.meta.env.VITE_API_URL || '/api'}
                       />
                     </div>
                   )}

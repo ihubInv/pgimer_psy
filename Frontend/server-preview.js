@@ -16,22 +16,23 @@ app.use((req, res, next) => {
   // CRITICAL: Set X-XSS-Protection header
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');  // Changed from DENY to SAMEORIGIN for mobile compatibility
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   
   // Content Security Policy - Allow Google Fonts and backend API
-  const apiUrl = process.env.VITE_API_URL || 'http://122.186.76.102:8002/api';
+  const apiUrl = process.env.VITE_API_URL || '/api';
   const apiOrigin = apiUrl.replace('/api', ''); // Remove /api to get origin
   
   // Build CSP directive allowing Google Fonts and backend API
+  // Mobile-friendly: More permissive for mobile browsers
   const csp = [
     "default-src 'self'",
-    `connect-src 'self' ${apiOrigin} https://fonts.googleapis.com`,
+    `connect-src 'self' ${apiOrigin} http://pgimerpsych.org https://pgimerpsych.org http://www.pgimerpsych.org https://www.pgimerpsych.org https://fonts.googleapis.com`,
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: https: http: blob:",
-    "frame-ancestors 'none'"
+    "frame-ancestors 'self'"
   ].join('; ');
   
   res.setHeader('Content-Security-Policy', csp);
@@ -44,7 +45,7 @@ app.use(express.static(DIST_DIR, {
     // Ensure security headers on all static files
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');  // Changed from DENY to SAMEORIGIN for mobile compatibility
     
     // Prevent caching of JS files
     if (path.endsWith('.js')) {
@@ -66,7 +67,7 @@ app.use((req, res, next) => {
     res.setHeader('Content-Type', 'text/html');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');  // Changed from DENY to SAMEORIGIN for mobile compatibility
     res.send(indexHtml);
   } catch (error) {
     console.error('Error serving index.html:', error);

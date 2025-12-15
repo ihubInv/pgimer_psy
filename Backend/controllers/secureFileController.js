@@ -128,7 +128,19 @@ class SecureFileController {
       
       // Security headers
       res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Cache-Control', 'private, max-age=3600'); // Cache for 1 hour, but private
+      // Temporarily disable cache to fix cached error responses
+      // Change back to 'public, max-age=3600, must-revalidate' after cache clears
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      // Add ETag for cache validation
+      const etag = `"${stats.mtime.getTime()}-${stats.size}"`;
+      res.setHeader('ETag', etag);
+      
+      // Check if client has cached version
+      if (req.headers['if-none-match'] === etag) {
+        return res.status(304).end();
+      }
       
       // For images and PDFs, allow inline display; for other files, force download
       if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf'].includes(ext)) {
