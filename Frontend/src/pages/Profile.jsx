@@ -107,8 +107,15 @@ const Profile = () => {
     }
 
     try {
-      // SECURITY FIX #2.17: Encrypt password before transmission
-      const currentPasswordEncryption = await encryptPasswordForTransmission(passwordForm.currentPassword);
+      // SECURITY FIX #2.17: Encrypt password before transmission (mandatory)
+      let currentPasswordEncryption;
+      try {
+        currentPasswordEncryption = await encryptPasswordForTransmission(passwordForm.currentPassword);
+      } catch (encryptError) {
+        console.error('[Security] Password encryption failed:', encryptError);
+        toast.error('Security error: Unable to encrypt password. Please try again.');
+        return;
+      }
       
       await requestPasswordChangeOTP({
         currentPassword: currentPasswordEncryption.encrypted,
@@ -167,8 +174,15 @@ const Profile = () => {
     }
 
     try {
-      // SECURITY FIX #2.17: Encrypt password before transmission
-      const newPasswordEncryption = await encryptPasswordForTransmission(passwordForm.newPassword);
+      // SECURITY FIX #2.17: Encrypt password before transmission (mandatory)
+      let newPasswordEncryption;
+      try {
+        newPasswordEncryption = await encryptPasswordForTransmission(passwordForm.newPassword);
+      } catch (encryptError) {
+        console.error('[Security] Password encryption failed:', encryptError);
+        toast.error('Security error: Unable to encrypt password. Please try again.');
+        return;
+      }
       
       await changePassword({
         newPassword: newPasswordEncryption.encrypted,
@@ -200,7 +214,16 @@ const Profile = () => {
     }
 
     try {
-      const currentPasswordEncryption = await encryptPasswordForTransmission(passwordForm.currentPassword);
+      // SECURITY FIX #2.17: Encrypt password before transmission (mandatory)
+      let currentPasswordEncryption;
+      try {
+        currentPasswordEncryption = await encryptPasswordForTransmission(passwordForm.currentPassword);
+      } catch (encryptError) {
+        console.error('[Security] Password encryption failed:', encryptError);
+        toast.error('Security error: Unable to encrypt password. Please try again.');
+        return;
+      }
+      
       await requestPasswordChangeOTP({
         currentPassword: currentPasswordEncryption.encrypted,
       }).unwrap();

@@ -509,10 +509,19 @@ class SessionController {
         role: user.role
       });
 
+      // SECURITY: Store access token in cookie instead of response body to hide it from network tab
+      const isHTTPS = false; // Using HTTP, not HTTPS
+      res.cookie('accessToken', accessToken, {
+        httpOnly: false, // Allow frontend to read it
+        secure: false, // Set to false for HTTP
+        sameSite: 'lax',
+        maxAge: 10 * 60 * 1000 // 10 minutes (same as token expiry)
+      });
+
       return res.json({
         success: true,
         data: {
-          accessToken,
+          // accessToken removed - now stored in cookie
           expiresIn: 600 // 10 minutes
         }
       });

@@ -8,9 +8,9 @@ import {
   FiCalendar, FiGlobe, FiFileText, FiHash, FiClock,
   FiHeart, FiBookOpen, FiTrendingUp, FiShield,
   FiNavigation,  FiEdit3, FiSave, FiX, FiLayers, 
-  FiChevronDown, FiChevronUp, FiArrowRight, 
+  FiChevronDown, FiChevronUp, 
 } from 'react-icons/fi';
-import {  useCreatePatientCompleteMutation, useUpdatePatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
+import {  useCreatePatientCompleteMutation } from '../../features/patients/patientsApiSlice';
 import { useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { updatePatientRegistrationForm, resetPatientRegistrationForm, selectPatientRegistrationForm } from '../../features/form/formSlice';
@@ -39,7 +39,6 @@ const CreatePatient = () => {
   const dispatch = useDispatch();
   const formData = useSelector(selectPatientRegistrationForm);
   const [createRecord, { isLoading }] = useCreatePatientCompleteMutation();
-  const [updatePatient, { isLoading: isUpdating }] = useUpdatePatientMutation();
   const [createProforma] = useCreateClinicalProformaMutation();
   const [createPatientFiles] = useCreatePatientFilesMutation();
   const { data: roomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
@@ -47,12 +46,6 @@ const CreatePatient = () => {
   const currentUser = useSelector(selectCurrentUser);
   const [errors, setErrors] = useState({});
   const [expandedPatientDetails, setExpandedPatientDetails] = useState(true);
-  const [currentStep, setCurrentStep] = useState(1); // 1 for Out Patient Card, 2 for remaining sections
-  const [patientId, setPatientId] = useState(null); // Store patient ID after step 1
-  const [hasLoadedPatientData, setHasLoadedPatientData] = useState(false); // Track if we've loaded patient data
-  const { data: patientDataResponse, isLoading: isLoadingPatientData } = useGetPatientByIdQuery(patientId, {
-    skip: !patientId || !token || hasLoadedPatientData, // Skip if no patientId, no token, or already loaded
-  });
   const [showOccupationOther, setShowOccupationOther] = useState(false); // Show custom occupation input when "Others" is selected
   const [occupationOther, setOccupationOther] = useState(''); // Custom occupation value
   const [showFamilyTypeOther, setShowFamilyTypeOther] = useState(false);
@@ -79,202 +72,6 @@ const CreatePatient = () => {
       dispatch(updatePatientRegistrationForm({ department: 'Psychiatry' }));
     }
   }, []);
-
-  // Restore step state from localStorage on mount and after authentication
-  useEffect(() => {
-    const savedPatientId = localStorage.getItem('createPatient_patientId');
-    const savedStep = localStorage.getItem('createPatient_step');
-
-    // If no saved data, start at step 1
-    if (!savedPatientId || savedStep !== '2') {
-      return;
-    }
-
-    // If token is available, verify patient exists before restoring
-    if (token) {
-      const verifyAndRestore = async () => {
-        try {
-          const baseUrl = import.meta.env.VITE_API_URL || '/api';
-          const response = await fetch(`${baseUrl}/patients/${savedPatientId}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-          });
-
-          if (response.ok) {
-            // Patient exists, restore step 2
-            setPatientId(savedPatientId);
-            setCurrentStep(2);
-            setExpandedPatientDetails(true);
-            // Reset the loaded flag so we can fetch patient data
-            setHasLoadedPatientData(false);
-          } else {
-            // Patient doesn't exist, clear localStorage and reset to step 1
-            localStorage.removeItem('createPatient_patientId');
-            localStorage.removeItem('createPatient_step');
-            setCurrentStep(1);
-            setPatientId(null);
-            setHasLoadedPatientData(false);
-          }
-        } catch (error) {
-          console.error('Error verifying patient:', error);
-          // On error, still restore step 2 (patient might exist, just network issue)
-          setPatientId(savedPatientId);
-          setCurrentStep(2);
-          setExpandedPatientDetails(true);
-          // Reset the loaded flag so we can fetch patient data
-          setHasLoadedPatientData(false);
-        }
-      };
-
-      verifyAndRestore();
-    } else {
-      // Token not available yet (session expired), but restore step 2 anyway
-      // Will verify when token becomes available
-      setPatientId(savedPatientId);
-      setCurrentStep(2);
-      setExpandedPatientDetails(true);
-      // Reset the loaded flag so we can fetch patient data when token is available
-      setHasLoadedPatientData(false);
-    }
-  }, [token]); // Run when token changes (after login or session expiration)
-
-  // Populate form with patient data when it's fetched (for step 2 restoration)
-  useEffect(() => {
-    if (patientDataResponse?.data?.patient && patientId && currentStep === 2 && !hasLoadedPatientData) {
-      const patient = patientDataResponse.data.patient;
-      
-      // Helper function to safely convert null/undefined to empty string
-      const safeString = (value) => (value === null || value === undefined) ? '' : String(value);
-      
-      // Map patient data to form fields
-      const formFields = {
-        // Step 1 fields
-        cr_no: safeString(patient.cr_no),
-        date: safeString(patient.date),
-        name: safeString(patient.name),
-        contact_number: safeString(patient.contact_number),
-        age: safeString(patient.age),
-        sex: safeString(patient.sex),
-        category: safeString(patient.category),
-        father_name: safeString(patient.father_name),
-        department: safeString(patient.department) || 'Psychiatry',
-        unit_consit: safeString(patient.unit_consit),
-        room_no: safeString(patient.room_no),
-        serial_no: safeString(patient.serial_no),
-        file_no: safeString(patient.file_no),
-        unit_days: safeString(patient.unit_days),
-        patient_income: safeString(patient.patient_income),
-        family_income: safeString(patient.family_income),
-        address_line: safeString(patient.address_line),
-        country: safeString(patient.country),
-        state: safeString(patient.state),
-        district: safeString(patient.district),
-        city: safeString(patient.city),
-        pin_code: safeString(patient.pin_code),
-        
-        // Step 2 fields
-        psy_no: safeString(patient.psy_no),
-        seen_in_walk_in_on: safeString(patient.seen_in_walk_in_on),
-        worked_up_on: safeString(patient.worked_up_on),
-        special_clinic_no: safeString(patient.special_clinic_no),
-        age_group: safeString(patient.age_group),
-        marital_status: safeString(patient.marital_status),
-        year_of_marriage: safeString(patient.year_of_marriage),
-        no_of_children_male: safeString(patient.no_of_children_male),
-        no_of_children_female: safeString(patient.no_of_children_female),
-        occupation: safeString(patient.occupation),
-        education: safeString(patient.education),
-        religion: safeString(patient.religion),
-        family_type: safeString(patient.family_type),
-        locality: safeString(patient.locality),
-        head_name: safeString(patient.head_name),
-        head_age: safeString(patient.head_age),
-        head_relationship: safeString(patient.head_relationship),
-        head_education: safeString(patient.head_education),
-        head_occupation: safeString(patient.head_occupation),
-        head_income: safeString(patient.head_income),
-        distance_from_hospital: safeString(patient.distance_from_hospital),
-        mobility: safeString(patient.mobility),
-        referred_by: safeString(patient.referred_by),
-        
-        // Address fields
-        permanent_address_line_1: safeString(patient.permanent_address_line_1),
-        permanent_city_town_village: safeString(patient.permanent_city_town_village),
-        permanent_district: safeString(patient.permanent_district),
-        permanent_state: safeString(patient.permanent_state),
-        permanent_pin_code: safeString(patient.permanent_pin_code),
-        permanent_country: safeString(patient.permanent_country),
-        present_address_line_1: safeString(patient.present_address_line_1),
-        present_address_line_2: safeString(patient.present_address_line_2),
-        present_city_town_village: safeString(patient.present_city_town_village),
-        present_city_town_village_2: safeString(patient.present_city_town_village_2),
-        present_district: safeString(patient.present_district),
-        present_district_2: safeString(patient.present_district_2),
-        present_state: safeString(patient.present_state),
-        present_state_2: safeString(patient.present_state_2),
-        present_pin_code: safeString(patient.present_pin_code),
-        present_pin_code_2: safeString(patient.present_pin_code_2),
-        present_country: safeString(patient.present_country),
-        present_country_2: safeString(patient.present_country_2),
-        local_address: safeString(patient.local_address),
-        assigned_room: safeString(patient.assigned_room),
-      };
-
-      // Update form with patient data
-      dispatch(updatePatientRegistrationForm(formFields));
-
-      // Handle "other" fields - check if values match "other" options
-      const checkOtherFields = (fieldName, options, otherFieldName, setShowOther, setOtherValue) => {
-        const value = patient[fieldName];
-        if (!value) return;
-        
-        // Check if the value matches any option (by value or label)
-        const matchesOption = options.some(opt => 
-          opt.value === value || 
-          opt.label === value ||
-          opt.value?.toLowerCase() === value?.toLowerCase() ||
-          opt.label?.toLowerCase() === value?.toLowerCase()
-        );
-        
-        if (!matchesOption && value !== 'others' && value !== 'other') {
-          // Value doesn't match any option, it's a custom "other" value
-          // Find if there's an "others" or "other" option
-          const otherOption = options.find(opt => opt.value === 'others' || opt.value === 'other');
-          if (otherOption) {
-            dispatch(updatePatientRegistrationForm({
-              [fieldName]: otherOption.value,
-              [otherFieldName]: value
-            }));
-            // Set local state for "other" fields
-            if (setShowOther) setShowOther(true);
-            if (setOtherValue) setOtherValue(value);
-          }
-        } else if (value === 'others' || value === 'other') {
-          // Field is already set to "others"/"other", show the custom input
-          if (setShowOther) setShowOther(true);
-          // The custom value should be in the _other field if it exists, otherwise check formFields
-          const customValue = patient[otherFieldName] || formFields[otherFieldName] || '';
-          if (setOtherValue && customValue) setOtherValue(customValue);
-        }
-      };
-
-      // Check and handle "other" fields
-      checkOtherFields('occupation', OCCUPATION_OPTIONS, 'occupation_other', setShowOccupationOther, setOccupationOther);
-      checkOtherFields('family_type', FAMILY_TYPE_OPTIONS, 'family_type_other', setShowFamilyTypeOther, setFamilyTypeOther);
-      checkOtherFields('locality', LOCALITY_OPTIONS, 'locality_other', setShowLocalityOther, setLocalityOther);
-      checkOtherFields('religion', RELIGION_OPTIONS, 'religion_other', setShowReligionOther, setReligionOther);
-      checkOtherFields('head_relationship', HEAD_RELATIONSHIP_OPTIONS, 'head_relationship_other', setShowHeadRelationshipOther, setHeadRelationshipOther);
-      checkOtherFields('mobility', MOBILITY_OPTIONS, 'mobility_other', setShowMobilityOther, setMobilityOther);
-      checkOtherFields('referred_by', REFERRED_BY_OPTIONS, 'referred_by_other', setShowReferredByOther, setReferredByOther);
-
-      // Mark as loaded to prevent re-fetching
-      setHasLoadedPatientData(true);
-    }
-  }, [patientDataResponse, patientId, currentStep, hasLoadedPatientData, dispatch]);
 
   // Check if fields with "others"/"other" are selected to show custom inputs
   useEffect(() => {
@@ -354,10 +151,10 @@ const CreatePatient = () => {
     }
   }, [formData.referred_by, formData.referred_by_other]);
 
-  // Auto-populate Permanent Address from Step 1 address when moving to Step 2
+  // Auto-populate Permanent Address from main address if permanent address is empty
   useEffect(() => {
-    if (currentStep === 2 && !formData.permanent_address_line_1) {
-      // Copy Step 1 address to Permanent Address if permanent address is empty
+    if (!formData.permanent_address_line_1) {
+      // Copy main address to Permanent Address if permanent address is empty
       if (formData.address_line || formData.city || formData.district || formData.state || formData.pin_code || formData.country) {
         dispatch(updatePatientRegistrationForm({
           permanent_address_line_1: formData.address_line || '',
@@ -369,7 +166,7 @@ const CreatePatient = () => {
         }));
       }
     }
-  }, [currentStep, formData.address_line, formData.city, formData.district, formData.state, formData.pin_code, formData.country, formData.permanent_address_line_1, dispatch]);
+  }, [formData.address_line, formData.city, formData.district, formData.state, formData.pin_code, formData.country, formData.permanent_address_line_1, dispatch]);
 
   // Sync present address with permanent address when checkbox is checked
   useEffect(() => {
@@ -394,11 +191,10 @@ const CreatePatient = () => {
     dispatch
   ]);
 
-  // Handle cancel - clear localStorage and navigate away
+  // Handle cancel - reset form and navigate away
   const handleCancel = () => {
-    localStorage.removeItem('createPatient_patientId');
-    localStorage.removeItem('createPatient_step');
-    setHasLoadedPatientData(false);
+    dispatch(resetPatientRegistrationForm());
+    setSelectedFiles([]);
     navigate('/patients');
   };
 
@@ -471,8 +267,9 @@ const CreatePatient = () => {
     dispatch(updatePatientRegistrationForm({ [name]: value }));
   };
 
-  const validate = (step = 1) => {
-    const validationResult = validatePatientRegistration(formData, step);
+  const validate = () => {
+    // Validate all fields
+    const validationResult = validatePatientRegistration(formData, 2);
     setErrors(validationResult.errors);
     return { isValid: validationResult.isValid, missingFields: validationResult.missingFields };
   };
@@ -481,11 +278,12 @@ const CreatePatient = () => {
 
 
 
-  // Handler for Step 1: Save Out Patient Card data
-  const handleStep1Submit = async (e) => {
+  // Handler for single form submission
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const validationResult = validate(1);
+    // Validate all fields
+    const validationResult = validate();
     if (!validationResult.isValid) {
       // Show toaster error for each missing field
       validationResult.missingFields.forEach((field) => {
@@ -501,8 +299,6 @@ const CreatePatient = () => {
     const patientCRNo = (formData.cr_no || '').trim();
 
     try {
-      // Additional validation (already checked in validate function, but keeping for safety)
-
       // Check if CR number already exists (if provided)
       if (patientCRNo && patientCRNo.length >= 3) {
         try {
@@ -522,7 +318,6 @@ const CreatePatient = () => {
             return;
           }
           // If 404, patient doesn't exist, continue with submission
-          // Other errors will be handled by the catch block
         } catch (checkError) {
           // If there's an error checking (network issue, etc.), continue with submission
           // The backend will catch duplicate CR numbers during creation
@@ -536,10 +331,16 @@ const CreatePatient = () => {
         return isNaN(parsed) ? null : parsed;
       };
 
+      const parseFloatSafe = (val) => {
+        if (val === '' || val === undefined || val === null) return null;
+        const parsed = parseFloat(val);
+        return isNaN(parsed) ? null : parsed;
+      };
+
       const currentUser = JSON.parse(localStorage.getItem("user"));
 
-      // Step 1: Save only Out Patient Card data
-      const step1PatientData = {
+      // Combine all patient data into single submission
+      const patientData = {
         // Required basic fields
         name: patientName,
         sex: patientSex,
@@ -561,8 +362,9 @@ const CreatePatient = () => {
         serial_no: formData.serial_no || null,
         file_no: formData.file_no || null,
         unit_days: formData.unit_days || null,
-        patient_income: formData.patient_income || null,
-        family_income: formData.family_income || null,
+        patient_income: parseFloatSafe(formData.patient_income),
+        family_income: parseFloatSafe(formData.family_income),
+        
         // Address fields
         address_line: formData.address_line || null,
         country: formData.country || null,
@@ -571,110 +373,6 @@ const CreatePatient = () => {
         city: formData.city || null,
         pin_code: formData.pin_code || null,
         
-        // Permanent Address fields
-        permanent_address_line_1: formData.permanent_address_line_1 || null,
-        permanent_city_town_village: formData.permanent_city_town_village || null,
-        permanent_district: formData.permanent_district || null,
-        permanent_state: formData.permanent_state || null,
-        permanent_pin_code: formData.permanent_pin_code || null,
-        permanent_country: formData.permanent_country || null,
-        
-        // Present Address fields
-        present_address_line_1: formData.present_address_line_1 || null,
-        present_address_line_2: formData.present_address_line_2 || null,
-        present_city_town_village: formData.present_city_town_village || null,
-        present_city_town_village_2: formData.present_city_town_village_2 || null,
-        present_district: formData.present_district || null,
-        present_district_2: formData.present_district_2 || null,
-        present_state: formData.present_state || null,
-        present_state_2: formData.present_state_2 || null,
-        present_pin_code: formData.present_pin_code || null,
-        present_pin_code_2: formData.present_pin_code_2 || null,
-        present_country: formData.present_country || null,
-        present_country_2: formData.present_country_2 || null,
-        
-        // Local Address field
-        local_address: formData.local_address || null,
-
-        // Additional fields
-        category: formData.category || null,
-
-        // Assignment - Include assigned_room in Step 1 so auto-assignment can happen
-        // If not provided, backend will auto-assign
-        assigned_room: formData.assigned_room || null,
-      };
-
-      // Create patient with step 1 data (using createPatientComplete which accepts all fields)
-      const patientResult = await createRecord(step1PatientData).unwrap();
-      const createdPatientId = patientResult.data.patient.id;
-
-      setPatientId(createdPatientId);
-
-      // Save to localStorage for persistence across page refreshes
-      localStorage.setItem('createPatient_patientId', String(createdPatientId));
-      localStorage.setItem('createPatient_step', '2');
-
-      // Mark as loaded since we already have the form data in Redux
-      setHasLoadedPatientData(true);
-
-      toast.success('Out Patient Card saved successfully!');
-
-      // Move to step 2
-      setCurrentStep(2);
-
-    } catch (err) {
-      console.error('Step 1 submission error:', err);
-
-      // Handle specific error cases
-      if (err?.data?.message?.includes('duplicate key value violates unique constraint "patients_cr_no_key"') ||
-        err?.data?.error?.includes('duplicate key value violates unique constraint "patients_cr_no_key"')) {
-        toast.error('CR number is already registered');
-        dispatch(updatePatientRegistrationForm({ cr_no: '' }));
-      } else if (err?.data?.message?.includes('duplicate key value violates unique constraint') ||
-        err?.data?.error?.includes('duplicate key value violates unique constraint')) {
-        toast.error('A record with this information already exists. Please check your data and try again.');
-      } else {
-        toast.error(err?.data?.message || err?.data?.error || 'Failed to save Out Patient Card');
-      }
-    }
-  };
-
-  // Handler for Step 2: Update patient with remaining data
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!patientId) {
-      toast.error('Patient ID is missing. Please complete step 1 first.');
-      return;
-    }
-
-    // Validate Step 2 required fields
-    const validationResult = validate(2);
-    if (!validationResult.isValid) {
-      // Show toaster error for each missing field
-      validationResult.missingFields.forEach((field) => {
-        toast.error(`Please fill ${field} field`);
-      });
-      return;
-    }
-
-    try {
-      const parseIntSafe = (val) => {
-        if (val === '' || val === undefined || val === null) return null;
-        const parsed = parseInt(val);
-        return isNaN(parsed) ? null : parsed;
-      };
-
-      const parseFloatSafe = (val) => {
-        if (val === '' || val === undefined || val === null) return null;
-        const parsed = parseFloat(val);
-        return isNaN(parsed) ? null : parsed;
-      };
-
-      const currentUser = JSON.parse(localStorage.getItem("user"));
-
-      // Step 2: Update patient with remaining data
-      const step2PatientData = {
         // Personal Information
         psy_no: formData.psy_no || null,
         seen_in_walk_in_on: formData.seen_in_walk_in_on || formData.date || null,
@@ -687,18 +385,12 @@ const CreatePatient = () => {
         no_of_children_female: parseIntSafe(formData.no_of_children_female),
 
         // Occupation & Education
-        // If "others" is selected, use the custom occupation value, otherwise use the selected option
         occupation: formData.occupation === 'others'
           ? (formData.occupation_other || occupationOther || null)
           : (formData.occupation || null),
         education: formData.education || null,
 
-        // Financial Information
-        // income: parseFloatSafe(formData.income),
-        patient_income: parseFloatSafe(formData.patient_income),
-        family_income: parseFloatSafe(formData.family_income),
         // Family Information
-        // If "others"/"other" is selected, use the custom value, otherwise use the selected option
         religion: formData.religion === 'others'
           ? (formData.religion_other || religionOther || null)
           : (formData.religion || null),
@@ -751,25 +443,24 @@ const CreatePatient = () => {
         // Local Address field
         local_address: formData.local_address || null,
 
-        // Assignment - Only update if a room is explicitly selected
-        // Don't overwrite auto-assigned room from Step 1 with null
-        // Only include assigned_room if it has a value
-        ...(formData.assigned_room && formData.assigned_room.trim() !== '' ? { assigned_room: formData.assigned_room } : {}),
+        // Additional fields
+        category: formData.category || null,
+
+        // Assignment
+        assigned_room: formData.assigned_room || null,
       };
 
-      // Update patient with step 2 data
-      await updatePatient({
-        id: patientId,
-        ...step2PatientData
-      }).unwrap();
+      // Create patient with all data in one go
+      const patientResult = await createRecord(patientData).unwrap();
+      const createdPatientId = patientResult.data.patient.id;
 
-      toast.success('Patient information updated successfully!');
+      toast.success('Patient registered successfully!');
 
       // Upload files if any are selected
       if (selectedFiles && selectedFiles.length > 0) {
         try {
           await createPatientFiles({
-            patient_id: patientId,
+            patient_id: createdPatientId,
             user_id: currentUser?.id,
             files: selectedFiles
           }).unwrap();
@@ -782,27 +473,31 @@ const CreatePatient = () => {
 
       // Create clinical proforma
       await createProforma({
-        patient_id: patientId,
+        patient_id: createdPatientId,
         visit_date: new Date().toISOString().split('T')[0]
       }).unwrap();
 
-      // Clear localStorage after successful completion
-      localStorage.removeItem('createPatient_patientId');
-      localStorage.removeItem('createPatient_step');
-
       // Reset form after successful submission
       dispatch(resetPatientRegistrationForm());
-      setCurrentStep(1);
-      setPatientId(null);
-      setHasLoadedPatientData(false);
-      setSelectedFiles([]); // Clear selected files
+      setSelectedFiles([]);
 
       // Navigate to patients list
       navigate('/patients');
 
     } catch (err) {
-      console.error('Step 2 submission error:', err);
-      toast.error(err?.data?.message || err?.data?.error || 'Failed to update patient information');
+      console.error('Patient registration error:', err);
+
+      // Handle specific error cases
+      if (err?.data?.message?.includes('duplicate key value violates unique constraint "patients_cr_no_key"') ||
+        err?.data?.error?.includes('duplicate key value violates unique constraint "patients_cr_no_key"')) {
+        toast.error('CR number is already registered');
+        dispatch(updatePatientRegistrationForm({ cr_no: '' }));
+      } else if (err?.data?.message?.includes('duplicate key value violates unique constraint') ||
+        err?.data?.error?.includes('duplicate key value violates unique constraint')) {
+        toast.error('A record with this information already exists. Please check your data and try again.');
+      } else {
+        toast.error(err?.data?.message || err?.data?.error || 'Failed to register patient');
+      }
     }
   };
 
@@ -841,22 +536,21 @@ const CreatePatient = () => {
 
           {expandedPatientDetails && (
             <div className="p-6">
-              <form onSubmit={currentStep === 1 ? handleStep1Submit : handleSubmit}>
-                {/* Step 1: Out Patient Card Section */}
-                {currentStep === 1 && (
-                  <div className="relative mb-8">
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 rounded-3xl blur-xl"></div>
-                    <Card
-                      title={
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-lg">
-                            <FiEdit3 className="w-6 h-6 text-indigo-600" />
-                          </div>
-                          <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">OUT PATIENT CARD</span>
+              <form onSubmit={handleSubmit}>
+                {/* Out Patient Card Section */}
+                <div className="relative mb-8">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 rounded-3xl blur-xl"></div>
+                  <Card
+                    title={
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-lg">
+                          <FiEdit3 className="w-6 h-6 text-indigo-600" />
                         </div>
-                      }
-                      className="relative mb-8 shadow-2xl border border-white/30 bg-white/70 backdrop-blur-xl rounded-3xl overflow-hidden">
-                      <div className="space-y-8">
+                        <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">OUT PATIENT CARD</span>
+                      </div>
+                    }
+                    className="relative mb-8 shadow-2xl border border-white/30 bg-white/70 backdrop-blur-xl rounded-3xl overflow-hidden">
+                    <div className="space-y-8">
                         {/* First Row - Basic Info */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                           <IconInput
@@ -1175,58 +869,25 @@ const CreatePatient = () => {
                       </div>
                     </Card>
                   </div>
-                )}
 
-                {/* Step 1: Submit Button for Out Patient Card */}
-                {currentStep === 1 && (
-                  <div className="relative mt-8">
-                    <div className="absolute inset-0 bg-gradient-to-r from-primary-500/20 via-indigo-500/20 to-blue-500/20 rounded-3xl blur-xl"></div>
-                    <div className="relative bg-white/70 backdrop-blur-xl rounded-3xl p-6 lg:p-8 shadow-2xl border border-white/30">
-                      <div className="flex flex-col sm:flex-row justify-end gap-4">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleCancel}
-                          className="px-6 lg:px-8 py-3 bg-white/60 backdrop-blur-md border border-white/30 hover:bg-white/80 hover:border-gray-300/50 text-gray-800 font-semibold shadow-sm hover:shadow-md transition-all duration-200"
-                        >
-                          <FiX className="mr-2" />
-                          Cancel
-                        </Button>
-                        <Button
-                          type="submit"
-                          loading={isLoading}
-                          disabled={isLoading}
-                          className="px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-                        >
-                          <FiArrowRight className="mr-2" />
-                          {isLoading ? 'Saving...' : 'Save & Continue'}
-                        </Button>
+                {/* Out-Patient Record Section */}
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 rounded-3xl blur-xl"></div>
+                  <Card
+                    title={
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-lg">
+                          <FiUser className="w-6 h-6 text-emerald-600" />
+                        </div>
+                        <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">OUT-PATIENT RECORD</span>
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 2: Basic Information and remaining sections */}
-                {currentStep === 2 && (
-                  <>
-                    {/* Basic Information with Glassmorphism */}
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 rounded-3xl blur-xl"></div>
-                      <Card
-                        title={
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-lg">
-                              <FiUser className="w-6 h-6 text-emerald-600" />
-                            </div>
-                            <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">OUT-PATIENT RECORD</span>
-                          </div>
-                        }
-                        className="relative mb-8 shadow-2xl border border-white/30 bg-white/70 backdrop-blur-xl rounded-3xl overflow-visible"
-                      >
-                        <div className="space-y-8">
-                          {/* Patient Identification */}
-                          <div className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    }
+                    className="relative mb-8 shadow-2xl border border-white/30 bg-white/70 backdrop-blur-xl rounded-3xl overflow-visible"
+                  >
+                    <div className="space-y-8">
+                      {/* Patient Identification */}
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
                               <DatePicker
                                 icon={<FiCalendar className="w-4 h-4" />}
@@ -1254,8 +915,7 @@ const CreatePatient = () => {
                                 value={formData.cr_no || ''}
                                 onChange={handleChange}
                                 placeholder="Enter CR number"
-                                disabled={true}
-                                className="disabled:bg-gray-200 disabled:cursor-not-allowed"
+                                className=""
                               />
 
                               <IconInput
@@ -1297,8 +957,7 @@ const CreatePatient = () => {
                                 value={formData.name || ''}
                                 onChange={handleChange}
                                 placeholder="Enter patient name"
-                                disabled={true}
-                                className="disabled:bg-gray-200 disabled:cursor-not-allowed"
+                                className=""
                               />
 
                               <div className="space-y-2">
@@ -1315,9 +974,7 @@ const CreatePatient = () => {
                                   placeholder="Select sex"
                                   error={errors.patientSex}
                                   searchable={true}
-
-                                  disabled={true}
-                                  className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                                  className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
                                 />
                               </div>
 
@@ -1675,6 +1332,7 @@ const CreatePatient = () => {
                                 inputLabel="Specify Referred By"
                               />
                             </div>
+                          </div>
 
                         {/* Permanent Address Section */}
                         <div className="space-y-6 pt-6 border-t border-white/30">
@@ -1927,8 +1585,8 @@ const CreatePatient = () => {
                             onFilesChange={setSelectedFiles}
                             maxFiles={20}
                             maxSizeMB={10}
-                            patientId={patientId}
-                            disabled={!patientId}
+                            patientId={null}
+                            disabled={false}
                           />
                           
                           {/* File Preview - Show uploaded files */}
@@ -1996,34 +1654,36 @@ const CreatePatient = () => {
                             </div>
                           )}
                         </div>
+                      </div>
+                    </Card>
+                  </div>
 
-                            <div className="flex flex-col sm:flex-row justify-end gap-4">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleCancel}
-                                className="px-6 lg:px-8 py-3 bg-white/60 backdrop-blur-md border border-white/30 hover:bg-white/80 hover:border-gray-300/50 text-gray-800 font-semibold shadow-sm hover:shadow-md transition-all duration-200"
-                              >
-                                <FiX className="mr-2" />
-                                Cancel
-                              </Button>
-                              <Button
-                                type="submit"
-                                loading={isLoading || isUpdating}
-                                disabled={isLoading || isUpdating}
-                                className="px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-                              >
-                                <FiSave className="mr-2" />
-                                {isLoading || isUpdating ? 'Saving...' : 'Register Patient'}
-                              </Button>
-                            </div>
-
-                          </div>
-                        </div>
-                      </Card>
+                {/* Submit Button */}
+                <div className="relative mt-8">
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary-500/20 via-indigo-500/20 to-blue-500/20 rounded-3xl blur-xl"></div>
+                  <div className="relative bg-white/70 backdrop-blur-xl rounded-3xl p-6 lg:p-8 shadow-2xl border border-white/30">
+                    <div className="flex flex-col sm:flex-row justify-end gap-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCancel}
+                        className="px-6 lg:px-8 py-3 bg-white/60 backdrop-blur-md border border-white/30 hover:bg-white/80 hover:border-gray-300/50 text-gray-800 font-semibold shadow-sm hover:shadow-md transition-all duration-200"
+                      >
+                        <FiX className="mr-2" />
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        loading={isLoading}
+                        disabled={isLoading}
+                        className="px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                      >
+                        <FiSave className="mr-2" />
+                        {isLoading ? 'Registering...' : 'Register Patient'}
+                      </Button>
                     </div>
-                  </>
-                )}
+                  </div>
+                </div>
               </form>
             </div>
           )}

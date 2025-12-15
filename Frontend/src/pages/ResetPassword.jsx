@@ -57,8 +57,16 @@ const ResetPassword = () => {
     setIsLoading(true);
 
     try {
-      // SECURITY FIX #2.17: Encrypt password before transmission
-      const passwordEncryption = await encryptPasswordForTransmission(formData.newPassword);
+      // SECURITY FIX #2.17: Encrypt password before transmission (mandatory)
+      let passwordEncryption;
+      try {
+        passwordEncryption = await encryptPasswordForTransmission(formData.newPassword);
+      } catch (encryptError) {
+        console.error('[Security] Password encryption failed:', encryptError);
+        setError('Security error: Unable to encrypt password. Please try again.');
+        setIsLoading(false);
+        return;
+      }
       
       // SECURITY FIX: Token is stored in HttpOnly cookie by backend, not in localStorage
       // No need to send token in request body - backend reads from cookie

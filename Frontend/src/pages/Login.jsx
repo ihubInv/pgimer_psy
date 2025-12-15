@@ -87,30 +87,59 @@ const Login = () => {
     e.preventDefault();
     try {
       // SECURITY FIX #2.17: Encrypt password before transmission
-      const passwordEncryption = await encryptPasswordForTransmission(formData.password);
-      
-      // Log encryption status for verification (remove in production if desired)
-      if (passwordEncryption.isEncrypted) {
-        console.log('[Security] Password encrypted before transmission:', {
-          originalLength: formData.password.length,
-          encryptedLength: passwordEncryption.encrypted.length,
-          isEncrypted: true
+      // Encryption is mandatory - will throw error if it fails
+      let passwordEncryption;
+      try {
+        passwordEncryption = await encryptPasswordForTransmission(formData.password);
+      } catch (encryptError) {
+        console.error('[Security] Password encryption failed:', encryptError);
+        console.error('[Security] Encryption error details:', {
+          name: encryptError?.name,
+          message: encryptError?.message,
+          stack: encryptError?.stack
         });
-      } else {
-        console.warn('[Security] Password NOT encrypted - sent in plaintext (HTTPS only protection)');
+        
+        // Show more detailed error message
+        const errorMessage = encryptError?.message || 'Unknown encryption error';
+        toast.error(`Security error: ${errorMessage}. Please check browser console for details.`);
+        return; // Stop login process if encryption fails
       }
+      
+      // Verify encryption succeeded
+      if (!passwordEncryption || !passwordEncryption.isEncrypted) {
+        console.error('[Security] Password encryption returned unencrypted password:', passwordEncryption);
+        toast.error('Security error: Password encryption failed. Cannot proceed.');
+        return; // Stop login process
+      }
+      
+      // Log encryption status for verification
+      console.log('[Security] Password encrypted before transmission:', {
+        originalLength: formData.password.length,
+        encryptedLength: passwordEncryption.encrypted.length,
+        isEncrypted: true
+      });
       
       const result = await login({
         email: formData.email,
         password: passwordEncryption.encrypted,
       }).unwrap();
 
-      // Check if accessToken is returned (direct login without OTP)
-      if (result.data.accessToken || result.data.token) {
-        // Direct login - accessToken received (new system) or token (legacy)
-        const token = result.data.accessToken || result.data.token;
-        const user = result.data.user;
-        const redirectUrl = result.data.redirectUrl || '/';
+      // SECURITY: Access token is now stored in cookie, not in response body
+      // Read token from cookie (fallback to response body for backward compatibility)
+      const getCookie = (name) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+      };
+      
+      const token = getCookie('accessToken') || result.data.accessToken || result.data.token;
+      const user = result.data.user;
+      const redirectUrl = result.data.redirectUrl || '/';
+      
+      // Check if accessToken is available (direct login without OTP)
+      if (token && user) {
+        // Direct login - token received from cookie or response (backward compatibility)
         
         // Use flushSync to ensure state update is synchronous and React re-renders immediately
         flushSync(() => {
@@ -132,10 +161,10 @@ const Login = () => {
         
         toast.success('Login successful!');
         
-        // Immediate redirect - use window.location for more reliable navigation
-        // This ensures the redirect happens even if React state hasn't fully updated
+        // Use React Router navigate to preserve network tab history
+        // This does client-side navigation without page reload
         setTimeout(() => {
-          window.location.href = redirectUrl;
+          navigate(redirectUrl, { replace: true });
         }, 100);
       } else {
         // OTP required - store login data for OTP verification
@@ -155,7 +184,16 @@ const Login = () => {
         otp: formData.otp,
       }).unwrap();
 
-      const token = result.data.accessToken || result.data.token;
+      // SECURITY: Access token is now stored in cookie, not in response body
+      // Read token from cookie (fallback to response body for backward compatibility)
+      const getCookie = (name) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+      };
+      
+      const token = getCookie('accessToken') || result.data.accessToken || result.data.token;
       const user = result.data.user;
       
       // Use flushSync to ensure state update is synchronous and React re-renders immediately
@@ -179,11 +217,11 @@ const Login = () => {
       
       toast.success('Login successful!');
       
-      // Immediate redirect - use window.location for more reliable navigation
-      // This ensures the redirect happens even if React state hasn't fully updated
+      // Use React Router navigate to preserve network tab history
+      // This does client-side navigation without page reload
       const redirectUrl = result.data?.redirectUrl || '/';
       setTimeout(() => {
-        window.location.href = redirectUrl;
+        navigate(redirectUrl, { replace: true });
       }, 100);
     } catch (err) {
       // Clear OTP field on error so user can enter a new one

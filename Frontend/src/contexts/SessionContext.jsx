@@ -85,11 +85,20 @@ export const SessionProvider = ({ children }) => {
 
         const result = await refreshToken().unwrap();
 
-        if (result?.data?.accessToken) {
+        // SECURITY: Access token is now stored in cookie, read from cookie
+        const getCookie = (name) => {
+          const value = `; ${document.cookie}`;
+          const parts = value.split(`; ${name}=`);
+          if (parts.length === 2) return parts.pop().split(';').shift();
+          return null;
+        };
+        
+        // Read token from cookie (fallback to response body for backward compatibility)
+        const newToken = getCookie('accessToken') || result?.data?.accessToken;
+        
+        if (newToken) {
           // Only update token if it's different to avoid unnecessary re-renders
           // This prevents form data from being cleared during token refresh
-          const newToken = result.data.accessToken;
-          
           if (token !== newToken) {
             // Use updateToken action which only updates the token
             // This prevents full state updates and form data loss

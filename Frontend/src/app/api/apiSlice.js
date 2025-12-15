@@ -142,22 +142,34 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
           isRefreshing = false;
           refreshPromise = null;
 
-    if (refreshResult?.data?.success && refreshResult?.data?.data?.accessToken) {
-      // Store the new token - use updateToken to avoid unnecessary re-renders
-      // This prevents form data from being cleared during automatic token refresh
-      const newToken = refreshResult.data.data.accessToken;
-      const state = api.getState();
+    // SECURITY: Access token is now stored in cookie, read from cookie
+    const getCookie = (name) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return null;
+    };
+    
+    if (refreshResult?.data?.success) {
+      // Read token from cookie (fallback to response body for backward compatibility)
+      const newToken = getCookie('accessToken') || refreshResult.data.data?.accessToken;
       
-      // Only update if token actually changed
-      if (state.auth.token !== newToken) {
-              console.log('[apiSlice] Token refreshed successfully');
-        api.dispatch({
-          type: 'auth/updateToken',
-          payload: newToken
-        });
-      }
+      if (newToken) {
+        // Store the new token - use updateToken to avoid unnecessary re-renders
+        // This prevents form data from being cleared during automatic token refresh
+        const state = api.getState();
+        
+        // Only update if token actually changed
+        if (state.auth.token !== newToken) {
+          console.log('[apiSlice] Token refreshed successfully');
+          api.dispatch({
+            type: 'auth/updateToken',
+            payload: newToken
+          });
+        }
 
-            return { success: true, token: newToken };
+        return { success: true, token: newToken };
+      }
           } else {
             // Refresh failed, logout user
             console.log('[apiSlice] Token refresh failed, logging out');

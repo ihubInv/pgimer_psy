@@ -24,7 +24,53 @@ function isEncryptionEnabled() {
 }
 
 /**
- * Decrypt password that was encrypted on the client side
+ * Decrypt password encrypted with crypto-js (fallback method)
+ * Uses AES-256-CBC with PBKDF2 key derivation
+ * @param {string} encryptedPassword - Base64 encoded encrypted password with CRYPTOJS: prefix
+ * @param {string} encryptionKey - Encryption key
+ * @returns {string} - Decrypted password
+ */
+async function decryptPasswordCryptoJS(encryptedPassword, encryptionKey) {
+  try {
+    // Remove CRYPTOJS: prefix
+    const base64Data = encryptedPassword.replace(/^CRYPTOJS:/, '');
+    
+    // Decode base64 to hex
+    const combinedHex = Buffer.from(base64Data, 'base64').toString('hex');
+    
+    // Extract salt (first 32 hex chars = 16 bytes), IV (next 32 hex chars = 16 bytes), and ciphertext (rest)
+    const saltHex = combinedHex.substring(0, 32);
+    const ivHex = combinedHex.substring(32, 64);
+    const ciphertextHex = combinedHex.substring(64);
+    
+    const salt = Buffer.from(saltHex, 'hex');
+    const iv = Buffer.from(ivHex, 'hex');
+    const ciphertext = Buffer.from(ciphertextHex, 'hex');
+    
+    // Derive key using PBKDF2 (same as frontend)
+    const keyMaterial = Buffer.from(encryptionKey, 'utf8');
+    const key = crypto.pbkdf2Sync(
+      keyMaterial,
+      salt,
+      100000, // Same iterations as frontend
+      32, // 256 bits = 32 bytes for AES-256
+      'sha256'
+    );
+    
+    // Decrypt using AES-256-CBC
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(ciphertext, null, 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    return decrypted;
+  } catch (error) {
+    console.error('[Password Decryption] crypto-js decryption failed:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Decrypt password that was encrypted on the client side using Web Crypto API
  * @param {string} encryptedPassword - Base64 encoded encrypted password
  * @returns {string} - Decrypted password
  */
@@ -43,6 +89,12 @@ async function decryptPassword(encryptedPassword) {
       console.warn('[Password Decryption] Using default encryption key. Set PASSWORD_ENCRYPTION_KEY in production!');
     }
 
+    // Check if it's crypto-js format (has CRYPTOJS: prefix)
+    if (encryptedPassword.startsWith('CRYPTOJS:')) {
+      return await decryptPasswordCryptoJS(encryptedPassword, encryptionKey);
+    }
+
+    // Web Crypto API format (AES-GCM)
     // Decode base64
     const combined = Buffer.from(encryptedPassword, 'base64');
     
@@ -88,6 +140,11 @@ async function decryptPassword(encryptedPassword) {
 function isEncryptedFormat(password) {
   if (!password || typeof password !== 'string') {
     return false;
+  }
+  
+  // Check for crypto-js format (has CRYPTOJS: prefix)
+  if (password.startsWith('CRYPTOJS:')) {
+    return true;
   }
   
   // Encrypted passwords are base64 encoded and typically longer

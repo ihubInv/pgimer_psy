@@ -64,8 +64,16 @@ const SetupPassword = () => {
     setIsLoading(true);
 
     try {
-      // SECURITY FIX #2.17: Encrypt password before transmission
-      const passwordEncryption = await encryptPasswordForTransmission(formData.newPassword);
+      // SECURITY FIX #2.17: Encrypt password before transmission (mandatory)
+      let passwordEncryption;
+      try {
+        passwordEncryption = await encryptPasswordForTransmission(formData.newPassword);
+      } catch (encryptError) {
+        console.error('[Security] Password encryption failed:', encryptError);
+        setError('Security error: Unable to encrypt password. Please try again.');
+        setIsLoading(false);
+        return;
+      }
       
       const response = await fetch('/api/users/setup-password', {
         method: 'POST',
