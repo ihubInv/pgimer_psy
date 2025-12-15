@@ -423,8 +423,230 @@ const CreatePrescription = ({
       return;
     }
 
-    // Trigger print
-    window.print();
+    // Get print content HTML
+    if (!printRef.current) {
+      toast.error('Print content not found');
+      return;
+    }
+
+    // Open new window with print content
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print');
+      return;
+    }
+
+    // Function to write print content
+    const writePrintContent = (win, logo) => {
+      const printHTML = printRef.current.innerHTML;
+      win.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Prescription - ${patient?.name || 'Patient'}</title>
+            <meta charset="UTF-8">
+            <style>
+              @page {
+                size: A4;
+                margin: 12mm 10mm 20mm 10mm;
+                @bottom-center {
+                  content: "This is electronically generated, no signature required";
+                  font-size: 8pt;
+                  color: #666;
+                  font-style: italic;
+                }
+              }
+              * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+              }
+              body {
+                font-family: 'Times New Roman', serif;
+                font-size: 10pt;
+                line-height: 1.4;
+                color: #000;
+                background: white;
+                margin: 0;
+                padding: 0;
+              }
+              .print-header {
+                margin-bottom: 10px;
+                padding-bottom: 6px;
+                border-bottom: 2px solid #000;
+                text-align: center;
+              }
+              .print-header > div {
+                text-align: center;
+              }
+              .print-header img {
+                max-height: 60px;
+                width: auto;
+                display: block;
+                margin: 0 auto 6px auto;
+              }
+              .print-header h1 {
+                margin: 0 0 4px 0;
+                font-size: 14pt;
+                font-weight: bold;
+                text-align: center;
+              }
+              .print-header h2 {
+                margin: 8px 0 0 0;
+                font-size: 12pt;
+                font-weight: bold;
+                text-align: center;
+              }
+              .print-header p {
+                margin: 2px 0;
+                font-size: 9pt;
+                text-align: center;
+              }
+              .mx-auto {
+                margin-left: auto;
+                margin-right: auto;
+              }
+              .mb-2 {
+                margin-bottom: 6px;
+              }
+              .mt-3 {
+                margin-top: 8px;
+              }
+              .print-patient-info {
+                font-size: 9.5pt;
+                margin-bottom: 10px;
+                padding: 6px 0;
+                border-bottom: 1px solid #000;
+              }
+              .print-patient-info span {
+                font-size: 9.5pt;
+              }
+              .print-section-title {
+                font-size: 10pt;
+                font-weight: bold;
+                margin: 8px 0 4px 0;
+                text-transform: uppercase;
+              }
+              .print-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 6px 0;
+                font-size: 9pt;
+              }
+              .print-table th,
+              .print-table td {
+                border: 1px solid #000;
+                padding: 4px 5px;
+                text-align: left;
+                vertical-align: top;
+              }
+              .print-table th {
+                font-weight: bold;
+                font-size: 9pt;
+              }
+              .print-footer {
+                margin-top: 12px;
+                padding-top: 6px;
+                border-top: 1px solid #000;
+              }
+              .print-footer p {
+                font-size: 9pt;
+                margin: 2px 0;
+              }
+              .print-footer .mb-16 {
+                margin-bottom: 30px;
+              }
+              .print-footer .border-t {
+                border-top: 1px solid #000;
+              }
+              .print-footer .text-center {
+                text-align: center;
+              }
+              .print-footer .mt-4 {
+                margin-top: 8px;
+              }
+              .print-footer .pt-2 {
+                padding-top: 4px;
+              }
+              .print-footer .text-xs {
+                font-size: 8pt;
+              }
+              .print-footer .italic {
+                font-style: italic;
+              }
+              .grid {
+                display: grid;
+              }
+              .flex {
+                display: flex;
+              }
+              .gap-12 {
+                gap: 20px;
+              }
+              .gap-x-8 {
+                column-gap: 14px;
+              }
+              .gap-y-2 {
+                row-gap: 3px;
+              }
+              .my-4 {
+                margin: 6px 0;
+              }
+              .mt-4 {
+                margin-top: 6px;
+              }
+              .pt-3 {
+                padding-top: 4px;
+              }
+              .mt-6 {
+                margin-top: 10px;
+              }
+              .ml-2 {
+                margin-left: 5px;
+              }
+              .space-y-1 > * + * {
+                margin-top: 2px;
+              }
+            </style>
+          </head>
+          <body>
+            ${printHTML}
+          </body>
+        </html>
+      `);
+      win.document.close();
+      
+      setTimeout(() => {
+        win.print();
+        toast.success('Print dialog opened');
+      }, 250);
+    };
+
+    // Get logo as base64 (optional)
+    try {
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      logoImg.src = PGI_Logo;
+      logoImg.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = logoImg.width;
+          canvas.height = logoImg.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(logoImg, 0, 0);
+          const logoBase64 = canvas.toDataURL('image/png');
+          // Update logo in print content if needed
+        } catch (e) {
+          // Continue without logo
+        }
+        writePrintContent(printWindow, '');
+      };
+      logoImg.onerror = () => {
+        writePrintContent(printWindow, '');
+      };
+    } catch (e) {
+      writePrintContent(printWindow, '');
+    }
   };
 
   // Save current prescriptions as template
@@ -630,6 +852,16 @@ const CreatePrescription = ({
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: #059669;
         }
+        /* Hide print content on screen */
+        @media screen {
+          .print-content {
+            position: absolute !important;
+            left: -9999px !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            visibility: hidden !important;
+          }
+        }
       `}</style>
 
       {/* Print-specific styles */}
@@ -637,240 +869,290 @@ const CreatePrescription = ({
         @media print {
           @page {
             size: A4;
-            margin: 12mm 15mm;
+            margin: 12mm 10mm 20mm 10mm;
+            @bottom-center {
+              content: "This is electronically generated, no signature required";
+              font-size: 8pt;
+              color: #666;
+              font-style: italic;
+            }
           }
           * {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            box-sizing: border-box;
           }
           html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
             height: auto !important;
-            overflow: visible !important;
+            font-family: 'Times New Roman', serif;
+            background: white !important;
+          }
+          /* Hide everything except print content */
+          body > *:not(.print-content) {
+            display: none !important;
+          }
+          /* Show print content */
+          .print-content {
+            display: block !important;
+            position: static !important;
+            width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
+            background: white !important;
+            page-break-after: avoid !important;
+            page-break-before: avoid !important;
           }
-          body {
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          body * {
-            visibility: hidden;
-          }
-          .print-content, .print-content * {
-            visibility: visible !important;
+          /* Remove all backgrounds - simple white page */
+          .print-content * {
+            background: transparent !important;
+            background-color: transparent !important;
           }
           .print-content {
-            position: relative !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
             background: white !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            page-break-after: avoid !important;
-            overflow: visible !important;
-            height: auto !important;
-            min-height: auto !important;
           }
+          /* Display rules for print content elements */
+          .print-content .grid { display: grid !important; }
+          .print-content .flex { display: flex !important; }
+          .print-content table { display: table !important; }
+          .print-content thead { display: table-header-group !important; }
+          .print-content tbody { display: table-row-group !important; }
+          .print-content tr { display: table-row !important; }
+          .print-content td, .print-content th { display: table-cell !important; }
+          .print-content span { display: inline !important; }
+          .print-content p { display: block !important; }
+          .print-content div { display: block !important; }
+          .print-content img { display: block !important; }
+          .print-content h1, .print-content h2, .print-content h3 { display: block !important; }
           .no-print,
           .no-print * {
             display: none !important;
             visibility: hidden !important;
           }
+          /* Header - Centered, Simple black borders, no backgrounds */
           .print-header {
-            margin-bottom: 12px !important;
-            padding-bottom: 8px !important;
-            border-bottom: 3px solid #1f2937;
-            page-break-after: avoid;
-            page-break-inside: avoid;
+            margin-bottom: 10px !important;
+            padding-bottom: 6px !important;
+            border-bottom: 2px solid #000 !important;
+            page-break-after: avoid !important;
+            text-align: center !important;
+          }
+          .print-header > div {
+            text-align: center !important;
+          }
+          .print-header img {
+            max-height: 60px !important;
+            width: auto !important;
+            display: block !important;
+            margin: 0 auto 6px auto !important;
           }
           .print-header h1 {
-            margin: 0 !important;
-            padding: 0 !important;
-            line-height: 1.2 !important;
+            margin: 0 0 4px 0 !important;
+            font-size: 14pt !important;
+            font-weight: bold !important;
+            color: #000 !important;
+            text-align: center !important;
           }
           .print-header h2 {
             margin: 8px 0 0 0 !important;
-            padding: 0 !important;
+            font-size: 12pt !important;
+            font-weight: bold !important;
+            color: #000 !important;
+            text-align: center !important;
           }
+          .print-header p {
+            margin: 2px 0 !important;
+            font-size: 9pt !important;
+            color: #000 !important;
+            text-align: center !important;
+          }
+          .mx-auto {
+            margin-left: auto !important;
+            margin-right: auto !important;
+          }
+          .mb-2 {
+            margin-bottom: 6px !important;
+          }
+          .mt-3 {
+            margin-top: 8px !important;
+          }
+          /* Patient Info - Simple styling */
+          .print-patient-info {
+            font-size: 9.5pt !important;
+            margin-bottom: 10px !important;
+            padding: 6px 0 !important;
+            border-bottom: 1px solid #000 !important;
+            page-break-after: avoid !important;
+          }
+          .print-patient-info span {
+            font-size: 9.5pt !important;
+            color: #000 !important;
+          }
+          .print-section-title {
+            font-size: 10pt !important;
+            font-weight: bold !important;
+            margin: 8px 0 4px 0 !important;
+            color: #000 !important;
+            page-break-after: avoid !important;
+          }
+          /* Table - Simple black borders, no backgrounds */
           .print-table {
-            border-collapse: collapse;
-            width: 100%;
-            font-size: 9px !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
             margin: 6px 0 !important;
-            page-break-inside: auto;
-          }
-          .print-table thead {
-            display: table-header-group;
-          }
-          .print-table tbody {
-            display: table-row-group;
+            font-size: 9pt !important;
+            page-break-inside: avoid !important;
           }
           .print-table th,
           .print-table td {
-            border: 1px solid #374151;
-            padding: 3px 4px !important;
-            text-align: left;
-            vertical-align: top;
-            word-wrap: break-word;
-            line-height: 1.2 !important;
+            border: 1px solid #000 !important;
+            padding: 4px 5px !important;
+            text-align: left !important;
+            vertical-align: top !important;
+            background: transparent !important;
+            color: #000 !important;
           }
           .print-table th {
-            background-color: #f3f4f6 !important;
-            font-weight: bold;
-            font-size: 9px !important;
-          }
-          .print-table td {
-            font-size: 9px !important;
+            font-weight: bold !important;
+            font-size: 9pt !important;
+            background: transparent !important;
           }
           .print-table tr {
-            page-break-inside: avoid;
+            background: transparent !important;
           }
+          /* Footer - Simple styling */
           .print-footer {
-            margin-top: 15px !important;
-            padding-top: 8px !important;
-            border-top: 2px solid #1f2937;
-            page-break-inside: avoid;
-            page-break-after: avoid;
+            margin-top: 12px !important;
+            padding-top: 6px !important;
+            border-top: 1px solid #000 !important;
+            page-break-inside: avoid !important;
+            page-break-after: avoid !important;
+          }
+          .print-footer p {
+            font-size: 9pt !important;
+            margin: 2px 0 !important;
+            color: #000 !important;
           }
           .print-footer .mb-16 {
-            margin-bottom: 35px !important;
+            margin-bottom: 30px !important;
           }
-          .print-patient-info {
-            font-size: 10px !important;
-            margin-bottom: 10px !important;
-            page-break-after: avoid;
-            page-break-inside: avoid;
+          .print-footer .grid {
+            gap: 25px !important;
           }
-          .print-patient-info > div {
-            margin: 0 !important;
-            padding: 0 !important;
+          .print-footer .border-t {
+            border-top: 1px solid #000 !important;
           }
-          .print-section-title {
-            font-weight: bold;
-            font-size: 11px !important;
-            margin: 8px 0 4px 0 !important;
-            padding: 0 !important;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            page-break-after: avoid;
+          .print-footer .text-center {
+            text-align: center !important;
           }
-          .print-content > div {
-            page-break-inside: avoid;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .print-content img {
-            max-height: 65px !important;
-            width: auto !important;
-            margin: 0 !important;
-          }
-          .my-4 {
-            margin-top: 8px !important;
-            margin-bottom: 8px !important;
-          }
-          .gap-12 {
-            gap: 40px !important;
-          }
-          .gap-4 {
-            gap: 12px !important;
-          }
-          .gap-x-8 {
-            column-gap: 20px !important;
-          }
-          .gap-y-2 {
-            row-gap: 4px !important;
-          }
-          .mb-3 {
-            margin-bottom: 8px !important;
-          }
-          .mt-4 {
+          .print-footer .mt-4 {
             margin-top: 8px !important;
           }
-          .pt-3 {
-            padding-top: 8px !important;
+          .print-footer .pt-2 {
+            padding-top: 4px !important;
           }
-          .mt-6 {
-            margin-top: 12px !important;
+          .print-footer .text-xs {
+            font-size: 8pt !important;
           }
+          .print-footer .italic {
+            font-style: italic !important;
+          }
+          .print-footer .text-gray-600 {
+            color: #666 !important;
+          }
+          /* Prevent extra pages */
+          .print-header,
+          .print-patient-info,
+          .my-4,
+          .print-footer {
+            page-break-inside: avoid !important;
+            page-break-after: avoid !important;
+          }
+          .print-table {
+            page-break-inside: avoid !important;
+          }
+          /* Utility classes */
+          .my-4 { margin: 6px 0 !important; }
+          .mt-4 { margin-top: 6px !important; }
+          .pt-3 { padding-top: 4px !important; }
+          .mt-6 { margin-top: 10px !important; }
+          .gap-12 { gap: 20px !important; }
+          .gap-x-8 { column-gap: 14px !important; }
+          .gap-y-2 { row-gap: 3px !important; }
+          .ml-2 { margin-left: 5px !important; }
+          .space-y-1 > * + * { margin-top: 2px !important; }
         }
       `}</style>
 
         <div className="w-full px-6 py-8 space-y-8">
        
           {/* Print Content - Hidden on screen, visible when printing */}
-          <div className="print-content" ref={printRef} style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none' }}>
-            {/* Print Header with PGI Logo */}
+          <div className="print-content" ref={printRef}>
+            {/* Print Header with PGI Logo - Centered */}
             <div className="print-header">
-              <div className="flex items-center justify-center gap-4 mb-3">
-                <img src={PGI_Logo} alt="PGIMER Logo" className="h-24 w-24 object-contain" />
-                <div className="text-center">
-                  <h1 className="text-xl font-bold text-gray-900 leading-tight">
-                    POSTGRADUATE INSTITUTE OF<br />MEDICAL EDUCATION & RESEARCH
-                  </h1>
-                  <p className="text-base font-semibold text-gray-700 mt-1">Department of Psychiatry</p>
-                  <p className="text-sm text-gray-600">Chandigarh, India</p>
-                </div>
+              <div className="text-center">
+                <img src={PGI_Logo} alt="PGIMER Logo" className="h-20 w-20 object-contain mx-auto mb-2" />
+                <h1 className="text-xl font-bold text-gray-900 leading-tight">
+                  POSTGRADUATE INSTITUTE OF<br />MEDICAL EDUCATION & RESEARCH
+                </h1>
+                <p className="text-base font-semibold text-gray-700 mt-1">Department of Psychiatry</p>
+                <p className="text-sm text-gray-600">Chandigarh, India</p>
               </div>
-              <h2 className="text-lg font-bold text-gray-900 uppercase tracking-wide text-center">PRESCRIPTION</h2>
+              <h2 className="text-lg font-bold text-gray-900 uppercase tracking-wide text-center mt-3">PRESCRIPTION</h2>
             </div>
 
             {/* Print Patient Information */}
             {patient && (
-              // <div className="print-patient-info">
-              //   <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
-              //     <div>
-              //       <span className="font-bold">Patient Name:</span> <span className="ml-2">{patient.name}</span>
-              //     </div>
-              //     <div>
-              //       <span className="font-bold">CR Number:</span> <span className="ml-2 font-mono">{patient.cr_no}</span>
-              //     </div>
-              //     <div>
-              //       <span className="font-bold">Age/Sex:</span> <span className="ml-2">{patient.age} years, {patient.sex}</span>
-              //     </div>
-              //     {patient.psy_no && (
-              //       <div>
-              //         <span className="font-bold">PSY Number:</span> <span className="ml-2 font-mono">{patient.psy_no}</span>
-              //       </div>
-              //     )}
-              //     {patient.assigned_doctor_name && (
-              //       <div>
-              //         <span className="font-bold">Prescribing Doctor:</span> <span className="ml-2">{patient.assigned_doctor_name} {patient.assigned_doctor_role ? `(${patient.assigned_doctor_role})` : ''}</span>
-              //       </div>
-              //     )}
-              //     <div>
-              //       <span className="font-bold">Room Number:</span> <span className="ml-2">{patient.assigned_room || 'N/A'}</span>
-              //     </div>
-              //     <div>
-              //       <span className="font-bold">Date:</span> <span className="ml-2">{formatDateFull(new Date().toISOString())}</span>
-              //     </div>
-              //   </div>
+              <div className="print-patient-info">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
+                  <div>
+                    <span className="font-bold">Patient Name:</span> <span className="ml-2">{patient.name}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold">CR Number:</span> <span className="ml-2 font-mono">{patient.cr_no}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold">Age/Sex:</span> <span className="ml-2">{patient.age} years, {patient.sex}</span>
+                  </div>
+                  {patient.psy_no && (
+                    <div>
+                      <span className="font-bold">PSY Number:</span> <span className="ml-2 font-mono">{patient.psy_no}</span>
+                    </div>
+                  )}
+                  {patient.assigned_doctor_name && (
+                    <div>
+                      <span className="font-bold">Prescribing Doctor:</span> <span className="ml-2">{patient.assigned_doctor_name} {patient.assigned_doctor_role ? `(${patient.assigned_doctor_role})` : ''}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="font-bold">Room Number:</span> <span className="ml-2">{patient.assigned_room || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold">Date:</span> <span className="ml-2">{formatDateFull(new Date().toISOString())}</span>
+                  </div>
+                </div>
 
-              //   {/* Past History in Print */}
-              //   {latestProforma && (
-              //     <div className="mt-4 pt-3 border-t border-gray-400">
-              //       <h3 className="print-section-title">Past Clinical History (Most Recent):</h3>
-              //       <div className="text-xs space-y-1 ml-2">
-              //         {latestProforma.diagnosis && (
-              //           <p><span className="font-semibold">Diagnosis:</span> <span className="ml-1">{latestProforma.diagnosis}</span></p>
-              //         )}
-              //         {latestProforma.icd_code && (
-              //           <p><span className="font-semibold">ICD Code:</span> <span className="ml-1 font-mono">{latestProforma.icd_code}</span></p>
-              //         )}
-              //         {latestProforma.case_severity && (
-              //           <p><span className="font-semibold">Case Severity:</span> <span className="ml-1 capitalize">{latestProforma.case_severity}</span></p>
-              //         )}
-              //         {latestProforma.visit_date && (
-              //           <p><span className="font-semibold">Last Visit:</span> <span className="ml-1">{formatDateFull(latestProforma.visit_date)}</span></p>
-              //         )}
-              //       </div>
-              //     </div>
-              //   )}
-              // </div>
-              <></>
+                {/* Past History in Print */}
+                {latestProforma && (
+                  <div className="mt-4 pt-3 border-t border-gray-400">
+                    <h3 className="print-section-title">Past Clinical History (Most Recent):</h3>
+                    <div className="text-xs space-y-1 ml-2">
+                      {latestProforma.diagnosis && (
+                        <p><span className="font-semibold">Diagnosis:</span> <span className="ml-1">{latestProforma.diagnosis}</span></p>
+                      )}
+                      {latestProforma.icd_code && (
+                        <p><span className="font-semibold">ICD Code:</span> <span className="ml-1 font-mono">{latestProforma.icd_code}</span></p>
+                      )}
+                      {latestProforma.case_severity && (
+                        <p><span className="font-semibold">Case Severity:</span> <span className="ml-1 capitalize">{latestProforma.case_severity}</span></p>
+                      )}
+                      {latestProforma.visit_date && (
+                        <p><span className="font-semibold">Last Visit:</span> <span className="ml-1">{formatDateFull(latestProforma.visit_date)}</span></p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Print Prescription Table */}
@@ -929,6 +1211,10 @@ const CreatePrescription = ({
                     <p className="text-xs text-gray-600 mt-1">with Hospital Stamp</p>
                   </div>
                 </div>
+              </div>
+              {/* Electronic generation notice */}
+              <div className="text-center mt-4 pt-2 border-t border-gray-400">
+                <p className="text-xs text-gray-600 italic">This is electronically generated, no signature required</p>
               </div>
             </div>
           </div>

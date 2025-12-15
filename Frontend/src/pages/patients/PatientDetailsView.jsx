@@ -2761,7 +2761,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
             <meta charset="UTF-8">
             <style>
               @page { 
-                margin: 12mm 15mm; 
+                margin: 12mm 10mm 12mm 15mm; 
                 size: A4;
                 @top-center {
                   content: "PGIMER - Patient Visit Record";
@@ -3092,7 +3092,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                   page-break-after: avoid;
                 }
                 @page {
-                  margin: 12mm 15mm;
+                  margin: 12mm 10mm 12mm 15mm;
                 }
                 a {
                   color: #1e40af;
