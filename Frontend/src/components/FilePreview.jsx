@@ -13,16 +13,25 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    if (!urlPath || !baseUrl) {
+    // If no urlPath, use src directly
+    if (!urlPath) {
       setImageSrc(src);
       setIsLoading(false);
       return;
     }
 
     // If we have a token, fetch with authentication
+    // baseUrl can be empty string for relative paths, which is valid
     if (token) {
-      const fullUrl = `${baseUrl}${urlPath}`;
-     
+      // Construct URL: if baseUrl is empty, use relative path; otherwise prepend baseUrl
+      const fullUrl = baseUrl ? `${baseUrl}${urlPath}` : urlPath;
+      
+      console.log('[AuthenticatedImage] Fetching image:', {
+        urlPath,
+        baseUrl: baseUrl || '(empty - using relative)',
+        fullUrl,
+        hasToken: !!token
+      });
       
       fetch(fullUrl, {
         method: 'GET',
@@ -32,7 +41,14 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
         credentials: 'include',
       })
         .then(response => {
-        
+          console.log('[AuthenticatedImage] Response received:', {
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.ok,
+            contentType: response.headers.get('content-type'),
+            url: fullUrl
+          });
+          
           if (!response.ok) {
             // Try to get error message from response
             return response.text().then(text => {
@@ -43,25 +59,58 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
               } catch {
                 errorMessage = text || errorMessage;
               }
+              console.error('[AuthenticatedImage] Fetch failed:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorMessage,
+                url: fullUrl
+              });
               throw new Error(errorMessage);
             });
           }
           return response.blob();
         })
         .then(blob => {
-         
+          // Validate blob before creating URL
+          if (!blob || blob.size === 0) {
+            console.error('[AuthenticatedImage] Invalid or empty blob received');
+            throw new Error('Invalid or empty blob');
+          }
+          
+          // Check blob type
+          if (!blob.type || !blob.type.startsWith('image/')) {
+            console.warn('[AuthenticatedImage] Blob type is not an image:', blob.type);
+            // Still try to display it, might be a valid image with wrong content-type
+          }
+          
           const blobUrl = URL.createObjectURL(blob);
+          console.log('[AuthenticatedImage] Image blob created successfully:', {
+            blobSize: blob.size,
+            blobType: blob.type,
+            blobUrl: blobUrl.substring(0, 50) + '...'
+          });
           setImageSrc(blobUrl);
           setIsLoading(false);
           setHasError(false);
         })
         .catch(error => {
-        
-          setHasError(true);
+          console.error('[AuthenticatedImage] Error fetching image:', {
+            error: error.message,
+            urlPath,
+            baseUrl: baseUrl || '(empty)',
+            fullUrl: baseUrl ? `${baseUrl}${urlPath}` : urlPath,
+            token: token ? 'present' : 'missing'
+          });
+          // Try fallback to src if available
+          if (src) {
+            console.log('[AuthenticatedImage] Attempting fallback to src:', src);
+            setImageSrc(src);
+            setHasError(false);
+          } else {
+            setHasError(true);
+            setImageSrc(null);
+          }
           setIsLoading(false);
-          // Don't fallback to src if it's the same URL that failed
-          // Instead, set a placeholder or let the error handler show the error
-          setImageSrc(null);
         });
     } else {
       // No token, use direct URL
@@ -79,6 +128,32 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
   }, [urlPath, baseUrl, token, src]);
 
   if (hasError && !imageSrc) {
+    // If we have a src fallback, try using it as last resort
+    if (src) {
+      console.log('[AuthenticatedImage] Using fallback src after error:', src);
+      return (
+        <img
+          src={src}
+          alt={alt}
+          className={className}
+          loading="lazy"
+          onError={(e) => {
+            console.error('[AuthenticatedImage] Fallback src also failed:', src);
+            if (onError) {
+              onError(e);
+            }
+          }}
+          onLoad={(e) => {
+            console.log('[AuthenticatedImage] Fallback src loaded successfully');
+            if (onLoad) {
+              onLoad(e);
+            }
+          }}
+          style={{ display: 'block' }}
+        />
+      );
+    }
+    
     return (
       <div className={className} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6', minHeight: '100%' }}>
         <div className="text-center p-2">
@@ -99,20 +174,40 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
     );
   }
 
+  const finalSrc = imageSrc || src;
+  
+  // Debug: Log what we're trying to render
+  console.log('[AuthenticatedImage] Rendering image:', {
+    imageSrc: imageSrc ? imageSrc.substring(0, 50) + '...' : 'null',
+    src: src ? src.substring(0, 50) + '...' : 'null',
+    finalSrc: finalSrc ? finalSrc.substring(0, 50) + '...' : 'null',
+    hasError,
+    isLoading
+  });
+
   return (
     <img
-      src={imageSrc || src}
+      src={finalSrc}
       alt={alt}
       className={className}
       loading="lazy"
       onError={(e) => {
-       
+        console.error('[AuthenticatedImage] Image onError triggered:', {
+          src: e.target?.src,
+          naturalWidth: e.target?.naturalWidth,
+          naturalHeight: e.target?.naturalHeight,
+          error: e.target?.error
+        });
         if (onError) {
           onError(e);
         }
       }}
       onLoad={(e) => {
-       
+        console.log('[AuthenticatedImage] Image onLoad triggered:', {
+          src: e.target?.src,
+          naturalWidth: e.target?.naturalWidth,
+          naturalHeight: e.target?.naturalHeight
+        });
         if (onLoad) {
           onLoad(e);
         }
@@ -178,31 +273,73 @@ const FilePreview = ({
       }
     }
     
-    // Handle absolute file system paths
-    if (filePath.startsWith('/var/') || filePath.startsWith('/usr/') || filePath.startsWith('/home/') || 
-        filePath.includes('/Backend/fileupload/') || filePath.includes('/Backend/uploads/')) {
-      let relativePath = filePath;
-      
-      const fileuploadIndex = filePath.indexOf('/fileupload/');
-      if (fileuploadIndex !== -1) {
-        relativePath = filePath.substring(fileuploadIndex);
-      } else {
-        const backendFileuploadIndex = filePath.indexOf('/Backend/fileupload/');
-        if (backendFileuploadIndex !== -1) {
-          relativePath = filePath.substring(backendFileuploadIndex + '/Backend'.length);
-        } else {
-          const uploadsIndex = filePath.indexOf('/uploads/');
-          if (uploadsIndex !== -1) {
-            relativePath = filePath.substring(uploadsIndex);
-          } else {
-            const backendUploadsIndex = filePath.indexOf('/Backend/uploads/');
-            if (backendUploadsIndex !== -1) {
-              relativePath = filePath.substring(backendUploadsIndex + '/Backend'.length);
-            }
-          }
-        }
+    // Normalize path separators first
+    let normalizedPath = filePath.replace(/\\/g, '/');
+    
+    // Handle absolute file system paths (Windows and Unix)
+    // Check for Backend/fileupload/ (with or without leading slash)
+    // This handles paths like: /var/www/.../Backend/fileupload/... or Backend/fileupload/...
+    if (normalizedPath.includes('Backend/fileupload/')) {
+      const backendFileuploadIndex = normalizedPath.indexOf('Backend/fileupload/');
+      // Extract from 'Backend/fileupload/' onwards, then remove 'Backend' prefix
+      let relativePath = normalizedPath.substring(backendFileuploadIndex + 'Backend'.length);
+      // Ensure it starts with /
+      if (!relativePath.startsWith('/')) {
+        relativePath = '/' + relativePath;
       }
+      console.log('[FilePreview] Converted Backend/fileupload path:', { 
+        original: filePath, 
+        normalized: normalizedPath,
+        converted: relativePath 
+      });
       return relativePath;
+    }
+    
+    // Check for Backend/uploads/ (with or without leading slash)
+    if (normalizedPath.includes('Backend/uploads/')) {
+      const backendUploadsIndex = normalizedPath.indexOf('Backend/uploads/');
+      let relativePath = normalizedPath.substring(backendUploadsIndex + 'Backend'.length);
+      // Ensure it starts with /
+      if (!relativePath.startsWith('/')) {
+        relativePath = '/' + relativePath;
+      }
+      console.log('[FilePreview] Converted Backend/uploads path:', { 
+        original: filePath, 
+        normalized: normalizedPath,
+        converted: relativePath 
+      });
+      return relativePath;
+    }
+    
+    // Check for /fileupload/ (less specific, but still valid)
+    if (normalizedPath.includes('/fileupload/')) {
+      const fileuploadIndex = normalizedPath.indexOf('/fileupload/');
+      const relativePath = normalizedPath.substring(fileuploadIndex);
+      console.log('[FilePreview] Converted fileupload path:', { 
+        original: filePath, 
+        normalized: normalizedPath,
+        converted: relativePath 
+      });
+      return relativePath;
+    }
+    
+    // Check for /uploads/ (less specific, but still valid)
+    if (normalizedPath.includes('/uploads/')) {
+      const uploadsIndex = normalizedPath.indexOf('/uploads/');
+      const relativePath = normalizedPath.substring(uploadsIndex);
+      console.log('[FilePreview] Converted uploads path:', { 
+        original: filePath, 
+        normalized: normalizedPath,
+        converted: relativePath 
+      });
+      return relativePath;
+    }
+    
+    // Handle other absolute paths that start with /var/, /usr/, /home/
+    if (filePath.startsWith('/var/') || filePath.startsWith('/usr/') || filePath.startsWith('/home/') ||
+        filePath.startsWith('C:\\') || filePath.startsWith('D:\\')) {
+      console.warn('[FilePreview] Could not extract relative path from absolute path:', filePath);
+      return '';
     }
     
     // Handle /uploads/patient_files/ paths (legacy format) and convert to /fileupload/
@@ -478,10 +615,12 @@ const FilePreview = ({
         return;
       }
       
-      console.log('[FilePreview] Deleting file - backend will handle path resolution:', {
-        patient_id: patientIdStr,
-        file_identifier: fileIdentifier
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[FilePreview] Deleting file - backend will handle path resolution:', {
+          patient_id: patientIdStr,
+          file_identifier: fileIdentifier
+        });
+      }
 
       // Use direct fetch to ensure correct endpoint: /api/patient-files/delete/{patient_id}/{file_path}
       // Backend handles all path resolution using req.user.role and module
@@ -590,6 +729,15 @@ const FilePreview = ({
             const fileName = actualPath.split('/').pop();
             const urlPath = getFileUrlPath(actualPath);
             const fileUrl = urlPath ? `${baseUrlWithoutApi}${urlPath}` : '';
+            
+            // Debug logging
+            console.log('[FilePreview] Processing file:', {
+              actualPath,
+              urlPath,
+              fileUrl,
+              baseUrlWithoutApi: baseUrlWithoutApi || '(empty - relative)',
+              fileName
+            });
             
             return {
               actualPath,

@@ -8,8 +8,7 @@ import {
   FiNavigation, FiEdit3, FiSave, FiX, FiLayers, 
   FiFolder, FiChevronDown, FiChevronUp, FiPackage, FiHash ,  FiPrinter, FiClipboard, FiEye, FiPlus
 } from 'react-icons/fi';
-import { useUpdatePatientMutation, useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
-import { useGetPatientFilesQuery } from '../../features/patients/patientFilesApiSlice';
+import { useUpdatePatientMutation, useGetPatientVisitHistoryQuery, useGetPatientFilesQuery } from '../../features/patients/patientsApiSlice';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import Card from '../../components/Card';

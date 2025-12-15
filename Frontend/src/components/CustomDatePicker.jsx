@@ -33,6 +33,7 @@ const CustomDatePicker = ({
   max,
   disabled = false,
   defaultToday = false,
+  dropdownZIndex = 1000000,
   ...props
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -377,6 +378,8 @@ const CustomDatePicker = ({
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
       const datePickerWidth = 320; // Fixed width for date picker
+      const datePickerHeight = 380; // Approximate height of date picker
+      const padding = 8; // Padding from edges
       
       // Calculate left position: center if input is wider, otherwise align to left
       let leftPosition = rect.left;
@@ -386,19 +389,43 @@ const CustomDatePicker = ({
       }
       
       // Ensure date picker doesn't go off-screen on the left
-      if (leftPosition < 8) {
-        leftPosition = 8;
+      if (leftPosition < padding) {
+        leftPosition = padding;
       }
       
       // Ensure date picker doesn't go off-screen on the right
-      const maxLeft = window.innerWidth - datePickerWidth - 8;
+      const maxLeft = window.innerWidth - datePickerWidth - padding;
       if (leftPosition > maxLeft) {
         leftPosition = maxLeft;
       }
       
+      // Calculate vertical position - check if there's enough space below
+      const spaceBelow = window.innerHeight - rect.bottom - padding;
+      const spaceAbove = rect.top - padding;
+      let topPosition;
+      
+      // If not enough space below but enough space above, position above
+      if (spaceBelow < datePickerHeight && spaceAbove > datePickerHeight) {
+        topPosition = rect.top - datePickerHeight - padding;
+      } else {
+        // Default: position below
+        topPosition = rect.bottom + padding;
+      }
+      
+      // Ensure date picker doesn't go off-screen at the top
+      if (topPosition < padding) {
+        topPosition = padding;
+      }
+      
+      // Ensure date picker doesn't go off-screen at the bottom
+      const maxTop = window.innerHeight - datePickerHeight - padding;
+      if (topPosition > maxTop) {
+        topPosition = maxTop;
+      }
+      
       // Use fixed positioning for portal (relative to viewport)
       setMenuStyle({
-        top: rect.bottom + 8,
+        top: topPosition,
         left: leftPosition,
         width: datePickerWidth,
       });
@@ -707,7 +734,7 @@ const CustomDatePicker = ({
               top: menuStyle.top,
               left: menuStyle.left,
               width: menuStyle.width || '320px',
-              zIndex: 999999,
+              zIndex: dropdownZIndex,
             }}
             className="bg-white/95 backdrop-blur-xl border-2 border-gray-200/60 rounded-xl shadow-2xl overflow-hidden"
           >

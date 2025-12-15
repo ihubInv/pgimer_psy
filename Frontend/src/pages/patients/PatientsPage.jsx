@@ -17,6 +17,7 @@ import Input from '../../components/Input';
 import Table from '../../components/Table';
 import Pagination from '../../components/Pagination';
 import Badge from '../../components/Badge';
+import ExportDateRangeModal from '../../components/ExportDateRangeModal';
 import { isAdmin, isMWO, isJrSr, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM } from '../../utils/constants';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
@@ -27,6 +28,7 @@ const PatientsPage = () => {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const limit = 10;
 
   // Reset page to 1 when search changes
@@ -749,7 +751,7 @@ const PatientsPage = () => {
     }
   };
 
-  const handleExportAll = async () => {
+  const handleExportAll = async (dateRange = null) => {
     let progressToastId = null;
     
     try {
@@ -766,6 +768,24 @@ const PatientsPage = () => {
       
       const baseUrl = import.meta.env.VITE_API_URL || '/api';
       const todayDateString = toISTDateString(new Date());
+      
+      // Helper function to check if a date is within the date range
+      const isDateInRange = (dateString) => {
+        if (!dateRange) return true; // No date range means export all
+        
+        if (!dateString) return false; // No date means exclude
+        
+        const date = new Date(dateString);
+        const rangeStart = new Date(dateRange.start);
+        const rangeEnd = new Date(dateRange.end);
+        
+        // Set time to start of day for comparison
+        rangeStart.setHours(0, 0, 0, 0);
+        rangeEnd.setHours(23, 59, 59, 999);
+        date.setHours(0, 0, 0, 0);
+        
+        return date >= rangeStart && date <= rangeEnd;
+      };
       
       // Get all patients (use filtered if searching, otherwise fetch all)
       let allPatients = [];
@@ -788,6 +808,18 @@ const PatientsPage = () => {
         
         const patientsResult = await patientsResponse.json();
         allPatients = patientsResult?.data?.patients || [];
+      }
+
+      // Filter patients by date range if specified
+      if (dateRange) {
+        allPatients = allPatients.filter(patient => {
+          // Check if patient was created within date range
+          const createdInRange = isDateInRange(patient.created_at);
+          
+          // For past history export, we'll check visit dates later
+          // For now, include patient if created in range
+          return createdInRange;
+        });
       }
 
       if (!allPatients || allPatients.length === 0) {
@@ -926,28 +958,8 @@ const PatientsPage = () => {
         return val ? 'Yes' : 'No';
       };
 
-      // Process each patient
-      for (let i = 0; i < allPatients.length; i++) {
-        const patient = allPatients[i];
-        const patientId = patient.id;
-
-        if (!patientId) continue;
-
-        // Update progress toast every 5 patients or on the last patient
-        if ((i + 1) % 5 === 0 || i === allPatients.length - 1) {
-          const updateMessage = isMWOUser
-            ? `Processing patients' data for export... (${i + 1}/${allPatients.length} patients)`
-            : `Processing patients' Past History data for export... (${i + 1}/${allPatients.length} patients)`;
-          toast.update(progressToastId, {
-            render: updateMessage,
-            type: 'info',
-            isLoading: true,
-            autoClose: false,
-          });
-        }
-
-        // Helper function to populate row data from constants (same as in handleExport)
-        const populateRowFromConstants = (row, constantArray, data, specialMappings = {}) => {
+      // Helper function to populate row data from constants (same as in handleExport)
+      const populateRowFromConstants = (row, constantArray, data, specialMappings = {}) => {
           constantArray.forEach(field => {
             const fieldValue = field.value;
             let value = data[fieldValue];
@@ -979,56 +991,88 @@ const PatientsPage = () => {
           return row;
         };
 
-        // Add patient details (always included with all headers)
-        const patientRow = { ...patientDetailsHeaders };
-        patientRow['Patient ID'] = patientId;
-        patientRow['ADL No'] = patient.adl_no || 'N/A';
-        patientRow['Actual Occupation'] = patient.actual_occupation || 'N/A';
-        patientRow['Completed Years of Education'] = patient.completed_years_of_education || 'N/A';
-        patientRow['Present Address Line 1'] = patient.present_address_line_1 || 'N/A';
-        patientRow['Present Address Line 2'] = patient.present_address_line_2 || 'N/A';
-        patientRow['Present City/Town/Village'] = patient.present_city_town_village || 'N/A';
-        patientRow['Permanent Address Line 1'] = patient.permanent_address_line_1 || 'N/A';
-        patientRow['Permanent Address Line 2'] = patient.permanent_address_line_2 || 'N/A';
-        patientRow['Permanent City/Town/Village'] = patient.permanent_city_town_village || 'N/A';
-        patientRow['Assigned Doctor'] = patient.assigned_doctor_name || 'N/A';
-        patientRow['Doctor Role'] = patient.assigned_doctor_role || 'N/A';
-        patientRow['Assigned Room'] = patient.assigned_room || 'N/A';
-        patientRow['Case Complexity'] = patient.case_complexity || 'N/A';
-        patientRow['Created At'] = formatDateTime(patient.created_at);
+      // Process patients in batches for better performance
+      const BATCH_SIZE = 10; // Process 10 patients at a time in parallel
+      
+      // Process each patient
+      for (let batchStart = 0; batchStart < allPatients.length; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, allPatients.length);
+        const batch = allPatients.slice(batchStart, batchEnd);
         
-        // Populate from PATIENT_REGISTRATION_FORM constants
-        populateRowFromConstants(patientRow, PATIENT_REGISTRATION_FORM, patient);
-        
-        patientDetailsData.push(patientRow);
+        // Update progress toast
+        const updateMessage = isMWOUser
+          ? `Processing patients' data for export... (${batchEnd}/${allPatients.length} patients)`
+          : `Processing patients' Past History data for export... (${batchEnd}/${allPatients.length} patients)`;
+        toast.update(progressToastId, {
+          render: updateMessage,
+          type: 'info',
+          isLoading: true,
+          autoClose: false,
+        });
 
-        // Track if patient has any past history data
-        let hasPastClinicalProforma = false;
-        let hasPastAdlFile = false;
-        let hasPastPrescription = false;
+        // Process batch in parallel
+        await Promise.all(batch.map(async (patient) => {
+          const patientId = patient.id;
+          if (!patientId) return;
 
-        // Only fetch past history if user is not MWO
-        if (!isMWOUser) {
-          try {
-            // Fetch clinical proformas
-            const clinicalResponse = await fetch(`${baseUrl}/clinical-proformas/patient/${patientId}`, {
-              headers: {
-                'Authorization': token ? `Bearer ${token}` : '',
-                'Content-Type': 'application/json',
-              },
-              credentials: 'include',
-            });
+          // Add patient details (always included with all headers)
+          const patientRow = { ...patientDetailsHeaders };
+          patientRow['Patient ID'] = patientId;
+          patientRow['ADL No'] = patient.adl_no || 'N/A';
+          patientRow['Actual Occupation'] = patient.actual_occupation || 'N/A';
+          patientRow['Completed Years of Education'] = patient.completed_years_of_education || 'N/A';
+          patientRow['Present Address Line 1'] = patient.present_address_line_1 || 'N/A';
+          patientRow['Present Address Line 2'] = patient.present_address_line_2 || 'N/A';
+          patientRow['Present City/Town/Village'] = patient.present_city_town_village || 'N/A';
+          patientRow['Permanent Address Line 1'] = patient.permanent_address_line_1 || 'N/A';
+          patientRow['Permanent Address Line 2'] = patient.permanent_address_line_2 || 'N/A';
+          patientRow['Permanent City/Town/Village'] = patient.permanent_city_town_village || 'N/A';
+          patientRow['Assigned Doctor'] = patient.assigned_doctor_name || 'N/A';
+          patientRow['Doctor Role'] = patient.assigned_doctor_role || 'N/A';
+          patientRow['Assigned Room'] = patient.assigned_room || 'N/A';
+          patientRow['Case Complexity'] = patient.case_complexity || 'N/A';
+          patientRow['Created At'] = formatDateTime(patient.created_at);
+          
+          // Populate from PATIENT_REGISTRATION_FORM constants
+          populateRowFromConstants(patientRow, PATIENT_REGISTRATION_FORM, patient);
+          
+          patientDetailsData.push(patientRow);
+
+          // Track if patient has any past history data
+          let hasPastClinicalProforma = false;
+          let hasPastAdlFile = false;
+          let hasPastPrescription = false;
+
+          // Only fetch past history if user is not MWO
+          if (!isMWOUser) {
+            try {
+              // Fetch clinical proformas
+              const clinicalResponse = await fetch(`${baseUrl}/clinical-proformas/patient/${patientId}`, {
+                headers: {
+                  'Authorization': token ? `Bearer ${token}` : '',
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+              });
 
           if (clinicalResponse.ok) {
             const clinicalResult = await clinicalResponse.json();
             const proformas = clinicalResult?.data?.proformas || clinicalResult?.data || [];
             
-            // Filter to only past proformas (not today's)
-            const pastProformas = proformas.filter(proforma => {
+            // Filter proformas based on date range
+            let pastProformas = proformas.filter(proforma => {
               if (!proforma) return false;
-              const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
-              if (!proformaDate) return true; // Include proformas without date as past
-              return proformaDate !== todayDateString;
+              
+              if (dateRange) {
+                // If date range is specified, check if visit date is in range
+                const visitDate = proforma.visit_date || proforma.created_at;
+                return isDateInRange(visitDate);
+              } else {
+                // No date range: filter to only past proformas (not today's)
+                const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
+                if (!proformaDate) return true; // Include proformas without date as past
+                return proformaDate !== todayDateString;
+              }
             });
 
             if (pastProformas.length > 0) {
@@ -1083,73 +1127,90 @@ const PatientsPage = () => {
               clinicalProformaData.push(proformaRow);
             });
 
-            // Fetch prescriptions for past proformas
-            for (const proforma of pastProformas) {
-              try {
-                const prescriptionResponse = await fetch(`${baseUrl}/prescriptions/by-proforma/${proforma.id}`, {
-                  headers: {
-                    'Authorization': token ? `Bearer ${token}` : '',
-                    'Content-Type': 'application/json',
-                  },
-                  credentials: 'include',
-                });
-
-                if (prescriptionResponse.ok) {
-                  const prescriptionResult = await prescriptionResponse.json();
-                  const prescriptions = prescriptionResult?.data?.prescription || [];
-                  
-                  if (prescriptions.length > 0) {
-                    hasPastPrescription = true;
-                  }
-                  
-                  prescriptions.forEach((prescription, pIdx) => {
-                    const prescriptionRow = { ...prescriptionHeaders };
-                    prescriptionRow['Patient ID'] = patientId;
-                    prescriptionRow['Patient Name'] = patient.name || 'N/A';
-                    prescriptionRow['CR No'] = patient.cr_no || 'N/A';
-                    prescriptionRow['Proforma ID'] = proforma.id;
-                    prescriptionRow['Visit Date'] = formatDate(proforma.visit_date);
-                    prescriptionRow['Visit Type'] = proforma.visit_type || 'N/A';
-                    prescriptionRow['Prescription #'] = pIdx + 1;
-                    prescriptionRow['When to Take'] = prescription.when_to_take || 'N/A';
-                    prescriptionRow['Created At'] = formatDateTime(prescription.created_at);
-                    
-                    // Populate from PRESCRIPTION_FORM constants
-                    populateRowFromConstants(prescriptionRow, PRESCRIPTION_FORM, prescription);
-                    
-                    prescriptionData.push(prescriptionRow);
+              // Fetch prescriptions for past proformas in parallel
+              const prescriptionPromises = pastProformas.map(async (proforma) => {
+                try {
+                  const prescriptionResponse = await fetch(`${baseUrl}/prescriptions/by-proforma/${proforma.id}`, {
+                    headers: {
+                      'Authorization': token ? `Bearer ${token}` : '',
+                      'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
                   });
-                }
-              } catch (e) {
-                console.warn(`Failed to fetch prescriptions for proforma ${proforma.id}:`, e);
-              }
-            }
-          }
-          } catch (e) {
-            console.warn(`Failed to fetch clinical proformas for patient ${patientId}:`, e);
-          }
 
-          try {
-            // Fetch ADL files
-            const adlResponse = await fetch(`${baseUrl}/adl-files/patient/${patientId}`, {
-              headers: {
-                'Authorization': token ? `Bearer ${token}` : '',
-                'Content-Type': 'application/json',
-              },
-              credentials: 'include',
-            });
+                  if (prescriptionResponse.ok) {
+                    const prescriptionResult = await prescriptionResponse.json();
+                    return prescriptionResult?.data?.prescription || [];
+                  }
+                  return [];
+                } catch (e) {
+                  console.warn(`Failed to fetch prescriptions for proforma ${proforma.id}:`, e);
+                  return [];
+                }
+              });
+
+              // Wait for all prescription requests to complete
+              const prescriptionResults = await Promise.all(prescriptionPromises);
+              
+              // Process all prescriptions
+              prescriptionResults.forEach((prescriptions, proformaIndex) => {
+                if (prescriptions.length > 0) {
+                  hasPastPrescription = true;
+                }
+                
+                const proforma = pastProformas[proformaIndex];
+                prescriptions.forEach((prescription, pIdx) => {
+                  const prescriptionRow = { ...prescriptionHeaders };
+                  prescriptionRow['Patient ID'] = patientId;
+                  prescriptionRow['Patient Name'] = patient.name || 'N/A';
+                  prescriptionRow['CR No'] = patient.cr_no || 'N/A';
+                  prescriptionRow['Proforma ID'] = proforma.id;
+                  prescriptionRow['Visit Date'] = formatDate(proforma.visit_date);
+                  prescriptionRow['Visit Type'] = proforma.visit_type || 'N/A';
+                  prescriptionRow['Prescription #'] = pIdx + 1;
+                  prescriptionRow['When to Take'] = prescription.when_to_take || 'N/A';
+                  prescriptionRow['Created At'] = formatDateTime(prescription.created_at);
+                  
+                  // Populate from PRESCRIPTION_FORM constants
+                  populateRowFromConstants(prescriptionRow, PRESCRIPTION_FORM, prescription);
+                  
+                  prescriptionData.push(prescriptionRow);
+                });
+              });
+            }
+            } catch (e) {
+              console.warn(`Failed to fetch clinical proformas for patient ${patientId}:`, e);
+            }
+
+            try {
+              // Fetch ADL files
+              const adlResponse = await fetch(`${baseUrl}/adl-files/patient/${patientId}`, {
+                headers: {
+                  'Authorization': token ? `Bearer ${token}` : '',
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+              });
 
             if (adlResponse.ok) {
               const adlResult = await adlResponse.json();
               const adlFiles = adlResult?.data?.adlFiles || adlResult?.data?.files || adlResult?.data || [];
               const adlFilesArray = Array.isArray(adlFiles) ? adlFiles : [];
 
-              // Filter to only past ADL files (not today's)
+              // Filter ADL files based on date range
               const pastAdlFiles = adlFilesArray.filter(adl => {
                 if (!adl) return false;
-                const adlDate = toISTDateString(adl.file_created_date || adl.created_at);
-                if (!adlDate) return true; // Include ADL files without date as past
-                return adlDate !== todayDateString;
+                
+                if (dateRange) {
+                  // If date range is specified, check if file created date is in range
+                  const fileDate = adl.file_created_date || adl.created_at;
+                  return isDateInRange(fileDate);
+                } else {
+                  // No date range: filter to only past ADL files (not today's)
+                  const adlDate = toISTDateString(adl.file_created_date || adl.created_at);
+                  if (!adlDate) return true; // Include ADL files without date as past
+                  return adlDate !== todayDateString;
+                }
               });
 
               if (pastAdlFiles.length > 0) {
@@ -1183,36 +1244,40 @@ const PatientsPage = () => {
                 
                 adlFileData.push(adlRow);
               });
+              }
+            } catch (e) {
+              console.warn(`Failed to fetch ADL files for patient ${patientId}:`, e);
             }
-          } catch (e) {
-            console.warn(`Failed to fetch ADL files for patient ${patientId}:`, e);
-          }
 
-          // If patient has no past history data in any section, add placeholder rows with N/A
-          if (!hasPastClinicalProforma) {
-            const emptyProformaRow = { ...clinicalProformaHeaders };
-            emptyProformaRow['Patient ID'] = patientId;
-            emptyProformaRow['Patient Name'] = patient.name || 'N/A';
-            emptyProformaRow['CR No'] = patient.cr_no || 'N/A';
-            clinicalProformaData.push(emptyProformaRow);
-          }
+            // If patient has no past history data in any section, add placeholder rows with N/A
+            if (!hasPastClinicalProforma) {
+              const emptyProformaRow = { ...clinicalProformaHeaders };
+              emptyProformaRow['Patient ID'] = patientId;
+              emptyProformaRow['Patient Name'] = patient.name || 'N/A';
+              emptyProformaRow['CR No'] = patient.cr_no || 'N/A';
+              clinicalProformaData.push(emptyProformaRow);
+            }
 
-          if (!hasPastAdlFile) {
-            const emptyAdlRow = { ...adlFileHeaders };
-            emptyAdlRow['Patient ID'] = patientId;
-            emptyAdlRow['Patient Name'] = patient.name || 'N/A';
-            emptyAdlRow['CR No'] = patient.cr_no || 'N/A';
-            adlFileData.push(emptyAdlRow);
-          }
+            if (!hasPastAdlFile) {
+              const emptyAdlRow = { ...adlFileHeaders };
+              emptyAdlRow['Patient ID'] = patientId;
+              emptyAdlRow['Patient Name'] = patient.name || 'N/A';
+              emptyAdlRow['CR No'] = patient.cr_no || 'N/A';
+              adlFileData.push(emptyAdlRow);
+            }
 
-          if (!hasPastPrescription) {
-            const emptyPrescriptionRow = { ...prescriptionHeaders };
-            emptyPrescriptionRow['Patient ID'] = patientId;
-            emptyPrescriptionRow['Patient Name'] = patient.name || 'N/A';
-            emptyPrescriptionRow['CR No'] = patient.cr_no || 'N/A';
-            prescriptionData.push(emptyPrescriptionRow);
+            if (!hasPastPrescription) {
+              const emptyPrescriptionRow = { ...prescriptionHeaders };
+              emptyPrescriptionRow['Patient ID'] = patientId;
+              emptyPrescriptionRow['Patient Name'] = patient.name || 'N/A';
+              emptyPrescriptionRow['CR No'] = patient.cr_no || 'N/A';
+              prescriptionData.push(emptyPrescriptionRow);
+            }
           }
-        }
+        }));
+        
+        // Wait for current batch to complete before processing next batch
+        await Promise.all(batch.map(() => Promise.resolve()));
       }
 
       // Create Excel workbook
@@ -1270,10 +1335,18 @@ const PatientsPage = () => {
         XLSX.utils.book_append_sheet(wb, ws4, 'Prescription');
       }
 
-      // Generate filename with current date
-      const filename = isMWOUser
+      // Generate filename with date range info
+      let filename = isMWOUser
         ? `all_patients_details_${new Date().toISOString().split('T')[0]}.xlsx`
         : `all_patients_past_history_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      // Add date range to filename if specified
+      if (dateRange) {
+        const dateRangeStr = `${dateRange.start}_to_${dateRange.end}`;
+        filename = isMWOUser
+          ? `all_patients_details_${dateRangeStr}.xlsx`
+          : `all_patients_past_history_${dateRangeStr}.xlsx`;
+      }
 
       // Write file
       XLSX.writeFile(wb, filename);
@@ -2875,7 +2948,7 @@ const PatientsPage = () => {
                 <Button
                   variant="outline"
                   className="h-12 px-5 bg-white border-2 border-primary-200 hover:bg-primary-50 hover:border-primary-300 shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={handleExportAll}
+                  onClick={() => setIsExportModalOpen(true)}
                   disabled={filteredPatients.length === 0 && (!data?.data?.patients || data.data.patients.length === 0)}
                 >
                   <FiDownload className="mr-2" />
@@ -2967,6 +3040,13 @@ const PatientsPage = () => {
         </Card>
 
       </div>
+
+      {/* Export Date Range Modal */}
+      <ExportDateRangeModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onExport={handleExportAll}
+      />
     </div>
   );
 };

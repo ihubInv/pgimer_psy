@@ -52,7 +52,7 @@ const Modal = ({
       
       {/* Modal panel - reduced glassmorphism effect */}
       <div
-        className={`relative z-50 backdrop-blur-lg bg-gradient-to-br from-white/70 via-white/65 to-white/60 border border-white/40 rounded-2xl text-left overflow-hidden transform transition-all w-full mx-4 ${sizes[size]}`}
+        className={`relative z-50 backdrop-blur-lg bg-gradient-to-br from-white/70 via-white/65 to-white/60 border border-white/40 rounded-2xl text-left overflow-visible transform transition-all w-full mx-4 ${sizes[size]}`}
         style={{
           boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.2), inset 0 1px 1px 0 rgba(255, 255, 255, 0.3)',
           backdropFilter: 'blur(12px) saturate(130%)',

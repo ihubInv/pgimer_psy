@@ -19,8 +19,7 @@ import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx-js-style';
 
 import { useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
-import { useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
-import { useGetPatientFilesQuery } from '../../features/patients/patientFilesApiSlice';
+import { useGetPatientVisitHistoryQuery, useGetPatientFilesQuery } from '../../features/patients/patientsApiSlice';
 import ViewADL from '../adl/ViewADL';
 import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
 import PrescriptionView from '../PrescribeMedication/PrescriptionView';
