@@ -103,13 +103,21 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
   }
 
   const rooms = roomsData?.data?.rooms || []; // These are only available (unoccupied) rooms
-  const distribution = roomsData?.data?.distribution || {};
+  const distribution = roomsData?.data?.distribution_today || {}; // Use today's distribution for day-specific room selection
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
-  const roomOptions = rooms.map(room => ({
-    value: room,
-    label: `${room} (${distribution[room] || 0} patients)`,
-  }));
+  const roomOptions = rooms.map(room => {
+    const totalPatients = distribution[room] || 0;
+    // Disable rooms with zero patients
+    const isDisabled = totalPatients === 0;
+    
+    return {
+      value: room,
+      label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''} today)`,
+      disabled: isDisabled,
+      disabledReason: isDisabled ? 'This room has no patients assigned' : undefined,
+    };
+  });
 
   // If no rooms available, add default rooms (but only if they're not occupied)
   if (roomOptions.length === 0) {
@@ -117,9 +125,15 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
       const roomName = `Room ${i}`;
       // Only add if not occupied
       if (!occupiedRooms[roomName]) {
+        const totalPatients = distribution[roomName] || 0;
+        // Disable rooms with zero patients
+        const isDisabled = totalPatients === 0;
+        
         roomOptions.push({
           value: roomName,
-          label: `${roomName} (0 patients)`,
+          label: `${roomName} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''})`,
+          disabled: isDisabled,
+          disabledReason: isDisabled ? 'This room has no patients assigned' : undefined,
         });
       }
     }
@@ -178,6 +192,11 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
                 {Object.keys(occupiedRooms).length > 0 && (
                   <p className="text-xs text-gray-500 mt-1 italic">
                     {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and are not shown.
+                  </p>
+                )}
+                {roomOptions.some(opt => opt.disabled && (distribution[opt.value] || 0) === 0) && (
+                  <p className="text-xs text-gray-500 mt-1 italic">
+                    Rooms with zero patients are disabled and cannot be selected.
                   </p>
                 )}
               </>

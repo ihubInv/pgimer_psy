@@ -546,7 +546,7 @@ const ClinicalTodayPatients = () => {
   const distribution = roomsData?.data?.distribution_today || {}; // Use today's distribution only
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
-  // Create room options with disabled state for occupied rooms
+  // Create room options with disabled state for occupied rooms and rooms with zero patients
   // Note: distribution_today shows patients created today OR with visits today
   // We'll show the count but clarify in the UI that it includes both new and existing patients
   const roomOptions = rooms.map(room => {
@@ -557,11 +557,20 @@ const ClinicalTodayPatients = () => {
     // Check if this is the current user's room
     const isMyRoom = validRoomData?.data?.current_room === room;
     
+    // Disable if occupied by another doctor OR if room has zero patients
+    const isDisabled = (isOccupied && !isMyRoom) || totalPatients === 0;
+    let disabledReason = undefined;
+    if (isOccupied && !isMyRoom) {
+      disabledReason = `This room is already assigned to ${occupiedBy || 'another doctor'}`;
+    } else if (totalPatients === 0) {
+      disabledReason = 'This room has no patients assigned';
+    }
+    
     return {
       value: room,
       label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''} today)${isOccupied ? ` - Assigned to ${occupiedBy || 'Doctor'}` : ''}${isMyRoom ? ' (Your room)' : ''}`,
-      disabled: isOccupied && !isMyRoom, // Don't disable if it's the current user's room
-      disabledReason: isOccupied && !isMyRoom ? `This room is already assigned to ${occupiedBy || 'another doctor'}` : undefined,
+      disabled: isDisabled,
+      disabledReason: disabledReason,
     };
   });
   
@@ -572,12 +581,22 @@ const ClinicalTodayPatients = () => {
       const roomName = `Room ${i}`;
       const isOccupied = occupiedRooms[roomName] !== undefined;
       const occupiedBy = isOccupied ? occupiedRooms[roomName]?.doctor_name : null;
+      const totalPatients = distribution[roomName] || 0;
+      
+      // Disable if occupied by another doctor OR if room has zero patients
+      const isDisabled = isOccupied || totalPatients === 0;
+      let disabledReason = undefined;
+      if (isOccupied) {
+        disabledReason = `This room is already assigned to ${occupiedBy || 'another doctor'}`;
+      } else if (totalPatients === 0) {
+        disabledReason = 'This room has no patients assigned';
+      }
       
       allRoomOptions.push({
         value: roomName,
-        label: `${roomName} (0 patients)${isOccupied ? ` - Assigned to ${occupiedBy || 'Doctor'}` : ''}`,
-        disabled: isOccupied,
-        disabledReason: isOccupied ? `This room is already assigned to ${occupiedBy || 'another doctor'}` : undefined,
+        label: `${roomName} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''})${isOccupied ? ` - Assigned to ${occupiedBy || 'Doctor'}` : ''}`,
+        disabled: isDisabled,
+        disabledReason: disabledReason,
       });
     }
   }
@@ -903,6 +922,11 @@ const ClinicalTodayPatients = () => {
                             {Object.keys(occupiedRooms).length > 0 && (
                               <p className="text-xs text-gray-500 mt-1 italic">
                                 {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and are disabled.
+                              </p>
+                            )}
+                            {allRoomOptions.some(opt => opt.disabled && (distribution[opt.value] || 0) === 0) && (
+                              <p className="text-xs text-gray-500 mt-1 italic">
+                                Rooms with zero patients are disabled and cannot be selected.
                               </p>
                             )}
                           </>
