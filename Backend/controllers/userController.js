@@ -168,6 +168,7 @@ class UserController {
             email: user.email,
             expires_in: 300 // 5 minutes in seconds
           }
+          
         });
       } else {
         // 2FA is disabled - direct login

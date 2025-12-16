@@ -132,9 +132,7 @@ app.get('/health', (req, res) => {
    FILE SERVING ROUTE (Must be before API routes to avoid conflicts)
    Serves files from /fileupload/ directory with authentication
 ================================================= */
-const { authenticateToken } = require('./middleware/auth');
 app.get('/fileupload/*', 
-  authenticateToken,
   SecureFileController.servePatientFile
 );
 

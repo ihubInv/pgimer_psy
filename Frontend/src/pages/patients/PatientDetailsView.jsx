@@ -2687,16 +2687,17 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         }
       });
 
-      // Transform checkbox/radio groups to compact format
-      // Find all checkbox/radio groups and make them display in grid
-      const checkboxGroups = clonedElement.querySelectorAll('div.flex.flex-wrap, div[class*="flex-wrap"]');
+      // Transform checkbox/radio groups to compact format with horizontal wrapping
+      // Find all checkbox/radio groups and make them display in flex with wrapping
+      const checkboxGroups = clonedElement.querySelectorAll('div.flex.flex-wrap, div[class*="flex-wrap"], div[class*="space-y"]');
       checkboxGroups.forEach(group => {
         const hasCheckboxes = group.querySelector('input[type="checkbox"], input[type="radio"]');
         if (hasCheckboxes) {
-          group.style.display = 'grid';
-          group.style.gridTemplateColumns = 'repeat(4, 1fr)';
-          group.style.gap = '4px 8px';
+          group.style.display = 'flex';
+          group.style.flexWrap = 'wrap';
+          group.style.gap = '6px 12px';
           group.style.marginBottom = '8px';
+          group.style.alignItems = 'flex-start';
         }
       });
 
@@ -2708,21 +2709,24 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           // Hide unchecked items
           label.style.display = 'none';
         } else if (input && input.checked) {
-          // Style checked items compactly
+          // Style checked items compactly - inline-flex for horizontal layout
           label.style.display = 'inline-flex';
           label.style.alignItems = 'center';
-          label.style.margin = '2px 8px 2px 0';
+          label.style.margin = '0';
           label.style.padding = '3px 6px';
           label.style.fontSize = '9pt';
-          label.style.background = '#e0f2fe';
-          label.style.border = '1px solid #0ea5e9';
-          label.style.borderRadius = '3px';
+          label.style.background = 'transparent';
+          label.style.border = '1px solid #000';
+          label.style.borderRadius = '0';
           label.style.fontWeight = '500';
+          label.style.whiteSpace = 'nowrap';
+          label.style.flexShrink = '0';
           if (input.type === 'checkbox' || input.type === 'radio') {
             input.style.width = '12px';
             input.style.height = '12px';
             input.style.marginRight = '6px';
             input.style.marginBottom = '0';
+            input.style.flexShrink = '0';
           }
         }
       });
@@ -2732,9 +2736,31 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       spaceYContainers.forEach(container => {
         const hasCheckboxes = container.querySelector('input[type="checkbox"], input[type="radio"]');
         if (hasCheckboxes) {
-          container.style.display = 'grid';
-          container.style.gridTemplateColumns = 'repeat(4, 1fr)';
-          container.style.gap = '4px 8px';
+          container.style.display = 'flex';
+          container.style.flexWrap = 'wrap';
+          container.style.gap = '6px 12px';
+          container.style.alignItems = 'flex-start';
+        }
+      });
+
+      // Handle form field groups - allow 2-3 columns for regular form fields
+      const formFieldGroups = clonedElement.querySelectorAll('.grid, [class*="grid-cols"]');
+      formFieldGroups.forEach(group => {
+        // Don't modify if it already has checkboxes/radios (handled above)
+        const hasCheckboxes = group.querySelector('input[type="checkbox"], input[type="radio"]');
+        if (!hasCheckboxes) {
+          // Check if it's a form field group (has inputs, selects, textareas)
+          const hasFormFields = group.querySelector('input:not([type="checkbox"]):not([type="radio"]), select, textarea');
+          if (hasFormFields) {
+            // Allow 2-3 columns based on content
+            const fieldCount = group.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select, textarea').length;
+            if (fieldCount <= 2) {
+              group.style.gridTemplateColumns = 'repeat(2, 1fr)';
+            } else {
+              group.style.gridTemplateColumns = 'repeat(3, 1fr)';
+            }
+            group.style.gap = '8px 12px';
+          }
         }
       });
 
@@ -2766,12 +2792,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                 @top-center {
                   content: "PGIMER - Patient Visit Record";
                   font-size: 9pt;
-                  color: #666;
+                  color: #000;
                 }
                 @bottom-right {
                   content: "Page " counter(page) " of " counter(pages);
                   font-size: 9pt;
-                  color: #666;
+                  color: #000;
                 }
               }
               * {
@@ -2785,14 +2811,14 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                 padding: 0;
                 font-size: 10.5pt;
                 line-height: 1.6;
-                color: #1a1a1a;
+                color: #000;
                 background: #fff;
               }
               .print-header { 
                 text-align: center; 
                 margin-bottom: 20px;
                 padding-bottom: 12px;
-                border-bottom: 3px solid #2563eb;
+                border-bottom: 2px solid #000;
                 page-break-after: avoid;
               }
               .logo { 
@@ -2806,20 +2832,20 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               .hospital-name {
                 font-size: 16pt;
                 font-weight: bold;
-                color: #1e40af;
+                color: #000;
                 margin: 5px 0;
                 letter-spacing: 0.5px;
               }
               .document-title {
                 font-size: 14pt;
                 font-weight: 600;
-                color: #374151;
+                color: #000;
                 margin-top: 5px;
               }
               .patient-info-box {
-                background: linear-gradient(to right, #eff6ff, #f0f9ff);
-                border: 2px solid #3b82f6;
-                border-radius: 4px;
+                background: transparent;
+                border: 1px solid #000;
+                border-radius: 0;
                 padding: 12px 15px;
                 margin-bottom: 20px;
                 display: grid;
@@ -2833,7 +2859,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               }
               .patient-info-label {
                 font-size: 8.5pt;
-                color: #64748b;
+                color: #000;
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
@@ -2841,71 +2867,74 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               }
               .patient-info-value {
                 font-size: 10pt;
-                color: #1e293b;
+                color: #000;
                 font-weight: 600;
               }
               .visit-header { 
-                background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
-                color: white;
+                background: transparent;
+                color: #000;
                 padding: 10px 15px; 
-                border-radius: 4px; 
+                border: 1px solid #000;
+                border-radius: 0;
                 margin-bottom: 20px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                box-shadow: none;
                 page-break-after: avoid;
               }
               .visit-header p {
                 margin: 0;
                 font-size: 11pt;
                 font-weight: 600;
+                color: #000;
               }
               .form-section {
                 margin-bottom: 25px;
                 page-break-inside: avoid;
-                border: 2px solid #e5e7eb;
-                border-radius: 6px;
+                border: 1px solid #000;
+                border-radius: 0;
                 padding: 18px;
-                background: #ffffff;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                background: transparent;
+                box-shadow: none;
               }
               .form-section-title {
                 font-size: 13pt;
                 font-weight: bold;
                 margin-bottom: 12px;
                 padding-bottom: 8px;
-                border-bottom: 3px solid;
+                border-bottom: 2px solid #000;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
+                color: #000;
               }
               .form-section.clinical-proforma .form-section-title {
-                color: #059669;
-                border-bottom-color: #059669;
+                color: #000;
+                border-bottom-color: #000;
               }
               .form-section.adl .form-section-title {
-                color: #ea580c;
-                border-bottom-color: #ea580c;
+                color: #000;
+                border-bottom-color: #000;
               }
               .form-section.prescription .form-section-title {
-                color: #d97706;
-                border-bottom-color: #d97706;
+                color: #000;
+                border-bottom-color: #000;
               }
               h2 { 
-                color: #1e40af; 
+                color: #000; 
                 margin: 18px 0 10px 0; 
-                border-bottom: 2px solid #3b82f6; 
+                border-bottom: 1px solid #000; 
                 padding-bottom: 6px;
                 font-size: 12pt;
                 font-weight: bold;
                 page-break-after: avoid;
               }
               h3 { 
-                color: #059669; 
+                color: #000; 
                 margin: 14px 0 8px 0;
                 font-size: 11pt;
                 font-weight: 600;
                 page-break-after: avoid;
               }
               h4 { 
-                color: #7c3aed; 
+                color: #000; 
                 margin: 12px 0 6px 0;
                 font-size: 10.5pt;
                 font-weight: 600;
@@ -2914,25 +2943,25 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                 font-size: 10.5pt;
                 margin: 10px 0 5px 0;
                 font-weight: 600;
-                color: #374151;
+                color: #000;
               }
               .field-group {
                 margin-bottom: 12px;
                 padding: 8px;
-                background: #f9fafb;
-                border-left: 3px solid #3b82f6;
+                background: transparent;
+                border-left: 2px solid #000;
                 page-break-inside: avoid;
               }
               .field-label {
                 font-weight: 600;
-                color: #475569;
+                color: #000;
                 font-size: 9pt;
                 text-transform: uppercase;
                 letter-spacing: 0.3px;
                 margin-bottom: 4px;
               }
               .field-value {
-                color: #1e293b;
+                color: #000;
                 font-size: 10pt;
                 line-height: 1.5;
               }
@@ -2942,35 +2971,35 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                 margin: 12px 0;
                 font-size: 9.5pt;
                 page-break-inside: avoid;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                box-shadow: none;
               }
               table td, table th {
                 padding: 10px 12px;
-                border: 1px solid #cbd5e1;
+                border: 1px solid #000;
                 text-align: left;
                 vertical-align: top;
               }
               table th {
-                background: linear-gradient(to bottom, #f1f5f9, #e2e8f0);
+                background: transparent;
                 font-weight: bold;
-                color: #1e293b;
+                color: #000;
                 font-size: 9.5pt;
                 text-transform: uppercase;
                 letter-spacing: 0.3px;
-                border-bottom: 2px solid #3b82f6;
+                border-bottom: 2px solid #000;
               }
               table tr:nth-child(even) {
-                background-color: #f8fafc;
+                background-color: transparent;
               }
               table tr:hover {
-                background-color: #f1f5f9;
+                background-color: transparent;
               }
               .section { 
                 margin-bottom: 20px; 
                 page-break-inside: avoid; 
               }
               .border-l-4 {
-                border-left: 4px solid #3b82f6 !important;
+                border-left: 2px solid #000 !important;
                 padding-left: 12px !important;
                 margin-left: 0 !important;
               }
@@ -2988,14 +3017,14 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                 grid-template-columns: repeat(4, 1fr);
               }
               input[disabled], textarea[disabled], select[disabled] {
-                background: #f1f5f9 !important;
-                color: #1e293b !important;
-                border: 1px solid #cbd5e1 !important;
+                background: transparent !important;
+                color: #000 !important;
+                border: 1px solid #000 !important;
                 padding: 6px 10px !important;
-                border-radius: 4px !important;
+                border-radius: 0 !important;
                 font-size: 10pt !important;
               }
-              /* Compact checkbox/radio button groups */
+              /* Compact checkbox/radio button groups - horizontal layout with wrapping */
               label:has(input[type="checkbox"]), 
               label:has(input[type="radio"]),
               label input[type="checkbox"],
@@ -3011,16 +3040,20 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                 flex-shrink: 0 !important;
                 cursor: default !important;
               }
-              /* Checkbox/radio groups container - make them display in columns */
+              /* Checkbox/radio groups container - flex with wrapping for horizontal layout */
               .flex.flex-wrap, 
               [class*="flex-wrap"],
-              .space-y-2,
-              .space-y-3,
-              .space-y-4 {
-                display: grid !important;
-                grid-template-columns: repeat(4, 1fr) !important;
-                gap: 4px 8px !important;
+              .space-y-2:has(input[type="checkbox"]),
+              .space-y-2:has(input[type="radio"]),
+              .space-y-3:has(input[type="checkbox"]),
+              .space-y-3:has(input[type="radio"]),
+              .space-y-4:has(input[type="checkbox"]),
+              .space-y-4:has(input[type="radio"]) {
+                display: flex !important;
+                flex-wrap: wrap !important;
+                gap: 6px 12px !important;
                 margin-bottom: 8px !important;
+                align-items: flex-start !important;
                 page-break-inside: avoid !important;
               }
               /* Hide unchecked checkboxes/radios in print - only show checked ones */
@@ -3028,25 +3061,52 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               input[type="radio"]:not(:checked) {
                 display: none !important;
               }
-              /* Style checked items - compact display */
+              /* Style checked items - compact display in horizontal row */
               label:has(input[type="checkbox"]:checked),
               label:has(input[type="radio"]:checked) {
                 display: inline-flex !important;
                 align-items: center !important;
-                margin: 2px 4px 2px 0 !important;
+                margin: 0 !important;
                 padding: 3px 6px !important;
                 font-size: 9pt !important;
                 line-height: 1.2 !important;
-                background: #e0f2fe !important;
-                border: 1px solid #0ea5e9 !important;
-                border-radius: 3px !important;
+                background: transparent !important;
+                border: 1px solid #000 !important;
+                border-radius: 0 !important;
                 font-weight: 500 !important;
+                white-space: nowrap !important;
+                flex-shrink: 0 !important;
                 page-break-inside: avoid !important;
               }
               /* Hide labels with unchecked inputs */
               label:has(input[type="checkbox"]:not(:checked)),
               label:has(input[type="radio"]:not(:checked)) {
                 display: none !important;
+              }
+              /* Form field groups - allow 2-3 columns */
+              .grid:has(input:not([type="checkbox"]):not([type="radio"])),
+              .grid:has(select),
+              .grid:has(textarea),
+              [class*="grid-cols"]:has(input:not([type="checkbox"]):not([type="radio"])),
+              [class*="grid-cols"]:has(select),
+              [class*="grid-cols"]:has(textarea) {
+                display: grid !important;
+                gap: 8px 12px !important;
+              }
+              /* Default to 2 columns for form fields, 3 if more content */
+              .grid:has(input:not([type="checkbox"]):not([type="radio"])),
+              .grid:has(select),
+              .grid:has(textarea) {
+                grid-template-columns: repeat(2, 1fr) !important;
+              }
+              /* 3 columns for larger groups */
+              .grid.grid-cols-3,
+              [class*="grid-cols-3"] {
+                grid-template-columns: repeat(3, 1fr) !important;
+              }
+              .grid.grid-cols-4,
+              [class*="grid-cols-4"] {
+                grid-template-columns: repeat(3, 1fr) !important;
               }
               button, .no-print, [class*="no-print"], nav, header, aside, 
               [class*="Button"], [class*="chevron"], [class*="Chevron"], 
@@ -3077,25 +3137,41 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                   -webkit-print-color-adjust: exact;
                   print-color-adjust: exact;
                 }
+                * {
+                  background: transparent !important;
+                  background-color: transparent !important;
+                }
+                body {
+                  background: #fff !important;
+                }
                 .form-section {
                   page-break-inside: avoid;
                   margin-bottom: 15px;
-                  border: 1.5px solid #cbd5e1;
+                  border: 1px solid #000;
+                  background: transparent !important;
                 }
                 .section { 
                   page-break-inside: avoid; 
                 }
                 .patient-info-box {
                   page-break-after: avoid;
+                  background: transparent !important;
                 }
                 .visit-header {
                   page-break-after: avoid;
+                  background: transparent !important;
+                }
+                table th {
+                  background: transparent !important;
+                }
+                table tr {
+                  background: transparent !important;
                 }
                 @page {
                   margin: 12mm 10mm 12mm 15mm;
                 }
                 a {
-                  color: #1e40af;
+                  color: #000;
                   text-decoration: underline;
                 }
               }
