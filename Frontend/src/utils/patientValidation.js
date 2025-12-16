@@ -108,9 +108,14 @@ const validateFieldValue = (fieldName, value, options = {}) => {
  * Get validation rules for a field
  * @param {string} fieldName - The field name
  * @param {number} step - The current step
+ * @param {string} userRole - The user's role (optional)
  * @returns {Object} - Validation rules for the field
  */
-const getFieldValidationRules = (fieldName, step) => {
+const getFieldValidationRules = (fieldName, step, userRole = null) => {
+  // Fields that should be optional for Psychiatric Welfare Officers
+  const isMWO = userRole === 'Psychiatric Welfare Officer';
+  const mwoOptionalFields = ['category', 'unit_consit', 'room_no', 'serial_no', 'file_no', 'unit_days'];
+  const isMWOOptionalField = isMWO && mwoOptionalFields.includes(fieldName);
   const rules = {
     // Step 1 Required Fields (Out Patient Card)
     name: { required: true, type: 'string', min: 1, max: 255 },
@@ -133,7 +138,7 @@ const getFieldValidationRules = (fieldName, step) => {
     district: { required: step === 1, type: 'string', min: 1, max: 100 },
     city: { required: step === 1, type: 'string', min: 1, max: 100 },
     pin_code: { 
-      required: step === 1, 
+      required: false, 
       type: 'string',
       pattern: /^\d{6}$/,
       customValidator: (value) => {
@@ -211,19 +216,19 @@ const getFieldValidationRules = (fieldName, step) => {
         return null;
       }
     },
-    category: { required: step === 1, type: 'string' },
+    category: { required: step === 1 && !isMWOOptionalField, type: 'string' },
     father_name: { required: step === 1, type: 'string', max: 255 },
     department: { required: step === 1, type: 'string', max: 100 },
-    unit_consit: { required: step === 1, type: 'string', max: 100 },
-    room_no: { required: step === 1, type: 'string', max: 50 },
-    serial_no: { required: step === 1, type: 'string', max: 50 },
-    file_no: { required: step === 1, type: 'string', max: 50 },
-    unit_days: { required: step === 1, type: 'string' },
+    unit_consit: { required: step === 1 && !isMWOOptionalField, type: 'string', max: 100 },
+    room_no: { required: step === 1 && !isMWOOptionalField, type: 'string', max: 50 },
+    serial_no: { required: step === 1 && !isMWOOptionalField, type: 'string', max: 50 },
+    file_no: { required: step === 1 && !isMWOOptionalField, type: 'string', max: 50 },
+    unit_days: { required: step === 1 && !isMWOOptionalField, type: 'string' },
     seen_in_walk_in_on: { required: step === 2, type: 'string' },
-    worked_up_on: { required: step === 2, type: 'string' },
+    worked_up_on: { required: false, type: 'string' },
     country: { required: step === 1, type: 'string', max: 100 },
-    psy_no: { required: step === 2, type: 'string', max: 50 },
-    special_clinic_no: { required: step === 2, type: 'string', max: 50 },
+    psy_no: { required: false, type: 'string', max: 50 },
+    special_clinic_no: { required: false, type: 'string', max: 50 },
     age_group: { required: step === 2, type: 'string', max: 20 },
     marital_status: { required: step === 2, type: 'string', max: 50 },
     year_of_marriage: { 
@@ -421,7 +426,7 @@ export const validatePatientRegistration = (formData, step = 1) => {
       value = 'Psychiatry';
     }
     
-    const rules = getFieldValidationRules(fieldName, step);
+    const rules = getFieldValidationRules(fieldName, step, userRole);
     
     // Only validate if rules exist (field is known) or if value is provided
     if (rules && Object.keys(rules).length > 0) {

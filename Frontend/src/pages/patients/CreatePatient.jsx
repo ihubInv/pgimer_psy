@@ -269,7 +269,7 @@ const CreatePatient = () => {
 
   const validate = () => {
     // Validate all fields
-    const validationResult = validatePatientRegistration(formData, 2);
+    const validationResult = validatePatientRegistration(formData, 2, currentUser?.role);
     setErrors(validationResult.errors);
     return { isValid: validationResult.isValid, missingFields: validationResult.missingFields };
   };
@@ -639,21 +639,23 @@ const CreatePatient = () => {
                               className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
                             />
                           </div>
-                          <div className="space-y-2">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                              <FiShield className="w-4 h-4 text-primary-600" />
-                              Category <span className="text-red-500">*</span>
-                            </label>
-                            <Select
-                              name="category"
-                              value={formData.category || ''}
-                              onChange={handleChange}
-                              options={CATEGORY_OPTIONS}
-                              placeholder="Select category"
-                              searchable={true}
-                              className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
-                            />
-                          </div>
+                          {!isMWO(currentUser?.role) && (
+                            <div className="space-y-2">
+                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                                <FiShield className="w-4 h-4 text-primary-600" />
+                                Category <span className="text-red-500">*</span>
+                              </label>
+                              <Select
+                                name="category"
+                                value={formData.category || ''}
+                                onChange={handleChange}
+                                options={CATEGORY_OPTIONS}
+                                placeholder="Select category"
+                                searchable={true}
+                                className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
+                              />
+                            </div>
+                          )}
                           <IconInput
                             icon={<FiUsers className="w-4 h-4" />}
                             label={
@@ -684,79 +686,85 @@ const CreatePatient = () => {
                             className="disabled:bg-gray-200 disabled:cursor-not-allowed"
                             disabled={true}
                           />
-                          <IconInput
-                            icon={<FiUsers className="w-4 h-4" />}
-                            label={
-                              <span>
-                                Unit/Consit <span className="text-red-500">*</span>
-                              </span>
-                            }
-                            name="unit_consit"
-                            value={formData.unit_consit || ''}
-                            onChange={handleChange}
-                            placeholder="Enter unit/consit"
-                            className=""
-                          />
-                          <IconInput
-                            icon={<FiHome className="w-4 h-4" />}
-                            label={
-                              <span>
-                                Room No. <span className="text-red-500">*</span>
-                              </span>
-                            }
-                            name="room_no"
-                            value={formData.room_no || ''}
-                            onChange={handleChange}
-                            placeholder="Enter room number"
-                            className=""
-                          />
-                          <IconInput
-                            icon={<FiHash className="w-4 h-4" />}
-                            label={
-                              <span>
-                                Serial No. <span className="text-red-500">*</span>
-                              </span>
-                            }
-                            name="serial_no"
-                            value={formData.serial_no || ''}
-                            onChange={handleChange}
-                            placeholder="Enter serial number"
-                            className=""
-                          />
+                          {!isMWO(currentUser?.role) && (
+                            <>
+                              <IconInput
+                                icon={<FiUsers className="w-4 h-4" />}
+                                label={
+                                  <span>
+                                    Unit/Consit <span className="text-red-500">*</span>
+                                  </span>
+                                }
+                                name="unit_consit"
+                                value={formData.unit_consit || ''}
+                                onChange={handleChange}
+                                placeholder="Enter unit/consit"
+                                className=""
+                              />
+                              <IconInput
+                                icon={<FiHome className="w-4 h-4" />}
+                                label={
+                                  <span>
+                                    Room No. <span className="text-red-500">*</span>
+                                  </span>
+                                }
+                                name="room_no"
+                                value={formData.room_no || ''}
+                                onChange={handleChange}
+                                placeholder="Enter room number"
+                                className=""
+                              />
+                              <IconInput
+                                icon={<FiHash className="w-4 h-4" />}
+                                label={
+                                  <span>
+                                    Serial No. <span className="text-red-500">*</span>
+                                  </span>
+                                }
+                                name="serial_no"
+                                value={formData.serial_no || ''}
+                                onChange={handleChange}
+                                placeholder="Enter serial number"
+                                className=""
+                              />
+                            </>
+                          )}
                         </div>
 
                         {/* Fifth Row - File No., Unit Days */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <IconInput
-                            icon={<FiFileText className="w-4 h-4" />}
-                            label={
-                              <span>
-                                File No. <span className="text-red-500">*</span>
-                              </span>
-                            }
-                            name="file_no"
-                            value={formData.file_no || ''}
-                            onChange={handleChange}
-                            placeholder="Enter file number"
-                            className=""
-                          />
-                          <div className="space-y-2">
-                            <Select
+                        {!isMWO(currentUser?.role) && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <IconInput
+                              icon={<FiFileText className="w-4 h-4" />}
                               label={
                                 <span>
-                                  Unit Days <span className="text-red-500">*</span>
+                                  File No. <span className="text-red-500">*</span>
                                 </span>
                               }
-                              name="unit_days"
-                              value={formData.unit_days || ''}
+                              name="file_no"
+                              value={formData.file_no || ''}
                               onChange={handleChange}
-                              options={UNIT_DAYS_OPTIONS}
-                              placeholder="Select unit days"
-                              searchable={true}
-                              className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
+                              placeholder="Enter file number"
+                              className=""
                             />
+                            <div className="space-y-2">
+                              <Select
+                                label={
+                                  <span>
+                                    Unit Days <span className="text-red-500">*</span>
+                                  </span>
+                                }
+                                name="unit_days"
+                                value={formData.unit_days || ''}
+                                onChange={handleChange}
+                                options={UNIT_DAYS_OPTIONS}
+                                placeholder="Select unit days"
+                                searchable={true}
+                                className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
+                              />
+                            </div>
                           </div>
-                        </div>
+                        )}
 
 
                         {/* Address Details */}
@@ -785,32 +793,19 @@ const CreatePatient = () => {
                               className=""
                             />
 
-                            {/* Location Fields */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* City/Town/Village, District, State, Country in one row */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                               <IconInput
-                                icon={<FiGlobe className="w-4 h-4" />}
+                                icon={<FiHome className="w-4 h-4" />}
                                 label={
                                   <span>
-                                    Country <span className="text-red-500">*</span>
+                                    City/Town/Village <span className="text-red-500">*</span>
                                   </span>
                                 }
-                                name="country"
-                                value={formData.country || ''}
+                                name="city"
+                                value={formData.city || ''}
                                 onChange={handleChange}
-                                placeholder="Enter country"
-                                className=""
-                              />
-                              <IconInput
-                                icon={<FiMapPin className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    State <span className="text-red-500">*</span>
-                                  </span>
-                                }
-                                name="state"
-                                value={formData.state || ''}
-                                onChange={handleChange}
-                                placeholder="Enter state"
+                                placeholder="Enter city, town or village"
                                 required
                                 className=""
                               />
@@ -829,36 +824,44 @@ const CreatePatient = () => {
                                 className=""
                               />
                               <IconInput
-                                icon={<FiHome className="w-4 h-4" />}
+                                icon={<FiMapPin className="w-4 h-4" />}
                                 label={
                                   <span>
-                                    City/Town/Village <span className="text-red-500">*</span>
+                                    State <span className="text-red-500">*</span>
                                   </span>
                                 }
-                                name="city"
-                                value={formData.city || ''}
+                                name="state"
+                                value={formData.state || ''}
                                 onChange={handleChange}
-                                placeholder="Enter city, town or village"
+                                placeholder="Enter state"
                                 required
+                                className=""
+                              />
+                              <IconInput
+                                icon={<FiGlobe className="w-4 h-4" />}
+                                label={
+                                  <span>
+                                    Country <span className="text-red-500">*</span>
+                                  </span>
+                                }
+                                name="country"
+                                value={formData.country || ''}
+                                onChange={handleChange}
+                                placeholder="Enter country"
                                 className=""
                               />
                             </div>
 
-                            {/* Pin Code Row */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Pin Code */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                               <IconInput
                                 icon={<FiHash className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    Pin Code <span className="text-red-500">*</span>
-                                  </span>
-                                }
+                                label="Pin Code"
                                 name="pin_code"
                                 value={formData.pin_code || ''}
                                 onChange={handleChange}
                                 placeholder="Enter pin code"
                                 type="number"
-                                required
                                 className=""
                               />
                             </div>
@@ -904,8 +907,8 @@ const CreatePatient = () => {
                                 name="worked_up_on"
                                 value={formData.worked_up_on}
                                 onChange={handleChange}
-                                defaultToday={true}
-                                required={true}
+                                defaultToday={false}
+                                required={false}
                               />
 
                               <IconInput
@@ -920,11 +923,7 @@ const CreatePatient = () => {
 
                               <IconInput
                                 icon={<FiFileText className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    Psy. No. <span className="text-red-500">*</span>
-                                  </span>
-                                }
+                                label="Psy. No."
                                 name="psy_no"
                                 value={formData.psy_no}
                                 onChange={handlePatientChange}
@@ -934,11 +933,7 @@ const CreatePatient = () => {
                               />
                               <IconInput
                                 icon={<FiHeart className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    Special Clinic No. <span className="text-red-500">*</span>
-                                  </span>
-                                }
+                                label="Special Clinic No."
                                 name="special_clinic_no"
                                 value={formData.special_clinic_no}
                                 onChange={handleChange}
@@ -1008,14 +1003,14 @@ const CreatePatient = () => {
                               />
                               <IconInput
                                 icon={<FiCalendar className="w-4 h-4" />}
-                                label="Year of marriage"
+                                label="Years of marriage"
                                 name="year_of_marriage"
                                 value={formData.year_of_marriage}
                                 onChange={handleChange}
                                 type="number"
-                                placeholder="Enter year of marriage"
-                                min="1900"
-                                max={new Date().getFullYear()}
+                                placeholder="Enter years of marriage (e.g., 5, 10, 25)"
+                                min="0"
+                                max="100"
                                 className="bg-gradient-to-r from-purple-50 to-pink-50"
                               />
 
@@ -1334,31 +1329,34 @@ const CreatePatient = () => {
                             </div>
                           </div>
 
-                        {/* Permanent Address Section */}
+                        {/* Present Address Section */}
                         <div className="space-y-6 pt-6 border-t border-white/30">
                           <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                            <div className="p-2.5 bg-gradient-to-br from-green-500/20 to-emerald-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
-                              <FiHome className="w-5 h-5 text-green-600" />
+                            <div className="p-2.5 bg-gradient-to-br from-orange-500/20 to-amber-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
+                              <FiMapPin className="w-5 h-5 text-orange-600" />
                             </div>
-                            Permanent Address
+                            Present Address
                           </h4>
 
                           <div className="space-y-6">
+                            {/* Address Line */}
                             <IconInput
                               icon={<FiHome className="w-4 h-4" />}
                               label="Address Line"
-                              name="permanent_address_line_1"
-                              value={formData.permanent_address_line_1 || ''}
+                              name="present_address_line_1"
+                              value={formData.present_address_line_1 || ''}
                               onChange={handleChange}
                               placeholder="Enter house number, street, locality"
                               className=""
                             />
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                            {/* City/Town/Village, District, State, Country in one row */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                               <IconInput
                                 icon={<FiHome className="w-4 h-4" />}
                                 label="City/Town/Village"
-                                name="permanent_city_town_village"
-                                value={formData.permanent_city_town_village || ''}
+                                name="present_city_town_village"
+                                value={formData.present_city_town_village || ''}
                                 onChange={handleChange}
                                 placeholder="Enter city, town or village"
                                 className=""
@@ -1366,8 +1364,8 @@ const CreatePatient = () => {
                               <IconInput
                                 icon={<FiLayers className="w-4 h-4" />}
                                 label="District"
-                                name="permanent_district"
-                                value={formData.permanent_district || ''}
+                                name="present_district"
+                                value={formData.present_district || ''}
                                 onChange={handleChange}
                                 placeholder="Enter district"
                                 className=""
@@ -1375,43 +1373,47 @@ const CreatePatient = () => {
                               <IconInput
                                 icon={<FiMapPin className="w-4 h-4" />}
                                 label="State"
-                                name="permanent_state"
-                                value={formData.permanent_state || ''}
+                                name="present_state"
+                                value={formData.present_state || ''}
                                 onChange={handleChange}
                                 placeholder="Enter state"
                                 className=""
                               />
                               <IconInput
+                                icon={<FiGlobe className="w-4 h-4" />}
+                                label="Country"
+                                name="present_country"
+                                value={formData.present_country || ''}
+                                onChange={handleChange}
+                                placeholder="Enter country"
+                                className=""
+                              />
+                            </div>
+
+                            {/* Pin Code */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                              <IconInput
                                 icon={<FiHash className="w-4 h-4" />}
                                 label="Pin Code"
-                                name="permanent_pin_code"
-                                value={formData.permanent_pin_code || ''}
+                                name="present_pin_code"
+                                value={formData.present_pin_code || ''}
                                 onChange={handleChange}
                                 placeholder="Enter pin code"
                                 type="number"
-                                className=""
-                              />
-                              <IconInput
-                                icon={<FiGlobe className="w-4 h-4" />}
-                                label="Country"
-                                name="permanent_country"
-                                value={formData.permanent_country || ''}
-                                onChange={handleChange}
-                                placeholder="Enter country"
                                 className=""
                               />
                             </div>
                           </div>
                         </div>
 
-                        {/* Present Address Section */}
+                        {/* Permanent Address Section */}
                         <div className="space-y-6 pt-6 border-t border-white/30">
                           <div className="flex items-center justify-between mb-6">
                             <h4 className="text-xl font-bold text-gray-900 flex items-center gap-3">
-                              <div className="p-2.5 bg-gradient-to-br from-orange-500/20 to-amber-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
-                                <FiMapPin className="w-5 h-5 text-orange-600" />
+                              <div className="p-2.5 bg-gradient-to-br from-green-500/20 to-emerald-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
+                                <FiHome className="w-5 h-5 text-green-600" />
                               </div>
-                              Present Address
+                              Permanent Address
                             </h4>
                             <label className="flex items-center gap-2 cursor-pointer group">
                               <input
@@ -1421,52 +1423,55 @@ const CreatePatient = () => {
                                   const checked = e.target.checked;
                                   setSameAsPermanent(checked);
                                   if (checked) {
-                                    // Copy permanent address to present address
+                                    // Copy present address to permanent address
                                     dispatch(updatePatientRegistrationForm({
-                                      present_address_line_1: formData.permanent_address_line_1 || '',
-                                      present_city_town_village: formData.permanent_city_town_village || '',
-                                      present_district: formData.permanent_district || '',
-                                      present_state: formData.permanent_state || '',
-                                      present_pin_code: formData.permanent_pin_code || '',
-                                      present_country: formData.permanent_country || ''
+                                      permanent_address_line_1: formData.present_address_line_1 || '',
+                                      permanent_city_town_village: formData.present_city_town_village || '',
+                                      permanent_district: formData.present_district || '',
+                                      permanent_state: formData.present_state || '',
+                                      permanent_pin_code: formData.present_pin_code || '',
+                                      permanent_country: formData.present_country || ''
                                     }));
                                   } else {
-                                    // Clear present address fields when unchecked
+                                    // Clear permanent address fields when unchecked
                                     dispatch(updatePatientRegistrationForm({
-                                      present_address_line_1: '',
-                                      present_city_town_village: '',
-                                      present_district: '',
-                                      present_state: '',
-                                      present_pin_code: '',
-                                      present_country: ''
+                                      permanent_address_line_1: '',
+                                      permanent_city_town_village: '',
+                                      permanent_district: '',
+                                      permanent_state: '',
+                                      permanent_pin_code: '',
+                                      permanent_country: ''
                                     }));
                                   }
                                 }}
                                 className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 focus:ring-2 cursor-pointer"
                               />
                               <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600 transition-colors">
-                                Same as Permanent Address
+                                Same as Present Address
                               </span>
                             </label>
                           </div>
 
                           <div className="space-y-6">
+                            {/* Address Line */}
                             <IconInput
                               icon={<FiHome className="w-4 h-4" />}
                               label="Address Line"
-                              name="present_address_line_1"
-                              value={formData.present_address_line_1 || ''}
+                              name="permanent_address_line_1"
+                              value={formData.permanent_address_line_1 || ''}
                               onChange={handleChange}
                               placeholder="Enter house number, street, locality"
                               disabled={sameAsPermanent}
                               className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                             />
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                            {/* City/Town/Village, District, State, Country in one row */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                               <IconInput
                                 icon={<FiHome className="w-4 h-4" />}
                                 label="City/Town/Village"
-                                name="present_city_town_village"
-                                value={formData.present_city_town_village || ''}
+                                name="permanent_city_town_village"
+                                value={formData.permanent_city_town_village || ''}
                                 onChange={handleChange}
                                 placeholder="Enter city, town or village"
                                 disabled={sameAsPermanent}
@@ -1475,8 +1480,8 @@ const CreatePatient = () => {
                               <IconInput
                                 icon={<FiLayers className="w-4 h-4" />}
                                 label="District"
-                                name="present_district"
-                                value={formData.present_district || ''}
+                                name="permanent_district"
+                                value={formData.permanent_district || ''}
                                 onChange={handleChange}
                                 placeholder="Enter district"
                                 disabled={sameAsPermanent}
@@ -1485,31 +1490,35 @@ const CreatePatient = () => {
                               <IconInput
                                 icon={<FiMapPin className="w-4 h-4" />}
                                 label="State"
-                                name="present_state"
-                                value={formData.present_state || ''}
+                                name="permanent_state"
+                                value={formData.permanent_state || ''}
                                 onChange={handleChange}
                                 placeholder="Enter state"
                                 disabled={sameAsPermanent}
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
                               <IconInput
-                                icon={<FiHash className="w-4 h-4" />}
-                                label="Pin Code"
-                                name="present_pin_code"
-                                value={formData.present_pin_code || ''}
+                                icon={<FiGlobe className="w-4 h-4" />}
+                                label="Country"
+                                name="permanent_country"
+                                value={formData.permanent_country || ''}
                                 onChange={handleChange}
-                                placeholder="Enter pin code"
-                                type="number"
+                                placeholder="Enter country"
                                 disabled={sameAsPermanent}
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
+                            </div>
+
+                            {/* Pin Code */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                               <IconInput
-                                icon={<FiGlobe className="w-4 h-4" />}
-                                label="Country"
-                                name="present_country"
-                                value={formData.present_country || ''}
+                                icon={<FiHash className="w-4 h-4" />}
+                                label="Pin Code"
+                                name="permanent_pin_code"
+                                value={formData.permanent_pin_code || ''}
                                 onChange={handleChange}
-                                placeholder="Enter country"
+                                placeholder="Enter pin code"
+                                type="number"
                                 disabled={sameAsPermanent}
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
