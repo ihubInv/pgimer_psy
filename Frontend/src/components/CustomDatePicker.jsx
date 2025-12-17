@@ -159,30 +159,25 @@ const CustomDatePicker = ({
         setCurrentMonth(new Date(date.getFullYear(), date.getMonth(), 1));
       }
     } else {
-      // Only show today's date if defaultToday is true
-      if (defaultToday === true) {
-        const today = new Date();
-        setSelectedDate(today);
-        setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-        const todayDate = getTodayDate();
-        const formatted = formatDateForDisplay(todayDate);
-        
-        // Show today's date in input field
-        setInputValue(formatted);
-        setDisplayValue(formatted);
-        
-        // Set today's date as the actual value
+      // Show today's date by default when no value is provided
+      const today = new Date();
+      setSelectedDate(today);
+      setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+      const todayDate = getTodayDate();
+      const formatted = formatDateForDisplay(todayDate);
+      
+      // Always show today's date in input field by default
+      setInputValue(formatted);
+      setDisplayValue(formatted);
+      
+      // Set today's date as the actual value if defaultToday is true or undefined
+      if (defaultToday !== false) {
         if (onChange) {
           const syntheticEvent = {
             target: { name, value: todayDate },
           };
           onChange(syntheticEvent);
         }
-      } else {
-        // When defaultToday is false, don't set any date
-        setSelectedDate(null);
-        setInputValue('');
-        setDisplayValue('');
       }
     }
   }, [value, defaultToday, name, onChange]);
