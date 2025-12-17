@@ -544,6 +544,33 @@ router.get('/age-distribution', authenticateToken, authorizeRoles('Admin', 'Psyc
 
 /**
  * @swagger
+ * /api/patients/cr/{cr_no}:
+ *   get:
+ *     summary: Get patient by CR number
+ *     tags: [Patient Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cr_no
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Central Registration Number
+ *     responses:
+ *       200:
+ *         description: Patient retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Patient not found
+ *       500:
+ *         description: Server error
+ */
+router.get('/cr/:cr_no', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), PatientController.getPatientByCRNo);
+
+/**
+ * @swagger
  * /api/patients/{id}:
  *   get:
  *     summary: Get patient by ID
@@ -904,34 +931,6 @@ router.get('/:id/adl-files', authenticateToken, authorizeRoles('Admin', 'Psychia
 // CRITICAL: Only Psychiatric Welfare Officers can assign patients - Admin is NOT allowed
 // The documentation was incorrect - this should be Psychiatric Welfare Officer only
 router.post('/assign', authenticateToken, authorizeRoles('Psychiatric Welfare Officer'), PatientController.assignPatient);
-
-// Routes for finding patients by specific numbers
-/**
- * @swagger
- * /api/patients/cr/{cr_no}:
- *   get:
- *     summary: Get patient by CR number
- *     tags: [Patient Management]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: cr_no
- *         required: true
- *         schema:
- *           type: string
- *         description: Central Registration Number
- *     responses:
- *       200:
- *         description: Patient retrieved successfully
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: Patient not found
- *       500:
- *         description: Server error
- */
-router.get('/cr/:cr_no', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), PatientController.getPatientByCRNo);
 
 /**
  * @swagger

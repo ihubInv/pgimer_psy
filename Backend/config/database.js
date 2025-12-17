@@ -1,13 +1,22 @@
 const { Pool } = require('pg');
-require('dotenv').config();
+const path = require('path');
+
+// Load .env file explicitly (important for PM2)
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 // PostgreSQL connection configuration
+// Ensure password is always a string (required by pg library)
+const dbPassword = process.env.DB_PASSWORD;
+if (!dbPassword) {
+  console.error('❌ DB_PASSWORD is not set in environment variables');
+}
+
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
+  port: parseInt(process.env.DB_PORT) || 5432,
   database: process.env.DB_NAME || 'pgi_emrs',
   user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || '',
+  password: dbPassword ? String(dbPassword) : '',
   max: parseInt(process.env.DB_POOL_MAX) || 20, // Maximum number of clients in the pool
   idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT) || 30000, // Close idle clients after 30 seconds
   connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT) || 10000, // Return an error after 10 seconds if connection could not be established (increased from 2s to 10s)

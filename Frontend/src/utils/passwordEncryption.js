@@ -217,7 +217,9 @@ export function isEncryptionSupported() {
     }
     
     if (!cryptoObj.subtle) {
-      console.error('[Password Encryption] crypto.subtle not available. Diagnostics:', diagnostics);
+      // crypto.subtle is only available in secure contexts (HTTPS)
+      // This is expected in HTTP contexts - will fall back to crypto-js
+      console.warn('[Password Encryption] crypto.subtle not available (expected in HTTP contexts). Will use crypto-js fallback. Diagnostics:', diagnostics);
       return false;
     }
     
