@@ -80,43 +80,11 @@ const MWONavigation = ({ onClose, isMinimized }) => {
         {!isMinimized && <span>Register New Patient</span>}
       </NavLink>
 
-      {/* All Patient Records */}
+      {/* Total Patients */}
       <NavLink
         to="/patients"
-        onClick={onClose}
-        className={() => {
-          // Only active on exact /patients or /patients/:id (view/edit) but NOT on /patients/new or /patients/select
-          const isExcluded = location.pathname === '/patients/new' || location.pathname === '/patients/select';
-          const isActive = !isExcluded && (location.pathname === '/patients' || location.pathname.startsWith('/patients/'));
-          
-          return `group flex items-center ${isMinimized ? 'justify-center px-2' : 'px-4'} py-3.5 text-sm font-medium rounded-xl transition-all duration-200 ${
-            isActive
-              ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30'
-              : 'text-gray-700 hover:bg-white/40 hover:text-primary-700 hover:shadow-md'
-          }`;
-        }}
-        title={isMinimized ? 'All Patient Records' : ''}
-      >
-        <div className={`p-2 rounded-lg ${isMinimized ? '' : 'mr-3'} transition-colors ${
-          (location.pathname === '/patients' || 
-           (location.pathname.startsWith('/patients/') && 
-            location.pathname !== '/patients/new' && 
-            location.pathname !== '/patients/select'))
-            ? 'bg-white/20'
-            : 'bg-gray-100 group-hover:bg-primary-100'
-        }`}>
-          <FiClipboard className="h-5 w-5" />
-        </div>
-        {!isMinimized && <span>All Patient Records</span>}
-      </NavLink>
-
-      
-
-      {/* Existing Patient */}
-      <NavLink
-        to="/patients/select"
-        onClick={onClose}
         end
+        onClick={onClose}
         className={({ isActive }) =>
           `group flex items-center ${isMinimized ? 'justify-center px-2' : 'px-4'} py-3.5 text-sm font-medium rounded-xl transition-all duration-200 ${
             isActive
@@ -124,16 +92,16 @@ const MWONavigation = ({ onClose, isMinimized }) => {
               : 'text-gray-700 hover:bg-white/40 hover:text-primary-700 hover:shadow-md'
           }`
         }
-        title={isMinimized ? 'Existing Patients' : ''}
+        title={isMinimized ? 'Total Patients' : ''}
       >
         <div className={`p-2 rounded-lg ${isMinimized ? '' : 'mr-3'} transition-colors ${
-          location.pathname === '/patients/select'
+          location.pathname === '/patients'
             ? 'bg-white/20'
             : 'bg-gray-100 group-hover:bg-primary-100'
         }`}>
-          <FiUserCheck className="h-5 w-5" />
+          <FiUsers className="h-5 w-5" />
         </div>
-        {!isMinimized && <span>Existing Patients</span>}
+        {!isMinimized && <span>Total Patients</span>}
       </NavLink>
 
       {/* Room Management */}

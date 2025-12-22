@@ -211,32 +211,26 @@ const getFieldValidationRules = (fieldName, step) => {
         return null;
       }
     },
-    category: { required: step === 1, type: 'string' },
     father_name: { required: step === 1, type: 'string', max: 255 },
     department: { required: step === 1, type: 'string', max: 100 },
-    unit_consit: { required: step === 1, type: 'string', max: 100 },
-    room_no: { required: step === 1, type: 'string', max: 50 },
-    serial_no: { required: step === 1, type: 'string', max: 50 },
     file_no: { required: step === 1, type: 'string', max: 50 },
-    unit_days: { required: step === 1, type: 'string' },
     seen_in_walk_in_on: { required: step === 2, type: 'string' },
-    worked_up_on: { required: step === 2, type: 'string' },
+    worked_up_on: { required: false, type: 'string' },
     country: { required: step === 1, type: 'string', max: 100 },
-    psy_no: { required: step === 2, type: 'string', max: 50 },
-    special_clinic_no: { required: step === 2, type: 'string', max: 50 },
+    psy_no: { required: false, type: 'string', max: 50 },
+    special_clinic_no: { required: false, type: 'string', max: 50 },
     age_group: { required: step === 2, type: 'string', max: 20 },
     marital_status: { required: step === 2, type: 'string', max: 50 },
     year_of_marriage: { 
       required: false, 
       type: 'integer', 
-      min: 1900, 
-      max: new Date().getFullYear(),
+      min: 0, 
+      max: 80,
       customValidator: (value, label) => {
         if (value) {
-          const year = parseInt(value);
-          const currentYear = new Date().getFullYear();
-          if (isNaN(year) || year < 1900 || year > currentYear) {
-            return `${label} must be between 1900 and ${currentYear}`;
+          const years = parseInt(value);
+          if (isNaN(years) || years < 0 || years > 80) {
+            return `${label} must be between 0 and 80 years (duration, not calendar year)`;
           }
         }
         return null;

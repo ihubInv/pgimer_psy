@@ -1,7 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSession } from '../contexts/SessionContext';
+import { useDispatch } from 'react-redux';
 import { AlertCircle, LogIn } from 'lucide-react';
+
+import { useSession } from '../contexts/SessionContext';
+import { apiSlice } from '../app/api/apiSlice';
 
 /**
  * Modal displayed when session expires due to inactivity
@@ -10,14 +13,32 @@ import { AlertCircle, LogIn } from 'lucide-react';
 const SessionExpiredModal = () => {
   const { isSessionExpired, handleLogout } = useSession();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   if (!isSessionExpired) {
     return null;
   }
 
-  const handleLogin = () => {
-    handleLogout();
-    navigate('/login');
+  const handleLogin = async () => {
+    try {
+      // First perform a clean logout via the session context
+      await handleLogout();
+    } catch (err) {
+      // Even if the API logout fails, proceed with client-side reset
+      console.error('Session expired logout error:', err);
+    } finally {
+      // Clear all RTK Query caches to remove any stale polling or requests
+      dispatch(apiSlice.util.resetApiState());
+
+      // Navigate to login within the SPA
+      navigate('/login', { replace: true });
+
+      // As a fallback, force a full reload so auth state is rebuilt
+      // from fresh storage and cookies, avoiding the need for a manual refresh
+      setTimeout(() => {
+        window.location.replace('/login');
+      }, 50);
+    }
   };
 
   return (

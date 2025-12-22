@@ -21,6 +21,7 @@ const prescriptionTemplateRoutes = require('./routes/prescriptionTemplateRoutes'
 const medicineRoutes = require('./routes/medicineRoutes');
 const sessionRoutes = require('./routes/sessionRoutes');
 const roomRoutes = require('./routes/roomRoutes');
+const followUpRoutes = require('./routes/followUpRoutes');
 const SecureFileController = require('./controllers/secureFileController');
 
 const app = express();
@@ -149,6 +150,7 @@ app.use('/api/prescription-templates', prescriptionTemplateRoutes);
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/session', sessionRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/follow-ups', followUpRoutes);
 
 /* =================================================
    ROOT

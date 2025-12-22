@@ -287,15 +287,15 @@ export const SelectWithOther = ({
             }
             className={`
               w-full px-4 py-3 pr-10
-              bg-white border-2 rounded-xl
+              bg-white border-2 border-gray-300/60 rounded-xl shadow-sm
               text-left font-medium
               transition-all duration-200 ease-in-out
-              focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500
-              hover:border-primary-400
-              disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:border-gray-300
-              ${selectProps.error ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300'}
+              focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 focus:bg-white
+              hover:bg-white hover:border-primary-400/70
+              disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:border-gray-300/60
+              ${selectProps.error ? 'border-red-500/60 focus:border-red-500 focus:ring-red-500/50' : 'border-gray-300/60'}
               ${!safeValue ? 'text-gray-500' : 'text-gray-900'}
-              ${isOpen ? 'border-primary-500 ring-2 ring-primary-500/20' : ''}
+              ${isOpen ? 'border-primary-500 ring-2 ring-primary-500/50 bg-white' : ''}
               ${selectProps.className}
               overflow-hidden
             `}

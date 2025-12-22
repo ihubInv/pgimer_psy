@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
-import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
+import { useGetClinicalProformaByPatientIdQuery, useCreateClinicalProformaMutation } from '../../features/clinical/clinicalApiSlice';
 import { useCreatePrescriptionMutation, useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 import { useGetAllMedicinesQuery } from '../../features/medicines/medicineApiSlice';
 import { useGetAllPrescriptionTemplatesQuery, useCreatePrescriptionTemplateMutation } from '../../features/prescriptionTemplates/prescriptionTemplateApiSlice';
@@ -32,6 +32,10 @@ const CreatePrescription = ({
   currentUser: propCurrentUser,
   prescriptions: propPrescriptions,
   setPrescriptions: propSetPrescriptions,
+  // Follow-up mode props
+  isFollowUpMode: propIsFollowUpMode,
+  onPrescriptionSaved: propOnPrescriptionSaved,
+  patient: propPatient,
   // Other optional props for embedded mode
   addPrescriptionRow: propAddPrescriptionRow,
   updatePrescriptionCell: propUpdatePrescriptionCell,
@@ -56,6 +60,10 @@ const CreatePrescription = ({
   
   // Track if component is in embedded mode
   const isEmbedded = !!propPatientId;
+  // Track if component is in follow-up mode
+  const isFollowUpMode = !!propIsFollowUpMode;
+  // Get patient data - use prop if provided, otherwise from query
+  const patient = propPatient || null;
 
   const { data: patientData, isLoading: loadingPatient } = useGetPatientByIdQuery(
     patientId,
@@ -68,6 +76,7 @@ const CreatePrescription = ({
   );
 
   const [createPrescription, { isLoading: isSavingPrescriptions }] = useCreatePrescriptionMutation();
+  const [createClinicalProforma] = useCreateClinicalProformaMutation();
   
   // Template functionality
   const { data: templatesData, isLoading: isLoadingTemplates } = useGetAllPrescriptionTemplatesQuery({ is_active: true });
@@ -99,7 +108,8 @@ const CreatePrescription = ({
   const prescriptionData = existingPrescriptionsData?.data?.prescription;
   const existingPrescriptions = prescriptionData?.prescription || [];
 
-  const patient = patientData?.data?.patient;
+  // Use prop patient if provided, otherwise use patient from query
+  const finalPatient = patient || patientData?.data?.patient;
   const clinicalHistory = clinicalHistoryData?.data?.proformas || [];
 
   // Get the most recent clinical proforma for past history
@@ -349,15 +359,6 @@ const CreatePrescription = ({
       return;
     }
 
-    // Get the clinical proforma to link prescriptions to
-    const proformaForPrescription = getProformaForPrescription();
-    
-    if (!proformaForPrescription || !proformaForPrescription.id) {
-      toast.error('No clinical proforma found. Please create a clinical proforma first before saving prescriptions.');
-      return;
-    }
-
-    try {
       // Prepare prescriptions data for API (ensure medicine is not empty)
       const prescriptionsToSave = validPrescriptions
         .filter(p => p.medicine && p.medicine.trim()) // Ensure medicine is not empty
@@ -377,29 +378,115 @@ const CreatePrescription = ({
         return;
       }
 
-      // Save to backend using createPrescription (handles multiple medicines)
       // Convert patient_id to integer if needed
       const patientIdInt = patientId 
         ? (typeof patientId === 'string' ? parseInt(patientId) : patientId)
-        : (proformaForPrescription.patient_id 
-            ? (typeof proformaForPrescription.patient_id === 'string' 
-                ? parseInt(proformaForPrescription.patient_id) 
-                : proformaForPrescription.patient_id)
-            : null);
+      : null;
       
       if (!patientIdInt || isNaN(patientIdInt)) {
         toast.error('Valid patient ID is required');
         return;
       }
       
+    try {
+      let proformaIdToUse = null;
+
+      // If in follow-up mode, handle minimal proforma creation
+      if (isFollowUpMode) {
+        // Use existing clinicalProformaId if available (from prop)
+        if (propClinicalProformaId) {
+          proformaIdToUse = propClinicalProformaId;
+          console.log('[CreatePrescription] Using existing clinical proforma ID for follow-up:', proformaIdToUse);
+        } else {
+          // Create a minimal clinical proforma for prescription linking
+          console.log('[CreatePrescription] Creating minimal clinical proforma for follow-up prescription');
+          const roomNo = finalPatient?.assigned_room || null;
+          const assignedDoctorId = currentUser?.id || null;
+          
+          // Ensure filled_by is set (backend will use req.user.id, but we should still provide it)
+          if (!currentUser?.id) {
+            throw new Error('User information is required. Please log in again.');
+          }
+          
+          const minimalProformaData = {
+            patient_id: patientIdInt,
+            // Note: filled_by is set by backend from req.user.id, so we don't send it
+            visit_date: new Date().toISOString().split('T')[0],
+            visit_type: 'follow_up',
+            // Only include assigned_doctor if we have a room_no (to avoid backend validation error)
+            ...(roomNo ? { assigned_doctor: assignedDoctorId, room_no: roomNo } : {}),
+            treatment_prescribed: 'Follow-up visit - see followup_visits table',
+            doctor_decision: 'simple_case',
+            informant_present: true,
+            prescriptions: [],
+          };
+
+          console.log('[CreatePrescription] Minimal proforma data:', minimalProformaData);
+
+          try {
+            const proformaResult = await createClinicalProforma(minimalProformaData).unwrap();
+            console.log('[CreatePrescription] Full proforma result:', proformaResult);
+            
+            // Backend returns different structures:
+            // Simple case: { data: { proforma: {...} } }
+            // Complex case: { data: { clinical_proforma: {...}, adl_file: {...} } }
+            proformaIdToUse = proformaResult?.data?.proforma?.id || 
+                             proformaResult?.data?.clinical_proforma?.id;
+
+            if (!proformaIdToUse) {
+              console.error('[CreatePrescription] Proforma result:', proformaResult);
+              console.error('[CreatePrescription] Available paths:', {
+                'data.proforma.id': proformaResult?.data?.proforma?.id,
+                'data.clinical_proforma.id': proformaResult?.data?.clinical_proforma?.id,
+                'data': Object.keys(proformaResult?.data || {})
+              });
+              throw new Error('Failed to create minimal clinical proforma: No ID returned from server');
+            }
+
+            console.log('[CreatePrescription] Minimal clinical proforma created:', proformaIdToUse);
+            
+            // Notify parent component about the saved proforma ID
+            if (propOnPrescriptionSaved) {
+              propOnPrescriptionSaved(proformaIdToUse);
+            }
+          } catch (proformaError) {
+            console.error('[CreatePrescription] Error creating minimal proforma:', proformaError);
+            // Extract detailed error message
+            const errorMessage = proformaError?.data?.message || 
+                                proformaError?.data?.error || 
+                                proformaError?.message || 
+                                'Failed to create minimal clinical proforma for prescription linking';
+            throw new Error(errorMessage);
+          }
+        }
+      } else {
+        // Normal mode: Get the clinical proforma to link prescriptions to
+        const proformaForPrescription = getProformaForPrescription();
+        
+        if (!proformaForPrescription || !proformaForPrescription.id) {
+          toast.error('No clinical proforma found. Please create a clinical proforma first before saving prescriptions.');
+          return;
+        }
+        
+        proformaIdToUse = proformaForPrescription.id;
+      }
+      
+      // Save prescription
       const result = await createPrescription({
         patient_id: patientIdInt,
-        clinical_proforma_id: proformaForPrescription.id,
-        prescription: prescriptionsToSave, // Use 'prescription' for new format
+        clinical_proforma_id: proformaIdToUse,
+        prescription: prescriptionsToSave,
       }).unwrap();
 
-      toast.success(`Prescription created successfully! ${result?.data?.prescription?.prescription?.length || validPrescriptions.length} medication(s) recorded.`);
+      toast.success(`Prescription saved successfully! ${result?.data?.prescription?.prescription?.length || prescriptionsToSave.length} medication(s) recorded.`);
       
+      // If in follow-up mode and we just created a proforma, notify parent
+      if (isFollowUpMode && propOnPrescriptionSaved && proformaIdToUse) {
+        propOnPrescriptionSaved(proformaIdToUse);
+      }
+      
+      // Only navigate if not in embedded mode (when embedded, parent component handles navigation)
+      if (!isEmbedded) {
       // Navigate back or to patient details
       if (returnTab) {
         navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
@@ -408,9 +495,31 @@ const CreatePrescription = ({
       } else {
         navigate(-1);
       }
+      }
+      // If embedded, just stay on the form - parent will handle navigation
     } catch (error) {
-      console.error('Error saving prescriptions:', error);
-      toast.error(error?.data?.message || 'Failed to save prescriptions. Please try again.');
+      console.error('[CreatePrescription] Error saving prescriptions:', error);
+      console.error('[CreatePrescription] Error details:', {
+        status: error?.status,
+        data: error?.data,
+        message: error?.message,
+        stack: error?.stack
+      });
+      
+      // Extract detailed error message
+      let errorMessage = 'Failed to save prescriptions. Please try again.';
+      
+      if (error?.data?.message) {
+        errorMessage = error.data.message;
+      } else if (error?.data?.error) {
+        errorMessage = error.data.error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      toast.error(errorMessage);
     }
   };
 
@@ -443,7 +552,7 @@ const CreatePrescription = ({
         <!DOCTYPE html>
         <html>
           <head>
-            <title>Prescription - ${patient?.name || 'Patient'}</title>
+            <title>Prescription - ${finalPatient?.name || 'Patient'}</title>
             <meta charset="UTF-8">
             <style>
               @page {
@@ -1102,30 +1211,30 @@ const CreatePrescription = ({
             </div>
 
             {/* Print Patient Information */}
-            {patient && (
+            {finalPatient && (
               <div className="print-patient-info">
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
                   <div>
-                    <span className="font-bold">Patient Name:</span> <span className="ml-2">{patient.name}</span>
+                    <span className="font-bold">Patient Name:</span> <span className="ml-2">{finalPatient.name}</span>
                   </div>
                   <div>
-                    <span className="font-bold">CR Number:</span> <span className="ml-2 font-mono">{patient.cr_no}</span>
+                    <span className="font-bold">CR Number:</span> <span className="ml-2 font-mono">{finalPatient.cr_no}</span>
                   </div>
                   <div>
-                    <span className="font-bold">Age/Sex:</span> <span className="ml-2">{patient.age} years, {patient.sex}</span>
+                    <span className="font-bold">Age/Sex:</span> <span className="ml-2">{finalPatient.age} years, {finalPatient.sex}</span>
                   </div>
-                  {patient.psy_no && (
+                  {finalPatient.psy_no && (
                     <div>
-                      <span className="font-bold">PSY Number:</span> <span className="ml-2 font-mono">{patient.psy_no}</span>
+                      <span className="font-bold">PSY Number:</span> <span className="ml-2 font-mono">{finalPatient.psy_no}</span>
                     </div>
                   )}
-                  {patient.assigned_doctor_name && (
+                  {finalPatient.assigned_doctor_name && (
                     <div>
-                      <span className="font-bold">Prescribing Doctor:</span> <span className="ml-2">{patient.assigned_doctor_name} {patient.assigned_doctor_role ? `(${patient.assigned_doctor_role})` : ''}</span>
+                      <span className="font-bold">Prescribing Doctor:</span> <span className="ml-2">{finalPatient.assigned_doctor_name} {finalPatient.assigned_doctor_role ? `(${finalPatient.assigned_doctor_role})` : ''}</span>
                     </div>
                   )}
                   <div>
-                    <span className="font-bold">Room Number:</span> <span className="ml-2">{patient.assigned_room || 'N/A'}</span>
+                    <span className="font-bold">Room Number:</span> <span className="ml-2">{finalPatient.assigned_room || 'N/A'}</span>
                   </div>
                   <div>
                     <span className="font-bold">Date:</span> <span className="ml-2">{formatDateFull(new Date().toISOString())}</span>
@@ -1198,8 +1307,8 @@ const CreatePrescription = ({
                 <div>
                   <div className="mb-16"></div>
                   <div className="border-t-2 border-gray-700 text-center pt-2">
-                    <p className="font-bold text-xs">{patient?.assigned_doctor_name || currentUser?.name || 'Doctor Name'}</p>
-                    <p className="text-xs text-gray-600 mt-1">{patient?.assigned_doctor_role || currentUser?.role || 'Designation'}</p>
+                    <p className="font-bold text-xs">{finalPatient?.assigned_doctor_name || currentUser?.name || 'Doctor Name'}</p>
+                    <p className="text-xs text-gray-600 mt-1">{finalPatient?.assigned_doctor_role || currentUser?.role || 'Designation'}</p>
                     <p className="text-xs text-gray-600 mt-1">Department of Psychiatry</p>
                     <p className="text-xs text-gray-600">PGIMER, Chandigarh</p>
                   </div>
@@ -1220,7 +1329,7 @@ const CreatePrescription = ({
           </div>
 
           {/* Patient Info Card */}
-          {patient && (
+          {finalPatient && (
             <Card className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-2 border-blue-200 shadow-lg">
               <div className="flex flex-wrap items-center gap-6">
                 <div className="flex items-center gap-3">
@@ -1228,25 +1337,25 @@ const CreatePrescription = ({
                     <FiUser className="w-6 h-6 text-blue-600" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">{patient.name}</h3>
-                    <p className="text-sm text-gray-600">CR: {patient.cr_no} {patient.psy_no && `| PSY: ${patient.psy_no}`}</p>
+                    <h3 className="text-lg font-bold text-gray-900">{finalPatient.name}</h3>
+                    <p className="text-sm text-gray-600">CR: {finalPatient.cr_no} {finalPatient.psy_no && `| PSY: ${finalPatient.psy_no}`}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 text-sm">
                   <div className="flex items-center gap-2">
                     <FiCalendar className="w-4 h-4 text-gray-500" />
-                    <span className="text-gray-700"><strong>Age:</strong> {patient.age} years, {patient.sex}</span>
+                    <span className="text-gray-700"><strong>Age:</strong> {finalPatient.age} years, {finalPatient.sex}</span>
                   </div>
-                  {patient.assigned_room && (
+                  {finalPatient.assigned_room && (
                     <div className="flex items-center gap-2">
                       <FiHome className="w-4 h-4 text-gray-500" />
-                      <span className="text-gray-700"><strong>Room:</strong> {patient.assigned_room}</span>
+                      <span className="text-gray-700"><strong>Room:</strong> {finalPatient.assigned_room}</span>
                     </div>
                   )}
-                  {patient.assigned_doctor_name && (
+                  {finalPatient.assigned_doctor_name && (
                     <div className="flex items-center gap-2">
                       <FiUserCheck className="w-4 h-4 text-gray-500" />
-                      <span className="text-gray-700"><strong>Doctor:</strong> {patient.assigned_doctor_name}</span>
+                      <span className="text-gray-700"><strong>Doctor:</strong> {finalPatient.assigned_doctor_name}</span>
                     </div>
                   )}
                 </div>
@@ -1640,9 +1749,24 @@ const CreatePrescription = ({
             </div>
           </Card>
 
-        {/* Action Buttons */}
+        {/* Action Buttons - Show Print button even when embedded, but hide Cancel/Save in embedded mode (except follow-up mode) */}
         <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl no-print">
           <div className="flex justify-end gap-3">
+            {/* Show Save Prescription button in follow-up mode (even when embedded) */}
+            {isFollowUpMode && (
+              <Button 
+                type="button" 
+                onClick={handleSave}
+                disabled={isSavingPrescriptions}
+                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FiSave className="w-4 h-4 mr-2" />
+                {isSavingPrescriptions ? 'Saving...' : 'Save Prescription'}
+              </Button>
+            )}
+            {/* Show Cancel and Save buttons in standalone mode (not embedded) */}
+            {!isEmbedded && !isFollowUpMode && (
+              <>
             <Button
               type="button"
               variant="outline"
@@ -1659,15 +1783,6 @@ const CreatePrescription = ({
               <FiX className="w-4 h-4 mr-2" />
               Cancel
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePrint}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border-0"
-            >
-              <FiPrinter className="w-4 h-4 mr-2" />
-              Print
-            </Button>
             <Button 
               type="button" 
               onClick={handleSave}
@@ -1676,6 +1791,18 @@ const CreatePrescription = ({
             >
               <FiSave className="w-4 h-4 mr-2" />
               {isSavingPrescriptions ? 'Saving...' : 'Save Prescription'}
+                </Button>
+              </>
+            )}
+            {/* Print button - Always show, even in embedded mode */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handlePrint}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border-0"
+            >
+              <FiPrinter className="w-4 h-4 mr-2" />
+              Print
             </Button>
           </div>
         </Card>

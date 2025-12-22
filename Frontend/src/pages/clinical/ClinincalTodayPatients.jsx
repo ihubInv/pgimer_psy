@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiPhone,  FiClock, FiEye,
-  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome
+  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus
 } from 'react-icons/fi';
 import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
@@ -12,6 +12,7 @@ import { useDispatch } from 'react-redux';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
 import Select from '../../components/Select';
+import SearchExistingPatientModal from '../../components/SearchExistingPatientModal';
 // Removed RoomSelectionModal - using inline card instead
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
@@ -250,7 +251,8 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
               <span className="whitespace-nowrap">View Details</span>
             </Button>
             
-            {/* Walk-in Clinical Proforma Button */}
+            {/* Walk-in Clinical Proforma Button (for new patients) / Follow Up Button (for existing patients) */}
+            {isNewPatient ? (
             <Button
               variant="outline"
               size="sm"
@@ -262,6 +264,19 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
               <FiPlusCircle className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">Walk-in Clinical Proforma</span>
             </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigate(`/follow-up/${patient.id}`)
+                }}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-green-50 border-green-300 text-green-700 hover:bg-green-100 hover:border-green-400 transition-all hover:shadow-sm"
+              >
+                <FiPlusCircle className="w-3.5 h-3.5" />
+                <span className="whitespace-nowrap">Follow Up</span>
+              </Button>
+            )}
             
             {/* Prescribe Medication Button */}
             {/* <Button
@@ -299,6 +314,7 @@ const ClinicalTodayPatients = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   
   // Check if user is a doctor (Faculty, Admin, or Resident)
   const isDoctor = currentUser && (isAdmin(currentUser.role) || isSR(currentUser.role) || isJR(currentUser.role));
@@ -483,11 +499,11 @@ const ClinicalTodayPatients = () => {
     case_complexity: '',
   });
 
-  // Fetch patients data - use a high limit to get all today's patients at once
-  // This ensures newly created patients appear immediately
+  // Fetch patients data - use a high limit (backend caps at 1000) to get all today's patients at once
+  // This ensures newly created/assigned patients in any room appear immediately
   const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
     page: 1,
-    limit: 100, // Reduced from 1000 - use server-side filtering instead
+    limit: 1000,
     // Filter for today's patients on backend if possible
     // search: search.trim() || undefined // Only include search if it has a value
   }, {
@@ -603,7 +619,11 @@ const ClinicalTodayPatients = () => {
   
   const allRoomsOccupied = allRoomOptions.every(room => room.disabled) && Object.keys(occupiedRooms).length > 0;
   
-  const hasNoRoom = isDoctor && !isLoadingRoom && !effectiveRoomData?.data?.current_room;
+  // Whether to show the room selection card:
+  // - Only for doctors (Admin/Faculty/Resident)
+  // - Only when there are no patients in today's list yet
+  //   (once patients appear, we hide the room selector to avoid duplicate context)
+  const showRoomSelectionCard = isDoctor && !isLoadingRoom && !effectiveRoomData?.data?.current_room;
   
 
 
@@ -722,23 +742,43 @@ const ClinicalTodayPatients = () => {
     
     // Only allow JR/SR to see patients assigned to them
     if (isJrSr(currentUser.role)) {
+      const currentUserId = parseInt(currentUser.id, 10);
+
       // Prefer direct field; fallback to latest assignment fields if present
       if (p.assigned_doctor_id) {
-        // Both IDs are integers
         const patientDoctorId = parseInt(p.assigned_doctor_id, 10);
-        const currentUserId = parseInt(currentUser.id, 10);
-        return patientDoctorId === currentUserId;
+        if (!isNaN(patientDoctorId) && patientDoctorId === currentUserId) {
+          return true;
       }
+      }
+
       if (p.assigned_doctor) {
         const patientDoctorId = String(p.assigned_doctor);
-        const currentUserId = String(currentUser.id);
-        return patientDoctorId === currentUserId;
+        const currentUserIdStr = String(currentUser.id);
+        if (patientDoctorId === currentUserIdStr) {
+          return true;
       }
-      if (p.assigned_doctor_name && p.assigned_doctor_role) {
-        // If role exists but id missing, be conservative: hide
+      }
+
+      // If patient is explicitly assigned to some other doctor (name + role set), hide
+      if (p.assigned_doctor_name && p.assigned_doctor_role && p.assigned_doctor_id && parseInt(p.assigned_doctor_id, 10) !== currentUserId) {
         return false;
       }
-      // If no assignment info present, hide for doctors
+
+      // Fallback visibility rule for NEW patients:
+      // Show patients created today in the current doctor's room even if not yet assigned to a doctor.
+      const targetDate = toISTDateString(selectedDate || new Date());
+      const patientCreatedDate = p?.created_at ? toISTDateString(p.created_at) : '';
+      const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
+
+      const doctorRoom = effectiveRoomData?.data?.current_room;
+      const inMyRoom = doctorRoom && p.assigned_room && p.assigned_room === doctorRoom;
+
+      if (createdToday && inMyRoom) {
+        return true;
+      }
+
+      // Otherwise, hide for doctors
       return false;
     }
     
@@ -750,12 +790,124 @@ const ClinicalTodayPatients = () => {
   // Combine all today's patients (both new and existing) - they'll be color-coded
   const allTodayPatients = todayPatients;
   
-  const filteredPatients = allTodayPatients.filter(patient => {
+  // Apply filters
+  const filteredPatientsUnsorted = allTodayPatients.filter(patient => {
     return Object.entries(filters).every(([key, value]) => {
       if (!value) return true;
       return patient[key]?.toString().toLowerCase().includes(value.toLowerCase());
     });
   });
+
+  // Sort patients: newly added patients (by visit_date or last_assigned_date) at the top
+  // Most recent visit/assignment first, then by created_at for new patients
+  const filteredPatients = [...filteredPatientsUnsorted].sort((a, b) => {
+    // Get the most recent activity date for each patient
+    const getMostRecentDate = (patient) => {
+      const dates = [];
+      
+      // Check visit_date (for existing patients with visits)
+      if (patient.visit_date) {
+        dates.push(new Date(patient.visit_date));
+      }
+      
+      // Check last_assigned_date (for existing patients)
+      if (patient.last_assigned_date) {
+        dates.push(new Date(patient.last_assigned_date));
+      }
+      
+      // Check created_at (for new patients or fallback)
+      if (patient.created_at) {
+        dates.push(new Date(patient.created_at));
+      }
+      
+      // Return the most recent date, or 0 if no dates found
+      if (dates.length === 0) return new Date(0);
+      return new Date(Math.max(...dates.map(d => d.getTime())));
+    };
+
+    const dateA = getMostRecentDate(a);
+    const dateB = getMostRecentDate(b);
+    
+    // Sort descending (newest first) - most recently added/visited at top
+    return dateB.getTime() - dateA.getTime();
+  });
+
+  // Helper function to get current time in IST and check if after 12 PM
+  const getISTTimeInfo = () => {
+    const now = new Date();
+    
+    // Get current hour in IST using Intl.DateTimeFormat for reliable parsing
+    const istFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      hour12: false
+    });
+    const istHour = parseInt(istFormatter.format(now), 10);
+    const isAfterNoon = istHour >= 12;
+    
+    // Get today's date in IST (YYYY-MM-DD format)
+    const todayIST = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    
+    // Create noon timestamp for today in IST (using ISO string with timezone offset)
+    // IST is UTC+5:30
+    const noonTodayIST = new Date(`${todayIST}T12:00:00+05:30`);
+    
+    // Get yesterday's date in IST
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayIST = yesterday.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const noonYesterdayIST = new Date(`${yesterdayIST}T12:00:00+05:30`);
+    
+    return { isAfterNoon, noonTodayIST, noonYesterdayIST };
+  };
+
+  // Calculate total patients count (New + Existing) with 12 PM reset logic
+  const calculateTotalPatients = () => {
+    const { isAfterNoon, noonTodayIST, noonYesterdayIST } = getISTTimeInfo();
+    const cutoffTime = isAfterNoon ? noonTodayIST : noonYesterdayIST;
+    
+    return allTodayPatients.filter(patient => {
+      // Check if patient was created after the relevant noon
+      const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
+      const createdAfterRelevantNoon = patientCreatedDate && patientCreatedDate >= cutoffTime;
+      
+      // Check if patient has visit after the relevant noon
+      const visitDate = patient?.visit_date ? new Date(patient.visit_date) : 
+                       patient?.last_assigned_date ? new Date(patient.last_assigned_date) : null;
+      const visitedAfterRelevantNoon = visitDate && visitDate >= cutoffTime;
+      
+      return createdAfterRelevantNoon || visitedAfterRelevantNoon;
+    }).length;
+  };
+
+  // Calculate new patients count with 12 PM reset logic
+  const calculateNewPatientsCount = () => {
+    const { isAfterNoon, noonTodayIST, noonYesterdayIST } = getISTTimeInfo();
+    const cutoffTime = isAfterNoon ? noonTodayIST : noonYesterdayIST;
+    const newPatients = todayPatients.filter(isNewPatientBasic);
+    
+    return newPatients.filter(patient => {
+      const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
+      return patientCreatedDate && patientCreatedDate >= cutoffTime;
+    }).length;
+  };
+
+  // Calculate existing patients count with 12 PM reset logic
+  const calculateExistingPatientsCount = () => {
+    const { isAfterNoon, noonTodayIST, noonYesterdayIST } = getISTTimeInfo();
+    const cutoffTime = isAfterNoon ? noonTodayIST : noonYesterdayIST;
+    const existingPatients = todayPatients.filter(isExistingPatientBasic);
+    
+    return existingPatients.filter(patient => {
+      const visitDate = patient?.visit_date ? new Date(patient.visit_date) : 
+                       patient?.last_assigned_date ? new Date(patient.last_assigned_date) : null;
+      return visitDate && visitDate >= cutoffTime;
+    }).length;
+  };
+
+  const totalPatientsCount = calculateTotalPatients();
+  const newPatientsCount = calculateNewPatientsCount();
+  const existingPatientsCount = calculateExistingPatientsCount();
 
 
 
@@ -801,6 +953,64 @@ const ClinicalTodayPatients = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
 
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-6 py-6">
+      
+        {/* Total Patient Count Card - At the top */}
+        <Card className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-200 shadow-lg">
+          <div className="p-5">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+                  <FiUsers className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Patients Today</p>
+                  <div className="flex items-baseline gap-3">
+                    <p className="text-3xl font-bold text-gray-900">
+                      {totalPatientsCount}
+                    </p>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                        <span className="text-gray-600 font-medium">
+                          New: <span className="font-bold text-blue-600">{newPatientsCount}</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                        <span className="text-gray-600 font-medium">
+                          Existing: <span className="font-bold text-green-600">{existingPatientsCount}</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Count resets after 12 PM (noon) each day
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-500 mb-1">Current Time (IST)</p>
+                <p className="text-sm font-semibold text-gray-700">
+                  {new Date().toLocaleTimeString('en-IN', { 
+                    timeZone: 'Asia/Kolkata',
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true 
+                  })}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {new Date().toLocaleDateString('en-IN', { 
+                    timeZone: 'Asia/Kolkata',
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric'
+                  })}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
       
         {/* Current Room Assignment Card - Show if doctor has selected a room TODAY */}
         {isDoctor && !isLoadingRoom && effectiveRoomData?.data?.current_room && effectiveRoomData.data.current_room !== null && effectiveRoomData.data.current_room !== '' && (
@@ -859,15 +1069,25 @@ const ClinicalTodayPatients = () => {
                   </div>
                 </div>
               </div>
+              {/* Existing Patient Button */}
+         {filteredPatients.length !==0 && filteredPatients.length !==undefined &&   ( <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => setIsSearchModalOpen(true)}
+                  className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
+                  size="sm"
+                >
+                  <FiUserPlus className="w-4 h-4 mr-2" />
+                  Existing Patient
+                </Button>
+              </div>)
+               }
             </div>
           </div>
 
-          {/* Room Selection Card - Show if doctor hasn't selected a room OR if no patients found */}
-          {(hasNoRoom || filteredPatients.length === 0) && isDoctor ? (
+          {/* Room Selection Card - Show only when there is no room assignment AND no patients yet */}
+          {showRoomSelectionCard && filteredPatients.length === 0 && (
             <div className="space-y-6">
-              {/* Room Selection Card */}
-              {hasNoRoom && (
-                <Card id="room-selection-card" className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
+              <Card id="room-selection-card" className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
                   <div className="p-6">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
@@ -968,9 +1188,11 @@ const ClinicalTodayPatients = () => {
                     </div>
                   </div>
                 </Card>
-              )}
             </div>
-          ) : filteredPatients.length === 0 ? (
+          )}
+
+          {/* Patients list or empty state */}
+          {filteredPatients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
                 <FiUsers className="w-12 h-12 text-gray-400" />
@@ -984,18 +1206,18 @@ const ClinicalTodayPatients = () => {
               </p>
             </div>
           ) : (
-          <div className="p-4 sm:p-5 space-y-3">
-            {filteredPatients.map((patient) => (
-              <PatientRow 
-                key={patient.id} 
-                patient={patient} 
-                isNewPatient={isNewPatientBasic(patient)}
-                navigate={navigate}
-                onMarkCompleted={handleMarkCompleted}
-              />
-            ))}
-          </div>
-        )}
+            <div className="p-4 sm:p-5 space-y-3">
+              {filteredPatients.map((patient) => (
+                <PatientRow 
+                  key={patient.id} 
+                  patient={patient} 
+                  isNewPatient={isNewPatientBasic(patient)}
+                  navigate={navigate}
+                  onMarkCompleted={handleMarkCompleted}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Patient count info - no pagination needed since we fetch all today's patients */}
           {filteredPatients.length > 0 && (
@@ -1011,6 +1233,26 @@ const ClinicalTodayPatients = () => {
             </div>
           )}
         </Card>
+
+        {/* Search Existing Patient Modal */}
+        <SearchExistingPatientModal
+          isOpen={isSearchModalOpen}
+          onClose={() => setIsSearchModalOpen(false)}
+          currentRoom={effectiveRoomData?.data?.current_room || ''}
+          onSelectPatient={async (patient) => {
+            // Patient is added to today's list via visit record creation
+            // Refetch to show the newly added patient at the top
+            try {
+              await refetch();
+              // Small delay to ensure data is fresh
+              setTimeout(() => {
+                refetch();
+              }, 500);
+            } catch (error) {
+              console.error('Failed to refetch patients:', error);
+            }
+          }}
+        />
       </div>
     </div>
   );

@@ -266,8 +266,8 @@ const Dashboard = () => {
     refetchOnMountOrArgChange: true 
   });
 
-  // Role-specific stats for MWO
-  const { data: outpatientStats } = useGetPatientsStatsQuery(undefined, { 
+  // Role-specific stats for MWO (aggregated patient statistics)
+  const { data: outpatientStats, isLoading: outpatientLoading } = useGetPatientsStatsQuery(undefined, { 
     skip: !isMwo, 
     refetchOnMountOrArgChange: true 
   });
@@ -1819,7 +1819,7 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard 
               title="Total Registered Patients" 
-              value={localityStats.total} 
+              value={outpatientStats?.data?.stats?.total_patients || 0} 
               icon={FiUsers} 
               colorClasses="from-blue-500 to-blue-600"
               to="/patients"

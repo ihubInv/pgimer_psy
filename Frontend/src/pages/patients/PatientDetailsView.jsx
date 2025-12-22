@@ -57,13 +57,16 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       assigned_doctor_role: formData?.assigned_doctor_role || patient?.assigned_doctor_role || '',
       date: formData?.date || patient?.date || '',
       father_name: formData?.father_name || patient?.father_name || '',
+      // For PWO: These fields should not exist in displayData
+      ...(userRole && !isMWO(userRole) ? {
       category: formData?.category || patient?.category || '',
-      department: formData?.department || patient?.department || '',
       unit_consit: formData?.unit_consit || patient?.unit_consit || '',
       room_no: formData?.room_no || patient?.room_no || '',
       serial_no: formData?.serial_no || patient?.serial_no || '',
-      file_no: formData?.file_no || patient?.file_no || '',
       unit_days: formData?.unit_days || patient?.unit_days || '',
+      } : {}),
+      department: formData?.department || patient?.department || '',
+      file_no: formData?.file_no || patient?.file_no || '',
       address_line: formData?.address_line || patient?.address_line || '',
       country: formData?.country || patient?.country || '',
       state: formData?.state || patient?.state || '',
@@ -282,16 +285,48 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     });
   }, [patientProformas]);
 
-  // Get the last visit proforma (most recent one)
+  // Get the first visit proforma (Walk-In Clinical Proforma) - only from the initial first visit
+  // This should be static and not change based on follow-up visits
   const lastVisitProforma = useMemo(() => {
     if (patientProformas.length === 0) return null;
-    // Sort by visit_date or created_at, most recent first
-    const sorted = [...patientProformas].sort((a, b) => {
+    
+    // Filter to only get first visit proformas (not follow-ups)
+    // Exclude minimal proformas and follow-up visits
+    const firstVisitProformas = patientProformas.filter(proforma => {
+      // Exclude follow-up visit records
+      if (proforma.record_type === 'followup_visit') {
+        return false;
+      }
+      
+      // Only include first visit proformas
+      if (proforma.visit_type !== 'first_visit') {
+        return false;
+      }
+      
+      // Exclude minimal proformas created for prescription linking
+      if (proforma.record_type === 'clinical_proforma' && 
+          proforma.visit_type === 'follow_up') {
+        const isMinimalProforma = proforma.treatment_prescribed?.includes('Follow-up visit') ||
+                                  proforma.treatment_prescribed?.includes('followup_visits') ||
+                                  proforma.treatment_prescribed?.includes('see followup_visits');
+        if (isMinimalProforma) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+    
+    if (firstVisitProformas.length === 0) return null;
+    
+    // Sort by visit_date or created_at, oldest first (to get the very first visit)
+    const sorted = [...firstVisitProformas].sort((a, b) => {
       const dateA = new Date(a.visit_date || a.created_at || 0);
       const dateB = new Date(b.visit_date || b.created_at || 0);
-      return dateB - dateA; // Most recent first
+      return dateA - dateB; // Oldest first (first visit)
     });
-    return sorted[0];
+    
+    return sorted[0]; // Return the first visit (oldest)
   }, [patientProformas]);
 
  
@@ -377,8 +412,44 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
   // Create unified visit structure: group proformas, ADL files, and prescriptions by visit
   const unifiedVisits = useMemo(() => {
+    // Filter out minimal clinical proformas created for follow-up prescription linking
+    // These are identified by: visit_type='follow_up' AND treatment_prescribed contains 'Follow-up visit'
+    // AND record_type='clinical_proforma' (not 'followup_visit')
+    const filteredProformas = trulyPastProformas.filter(proforma => {
+      // Keep follow-up visit records (from followup_visits table)
+      if (proforma.record_type === 'followup_visit') {
+        return true;
+      }
+      // Filter out minimal clinical proformas created for follow-up prescription linking
+      // These are identified by: visit_type='follow_up' AND treatment_prescribed contains 'Follow-up visit' or 'followup_visits'
+      // AND record_type='clinical_proforma' (not 'followup_visit')
+      // Also check if there's a corresponding follow-up visit for the same date - if so, exclude the minimal proforma
+      if (proforma.record_type === 'clinical_proforma' && 
+          proforma.visit_type === 'follow_up') {
+        // Check if this is a minimal proforma (has treatment_prescribed mentioning follow-up)
+        const isMinimalProforma = proforma.treatment_prescribed?.includes('Follow-up visit') ||
+                                  proforma.treatment_prescribed?.includes('followup_visits') ||
+                                  proforma.treatment_prescribed?.includes('see followup_visits');
+        
+        // Also check if there's a corresponding follow-up visit record for the same date
+        const hasCorrespondingFollowUp = trulyPastProformas.some(p => 
+          p.record_type === 'followup_visit' &&
+          p.visit_date === proforma.visit_date
+        );
+        
+        // Exclude if it's a minimal proforma OR if there's a corresponding follow-up visit
+        if (isMinimalProforma || hasCorrespondingFollowUp) {
+          // This is a minimal proforma created for prescription linking - exclude it
+          // The actual follow-up visit will be shown separately
+          return false;
+        }
+      }
+      // Keep all other clinical proformas (regular visits)
+      return true;
+    });
+
     // Sort proformas chronologically (newest first - latest visit at top)
-    const sortedProformas = [...trulyPastProformas].sort((a, b) => {
+    const sortedProformas = [...filteredProformas].sort((a, b) => {
       const dateA = new Date(a.visit_date || a.created_at || 0);
       const dateB = new Date(b.visit_date || b.created_at || 0);
       return dateB - dateA; // Newest first (latest visit at top)
@@ -386,17 +457,59 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
     // Create visit objects with all associated forms
     return sortedProformas.map((proforma) => {
-      const visitId = proforma.id;
+      // Handle follow-up visits (record_type === 'followup_visit')
+      const isFollowUp = proforma.record_type === 'followup_visit';
+      const visitId = isFollowUp ? proforma.followup_id : proforma.id;
       const visitDate = proforma.visit_date || proforma.created_at;
       
-      // Find associated ADL file
-      const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === visitId);
+      // Find associated ADL file (only for regular clinical proformas, not follow-ups)
+      const adlFile = !isFollowUp ? patientAdlFiles.find(adl => adl.clinical_proforma_id === visitId) : null;
       
       // Find associated prescription
+      // For follow-ups, we need to find prescription by clinical_proforma_id if it exists
+      // For regular proformas, use the existing logic
+      let prescription = null;
+      let followUpProforma = null; // Declare outside if block for use in minimalProformaId
+      
+      if (isFollowUp) {
+        // For follow-ups, try to find prescription by matching visit date
+        // Follow-ups might have a minimal clinical proforma created for prescription linking
+        // Look for a clinical proforma with the same visit_date and visit_type='follow_up'
+        // that was created for prescription linking (has treatment_prescribed mentioning follow-up)
+        followUpProforma = patientProformas.find(p => {
+          if (p.record_type === 'followup_visit') return false; // Skip the follow-up visit record itself
+          const proformaDate = toISTDateString(p.visit_date || p.created_at);
+          const followUpDate = toISTDateString(visitDate);
+          return proformaDate === followUpDate && 
+                 p.visit_type === 'follow_up' &&
+                 p.record_type === 'clinical_proforma' &&
+                 (p.treatment_prescribed?.includes('Follow-up visit') || 
+                  p.treatment_prescribed?.includes('followup_visits') ||
+                  p.treatment_prescribed?.includes('see followup_visits'));
+        });
+        if (followUpProforma && followUpProforma.id) {
+          // Try to find prescription in the prescriptionResults array
+          const prescriptionResult = prescriptionResults.find((result, idx) => {
+            return proformaIds[idx] === followUpProforma.id && result.data?.data?.prescription?.prescription;
+          });
+          prescription = prescriptionResult?.data?.data?.prescription?.prescription || null;
+          
+          // If not found in prescriptionResults, try fetching directly (fallback)
+          // This handles cases where the minimal proforma might not be in the first 10 proformas
+          if (!prescription && followUpProforma.id) {
+            // The prescription should be linked to this minimal proforma's ID
+            // We'll rely on the PrescriptionView component to fetch it if needed
+          }
+        }
+      } else {
       const prescriptionResult = prescriptionResults.find((result, idx) => {
         return proformaIds[idx] === visitId && result.data?.data?.prescription?.prescription;
       });
-      const prescription = prescriptionResult?.data?.data?.prescription?.prescription || null;
+        prescription = prescriptionResult?.data?.data?.prescription?.prescription || null;
+      }
+
+      // Store the minimal clinical proforma ID for follow-up visits (for PrescriptionView to fetch directly)
+      const minimalProformaId = isFollowUp && followUpProforma ? followUpProforma.id : null;
 
       return {
         visitId,
@@ -405,10 +518,13 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         adlFile: adlFile || null,
         prescription: prescription || null,
         hasAdl: !!adlFile,
-        hasPrescription: !!prescription,
+        hasPrescription: !!prescription || !!minimalProformaId, // Mark as having prescription if minimal proforma exists
+        isFollowUp: isFollowUp, // Flag to identify follow-up visits
+        clinicalAssessment: isFollowUp ? proforma.clinical_assessment : null, // Follow-up assessment
+        minimalProformaId: minimalProformaId, // Store minimal proforma ID for PrescriptionView
       };
     });
-  }, [trulyPastProformas, patientAdlFiles, prescriptionResults, proformaIds]);
+  }, [trulyPastProformas, patientAdlFiles, prescriptionResults, proformaIds, patientProformas]);
 
   // Print functionality refs
   const patientDetailsPrintRef = useRef(null);
@@ -2139,9 +2255,16 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
       // Sheet 1: Patient Basic Details (always included)
       // Use PATIENT_REGISTRATION_FORM labels as Excel headers
+      // For PWO: Exclude category, unit_consit, room_no, serial_no, unit_days
+      const fieldsToExcludeForPWO = ['category', 'unit_consit', 'room_no', 'serial_no', 'unit_days'];
       const patientExportData = {};
 
       PATIENT_REGISTRATION_FORM.forEach(field => {
+        // Skip excluded fields for PWO
+        if (isMWOUser && fieldsToExcludeForPWO.includes(field.value)) {
+          return;
+        }
+        
         const value = displayData[field.value];
 
         // Handle special cases
@@ -3391,8 +3514,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                       />
                     </div>
 
-                    {/* Second Row - Age, Sex, Category, Father's Name */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Second Row - Age, Sex, Category (if not PWO), Father's Name */}
+                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
                       <IconInput
                         icon={<FiClock className="w-4 h-4" />}
                         label="Age"
@@ -3410,6 +3533,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           {displayData.sex || 'N/A'}
                       </div>
                       </div>
+                      {userRole && !isMWO(userRole) && (
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
                           <FiShield className="w-4 h-4 text-primary-600" />
@@ -3419,6 +3543,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           {displayData.category || 'N/A'}
                       </div>
                       </div>
+                      )}
                       <IconInput
                         icon={<FiUsers className="w-4 h-4" />}
                         label="Father's Name"
@@ -3428,8 +3553,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                         className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                       />
                     </div>
-                    {/* Fourth Row - Department, Unit/Consit, Room No., Serial No. */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Fourth Row - Department, Unit/Consit (if not PWO), Room No. (if not PWO), Serial No. (if not PWO) */}
+                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6`}>
                       <IconInput
                         icon={<FiLayers className="w-4 h-4" />}
                         label="Department"
@@ -3438,6 +3563,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                         disabled={true}
                         className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                       />
+                      {userRole && !isMWO(userRole) && (
+                        <>
                       <IconInput
                         icon={<FiUsers className="w-4 h-4" />}
                         label="Unit/Consit"
@@ -3462,10 +3589,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                         disabled={true}
                         className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                       />
+                        </>
+                      )}
                     </div>
 
-                    {/* Fifth Row - File No., Unit Days */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Fifth Row - File No., Unit Days (if not PWO) */}
+                    <div className={`grid grid-cols-1 ${userRole && !isMWO(userRole) ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-6`}>
                       <IconInput
                         icon={<FiFileText className="w-4 h-4" />}
                         label="File No."
@@ -3474,12 +3603,14 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                         disabled={true}
                         className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                       />
+                      {userRole && !isMWO(userRole) && (
                       <div className="space-y-2">
                         <label className="text-sm font-semibold text-gray-800">Unit Days</label>
                         <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
                           {displayData.unit_days || 'N/A'}
                         </div>
                       </div>
+                      )}
                     </div>
 
                     {/* Address Details */}
@@ -4061,18 +4192,14 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <p className="text-sm text-gray-500">
                     {lastVisitProforma
-                      ? `Last visit: ${formatDate(lastVisitProforma.visit_date || lastVisitProforma.created_at)}`
+                      ? `First visit: ${formatDate(lastVisitProforma.visit_date || lastVisitProforma.created_at)}`
                     : 'No clinical records'}
                 </p>
-                  {lastVisitProforma && lastVisitProforma.visit_type && (
+                  {lastVisitProforma && (
                     <>
                       <span className="text-gray-400">•</span>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        lastVisitProforma.visit_type === 'first_visit' 
-                          ? 'bg-purple-100 text-purple-800' 
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {lastVisitProforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
+                      <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                        First Visit
                       </span>
                     </>
                   )}
@@ -4095,12 +4222,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
           {expandedCards.clinical && (
             <div className="p-6 space-y-6">
-              {/* Last Visit Section - Show full proforma form */}
+              {/* First Visit Section - Show full proforma form (static, only from initial visit) */}
               {lastVisitProforma ? (
                 <div className="space-y-4 border-t border-gray-200 pt-6">
                   <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
-                      Last Visit
+                    <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+                      First Visit
                     </span>
                     <span className="text-sm text-gray-500 font-normal">
                       {formatDate(lastVisitProforma.visit_date || lastVisitProforma.created_at)}
@@ -4292,8 +4419,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Past History</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  {trulyPastProformas.length > 0 
-                    ? `${trulyPastProformas.length} past visit${trulyPastProformas.length > 1 ? 's' : ''} - View only`
+                  {unifiedVisits.length > 0 
+                    ? `${unifiedVisits.length} past visit${unifiedVisits.length > 1 ? 's' : ''} - View only`
                     : 'No past visits - View only'}
                 </p>
               </div>
@@ -4438,10 +4565,17 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                           {visitDate}
                                         </h4>
                                         <div className="flex items-center gap-3 mt-2">
+                                          {visit.isFollowUp ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                              <FiFileText className="w-3 h-3" />
+                                              Follow-Up Visit
+                                            </span>
+                                          ) : (
                                           <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
                                             <FiFileText className="w-3 h-3" />
                                             Clinical Proforma
                                           </span>
+                                          )}
                                           {visit.hasAdl && (
                                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
                                               <FiFolder className="w-3 h-3" />
@@ -4485,7 +4619,40 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                       if (el) visitPrintRefs.current.set(visit.visitId, el);
                                       else visitPrintRefs.current.delete(visit.visitId);
                                     }} className="p-6 space-y-6">
-                                      {/* 1. Clinical Proforma Section */}
+                                      {/* 1. Clinical Proforma / Follow-Up Assessment Section */}
+                                      {visit.isFollowUp ? (
+                                        <div className="border-l-4 border-blue-500 pl-4">
+                                          <div className="flex items-center justify-between mb-3">
+                                            <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                              <FiFileText className="h-5 w-5 text-blue-600" />
+                                              Follow-Up Clinical Assessment
+                                            </h5>
+                                            {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') ? (
+                                              <FiChevronUp 
+                                                className="h-5 w-5 text-gray-500 cursor-pointer"
+                                                onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
+                                              />
+                                            ) : (
+                                              <FiChevronDown 
+                                                className="h-5 w-5 text-gray-500 cursor-pointer"
+                                                onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
+                                              />
+                                            )}
+                                          </div>
+                                          {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') && (
+                                            <div className="mt-3">
+                                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                  Follow-Up Clinical Assessment
+                                                </label>
+                                                <div className="bg-white border border-gray-300 rounded-lg p-4 min-h-[100px] whitespace-pre-wrap text-gray-900">
+                                                  {visit.clinicalAssessment || visit.proforma?.clinical_assessment || 'No assessment recorded'}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
                                       <div className="border-l-4 border-green-500 pl-4">
                                         <div className="flex items-center justify-between mb-3">
                                           <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -4510,6 +4677,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                           </div>
                                         )}
                                       </div>
+                                      )}
 
                                       {/* 2. ADL File Section (if exists) */}
                                       {visit.hasAdl && (
@@ -4562,7 +4730,20 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                           {isVisitSectionExpanded(visit.visitId, 'prescription') && (
                                             <div className="mt-3">
                                               <PrescriptionView 
-                                                clinicalProformaId={visit.proforma.id}
+                                                clinicalProformaId={visit.isFollowUp ? 
+                                                  (visit.minimalProformaId || 
+                                                   patientProformas.find(p => {
+                                                     if (p.record_type === 'followup_visit') return false; // Skip the follow-up visit record itself
+                                                     const proformaDate = toISTDateString(p.visit_date || p.created_at);
+                                                     const followUpDate = toISTDateString(visit.visitDate);
+                                                     return proformaDate === followUpDate && 
+                                                            p.visit_type === 'follow_up' &&
+                                                            p.record_type === 'clinical_proforma' &&
+                                                            (p.treatment_prescribed?.includes('Follow-up visit') || 
+                                                             p.treatment_prescribed?.includes('followup_visits') ||
+                                                             p.treatment_prescribed?.includes('see followup_visits'));
+                                                   })?.id) : visit.proforma?.id
+                                                }
                                                 patientId={patient?.id}
                                               />
                                             </div>

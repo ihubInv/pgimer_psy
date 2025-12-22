@@ -988,36 +988,215 @@ class Patient {
     }
   }
 
-  // Get visit history
+  // Get visit history (includes both patient_visits and followup_visits)
   async getVisitHistory() {
     try {
-      const result = await db.query(
-        `SELECT pv.*, u.name as doctor_name, u.role as doctor_role
+      // Get regular visits from patient_visits table
+      const visitsResult = await db.query(
+        `SELECT 
+           pv.id,
+           pv.patient_id,
+           pv.visit_date,
+           pv.visit_type,
+           pv.visit_status,
+           pv.assigned_doctor_id,
+           pv.room_no,
+           pv.notes,
+           pv.created_at,
+           pv.updated_at,
+           u.name as doctor_name,
+           u.role as doctor_role,
+           'patient_visit' as record_type,
+           NULL as clinical_assessment,
+           NULL as followup_id
          FROM patient_visits pv
          LEFT JOIN users u ON pv.assigned_doctor_id = u.id
          WHERE pv.patient_id = $1
-         ORDER BY pv.visit_date DESC`,
+         
+         UNION ALL
+         
+         SELECT 
+           fv.visit_id as id,
+           fv.patient_id,
+           fv.visit_date,
+           'follow_up'::varchar as visit_type,
+           'completed'::varchar as visit_status,
+           fv.assigned_doctor_id,
+           fv.room_no,
+           NULL as notes,
+           fv.created_at,
+           fv.updated_at,
+           u2.name as doctor_name,
+           u2.role as doctor_role,
+           'followup_visit' as record_type,
+           fv.clinical_assessment,
+           fv.id as followup_id
+         FROM followup_visits fv
+         LEFT JOIN users u2 ON fv.assigned_doctor_id = u2.id
+         WHERE fv.patient_id = $1 AND fv.is_active = true
+         
+         ORDER BY visit_date DESC, created_at DESC`,
         [this.id]
       );
-      return result.rows;
+      return visitsResult.rows;
     } catch (error) {
+      console.error('[Patient.getVisitHistory] Error:', error);
+      // Graceful fallback: if followup_visits table or related objects are missing,
+      // return basic patient_visits history instead of failing with 500
+      const isMissingFollowupTable =
+        error.code === '42P01' || // undefined_table in PostgreSQL
+        (typeof error.message === 'string' &&
+          (error.message.includes('followup_visits') ||
+           error.message.includes('relation "followup_visits" does not exist')));
+
+      if (isMissingFollowupTable) {
+        console.warn('[Patient.getVisitHistory] Falling back to patient_visits only (followup_visits not available).');
+        try {
+          const fallbackResult = await db.query(
+            `SELECT 
+               pv.id,
+               pv.patient_id,
+               pv.visit_date,
+               pv.visit_type,
+               pv.visit_status,
+               pv.assigned_doctor_id,
+               pv.room_no,
+               pv.notes,
+               pv.created_at,
+               pv.updated_at,
+               u.name as doctor_name,
+               u.role as doctor_role,
+               'patient_visit' as record_type,
+               NULL as clinical_assessment,
+               NULL as followup_id
+             FROM patient_visits pv
+             LEFT JOIN users u ON pv.assigned_doctor_id = u.id
+             WHERE pv.patient_id = $1
+             ORDER BY pv.visit_date DESC, pv.created_at DESC`,
+            [this.id]
+          );
+          return fallbackResult.rows;
+        } catch (fallbackError) {
+          console.error('[Patient.getVisitHistory] Fallback query error:', fallbackError);
+          throw fallbackError;
+        }
+      }
+
       throw error;
     }
   }
 
-  // Get clinical records
+  // Get clinical records (includes both clinical_proforma and followup_visits)
   async getClinicalRecords() {
     try {
-      const result = await db.query(
-        `SELECT cp.*, u.name as doctor_name, u.role as doctor_role
+      // Get regular clinical proformas
+      const proformasResult = await db.query(
+        `SELECT cp.*, 
+           u.name as doctor_name, 
+           u.role as doctor_role,
+           'clinical_proforma' as record_type,
+           NULL::text as clinical_assessment,
+           NULL::integer as followup_id
          FROM clinical_proforma cp
          LEFT JOIN users u ON cp.filled_by = u.id
-         WHERE cp.patient_id = $1
-         ORDER BY cp.visit_date DESC`,
+         WHERE cp.patient_id = $1 AND cp.is_active = true
+         ORDER BY cp.visit_date DESC, cp.created_at DESC`,
         [this.id]
       );
-      return result.rows;
+
+      // Get follow-up visits separately and merge
+      const followUpsResult = await db.query(
+        `SELECT 
+           fv.id as followup_id,
+           fv.patient_id,
+           fv.visit_date,
+           fv.clinical_assessment,
+           fv.filled_by,
+           fv.assigned_doctor_id as assigned_doctor,
+           fv.room_no,
+           fv.created_at,
+           fv.updated_at,
+           fv.is_active,
+           u2.name as doctor_name,
+           u2.role as doctor_role,
+           'followup_visit' as record_type
+         FROM followup_visits fv
+         LEFT JOIN users u2 ON fv.assigned_doctor_id = u2.id
+         WHERE fv.patient_id = $1 AND fv.is_active = true
+         ORDER BY fv.visit_date DESC, fv.created_at DESC`,
+        [this.id]
+      );
+
+      // Convert follow-ups to proforma-like structure for compatibility
+      const followUpProformas = followUpsResult.rows.map(fv => ({
+        id: fv.followup_id, // Use followup_id as id for identification
+        patient_id: fv.patient_id,
+        filled_by: fv.filled_by,
+        visit_date: fv.visit_date,
+        visit_type: 'follow_up',
+        room_no: fv.room_no,
+        assigned_doctor: fv.assigned_doctor,
+        informant_present: null,
+        nature_of_information: null,
+        onset_duration: null,
+        course: null,
+        precipitating_factor: null,
+        illness_duration: null,
+        current_episode_since: null,
+        mood: null,
+        behaviour: null,
+        speech: null,
+        thought: null,
+        perception: null,
+        somatic: null,
+        bio_functions: null,
+        adjustment: null,
+        cognitive_function: null,
+        fits: null,
+        sexual_problem: null,
+        substance_use: null,
+        past_history: null,
+        family_history: null,
+        associated_medical_surgical: null,
+        mse_behaviour: null,
+        mse_affect: null,
+        mse_thought: null,
+        mse_delusions: null,
+        mse_perception: null,
+        mse_cognitive_function: null,
+        gpe: null,
+        diagnosis: null,
+        icd_code: null,
+        disposal: null,
+        workup_appointment: null,
+        referred_to: null,
+        treatment_prescribed: fv.clinical_assessment, // Store assessment in treatment_prescribed for compatibility
+        doctor_decision: 'simple_case',
+        case_severity: null,
+        requires_adl_file: false,
+        adl_reasoning: null,
+        adl_file_id: null,
+        is_active: fv.is_active,
+        created_at: fv.created_at,
+        updated_at: fv.updated_at,
+        prescriptions: [],
+        doctor_name: fv.doctor_name,
+        doctor_role: fv.doctor_role,
+        record_type: 'followup_visit',
+        clinical_assessment: fv.clinical_assessment,
+        followup_id: fv.followup_id,
+      }));
+
+      // Combine and sort by visit_date
+      const allRecords = [...proformasResult.rows, ...followUpProformas].sort((a, b) => {
+        const dateA = new Date(a.visit_date || a.created_at || 0);
+        const dateB = new Date(b.visit_date || b.created_at || 0);
+        return dateB - dateA; // Newest first
+      });
+
+      return allRecords;
     } catch (error) {
+      console.error('[Patient.getClinicalRecords] Error:', error);
       throw error;
     }
   }

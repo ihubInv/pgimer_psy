@@ -299,32 +299,6 @@ const CreatePatient = () => {
     const patientCRNo = (formData.cr_no || '').trim();
 
     try {
-      // Check if CR number already exists (if provided)
-      if (patientCRNo && patientCRNo.length >= 3) {
-        try {
-          const baseUrl = import.meta.env.VITE_API_URL || '/api';
-          const response = await fetch(`${baseUrl}/patients/cr/${encodeURIComponent(patientCRNo)}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': token ? `Bearer ${token}` : '',
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-          });
-
-          // If patient exists (200 status), show error
-          if (response.ok) {
-            toast.error('CR number already registered');
-            return;
-          }
-          // If 404, patient doesn't exist, continue with submission
-        } catch (checkError) {
-          // If there's an error checking (network issue, etc.), continue with submission
-          // The backend will catch duplicate CR numbers during creation
-          console.warn('Error checking CR number:', checkError);
-        }
-      }
-
       const parseIntSafe = (val) => {
         if (val === '' || val === undefined || val === null) return null;
         const parsed = parseInt(val);
@@ -357,11 +331,7 @@ const CreatePatient = () => {
 
         // Quick Entry fields
         department: formData.department || "Psychiatry",
-        unit_consit: formData.unit_consit || null,
-        room_no: formData.room_no || null,
-        serial_no: formData.serial_no || null,
         file_no: formData.file_no || null,
-        unit_days: formData.unit_days || null,
         patient_income: parseFloatSafe(formData.patient_income),
         family_income: parseFloatSafe(formData.family_income),
         
@@ -376,11 +346,13 @@ const CreatePatient = () => {
         // Personal Information
         psy_no: formData.psy_no || null,
         seen_in_walk_in_on: formData.seen_in_walk_in_on || formData.date || null,
-        worked_up_on: formData.worked_up_on || null,
+        // For MWO: worked_up_on should not be auto-populated and is optional
+        worked_up_on: isMWO(currentUser?.role) ? (formData.worked_up_on || null) : (formData.worked_up_on || null),
         special_clinic_no: formData.special_clinic_no || null,
         age_group: formData.age_group || null,
         marital_status: formData.marital_status || null,
-        year_of_marriage: parseIntSafe(formData.year_of_marriage),
+        // Years of Marriage: numeric duration (0-80), not calendar year
+        year_of_marriage: formData.year_of_marriage ? parseIntSafe(formData.year_of_marriage) : null,
         no_of_children_male: parseIntSafe(formData.no_of_children_male),
         no_of_children_female: parseIntSafe(formData.no_of_children_female),
 
@@ -443,9 +415,6 @@ const CreatePatient = () => {
         // Local Address field
         local_address: formData.local_address || null,
 
-        // Additional fields
-        category: formData.category || null,
-
         // Assignment
         assigned_room: formData.assigned_room || null,
       };
@@ -471,11 +440,21 @@ const CreatePatient = () => {
         }
       }
 
-      // Create clinical proforma
-      await createProforma({
-        patient_id: createdPatientId,
-        visit_date: new Date().toISOString().split('T')[0]
-      }).unwrap();
+      // Create initial clinical proforma ONLY for doctor roles (Admin / Faculty / Resident)
+      // Psychiatric Welfare Officer should NOT create walk-in clinical proformas
+      if (!isMWO(currentUser?.role)) {
+        try {
+          await createProforma({
+            patient_id: createdPatientId,
+            visit_date: new Date().toISOString().split('T')[0]
+          }).unwrap();
+        } catch (err) {
+          console.error('Error creating initial clinical proforma:', err);
+          // Don't block patient registration for doctors if proforma fails
+          // Doctors can still create the proforma manually from Clinical / Today’s Patients
+          toast.error(err?.data?.message || 'Patient created, but failed to create initial clinical proforma.');
+        }
+      }
 
       // Reset form after successful submission
       dispatch(resetPatientRegistrationForm());
@@ -606,8 +585,8 @@ const CreatePatient = () => {
                           />
                         </div>
 
-                        {/* Second Row - Age, Sex, Category, Father's Name */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {/* Second Row - Age, Sex, Father's Name */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                           <IconInput
                             icon={<FiClock className="w-4 h-4" />}
                             label={
@@ -636,22 +615,7 @@ const CreatePatient = () => {
                               placeholder="Select sex"
                               error={errors.patientSex}
                               searchable={true}
-                              className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                              <FiShield className="w-4 h-4 text-primary-600" />
-                              Category <span className="text-red-500">*</span>
-                            </label>
-                            <Select
-                              name="category"
-                              value={formData.category || ''}
-                              onChange={handleChange}
-                              options={CATEGORY_OPTIONS}
-                              placeholder="Select category"
-                              searchable={true}
-                              className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
+                              className=""
                             />
                           </div>
                           <IconInput
@@ -668,8 +632,8 @@ const CreatePatient = () => {
                             className=""
                           />
                         </div>
-                        {/* Fourth Row - Department, Unit/Consit, Room No., Serial No. */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {/* Third Row - Department, File No. */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <IconInput
                             icon={<FiLayers className="w-4 h-4" />}
                             label={
@@ -685,49 +649,6 @@ const CreatePatient = () => {
                             disabled={true}
                           />
                           <IconInput
-                            icon={<FiUsers className="w-4 h-4" />}
-                            label={
-                              <span>
-                                Unit/Consit <span className="text-red-500">*</span>
-                              </span>
-                            }
-                            name="unit_consit"
-                            value={formData.unit_consit || ''}
-                            onChange={handleChange}
-                            placeholder="Enter unit/consit"
-                            className=""
-                          />
-                          <IconInput
-                            icon={<FiHome className="w-4 h-4" />}
-                            label={
-                              <span>
-                                Room No. <span className="text-red-500">*</span>
-                              </span>
-                            }
-                            name="room_no"
-                            value={formData.room_no || ''}
-                            onChange={handleChange}
-                            placeholder="Enter room number"
-                            className=""
-                          />
-                          <IconInput
-                            icon={<FiHash className="w-4 h-4" />}
-                            label={
-                              <span>
-                                Serial No. <span className="text-red-500">*</span>
-                              </span>
-                            }
-                            name="serial_no"
-                            value={formData.serial_no || ''}
-                            onChange={handleChange}
-                            placeholder="Enter serial number"
-                            className=""
-                          />
-                        </div>
-
-                        {/* Fifth Row - File No., Unit Days */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <IconInput
                             icon={<FiFileText className="w-4 h-4" />}
                             label={
                               <span>
@@ -740,22 +661,6 @@ const CreatePatient = () => {
                             placeholder="Enter file number"
                             className=""
                           />
-                          <div className="space-y-2">
-                            <Select
-                              label={
-                                <span>
-                                  Unit Days <span className="text-red-500">*</span>
-                                </span>
-                              }
-                              name="unit_days"
-                              value={formData.unit_days || ''}
-                              onChange={handleChange}
-                              options={UNIT_DAYS_OPTIONS}
-                              placeholder="Select unit days"
-                              searchable={true}
-                              className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
-                            />
-                          </div>
                         </div>
 
 
@@ -788,29 +693,16 @@ const CreatePatient = () => {
                             {/* Location Fields */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <IconInput
-                                icon={<FiGlobe className="w-4 h-4" />}
+                                icon={<FiHome className="w-4 h-4" />}
                                 label={
                                   <span>
-                                    Country <span className="text-red-500">*</span>
+                                    City/Town/Village <span className="text-red-500">*</span>
                                   </span>
                                 }
-                                name="country"
-                                value={formData.country || ''}
+                                name="city"
+                                value={formData.city || ''}
                                 onChange={handleChange}
-                                placeholder="Enter country"
-                                className=""
-                              />
-                              <IconInput
-                                icon={<FiMapPin className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    State <span className="text-red-500">*</span>
-                                  </span>
-                                }
-                                name="state"
-                                value={formData.state || ''}
-                                onChange={handleChange}
-                                placeholder="Enter state"
+                                placeholder="Enter city, town or village"
                                 required
                                 className=""
                               />
@@ -829,17 +721,30 @@ const CreatePatient = () => {
                                 className=""
                               />
                               <IconInput
-                                icon={<FiHome className="w-4 h-4" />}
+                                icon={<FiMapPin className="w-4 h-4" />}
                                 label={
                                   <span>
-                                    City/Town/Village <span className="text-red-500">*</span>
+                                    State <span className="text-red-500">*</span>
                                   </span>
                                 }
-                                name="city"
-                                value={formData.city || ''}
+                                name="state"
+                                value={formData.state || ''}
                                 onChange={handleChange}
-                                placeholder="Enter city, town or village"
+                                placeholder="Enter state"
                                 required
+                                className=""
+                              />
+                              <IconInput
+                                icon={<FiGlobe className="w-4 h-4" />}
+                                label={
+                                  <span>
+                                    Country <span className="text-red-500">*</span>
+                                  </span>
+                                }
+                                name="country"
+                                value={formData.country || ''}
+                                onChange={handleChange}
+                                placeholder="Enter country"
                                 className=""
                               />
                             </div>
@@ -887,7 +792,7 @@ const CreatePatient = () => {
                     <div className="space-y-8">
                       {/* Patient Identification */}
                       <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
                               <DatePicker
                                 icon={<FiCalendar className="w-4 h-4" />}
@@ -898,15 +803,17 @@ const CreatePatient = () => {
                                 defaultToday={true}
                                 required={true}
                               />
-                              <DatePicker
-                                icon={<FiCalendar className="w-4 h-4" />}
-                                label="Worked up on"
-                                name="worked_up_on"
-                                value={formData.worked_up_on}
-                                onChange={handleChange}
-                                defaultToday={true}
-                                required={true}
-                              />
+                              {!isMWO(currentUser?.role) && (
+                                <DatePicker
+                                  icon={<FiCalendar className="w-4 h-4" />}
+                                  label="Worked up on"
+                                  name="worked_up_on"
+                                  value={formData.worked_up_on}
+                                  onChange={handleChange}
+                                  defaultToday={false}
+                                  required={false}
+                                />
+                              )}
 
                               <IconInput
                                 icon={<FiHash className="w-4 h-4" />}
@@ -915,16 +822,13 @@ const CreatePatient = () => {
                                 value={formData.cr_no || ''}
                                 onChange={handleChange}
                                 placeholder="Enter CR number"
-                                className=""
+                                disabled={true}
+                                className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                               />
 
                               <IconInput
                                 icon={<FiFileText className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    Psy. No. <span className="text-red-500">*</span>
-                                  </span>
-                                }
+                                label="Psy. No."
                                 name="psy_no"
                                 value={formData.psy_no}
                                 onChange={handlePatientChange}
@@ -934,11 +838,7 @@ const CreatePatient = () => {
                               />
                               <IconInput
                                 icon={<FiHeart className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    Special Clinic No. <span className="text-red-500">*</span>
-                                  </span>
-                                }
+                                label="Special Clinic No."
                                 name="special_clinic_no"
                                 value={formData.special_clinic_no}
                                 onChange={handleChange}
@@ -957,7 +857,8 @@ const CreatePatient = () => {
                                 value={formData.name || ''}
                                 onChange={handleChange}
                                 placeholder="Enter patient name"
-                                className=""
+                                disabled={true}
+                                className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                               />
 
                               <div className="space-y-2">
@@ -974,7 +875,8 @@ const CreatePatient = () => {
                                   placeholder="Select sex"
                                   error={errors.patientSex}
                                   searchable={true}
-                                  className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
+                                  disabled={true}
+                                  className="disabled:bg-gray-200 disabled:cursor-not-allowed"
                                 />
                               </div>
 
@@ -990,7 +892,7 @@ const CreatePatient = () => {
                                 options={AGE_GROUP_OPTIONS}
                                 placeholder="Select age group"
                                 searchable={true}
-                                className="bg-gradient-to-r from-blue-50 to-indigo-50"
+                                className=""
                               />
                               <Select
                                 label={
@@ -1004,19 +906,19 @@ const CreatePatient = () => {
                                 options={MARITAL_STATUS}
                                 placeholder="Select marital status"
                                 searchable={true}
-                                className="bg-gradient-to-r from-pink-50 to-rose-50"
+                                className=""
                               />
                               <IconInput
                                 icon={<FiCalendar className="w-4 h-4" />}
-                                label="Year of marriage"
+                                label="Years of Marriage"
                                 name="year_of_marriage"
                                 value={formData.year_of_marriage}
                                 onChange={handleChange}
                                 type="number"
-                                placeholder="Enter year of marriage"
-                                min="1900"
-                                max={new Date().getFullYear()}
-                                className="bg-gradient-to-r from-purple-50 to-pink-50"
+                                placeholder="Enter years of marriage (e.g., 5, 10, 25)"
+                                min="0"
+                                max="80"
+                                className=""
                               />
 
 
@@ -1030,7 +932,7 @@ const CreatePatient = () => {
                                 placeholder="Male"
                                 min="0"
                                 max="20"
-                                className="bg-gradient-to-r from-blue-50 to-indigo-50"
+                                className=""
                               />
                               <IconInput
                                 icon={<FiUsers className="w-4 h-4" />}
@@ -1042,7 +944,7 @@ const CreatePatient = () => {
                                 placeholder="Female"
                                 min="0"
                                 max="20"
-                                className="bg-gradient-to-r from-pink-50 to-rose-50"
+                                className=""
                               />
 
                               <SelectWithOther
@@ -1058,7 +960,7 @@ const CreatePatient = () => {
                                 options={OCCUPATION_OPTIONS}
                                 placeholder="Select Occupation"
                                 searchable={true}
-                                className="bg-gradient-to-r from-green-50 to-emerald-50"
+                                className=""
                                 customValue={occupationOther}
                                 setCustomValue={setOccupationOther}
                                 showCustomInput={showOccupationOther}
@@ -1080,7 +982,7 @@ const CreatePatient = () => {
                                 options={EDUCATION_OPTIONS}
                                 placeholder="Select education"
                                 searchable={true}
-                                className="bg-gradient-to-r from-green-50 to-emerald-50"
+                                className=""
                               />
 
                               <IconInput
@@ -1096,7 +998,7 @@ const CreatePatient = () => {
                                 type="number"
                                 placeholder="Monthly income"
                                 min="0"
-                                className="bg-gradient-to-r from-teal-50 to-cyan-50"
+                                className=""
                               />
                                <IconInput
                                 icon={<FiTrendingUp className="w-4 h-4" />}
@@ -1111,7 +1013,7 @@ const CreatePatient = () => {
                                 type="number"
                                 placeholder="Monthly income"
                                 min="0"
-                                className="bg-gradient-to-r from-teal-50 to-cyan-50"
+                                className=""
                               />
 
                               <SelectWithOther
@@ -1126,7 +1028,7 @@ const CreatePatient = () => {
                                 options={RELIGION_OPTIONS}
                                 placeholder="Select religion"
                                 searchable={true}
-                                className="bg-gradient-to-r from-teal-50 to-cyan-50"
+                                className=""
                                 customValue={religionOther}
                                 setCustomValue={setReligionOther}
                                 showCustomInput={showReligionOther}
@@ -1146,7 +1048,7 @@ const CreatePatient = () => {
                                 options={FAMILY_TYPE_OPTIONS}
                                 placeholder="Select family type"
                                 searchable={true}
-                                className="bg-gradient-to-r from-teal-50 to-cyan-50"
+                                className=""
                                 customValue={familyTypeOther}
                                 setCustomValue={setFamilyTypeOther}
                                 showCustomInput={showFamilyTypeOther}
@@ -1166,7 +1068,7 @@ const CreatePatient = () => {
                                 options={LOCALITY_OPTIONS}
                                 placeholder="Select locality"
                                 searchable={true}
-                                className="bg-gradient-to-r from-teal-50 to-cyan-50"
+                                className=""
                                 customValue={localityOther}
                                 setCustomValue={setLocalityOther}
                                 showCustomInput={showLocalityOther}
@@ -1188,7 +1090,7 @@ const CreatePatient = () => {
                                 value={formData.head_name}
                                 onChange={handleChange}
                                 placeholder="Enter head of family name"
-                                className="bg-gradient-to-r from-blue-50 to-indigo-50"
+                                className=""
                               />
                               <IconInput
                                 icon={<FiClock className="w-4 h-4" />}
@@ -1204,7 +1106,7 @@ const CreatePatient = () => {
                                 placeholder="Enter age"
                                 min="0"
                                 max="150"
-                                className="bg-gradient-to-r from-orange-50 to-yellow-50"
+                                className=""
                               />
 
                               <SelectWithOther
@@ -1219,7 +1121,7 @@ const CreatePatient = () => {
                                 options={HEAD_RELATIONSHIP_OPTIONS}
                                 placeholder="Select relationship"
                                 searchable={true}
-                                className="bg-gradient-to-r from-green-50 to-emerald-50"
+                                className=""
                                 customValue={headRelationshipOther}
                                 setCustomValue={setHeadRelationshipOther}
                                 showCustomInput={showHeadRelationshipOther}
@@ -1242,7 +1144,7 @@ const CreatePatient = () => {
                                 options={EDUCATION_OPTIONS}
                                 placeholder="Select education"
                                 searchable={true}
-                                className="bg-gradient-to-r from-green-50 to-emerald-50"
+                                className=""
                               />
 
                               <Select
@@ -1258,7 +1160,7 @@ const CreatePatient = () => {
                                 options={OCCUPATION_OPTIONS}
                                 placeholder="Select occupation"
                                 searchable={true}
-                                className="bg-gradient-to-r from-green-50 to-emerald-50"
+                                className=""
                               />
                               <IconInput
                                 icon={<FiTrendingUp className="w-4 h-4" />}
@@ -1273,7 +1175,7 @@ const CreatePatient = () => {
                                 type="number"
                                 placeholder="Monthly income"
                                 min="0"
-                                className="bg-gradient-to-r from-amber-50 to-orange-50"
+                                className=""
                               />
 
                               <IconInput
@@ -1302,7 +1204,7 @@ const CreatePatient = () => {
                                 options={MOBILITY_OPTIONS}
                                 placeholder="Select mobility"
                                 searchable={true}
-                                className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
+                                className=""
                                 customValue={mobilityOther}
                                 setCustomValue={setMobilityOther}
                                 showCustomInput={showMobilityOther}
@@ -1323,7 +1225,7 @@ const CreatePatient = () => {
                                 options={REFERRED_BY_OPTIONS}
                                 placeholder="Select referred by"
                                 searchable={true}
-                                className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
+                                className=""
                                 customValue={referredByOther}
                                 setCustomValue={setReferredByOther}
                                 showCustomInput={showReferredByOther}
@@ -1333,76 +1235,6 @@ const CreatePatient = () => {
                               />
                             </div>
                           </div>
-
-                        {/* Permanent Address Section */}
-                        <div className="space-y-6 pt-6 border-t border-white/30">
-                          <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                            <div className="p-2.5 bg-gradient-to-br from-green-500/20 to-emerald-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
-                              <FiHome className="w-5 h-5 text-green-600" />
-                            </div>
-                            Permanent Address
-                          </h4>
-
-                          <div className="space-y-6">
-                            <IconInput
-                              icon={<FiHome className="w-4 h-4" />}
-                              label="Address Line"
-                              name="permanent_address_line_1"
-                              value={formData.permanent_address_line_1 || ''}
-                              onChange={handleChange}
-                              placeholder="Enter house number, street, locality"
-                              className=""
-                            />
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              <IconInput
-                                icon={<FiHome className="w-4 h-4" />}
-                                label="City/Town/Village"
-                                name="permanent_city_town_village"
-                                value={formData.permanent_city_town_village || ''}
-                                onChange={handleChange}
-                                placeholder="Enter city, town or village"
-                                className=""
-                              />
-                              <IconInput
-                                icon={<FiLayers className="w-4 h-4" />}
-                                label="District"
-                                name="permanent_district"
-                                value={formData.permanent_district || ''}
-                                onChange={handleChange}
-                                placeholder="Enter district"
-                                className=""
-                              />
-                              <IconInput
-                                icon={<FiMapPin className="w-4 h-4" />}
-                                label="State"
-                                name="permanent_state"
-                                value={formData.permanent_state || ''}
-                                onChange={handleChange}
-                                placeholder="Enter state"
-                                className=""
-                              />
-                              <IconInput
-                                icon={<FiHash className="w-4 h-4" />}
-                                label="Pin Code"
-                                name="permanent_pin_code"
-                                value={formData.permanent_pin_code || ''}
-                                onChange={handleChange}
-                                placeholder="Enter pin code"
-                                type="number"
-                                className=""
-                              />
-                              <IconInput
-                                icon={<FiGlobe className="w-4 h-4" />}
-                                label="Country"
-                                name="permanent_country"
-                                value={formData.permanent_country || ''}
-                                onChange={handleChange}
-                                placeholder="Enter country"
-                                className=""
-                              />
-                            </div>
-                          </div>
-                        </div>
 
                         {/* Present Address Section */}
                         <div className="space-y-6 pt-6 border-t border-white/30">
@@ -1453,7 +1285,7 @@ const CreatePatient = () => {
                           <div className="space-y-6">
                             <IconInput
                               icon={<FiHome className="w-4 h-4" />}
-                              label="Address Line"
+                              label="Address Line (House No., Street, Locality)"
                               name="present_address_line_1"
                               value={formData.present_address_line_1 || ''}
                               onChange={handleChange}
@@ -1463,22 +1295,12 @@ const CreatePatient = () => {
                             />
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <IconInput
-                                icon={<FiHome className="w-4 h-4" />}
-                                label="City/Town/Village"
-                                name="present_city_town_village"
-                                value={formData.present_city_town_village || ''}
+                                icon={<FiGlobe className="w-4 h-4" />}
+                                label="Country"
+                                name="present_country"
+                                value={formData.present_country || ''}
                                 onChange={handleChange}
-                                placeholder="Enter city, town or village"
-                                disabled={sameAsPermanent}
-                                className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
-                              />
-                              <IconInput
-                                icon={<FiLayers className="w-4 h-4" />}
-                                label="District"
-                                name="present_district"
-                                value={formData.present_district || ''}
-                                onChange={handleChange}
-                                placeholder="Enter district"
+                                placeholder="Enter country"
                                 disabled={sameAsPermanent}
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
@@ -1493,6 +1315,26 @@ const CreatePatient = () => {
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
                               <IconInput
+                                icon={<FiLayers className="w-4 h-4" />}
+                                label="District"
+                                name="present_district"
+                                value={formData.present_district || ''}
+                                onChange={handleChange}
+                                placeholder="Enter district"
+                                disabled={sameAsPermanent}
+                                className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
+                              />
+                              <IconInput
+                                icon={<FiHome className="w-4 h-4" />}
+                                label="City/Town/Village"
+                                name="present_city_town_village"
+                                value={formData.present_city_town_village || ''}
+                                onChange={handleChange}
+                                placeholder="Enter city, town or village"
+                                disabled={sameAsPermanent}
+                                className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
+                              />
+                              <IconInput
                                 icon={<FiHash className="w-4 h-4" />}
                                 label="Pin Code"
                                 name="present_pin_code"
@@ -1503,15 +1345,75 @@ const CreatePatient = () => {
                                 disabled={sameAsPermanent}
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Permanent Address Section */}
+                        <div className="space-y-6 pt-6 border-t border-white/30">
+                          <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                            <div className="p-2.5 bg-gradient-to-br from-green-500/20 to-emerald-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
+                              <FiHome className="w-5 h-5 text-green-600" />
+                            </div>
+                            Permanent Address
+                          </h4>
+
+                          <div className="space-y-6">
+                            <IconInput
+                              icon={<FiHome className="w-4 h-4" />}
+                              label="Address Line"
+                              name="permanent_address_line_1"
+                              value={formData.permanent_address_line_1 || ''}
+                              onChange={handleChange}
+                              placeholder="Enter house number, street, locality"
+                              className=""
+                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <IconInput
                                 icon={<FiGlobe className="w-4 h-4" />}
                                 label="Country"
-                                name="present_country"
-                                value={formData.present_country || ''}
+                                name="permanent_country"
+                                value={formData.permanent_country || ''}
                                 onChange={handleChange}
                                 placeholder="Enter country"
-                                disabled={sameAsPermanent}
-                                className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
+                                className=""
+                              />
+                              <IconInput
+                                icon={<FiMapPin className="w-4 h-4" />}
+                                label="State"
+                                name="permanent_state"
+                                value={formData.permanent_state || ''}
+                                onChange={handleChange}
+                                placeholder="Enter state"
+                                className=""
+                              />
+                              <IconInput
+                                icon={<FiLayers className="w-4 h-4" />}
+                                label="District"
+                                name="permanent_district"
+                                value={formData.permanent_district || ''}
+                                onChange={handleChange}
+                                placeholder="Enter district"
+                                className=""
+                              />
+                              <IconInput
+                                icon={<FiHome className="w-4 h-4" />}
+                                label="City/Town/Village"
+                                name="permanent_city_town_village"
+                                value={formData.permanent_city_town_village || ''}
+                                onChange={handleChange}
+                                placeholder="Enter city, town or village"
+                                className=""
+                              />
+                              <IconInput
+                                icon={<FiHash className="w-4 h-4" />}
+                                label="Pin Code"
+                                name="permanent_pin_code"
+                                value={formData.permanent_pin_code || ''}
+                                onChange={handleChange}
+                                placeholder="Enter pin code"
+                                type="number"
+                                className=""
                               />
                             </div>
                           </div>
@@ -1562,7 +1464,7 @@ const CreatePatient = () => {
                                     }))}
                                   placeholder={isMWO(currentUser?.role) ? "Select room or leave empty for auto-assignment" : "Select room"}
                                   searchable={true}
-                                  className="bg-gradient-to-r from-teal-50 to-cyan-50"
+                                  className=""
                                 />
                                 {isMWO(currentUser?.role) && (
                                   <p className="text-xs text-gray-500 italic">

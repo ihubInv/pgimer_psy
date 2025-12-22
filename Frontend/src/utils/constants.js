@@ -149,7 +149,7 @@ export const PATIENT_REGISTRATION_FORM = [
 
   // Personal Information
   { value: 'marital_status', label: 'Marital Status' },
-  { value: 'year_of_marriage', label: 'Year of Marriage' },
+  { value: 'year_of_marriage', label: 'Years of Marriage' },
   { value: 'no_of_children_male', label: 'Number of Children - Male' },
   { value: 'no_of_children_female', label: 'Number of Children - Female' },
 

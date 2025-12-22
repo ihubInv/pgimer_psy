@@ -69,7 +69,8 @@ const baseQuery = fetchBaseQuery({
     
     // For prescription endpoints with 404, clone response but don't treat as error
     // This prevents browser from logging it as an error
-    if (response.status === 404 && url.includes('/prescriptions/by-proforma/')) {
+    const urlString = String(url || '');
+    if (response.status === 404 && urlString.includes('/prescriptions/by-proforma/')) {
       // Return a response that RTK Query will handle gracefully
       return response;
     }
@@ -85,7 +86,8 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
   // Handle 404 for prescription endpoints gracefully (it's expected when no prescription exists)
   // Note: Browser console may still show 404 network errors, but RTK Query handles them gracefully
   // This is normal behavior - 404s are logged by the browser before our code can intercept them
-  if (result?.error?.status === 404 && args.url?.includes('/prescriptions/by-proforma/')) {
+  const argsUrlString = String(args.url || '');
+  if (result?.error?.status === 404 && argsUrlString.includes('/prescriptions/by-proforma/')) {
     // Return success with null data instead of error for missing prescriptions
     // This prevents RTK Query from treating it as an error and breaking the UI
     return {
@@ -105,18 +107,19 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
   // If access token expired, try to refresh it
   if (result?.error?.status === 401) {
     // Check if it's a token expiration error
-    const errorMessage = result?.error?.data?.message || '';
+    const errorMessage = String(result?.error?.data?.message || '');
     const errorData = result?.error?.data || {};
     
     // Don't try to refresh if it's a session expired error or login endpoint
+    const urlString = String(args.url || '');
     if (
-      errorMessage.includes('Session expired') ||
-      errorMessage.includes('SESSION_EXPIRED') ||
-      args.url?.includes('/login') ||
-      args.url?.includes('/session/refresh')
+      (errorMessage && typeof errorMessage === 'string' && errorMessage.includes('Session expired')) ||
+      (errorMessage && typeof errorMessage === 'string' && errorMessage.includes('SESSION_EXPIRED')) ||
+      (urlString && urlString.includes('/login')) ||
+      (urlString && urlString.includes('/session/refresh'))
     ) {
       // Session expired or refresh failed, logout user
-      if (errorMessage.includes('Session expired') || errorMessage.includes('SESSION_EXPIRED')) {
+      if (errorMessage && typeof errorMessage === 'string' && (errorMessage.includes('Session expired') || errorMessage.includes('SESSION_EXPIRED'))) {
         console.log('[apiSlice] Session expired, logging out');
       api.dispatch({ type: 'auth/logout' });
       return result;
@@ -128,7 +131,8 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
     // The backend will check inactivity on token refresh and expire if user has been idle for 2+ minutes
 
     // Try to refresh the token (skip if we're already trying to refresh)
-    if (!args.url?.includes('/session/refresh') && !isRefreshing) {
+    const urlStr = String(args.url || '');
+    if (!urlStr.includes('/session/refresh') && !isRefreshing) {
       // If we're not already refreshing, start a refresh
       if (!refreshPromise) {
         isRefreshing = true;
@@ -198,7 +202,7 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
       if (refreshResult?.success) {
         result = await baseQuery(args, api, extraOptions);
       }
-    } else if (args.url?.includes('/session/refresh')) {
+    } else if (urlStr && urlStr.includes('/session/refresh')) {
       // Already trying to refresh, just logout
       console.log('[apiSlice] Refresh endpoint returned 401, logging out');
       isRefreshing = false;
@@ -212,6 +216,6 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
 
 export const apiSlice = createApi({
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['User', 'Patient', 'Clinical', 'ADL', 'Stats', 'Prescription', 'Rooms', 'MyRoom', 'Medicine', 'PrescriptionTemplate'],
+  tagTypes: ['User', 'Patient', 'Clinical', 'ADL', 'Stats', 'Prescription', 'Rooms', 'MyRoom', 'Medicine', 'PrescriptionTemplate', 'FollowUp', 'PatientVisit'],
   endpoints: (builder) => ({}),
 });

@@ -29,8 +29,17 @@ class UserController {
 
       // Send password setup email to user
       try {
-        // Use server IP for setup link (production server)
-        const setupLink = `${process.env.FRONTEND_URL || 'http://122.186.76.102:8001'}/setup-password?token=${setupToken.token}`;
+        // Get frontend URL from environment variable (domain-based, not IP)
+        // FRONTEND_URL should be set in environment (e.g., http://pgimerpsych.org)
+        // Fallback to domain if env var not set (for production)
+        const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || process.env.BASE_URL || 'http://pgimerpsych.org';
+        
+        // Ensure the URL doesn't end with a slash
+        const baseUrl = frontendUrl.replace(/\/$/, '');
+        const setupLink = `${baseUrl}/setup-password?token=${setupToken.token}`;
+        
+        console.log('[UserController] Generated setup password link:', setupLink);
+        
         await sendEmail(user.email, 'passwordSetup', { 
           userName: user.name, 
           setupLink,
@@ -840,8 +849,18 @@ class UserController {
       const userId = req.user.id;
       const userRole = req.user.role;
 
-      // Only allow Faculty, Admin, or Resident to select rooms
-      const allowedRoles = ['Faculty', 'Admin', 'Resident'];
+      // Only allow Faculty, Admin, or Resident (including legacy role names) to select rooms
+      // Some older accounts may still use JR/SR or verbose labels – handle them here
+      const allowedRoles = [
+        'Faculty',
+        'Admin',
+        'Resident',
+        'JR',
+        'SR',
+        'Faculty Residents (Junior Resident (JR))',
+        'Faculty Residents (Senior Resident (SR))',
+      ];
+
       if (!allowedRoles.includes(userRole)) {
         return res.status(403).json({
           success: false,

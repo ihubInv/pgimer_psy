@@ -122,8 +122,10 @@ const validatePatient = [
     .isLength({ min: 1, max: 50 })
     .withMessage('CR number must not exceed 50 characters'),
   body('psy_no')
-    .optional()
-    .isLength({ min: 1, max: 50 })
+    // PSY number is optional for all roles (including Psychiatric Welfare Officer)
+    // Allow null / empty, but enforce max length when provided
+    .optional({ nullable: true, checkFalsy: true })
+    .isLength({ max: 50 })
     .withMessage('PSY number must not exceed 50 characters'),
   handleValidationErrors
 ];
@@ -154,8 +156,10 @@ const validatePatientRegistration = [
     .isLength({ min: 1, max: 50 })
     .withMessage('CR number must not exceed 50 characters'),
   body('psy_no')
-    .optional()
-    .isLength({ min: 1, max: 50 })
+    // PSY number is optional for all roles (including Psychiatric Welfare Officer)
+    // Allow null / empty, but enforce max length when provided
+    .optional({ nullable: true, checkFalsy: true })
+    .isLength({ max: 50 })
     .withMessage('PSY number must not exceed 50 characters'),
   
   // Additional fields for outpatient record
@@ -164,7 +168,8 @@ const validatePatientRegistration = [
     .isISO8601()
     .withMessage('Seen in walk-in date must be a valid date'),
   body('worked_up_on')
-    .optional()
+    // Worked up date is optional; allow null / missing. When provided, must be a valid date.
+    .optional({ nullable: true, checkFalsy: true })
     .isISO8601()
     .withMessage('Worked up date must be a valid date'),
   body('special_clinic_no')
@@ -183,8 +188,8 @@ const validatePatientRegistration = [
     .withMessage('Marital status must not exceed 20 characters'),
   body('year_of_marriage')
     .optional({ nullable: true })
-    .isInt({ min: 1900, max: new Date().getFullYear() })
-    .withMessage('Year of marriage must be a valid year'),
+    .isInt({ min: 0, max: 80 })
+    .withMessage('Years of marriage must be between 0 and 80 years (duration, not calendar year)'),
   body('no_of_children')
     .optional({ nullable: true })
     .isInt({ min: 0, max: 20 })
@@ -287,16 +292,38 @@ const validatePatientRegistration = [
     .optional()
     .isLength({ max: 100 })
     .withMessage('Department must not exceed 100 characters'),
+  // For Psychiatric Welfare Officer: These fields should not be accepted
   body('unit_consit')
     .optional()
+    .custom((value, { req }) => {
+      // Reject if Psychiatric Welfare Officer tries to set this field
+      if (req.user?.role === 'Psychiatric Welfare Officer' && value !== null && value !== undefined && value !== '') {
+        throw new Error('Unit/Consultant field is not allowed for Psychiatric Welfare Officer');
+      }
+      return true;
+    })
     .isLength({ max: 100 })
     .withMessage('Unit/Consit must not exceed 100 characters'),
   body('room_no')
     .optional()
+    .custom((value, { req }) => {
+      // Reject if Psychiatric Welfare Officer tries to set this field
+      if (req.user?.role === 'Psychiatric Welfare Officer' && value !== null && value !== undefined && value !== '') {
+        throw new Error('Room Number field is not allowed for Psychiatric Welfare Officer');
+      }
+      return true;
+    })
     .isLength({ max: 20 })
     .withMessage('Room number must not exceed 20 characters'),
   body('serial_no')
     .optional()
+    .custom((value, { req }) => {
+      // Reject if Psychiatric Welfare Officer tries to set this field
+      if (req.user?.role === 'Psychiatric Welfare Officer' && value !== null && value !== undefined && value !== '') {
+        throw new Error('Serial Number field is not allowed for Psychiatric Welfare Officer');
+      }
+      return true;
+    })
     .isLength({ max: 50 })
     .withMessage('Serial number must not exceed 50 characters'),
   body('file_no')
@@ -305,7 +332,11 @@ const validatePatientRegistration = [
     .withMessage('File number must not exceed 50 characters'),
   body('unit_days')
     .optional({ nullable: true })
-    .custom((value) => {
+    .custom((value, { req }) => {
+      // Reject if Psychiatric Welfare Officer tries to set this field
+      if (req.user?.role === 'Psychiatric Welfare Officer' && value !== null && value !== undefined && value !== '') {
+        throw new Error('Unit Days field is not allowed for Psychiatric Welfare Officer');
+      }
       // Allow null, undefined, or empty string
       if (value === null || value === undefined || value === '') {
         return true;
@@ -436,6 +467,13 @@ const validatePatientRegistration = [
   // Additional fields validation
   body('category')
     .optional()
+    .custom((value, { req }) => {
+      // Reject if Psychiatric Welfare Officer tries to set this field
+      if (req.user?.role === 'Psychiatric Welfare Officer' && value !== null && value !== undefined && value !== '') {
+        throw new Error('Category field is not allowed for Psychiatric Welfare Officer');
+      }
+      return true;
+    })
     .isIn(['GEN', 'SC', 'ST', 'OBC', 'EWS'])
     .withMessage('Category must be one of: GEN, SC, ST, OBC, EWS'),
     body('assigned_doctor_id')

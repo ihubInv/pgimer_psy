@@ -10,8 +10,7 @@ import {
   useAddClinicalOptionMutation,
   useUpdateClinicalOptionMutation,
   useDeleteClinicalOptionMutation,
-  useGetAllClinicalProformasQuery,
-  useGetLastVisitDetailsQuery
+  useGetAllClinicalProformasQuery
 } from '../../features/clinical/clinicalApiSlice';
 import { useGetADLFileByIdQuery, useGetAllADLFilesQuery,useUpdateADLFileMutation, useCreateADLFileMutation } from '../../features/adl/adlApiSlice';
 import { useGetPatientByIdQuery, useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
@@ -27,7 +26,7 @@ import Input from '../../components/Input';
 import Select from '../../components/Select';
 import Textarea from '../../components/Textarea';
 import Button from '../../components/Button';
-import { FiArrowLeft, FiAlertCircle, FiSave, FiHeart, FiActivity, FiUser, FiClipboard, FiList, FiCheckSquare, FiFileText, FiX, FiPlus, FiChevronDown, FiChevronUp, FiLoader, FiCalendar, FiPrinter } from 'react-icons/fi';
+import { FiArrowLeft, FiAlertCircle, FiSave, FiHeart, FiActivity, FiUser, FiClipboard, FiList, FiCheckSquare, FiFileText, FiX, FiPlus, FiChevronDown, FiChevronUp, FiCalendar, FiPrinter } from 'react-icons/fi';
 import icd11Codes from '../../assets/ICD11_Codes.json';
 import { useUpdatePrescriptionMutation,useGetAllPrescriptionQuery, useCreatePrescriptionMutation } from '../../features/prescriptions/prescriptionApiSlice';
 import PrescriptionEdit from '../PrescribeMedication/PrescriptionEdit';
@@ -42,13 +41,14 @@ import PatientClinicalHistory from '../../components/PatientClinicalHistory';
 
 
 
-const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: propOnUpdate = null, onFormDataChange = null, hideFileUpload = false, onAutoFillADL = null }) => {
+const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: propOnUpdate = null, onFormDataChange = null, hideFileUpload = false }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTab = searchParams.get('returnTab');
   const returnPath = searchParams.get('returnPath');
   const mode = searchParams.get('mode'); // 'create' or 'update' from URL
+  const isFollowUpMode = searchParams.get('followup') === 'true'; // Follow-up mode - only show Clinical Assessment and Prescription
   const [createPrescriptions, { isLoading: isSavingPrescriptions }] = useCreatePrescriptionMutation();
 
   const { data: proformaData, isLoading, isFetching, refetch, error } = useGetAllClinicalProformasQuery({});
@@ -253,9 +253,9 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     // If no proforma, return default empty form data
     if (!proforma) {
       return {
-        patient_id: '',
+        patient_id: patientId?.toString() || '',
         visit_date: new Date().toISOString().split('T')[0],
-        visit_type: 'first_visit',
+        visit_type: isFollowUpMode ? 'follow_up' : 'first_visit',
         room_no: '',
         assigned_doctor: '',
         informant_present: true,
@@ -346,9 +346,9 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
   // Initialize with default empty values if initialFormData is not ready
   const defaultFormData = {
-    patient_id: '',
+    patient_id: patientId?.toString() || '',
     visit_date: new Date().toISOString().split('T')[0],
-    visit_type: 'first_visit',
+    visit_type: isFollowUpMode ? 'follow_up' : 'first_visit',
     room_no: '',
     assigned_doctor: '',
     informant_present: true,
@@ -389,9 +389,22 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     doctor_decision: 'simple_case',
   };
 
-  const [formData, setFormData] = useState(initialFormData || defaultFormData);
+  // Initialize form data - ensure visit_type is set correctly for follow-up mode
+  const initialFormDataWithFollowUp = useMemo(() => {
+    const data = initialFormData || defaultFormData;
+    if (isFollowUpMode && patientId) {
+      return {
+        ...data,
+        patient_id: patientId.toString(),
+        visit_type: 'follow_up',
+        visit_date: new Date().toISOString().split('T')[0],
+      };
+    }
+    return data;
+  }, [initialFormData, isFollowUpMode, patientId]);
+
+  const [formData, setFormData] = useState(initialFormDataWithFollowUp);
   const [errors, setErrors] = useState({});
-  const [autoFillEnabled, setAutoFillEnabled] = useState(false);
   const currentUser = useSelector(selectCurrentUser);
   
   // Ref to track the latest formData to ensure we always use current values in submit
@@ -401,128 +414,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   useEffect(() => {
     formDataRef.current = formData;
   }, [formData]);
-
-  // Fetch last visit details when auto-fill is enabled and we're in create mode
-  const { data: lastVisitData, isLoading: isLoadingLastVisit } = useGetLastVisitDetailsQuery(
-    patientId,
-    { skip: !autoFillEnabled || !patientId || !isCreateMode || !!propInitialData?.id }
-  );
-
-  // Auto-fill form with last visit data when enabled
-  useEffect(() => {
-    if (autoFillEnabled && lastVisitData?.data && isCreateMode && !propInitialData?.id) {
-      const lastProforma = lastVisitData.data.proforma;
-      const lastAdlFile = lastVisitData.data.adl_file;
-
-      if (lastProforma) {
-        // Helper to normalize array fields
-        const normalizeArrayField = (value) => {
-          if (Array.isArray(value)) return value;
-          if (typeof value === 'string') {
-            try {
-              const parsed = JSON.parse(value);
-              return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
-            } catch {
-              if (value.includes(',')) {
-                return value.split(',').map(item => item.trim()).filter(item => item.length > 0);
-              }
-              return value.trim() ? [value.trim()] : [];
-            }
-          }
-          return value ? [value] : [];
-        };
-
-        // Helper to format date
-        const formatDate = (dateVal) => {
-          if (!dateVal) return new Date().toISOString().split('T')[0];
-          if (typeof dateVal === 'string') {
-            if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return dateVal;
-            if (dateVal.includes('T')) return dateVal.split('T')[0];
-            return dateVal;
-          }
-          return new Date().toISOString().split('T')[0];
-        };
-
-        // Populate form with last visit proforma data (but keep today's date)
-        const autoFilledData = {
-          visit_date: new Date().toISOString().split('T')[0], // Always use today's date
-          visit_type: 'follow_up', // Existing patients are always follow-ups
-          room_no: lastProforma.room_no || '',
-          assigned_doctor: lastProforma.assigned_doctor?.toString() || '',
-          informant_present: lastProforma.informant_present ?? true,
-          nature_of_information: lastProforma.nature_of_information || '',
-          onset_duration: lastProforma.onset_duration || '',
-          course: lastProforma.course || '',
-          precipitating_factor: lastProforma.precipitating_factor || '',
-          illness_duration: lastProforma.illness_duration || '',
-          current_episode_since: formatDate(lastProforma.current_episode_since),
-          mood: normalizeArrayField(lastProforma.mood),
-          behaviour: normalizeArrayField(lastProforma.behaviour),
-          speech: normalizeArrayField(lastProforma.speech),
-          thought: normalizeArrayField(lastProforma.thought),
-          perception: normalizeArrayField(lastProforma.perception),
-          somatic: normalizeArrayField(lastProforma.somatic),
-          bio_functions: normalizeArrayField(lastProforma.bio_functions),
-          adjustment: normalizeArrayField(lastProforma.adjustment),
-          cognitive_function: normalizeArrayField(lastProforma.cognitive_function),
-          fits: normalizeArrayField(lastProforma.fits),
-          sexual_problem: normalizeArrayField(lastProforma.sexual_problem),
-          substance_use: normalizeArrayField(lastProforma.substance_use),
-          past_history: lastProforma.past_history || '',
-          family_history: lastProforma.family_history || '',
-          associated_medical_surgical: normalizeArrayField(lastProforma.associated_medical_surgical),
-          mse_behaviour: normalizeArrayField(lastProforma.mse_behaviour),
-          mse_affect: normalizeArrayField(lastProforma.mse_affect),
-          mse_thought: lastProforma.mse_thought || '',
-          mse_delusions: lastProforma.mse_delusions || '',
-          mse_perception: normalizeArrayField(lastProforma.mse_perception),
-          mse_cognitive_function: normalizeArrayField(lastProforma.mse_cognitive_function),
-          gpe: lastProforma.gpe || '',
-          diagnosis: lastProforma.diagnosis || '',
-          icd_code: lastProforma.icd_code || '',
-          disposal: lastProforma.disposal || '',
-          workup_appointment: formatDate(lastProforma.workup_appointment),
-          referred_to: lastProforma.referred_to || '',
-          treatment_prescribed: lastProforma.treatment_prescribed || '',
-          doctor_decision: lastProforma.doctor_decision || 'simple_case',
-        };
-
-        setFormData(prev => {
-          const updated = {
-            ...prev,
-            ...autoFilledData,
-            // Preserve patient_id and other critical fields
-            patient_id: prev.patient_id || patientId?.toString() || '',
-          };
-          
-          // Mark that form has been populated (even if auto-filled) to prevent reset
-          // This ensures user edits after auto-fill are preserved
-          userHasEditedRef.current = true;
-
-          // Update formDataRef immediately to ensure submit uses latest data
-          formDataRef.current = updated;
-
-          // Update prevInitialDataRef to prevent the useEffect from resetting formData
-          // Use the updated data, not stale formData
-          prevInitialDataRef.current = {
-            ...updated,
-            proformaId: propInitialData?.id || null
-          };
-          
-          return updated;
-        });
-
-        // If there's an ADL file and callback is provided, populate ADL form
-        if (lastAdlFile && onAutoFillADL) {
-          onAutoFillADL(lastAdlFile);
-        }
-
-        toast.success('Form auto-filled with last visit details');
-      } else {
-        toast.info('No previous visit found to auto-fill');
-      }
-    }
-  }, [autoFillEnabled, lastVisitData, isCreateMode, propInitialData?.id, onAutoFillADL]);
 
   // Debug logging (moved here after formData is defined)
   useEffect(() => {
@@ -1317,45 +1208,28 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           {isEmbedded ? (
             // When embedded, render form content directly without Card wrapper
             <div ref={printSectionRef} className="space-y-6">
-              {/* Form Header with Auto-Fill Button */}
-              {isCreateMode && !propInitialData?.id && patientId && (
-                <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Walk-in Clinical Proforma</h3>
-                    <p className="text-sm text-gray-500 mt-1">Create a new clinical proforma for this visit</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {isLoadingLastVisit && (
-                      <div className="flex items-center gap-2 text-blue-600">
-                        <FiLoader className="w-4 h-4 animate-spin" />
-                        <span className="text-sm">Loading...</span>
+              {/* Form Header */}
+              {/* {isCreateMode && !propInitialData?.id && patientId && !isFollowUpMode && (
+                <div className="mb-4 pb-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {isFollowUpMode ? 'Follow-Up Clinical Assessment' : 'Walk-in Clinical Proforma'}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {isFollowUpMode ? 'Follow-up visit assessment and prescription' : 'Create a new clinical proforma for this visit'}
+                  </p>
                       </div>
-                    )}
-                    <label className="flex items-center gap-2 cursor-pointer px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-lg transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={autoFillEnabled}
-                      onChange={(e) => {
-                        setAutoFillEnabled(e.target.checked);
-                        if (!e.target.checked) {
-                          // Reset form to initial state when unchecked
-                          setFormData(initialFormData || defaultFormData);
-                          // Reset the edited flag when user explicitly unchecks
-                          userHasEditedRef.current = false;
-                        }
-                      }}
-                        disabled={isLoadingLastVisit}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <span className="text-sm font-medium text-gray-900 whitespace-nowrap">
-                        Auto-Fill Last Visit Details
-                      </span>
-                    </label>
-                  </div>
+                    )} */}
+
+              {/* Follow-Up Mode Header */}
+              {isFollowUpMode && (
+                <div className="mb-4 pb-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900">Follow-Up Clinical Assessment</h3>
+                  <p className="text-sm text-gray-500 mt-1">Patient: {patient?.name || 'N/A'} (CR: {patient?.cr_no || 'N/A'})</p>
                 </div>
               )}
 
-              {/* Basic Information Section */}
+              {/* Basic Information Section - Hide in Follow-Up Mode */}
+              {!isFollowUpMode && (
               <div className="space-y-4">
                 {/* <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Basic Information</h2> */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1392,6 +1266,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
 
               </div>
+              )}
 
               {/* Informant Section */}
 
@@ -1677,8 +1552,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                 </div>
               </div>
 
-              {/* Patient Documents & Files Section */}
-              {patientId && (
+              {/* Patient Documents & Files Section - Hide in Follow-Up Mode */}
+              {patientId && !isFollowUpMode && (
                 <div className="space-y-6 pt-6 border-t border-gray-200">
                   <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                     <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
@@ -1758,6 +1633,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                   <FiSave className="w-4 h-4" />
                   {(isUpdating || isCreating || isUploadingFiles)
                     ? 'Saving...'
+                    : isFollowUpMode
+                      ? 'Save Follow-Up Visit'
                     : (mode === 'create' || (!isUpdateMode && !proforma?.id))
                       ? 'Create Walk-in Clinical Proforma'
                       : 'Update Walk-in Clinical Proforma'}
@@ -2108,8 +1985,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                 </div>
               </div>
 
-              {/* Patient Documents & Files Section */}
-              {patientId && (
+              {/* Patient Documents & Files Section - Hide in Follow-Up Mode */}
+              {patientId && !isFollowUpMode && (
                 <div className="space-y-6 pt-6 border-t border-gray-200">
                   <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                     <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">

@@ -8,6 +8,23 @@ const fs = require('fs');
 const uploadConfig = require('../config/uploadConfig');
 
 class PatientController {
+  // Helper function to filter patient data for PWO role
+  static filterPatientDataForRole(patientData, userRole) {
+    if (!patientData) return patientData;
+    
+    // If user is Psychiatric Welfare Officer, remove restricted fields
+    if (userRole === 'Psychiatric Welfare Officer') {
+      const filtered = { ...patientData };
+      delete filtered.category;
+      delete filtered.unit_consit;
+      delete filtered.room_no;
+      delete filtered.serial_no;
+      delete filtered.unit_days;
+      return filtered;
+    }
+    
+    return patientData;
+  }
 
   static async getPatientStats(req, res) {
     try {
@@ -53,17 +70,23 @@ class PatientController {
     try {
       const { name, sex, age, assigned_room, cr_no, psy_no, patient_id } = req.body;
 
-      // SECURITY FIX: Broken Access Control - Restrict existing patient selection to Psychiatric Welfare Officers ONLY
-      // If patient_id is provided, this is a visit for an existing patient (SelectExistingPatient functionality)
-      // CRITICAL: Only Psychiatric Welfare Officers can access this - Admin, Faculty, and Resident are NOT allowed
+      // If patient_id is provided, this is a visit for an existing patient
+      // Only Doctors (Admin, Faculty, Resident) can create visits for existing patients
+      // Psychiatric Welfare Officers can ONLY create new patients, not visit records for existing patients
       if (patient_id) {
-        // Check if user role is EXACTLY Psychiatric Welfare Officer (Admin is NOT allowed)
         const userRole = req.user?.role;
-        if (userRole !== 'Psychiatric Welfare Officer') {
+        const currentUserId = req.user?.id;
+        const allowedRoles = [
+          'Admin',                       // For follow-up workflow
+          'Faculty',                     // For follow-up workflow
+          'Resident'                     // For follow-up workflow
+        ];
+        
+        if (!allowedRoles.includes(userRole)) {
           console.warn(`[createPatient] Unauthorized attempt to create visit for existing patient by role: ${userRole}, user: ${req.user?.email || 'unknown'}`);
           return res.status(403).json({
             success: false,
-            message: 'Access denied. Only Psychiatric Welfare Officers can select existing patients to create visits.',
+            message: 'Access denied. Only Doctors (Admin, Faculty, Resident) can create visits for existing patients. Psychiatric Welfare Officers can only create new patients.',
             code: 'UNAUTHORIZED_EXISTING_PATIENT_ACCESS'
           });
         }
@@ -85,35 +108,50 @@ class PatientController {
             message: 'Invalid patient ID format'
           });
         }
-        
-        // assigned_doctor_id is an integer
-        const assignedDoctorId = existingPatient.assigned_doctor_id 
-          ? parseInt(existingPatient.assigned_doctor_id, 10)
-          : null;
-        
+
         // Get visit count to determine visit type
         const visitCount = await PatientVisit.getVisitCount(patientIdInt);
         const visitType = visitCount === 0 ? 'first_visit' : 'follow_up';
-        
-        // CRITICAL: Check if doctor has selected a room for TODAY (if doctor is assigned)
-        let roomToUse = existingPatient.assigned_room || assigned_room || null;
-        if (assignedDoctorId) {
+
+        // Determine room for today's visit
+        // IMPORTANT BUSINESS RULE:
+        //   Room assignment for an existing patient's new visit MUST be based on
+        //   the doctor's current room for today, not the patient's previous room.
+        //
+        // Behaviour:
+        //   1) If the frontend passes an explicit assigned_room, we still normalise it
+        //      but the final room is always taken from the doctor's current room.
+        //   2) If the doctor has not selected a room for today, block visit creation
+        //      and ask them to select a room first.
+        //
+        // This ensures scenarios like:
+        //   - Patient was last seen in Room 211
+        //   - Doctor is currently in Room 206
+        //   => Today's visit (and patient.assigned_room) will be Room 206.
+        const requestedRoom =
+          assigned_room && String(assigned_room).trim() !== ''
+            ? String(assigned_room).trim()
+            : null;
+
+        // Always resolve the effective room from the doctor's current room for today
           const { hasRoomToday } = require('../utils/roomAssignment');
-          const roomStatus = await hasRoomToday(assignedDoctorId);
-          
-          if (!roomStatus.hasRoom) {
+          const roomStatusForCurrentDoctor = await hasRoomToday(currentUserId);
+
+          if (!roomStatusForCurrentDoctor.hasRoom) {
             return res.status(400).json({
               success: false,
-              message: 'Please select a room for today before assigning patients. Room selection is required each day.'
+              message: 'Please select a room for today before creating a visit. Room selection is required each day.'
             });
           }
-          
-          // Use doctor's selected room if not provided
-          if (!roomToUse && roomStatus.room) {
-            roomToUse = roomStatus.room;
-          }
-        }
-        
+
+        let roomToUse = roomStatusForCurrentDoctor.room;
+
+        // Log both the requested room (if any) and the effective room used
+        console.log(
+          `[createPatient] Existing patient visit – requested room: "${requestedRoom}", ` +
+          `effective doctor room for today: "${roomToUse}"`
+        );
+
         // Get today's date in IST (YYYY-MM-DD format)
         // Use CURRENT_DATE from database to ensure consistency with IST timezone
         const db = require('../config/database');
@@ -122,8 +160,8 @@ class PatientController {
         
         // Check if a doctor has already selected the room for today (if room is provided)
         // This ensures patients added to a room are assigned to the doctor already in that room
-        let finalAssignedDoctorId = assignedDoctorId;
-        if (roomToUse && roomToUse.trim() !== '' && !finalAssignedDoctorId) {
+        let finalAssignedDoctorId = currentUserId;
+        if (roomToUse && roomToUse.trim() !== '') {
           const roomDoctorResult = await db.query(
             `SELECT id, name, role 
              FROM users 
@@ -136,6 +174,9 @@ class PatientController {
           if (roomDoctorResult.rows.length > 0) {
             finalAssignedDoctorId = roomDoctorResult.rows[0].id;
             console.log(`[createPatient] Found doctor ${finalAssignedDoctorId} (${roomDoctorResult.rows[0].name}) already in room ${roomToUse.trim()}, will assign patient to them`);
+          } else {
+            // Fallback: ensure we still use the logged-in doctor
+            finalAssignedDoctorId = currentUserId;
           }
         }
         
@@ -224,11 +265,18 @@ class PatientController {
         psy_no
       });
 
-      res.status(201).json({
+      // Filter patient data based on user role before sending response
+      const patientJson = patient.toJSON();
+      const filteredPatient = this.filterPatientDataForRole(
+        patientJson,
+        req.user?.role
+      );
+
+      return res.status(201).json({
         success: true,
         message: 'Patient registered successfully',
         data: {
-          patient: patient.toJSON()
+          patient: filteredPatient
         }
       });
     } catch (error) {
@@ -303,6 +351,41 @@ class PatientController {
       // Remove mobile_no if it exists (to avoid duplicate)
       if (patientData.mobile_no && patientData.contact_number) {
         delete patientData.mobile_no;
+      }
+
+      // For Psychiatric Welfare Officer: Remove fields that should not be set during registration
+      if (req.user?.role === 'Psychiatric Welfare Officer') {
+        // Remove Out-Patient Card fields that MWO should not set
+        delete patientData.category;
+        delete patientData.unit_consit;
+        delete patientData.room_no;
+        delete patientData.serial_no;
+        delete patientData.unit_days;
+        
+        // Ensure worked_up_on is not auto-populated (should be null if not provided)
+        if (!req.body.worked_up_on || req.body.worked_up_on === '') {
+          patientData.worked_up_on = null;
+        }
+        
+        // Ensure psy_no and special_clinic_no are optional (can be null)
+        if (!req.body.psy_no || req.body.psy_no === '') {
+          patientData.psy_no = null;
+        }
+        if (!req.body.special_clinic_no || req.body.special_clinic_no === '') {
+          patientData.special_clinic_no = null;
+        }
+        
+        // Validate year_of_marriage is numeric duration (0-80), not calendar year
+        if (patientData.year_of_marriage !== null && patientData.year_of_marriage !== undefined) {
+          const yearsOfMarriage = parseInt(patientData.year_of_marriage, 10);
+          if (isNaN(yearsOfMarriage) || yearsOfMarriage < 0 || yearsOfMarriage > 80) {
+            return res.status(400).json({
+              success: false,
+              message: 'Years of Marriage must be a number between 0 and 80 (duration, not calendar year)'
+            });
+          }
+          patientData.year_of_marriage = yearsOfMarriage;
+        }
       }
 
       // Auto-assign room if room not manually specified (works for ALL users)
@@ -424,7 +507,32 @@ class PatientController {
         table: error.table,
         column: error.column
       });
-      
+
+      // Handle duplicate CR number (unique constraint violation) gracefully
+      const isDuplicateKey = error.code === '23505';
+      const isDuplicateCR =
+        isDuplicateKey &&
+        (
+          (typeof error.message === 'string' && error.message.includes('registered_patient_cr_no_key')) ||
+          (error.originalError && error.originalError.constraint === 'registered_patient_cr_no_key')
+        );
+
+      if (isDuplicateCR) {
+        return res.status(409).json({
+          success: false,
+          message: 'A patient with this CR number already exists. Please use Search by CR No to open the existing patient.',
+          code: 'DUPLICATE_CR_NO'
+        });
+      }
+
+      if (isDuplicateKey) {
+        return res.status(409).json({
+          success: false,
+          message: 'A similar patient record already exists. Please verify the details before creating a new record.',
+          code: 'DUPLICATE_RECORD'
+        });
+      }
+
       res.status(500).json({
         success: false,
         message: 'Failed to register patient with details',
@@ -481,7 +589,9 @@ class PatientController {
       if (req.query.assigned_room) filters.assigned_room = req.query.assigned_room;
 
       // Limit the maximum page size to prevent timeouts
-      const safeLimit = Math.min(limit, 100); // Cap at 100 to prevent performance issues
+      // Increase cap so "Today's Patients" view can see all patients with visits today
+      // while still protecting against unbounded queries.
+      const safeLimit = Math.min(limit, 1000); // Cap at 1000 instead of 100
       const result = await Patient.findAll(page, safeLimit, filters);
 
       // Enrich with latest assignment info
@@ -648,6 +758,14 @@ class PatientController {
         }
       }
 
+      // Filter patient data for PWO role
+      // NOTE: Express does not bind `this` when calling handlers, so we must reference the class directly
+      if (result.patients && Array.isArray(result.patients)) {
+        result.patients = result.patients.map(patient =>
+          PatientController.filterPatientDataForRole(patient, req.user?.role)
+        );
+      }
+      
       res.json({
         success: true,
         data: result
@@ -684,6 +802,13 @@ class PatientController {
       // Note: We use parameterized queries in Patient.search(), so SQL injection is prevented
       // This is just for additional safety and output encoding
       const result = await Patient.search(searchTerm, page, limit);
+      
+      // Filter patient data for PWO role
+      if (result.patients && Array.isArray(result.patients)) {
+        result.patients = result.patients.map(patient =>
+          PatientController.filterPatientDataForRole(patient, req.user?.role)
+        );
+      }
 
       res.json({
         success: true,
@@ -737,10 +862,17 @@ class PatientController {
 
       console.log(`[getPatientById] Successfully fetched patient ID: ${patient.id}, Name: ${patient.name}`);
 
+      const patientJson = patient.toJSON();
+      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
+      const filteredPatient = PatientController.filterPatientDataForRole(
+        patientJson,
+        req.user?.role
+      );
+      
       res.json({
         success: true,
         data: {
-          patient: patient.toJSON()
+          patient: filteredPatient
         }
       });
     } catch (error) {
@@ -766,10 +898,17 @@ class PatientController {
         });
       }
 
+      const patientJson = patient.toJSON();
+      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
+      const filteredPatient = PatientController.filterPatientDataForRole(
+        patientJson,
+        req.user?.role
+      );
+      
       res.json({
         success: true,
         data: {
-          patient: patient.toJSON()
+          patient: filteredPatient
         }
       });
     } catch (error) {
@@ -1090,10 +1229,13 @@ class PatientController {
         patient.getADLFiles()
       ]);
 
+      const patientJson = patient.toJSON();
+      const filteredPatient = this.filterPatientDataForRole(patientJson, req.user?.role);
+      
       res.json({
         success: true,
         data: {
-          patient: patient.toJSON(),
+          patient: filteredPatient,
           visitHistory,
           clinicalRecords,
           adlFiles
@@ -1122,12 +1264,22 @@ class PatientController {
         });
       }
 
-      const visitHistory = await patient.getVisitHistory();
+      let visitHistory = [];
+      try {
+        visitHistory = await patient.getVisitHistory();
+      } catch (historyError) {
+        // Log but don't fail the whole request – return empty history instead
+        console.error('[getPatientVisitHistory] Non-fatal visit history error, returning empty history:', historyError);
+        visitHistory = [];
+      }
 
+      const patientJson = patient.toJSON();
+      const filteredPatient = this.filterPatientDataForRole(patientJson, req.user?.role);
+      
       res.json({
         success: true,
         data: {
-          patient: patient.toJSON(),
+          patient: filteredPatient,
           visitHistory
         }
       });
@@ -1156,10 +1308,13 @@ class PatientController {
 
       const clinicalRecords = await patient.getClinicalRecords();
 
+      const patientJson = patient.toJSON();
+      const filteredPatient = this.filterPatientDataForRole(patientJson, req.user?.role);
+      
       res.json({
         success: true,
         data: {
-          patient: patient.toJSON(),
+          patient: filteredPatient,
           clinicalRecords
         }
       });
@@ -1188,10 +1343,13 @@ class PatientController {
 
       const adlFiles = await patient.getADLFiles();
 
+      const patientJson = patient.toJSON();
+      const filteredPatient = this.filterPatientDataForRole(patientJson, req.user?.role);
+      
       res.json({
         success: true,
         data: {
-          patient: patient.toJSON(),
+          patient: filteredPatient,
           adlFiles
         }
       });

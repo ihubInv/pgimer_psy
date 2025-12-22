@@ -232,14 +232,17 @@ const PatientsPage = () => {
         'Assigned Doctor': 'N/A',
         'Doctor Role': 'N/A',
         'Assigned Room': 'N/A',
-        'Category': 'N/A',
+        // For PWO: These fields should not exist in headers
+        ...(user?.role && !isMWO(user?.role) ? {
+          'Category': 'N/A',
+          'Unit/Consit': 'N/A',
+          'Room No': 'N/A',
+          'Serial No': 'N/A',
+          'Unit Days': 'N/A',
+        } : {}),
         'Case Complexity': 'N/A',
         'Department': 'N/A',
-        'Unit/Consit': 'N/A',
-        'Room No': 'N/A',
-        'Serial No': 'N/A',
         'File No': 'N/A',
-        'Unit Days': 'N/A',
         'Special Clinic No': 'N/A',
         'Created At': 'N/A',
       };
@@ -1538,7 +1541,8 @@ const PatientsPage = () => {
         hasPastHistory ? adlFiles : [], 
         hasPastHistory ? allPrescriptions : [], 
         logoBase64,
-        hasPastHistory // Pass flag to indicate if Past History should be shown (always false for MWO)
+        hasPastHistory, // Pass flag to indicate if Past History should be shown (always false for MWO)
+        isMWOUser // Pass PWO flag to exclude restricted fields
       );
       
       // Create a new window for printing
@@ -1565,7 +1569,7 @@ const PatientsPage = () => {
   };
 
   // Generate print-friendly HTML content
-  const generatePrintContent = (patient, clinicalProformas = [], adlFiles = [], prescriptions = [], logoBase64 = '', showPastHistory = true) => {
+  const generatePrintContent = (patient, clinicalProformas = [], adlFiles = [], prescriptions = [], logoBase64 = '', showPastHistory = true, isPWO = false) => {
     const formatValue = (value) => {
       if (value === null || value === undefined || value === '') return 'N/A';
       if (typeof value === 'boolean') return value ? 'Yes' : 'No';
@@ -1844,10 +1848,12 @@ const PatientsPage = () => {
         <div class="info-label">Sex</div>
         <div class="info-value">${formatValue(patient.sex)}</div>
       </div>
+      ${!isPWO ? `
       <div class="info-item">
         <div class="info-label">Category</div>
         <div class="info-value">${formatValue(patient.category)}</div>
       </div>
+      ` : ''}
       <div class="info-item">
         <div class="info-label">Father's Name</div>
         <div class="info-value">${formatValue(patient.father_name)}</div>
@@ -1856,6 +1862,7 @@ const PatientsPage = () => {
         <div class="info-label">Department</div>
         <div class="info-value">${formatValue(patient.department)}</div>
       </div>
+      ${!isPWO ? `
       <div class="info-item">
         <div class="info-label">Unit/Consit</div>
         <div class="info-value">${formatValue(patient.unit_consit)}</div>
@@ -1868,14 +1875,17 @@ const PatientsPage = () => {
         <div class="info-label">Serial No.</div>
         <div class="info-value">${formatValue(patient.serial_no)}</div>
       </div>
+      ` : ''}
       <div class="info-item">
         <div class="info-label">File No.</div>
         <div class="info-value">${formatValue(patient.file_no)}</div>
       </div>
+      ${!isPWO ? `
       <div class="info-item">
         <div class="info-label">Unit Days</div>
         <div class="info-value">${formatValue(patient.unit_days)}</div>
       </div>
+      ` : ''}
     </div>
     <div class="info-grid" style="margin-top: 15px;">
       <div class="info-item full-width">

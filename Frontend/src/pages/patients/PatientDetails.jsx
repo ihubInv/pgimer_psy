@@ -169,16 +169,17 @@ const PatientDetails = () => {
     pin_code: '',
     country: '',
 
-    // Registration Details
-    department: '',
-    unit_consit: '',
-    room_no: '',
-    serial_no: '',
-    file_no: '',
-    unit_days: '',
-
-    // Additional Fields
-    category: '',
+      // Registration Details
+      department: '',
+      // For PWO: Do not include these fields in form state
+      ...(user?.role && user.role !== 'Psychiatric Welfare Officer' ? {
+        unit_consit: '',
+        room_no: '',
+        serial_no: '',
+        unit_days: '',
+        category: '',
+      } : {}),
+      file_no: '',
     special_clinic_no: '',
   });
 
@@ -266,14 +267,15 @@ const PatientDetails = () => {
 
       // Registration Details
       department: '',
-      unit_consit: '',
-      room_no: '',
-      serial_no: '',
+      // For PWO: Do not include these fields in form state
+      ...(user?.role && user.role !== 'Psychiatric Welfare Officer' ? {
+        unit_consit: '',
+        room_no: '',
+        serial_no: '',
+        unit_days: '',
+        category: '',
+      } : {}),
       file_no: '',
-      unit_days: '',
-
-      // Additional Fields
-      category: '',
       special_clinic_no: '',
     });
   }, [patientId]); // Reset when patientId changes
@@ -382,14 +384,15 @@ const PatientDetails = () => {
 
         // Registration details
         department: patient.department ?? prev.department ?? '',
-        unit_consit: patient.unit_consit ?? prev.unit_consit ?? '',
-        room_no: patient.room_no ?? prev.room_no ?? '',
-        serial_no: patient.serial_no ?? prev.serial_no ?? '',
+        // For PWO: Do not include these fields in form state
+        ...(user?.role && user.role !== 'Psychiatric Welfare Officer' ? {
+          unit_consit: patient.unit_consit ?? prev.unit_consit ?? '',
+          room_no: patient.room_no ?? prev.room_no ?? '',
+          serial_no: patient.serial_no ?? prev.serial_no ?? '',
+          unit_days: patient.unit_days ?? prev.unit_days ?? '',
+          category: patient.category ?? prev.category ?? '',
+        } : {}),
         file_no: patient.file_no ?? prev.file_no ?? '',
-        unit_days: patient.unit_days ?? prev.unit_days ?? '',
-
-        // Additional fields
-        category: patient.category ?? prev.category ?? '',
         special_clinic_no: patient.special_clinic_no ?? prev.special_clinic_no ?? '',
       }));
     }

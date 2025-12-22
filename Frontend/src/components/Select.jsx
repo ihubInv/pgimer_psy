@@ -168,7 +168,7 @@ const Select = ({
       {label && (
         <label
           htmlFor={name}
-          className="block text-sm font-medium text-gray-700 mb-2"
+          className="block text-sm font-semibold text-gray-800 mb-2"
         >
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
@@ -204,16 +204,16 @@ const Select = ({
           disabled={disabled}
           title={selectedOption ? selectedOption.label : placeholder}
           className={`
-            w-full px-3 py-2 pr-10
-            backdrop-blur-md bg-white/60 border border-white/40 rounded-lg shadow-sm
+            w-full px-4 py-3 pr-10
+            bg-white border-2 border-gray-300/60 rounded-xl shadow-sm
             text-left font-medium
             transition-all duration-300 ease-in-out
-            focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 focus:bg-white/80
-            hover:bg-white/70 hover:border-primary-400/70
-            disabled:bg-gray-100/60 disabled:text-gray-400 disabled:cursor-not-allowed disabled:backdrop-blur-sm disabled:hover:border-white/40
-            ${error ? 'border-red-500/60 focus:border-red-500 focus:ring-red-500/50' : 'border-white/40'}
+            focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 focus:bg-white
+            hover:bg-white hover:border-primary-400/70
+            disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:border-gray-300/60
+            ${error ? 'border-red-500/60 focus:border-red-500 focus:ring-red-500/50' : 'border-gray-300/60'}
             ${!value ? 'text-gray-500' : 'text-gray-900'}
-            ${isOpen ? 'border-primary-500 ring-2 ring-primary-500/50 bg-white/80' : ''}
+            ${isOpen ? 'border-primary-500 ring-2 ring-primary-500/50 bg-white' : ''}
             ${className}
             overflow-hidden
           `}

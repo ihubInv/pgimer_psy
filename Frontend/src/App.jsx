@@ -27,6 +27,7 @@ import SelectExistingPatient from './pages/patients/SelectExistingPatient';
 import ClinicalProformaPage from './pages/clinical/ClinicalProformaPage';
 import EditClinicalProforma from './pages/clinical/EditClinicalProforma';
 import ClinicalProformaDetails from './pages/clinical/ClinicalProformaDetails';
+import FollowUpForm from './pages/clinical/FollowUpForm';
 
 // Prescription Pages
 import PrescriptionEdit from './pages/PrescribeMedication/PrescriptionEdit';
@@ -91,12 +92,6 @@ function App() {
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/patients/new" element={<CreatePatient />} />
               <Route path="/patients/:id" element={<PatientDetails />} />
-              
-              {/* SECURITY FIX: Existing Patient Selection - Psychiatric Welfare Officer ONLY */}
-              {/* Admin and other roles should NOT have access to this endpoint */}
-              <Route element={<ProtectedRoute allowedRoles={['Psychiatric Welfare Officer']} />}>
-                <Route path="/patients/select" element={<SelectExistingPatient />} />
-              </Route>
 
 
               {/* Walk-in Clinical Proforma - Faculty, Resident and Admin */}
@@ -105,6 +100,7 @@ function App() {
                 <Route path="/clinical-today-patients" element={<ClinicalTodayPatients />} />
                 <Route path="/clinical/:id" element={<ClinicalProformaDetails />} />
                 <Route path="/clinical/:id/edit" element={<EditClinicalProforma />} />
+                <Route path="/follow-up/:id" element={<FollowUpForm />} />
               </Route>
 
               {/* Prescription Routes - Faculty, Resident and Admin */}

@@ -415,18 +415,19 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
 
     const doctor = doctorResult.rows[0];
 
-    // Find only TODAY's patients assigned to this room
-    // Assign patients that are either:
-    // 1. Created today, OR
-    // 2. Have a visit today
-    // This matches the frontend filtering logic (createdToday || hasVisitToday)
-    // Use CURRENT_DATE from database to ensure consistency with IST timezone
+    // Find patients assigned to this room.
+    // We look at:
+    //  - registered_patient.assigned_room
+    //  - patient_visits.room_no for visits today
+    // and then create a visit for today for any patient that doesn't have one yet.
+    // This way, all patients physically in the room become "today's patients".
+    // Use CURRENT_DATE from database to ensure consistency with IST timezone.
     const todayResult = await db.query('SELECT CURRENT_DATE as today');
     const todayDate = todayResult.rows[0]?.today || today;
     
-    // Find patients in this room for today
+    // Find patients in this room
     // Handle room format variations - compare as text to handle "205" vs "Room 205" etc.
-    // Check both assigned_room from patient record and room_no from visit record
+    // Check both assigned_room from patient record and room_no from today's visit record
     const patientsResult = await db.query(
       `SELECT DISTINCT rp.id, rp.name, rp.assigned_doctor_id, DATE(rp.created_at) as created_date,
               rp.assigned_room, pv.room_no
@@ -435,11 +436,9 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
        WHERE (
          -- Check if patient's assigned_room matches (as text to handle format variations)
          TRIM(COALESCE(rp.assigned_room::text, '')) = TRIM($1::text)
-         -- OR check if visit's room_no matches
+         -- OR check if today's visit room_no matches
          OR TRIM(COALESCE(pv.room_no::text, '')) = TRIM($1::text)
-       )
-         -- Only include patients created today OR with a visit today
-         AND (DATE(rp.created_at) = $2 OR pv.id IS NOT NULL)`,
+       )`,
       [roomNumber, todayDate]
     );
 
@@ -627,7 +626,9 @@ async function isRoomOccupied(roomNumber, excludeUserId = null) {
  */
 async function hasRoomToday(doctorId) {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    // Use CURRENT_DATE from database to ensure consistency with IST timezone
+    const todayResult = await db.query('SELECT CURRENT_DATE as today');
+    const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
     
     const result = await db.query(
       `SELECT current_room, room_assignment_time 

@@ -17,6 +17,11 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       // Keep patient data for 5 minutes (patients don't change frequently)
       keepUnusedDataFor: 300,
     }),
+    getPatientByCRNo: builder.query({
+      query: (cr_no) => `/patients/cr/${cr_no}`,
+      providesTags: (result, error, cr_no) => [{ type: 'Patient', id: result?.data?.patient?.id }],
+      keepUnusedDataFor: 60,
+    }),
     searchPatients: builder.query({
       query: ({ search, page = 1, limit = 10 }) => ({
         url: '/patients/search',
@@ -240,6 +245,7 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
 export const {
   useGetAllPatientsQuery,
   useGetPatientByIdQuery,
+  useGetPatientByCRNoQuery,
   useSearchPatientsQuery,
   useCreatePatientMutation,
   useCreatePatientCompleteMutation,

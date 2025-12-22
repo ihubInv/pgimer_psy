@@ -902,7 +902,8 @@ const {
  *                   type: string
  *                   description: Detailed error message
  */
-router.post('/', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), validateClinicalProforma, ClinicalController.createClinicalProforma);
+// Psychiatric Welfare Officer can only create new patients, not clinical proformas for existing patients
+router.post('/', authenticateToken, authorizeRoles('Admin', 'Faculty', 'Resident','Psychiatric Welfare Officer'), validateClinicalProforma, ClinicalController.createClinicalProforma);
 
 /**
  * @swagger

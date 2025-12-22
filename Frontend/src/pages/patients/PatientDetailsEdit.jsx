@@ -2111,6 +2111,41 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   // The API returns { success: true, data: { patient: ..., visitHistory: [...] } }
   const visitHistory = visitHistoryData?.visitHistory || visitHistoryData?.data?.visitHistory || [];
 
+  // Fetch prescriptions for all proformas (including follow-up visits)
+  const proformaIds = useMemo(() => {
+    const ids = patientProformas.map(p => p?.id).filter(Boolean).slice(0, 10);
+    // Pad to exactly 10 elements with null to ensure consistent hook calls
+    while (ids.length < 10) {
+      ids.push(null);
+    }
+    return ids;
+  }, [patientProformas]);
+
+  const prescriptionResult1 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[0] }, { skip: !proformaIds[0] });
+  const prescriptionResult2 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[1] }, { skip: !proformaIds[1] });
+  const prescriptionResult3 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[2] }, { skip: !proformaIds[2] });
+  const prescriptionResult4 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[3] }, { skip: !proformaIds[3] });
+  const prescriptionResult5 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[4] }, { skip: !proformaIds[4] });
+  const prescriptionResult6 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[5] }, { skip: !proformaIds[5] });
+  const prescriptionResult7 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[6] }, { skip: !proformaIds[6] });
+  const prescriptionResult8 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[7] }, { skip: !proformaIds[7] });
+  const prescriptionResult9 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[8] }, { skip: !proformaIds[8] });
+  const prescriptionResult10 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[9] }, { skip: !proformaIds[9] });
+
+  // Combine all prescription results
+  const prescriptionResults = [
+    prescriptionResult1,
+    prescriptionResult2,
+    prescriptionResult3,
+    prescriptionResult4,
+    prescriptionResult5,
+    prescriptionResult6,
+    prescriptionResult7,
+    prescriptionResult8,
+    prescriptionResult9,
+    prescriptionResult10,
+  ];
+
   // Helper function to convert date to IST date string (YYYY-MM-DD)
   const toISTDateString = (dateInput) => {
     try {
@@ -2213,8 +2248,44 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
   // Create unified visit structure: group proformas, ADL files, and prescriptions by visit
   const unifiedVisits = useMemo(() => {
+    // Filter out minimal clinical proformas created for follow-up prescription linking
+    // These are identified by: visit_type='follow_up' AND treatment_prescribed contains 'Follow-up visit'
+    // AND record_type='clinical_proforma' (not 'followup_visit')
+    const filteredProformas = trulyPastProformas.filter(proforma => {
+      // Keep follow-up visit records (from followup_visits table)
+      if (proforma.record_type === 'followup_visit') {
+        return true;
+      }
+      // Filter out minimal clinical proformas created for follow-up prescription linking
+      // These are identified by: visit_type='follow_up' AND treatment_prescribed contains 'Follow-up visit' or 'followup_visits'
+      // AND record_type='clinical_proforma' (not 'followup_visit')
+      // Also check if there's a corresponding follow-up visit for the same date - if so, exclude the minimal proforma
+      if (proforma.record_type === 'clinical_proforma' && 
+          proforma.visit_type === 'follow_up') {
+        // Check if this is a minimal proforma (has treatment_prescribed mentioning follow-up)
+        const isMinimalProforma = proforma.treatment_prescribed?.includes('Follow-up visit') ||
+                                  proforma.treatment_prescribed?.includes('followup_visits') ||
+                                  proforma.treatment_prescribed?.includes('see followup_visits');
+        
+        // Also check if there's a corresponding follow-up visit record for the same date
+        const hasCorrespondingFollowUp = trulyPastProformas.some(p => 
+          p.record_type === 'followup_visit' &&
+          p.visit_date === proforma.visit_date
+        );
+        
+        // Exclude if it's a minimal proforma OR if there's a corresponding follow-up visit
+        if (isMinimalProforma || hasCorrespondingFollowUp) {
+          // This is a minimal proforma created for prescription linking - exclude it
+          // The actual follow-up visit will be shown separately
+          return false;
+        }
+      }
+      // Keep all other clinical proformas (regular visits)
+      return true;
+    });
+
     // Sort proformas chronologically (newest first - latest visit at top)
-    const sortedProformas = [...trulyPastProformas].sort((a, b) => {
+    const sortedProformas = [...filteredProformas].sort((a, b) => {
       const dateA = new Date(a.visit_date || a.created_at || 0);
       const dateB = new Date(b.visit_date || b.created_at || 0);
       return dateB - dateA; // Newest first (latest visit at top)
@@ -2222,26 +2293,111 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
     // Create visit objects with all associated forms
     return sortedProformas.map((proforma) => {
-      const visitId = proforma.id;
+      // Handle follow-up visits (record_type === 'followup_visit')
+      const isFollowUp = proforma.record_type === 'followup_visit';
+      const visitId = isFollowUp ? proforma.followup_id : proforma.id;
       const visitDate = proforma.visit_date || proforma.created_at;
       
-      // Find associated ADL file
-      const adlFile = patientAdlFiles.find(adl => adl.clinical_proforma_id === visitId);
+      // Find associated ADL file (only for regular clinical proformas, not follow-ups)
+      const adlFile = !isFollowUp ? patientAdlFiles.find(adl => adl.clinical_proforma_id === visitId) : null;
       
-      // Note: Prescription data would need to be fetched separately if needed
-      // For now, we'll assume it might exist but we don't have the data structure here
+      // Find associated prescription
+      // For follow-ups, we need to find prescription by clinical_proforma_id if it exists
+      // For regular proformas, use the existing logic
+      let prescription = null;
+      let followUpProforma = null; // Declare outside if block for use in minimalProformaId
+      
+      if (isFollowUp) {
+        // For follow-ups, try to find prescription by matching visit date
+        // Follow-ups might have a minimal clinical proforma created for prescription linking
+        // Look for a clinical proforma with the same visit_date and visit_type='follow_up'
+        // that was created for prescription linking (has treatment_prescribed mentioning follow-up)
+        followUpProforma = patientProformas.find(p => {
+          if (p.record_type === 'followup_visit') return false; // Skip the follow-up visit record itself
+          const proformaDate = toISTDateString(p.visit_date || p.created_at);
+          const followUpDate = toISTDateString(visitDate);
+          return proformaDate === followUpDate && 
+                 p.visit_type === 'follow_up' &&
+                 p.record_type === 'clinical_proforma' &&
+                 (p.treatment_prescribed?.includes('Follow-up visit') || 
+                  p.treatment_prescribed?.includes('followup_visits') ||
+                  p.treatment_prescribed?.includes('see followup_visits'));
+        });
+        if (followUpProforma && followUpProforma.id) {
+          // Try to find prescription in the prescriptionResults array
+          const prescriptionResult = prescriptionResults.find((result, idx) => {
+            return proformaIds[idx] === followUpProforma.id && result.data?.data?.prescription?.prescription;
+          });
+          prescription = prescriptionResult?.data?.data?.prescription?.prescription || null;
+        }
+      } else {
+        const prescriptionResult = prescriptionResults.find((result, idx) => {
+          return proformaIds[idx] === visitId && result.data?.data?.prescription?.prescription;
+        });
+        prescription = prescriptionResult?.data?.data?.prescription?.prescription || null;
+      }
+      
+      // Store the minimal clinical proforma ID for follow-up visits (for PrescriptionView to fetch directly)
+      const minimalProformaId = isFollowUp && followUpProforma ? followUpProforma.id : null;
       
       return {
         visitId,
         visitDate,
         proforma,
         adlFile: adlFile || null,
-        prescription: null, // Would need to be fetched if needed
+        prescription: prescription || null,
         hasAdl: !!adlFile,
-        hasPrescription: false, // Would need to check if prescription exists
+        hasPrescription: !!prescription || !!minimalProformaId, // Mark as having prescription if minimal proforma exists
+        isFollowUp: isFollowUp, // Flag to identify follow-up visits
+        clinicalAssessment: isFollowUp ? proforma.clinical_assessment : null, // Follow-up assessment
+        minimalProformaId: minimalProformaId, // Store minimal proforma ID for PrescriptionView
       };
     });
-  }, [trulyPastProformas, patientAdlFiles]);
+  }, [trulyPastProformas, patientAdlFiles, prescriptionResults, proformaIds, patientProformas]);
+
+  // Get the first visit's proforma (Walk-In Clinical Proforma) - only from the initial first visit
+  // This should be static and not change based on follow-up visits
+  const firstVisitProforma = useMemo(() => {
+    if (patientProformas.length === 0) return null;
+    
+    // Filter to only get first visit proformas (not follow-ups)
+    // Exclude minimal proformas and follow-up visits
+    const firstVisitProformas = patientProformas.filter(proforma => {
+      // Exclude follow-up visit records
+      if (proforma.record_type === 'followup_visit') {
+        return false;
+      }
+      
+      // Only include first visit proformas
+      if (proforma.visit_type !== 'first_visit') {
+        return false;
+      }
+      
+      // Exclude minimal proformas created for prescription linking
+      if (proforma.record_type === 'clinical_proforma' && 
+          proforma.visit_type === 'follow_up') {
+        const isMinimalProforma = proforma.treatment_prescribed?.includes('Follow-up visit') ||
+                                  proforma.treatment_prescribed?.includes('followup_visits') ||
+                                  proforma.treatment_prescribed?.includes('see followup_visits');
+        if (isMinimalProforma) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+    
+    if (firstVisitProformas.length === 0) return null;
+    
+    // Sort by visit_date or created_at, oldest first (to get the very first visit)
+    const sorted = [...firstVisitProformas].sort((a, b) => {
+      const dateA = new Date(a.visit_date || a.created_at || 0);
+      const dateB = new Date(b.visit_date || b.created_at || 0);
+      return dateA - dateB; // Oldest first (first visit)
+    });
+    
+    return sorted[0]; // Return the first visit (oldest)
+  }, [patientProformas]);
 
   // Get the last visit's proforma for pre-filling form (for existing patients)
   // This is used as reference only - will create a NEW record when submitted
@@ -2254,6 +2410,9 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         return dateB - dateA; // Most recent first
       })[0]
     : null;
+  
+  // Check if patient already has a first visit proforma
+  const hasFirstVisitProforma = !!firstVisitProforma;
 
   // Check if patient has actual past history (not including today's visits/proformas)
   const hasPastHistory = pastVisitHistory.length > 0 || pastProformas.length > 0;
@@ -2407,7 +2566,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       special_clinic_no: getVal(patient?.special_clinic_no, getVal(initialFormData?.special_clinic_no)),
       contact_number: getVal(patient?.contact_number, getVal(initialFormData?.contact_number)),
       father_name: getVal(patient?.father_name, getVal(initialFormData?.father_name)),
+      // For PWO: Do not include these fields in form state
+      ...(userRole && !isMWO(userRole) ? {
       category: getVal(patient?.category, getVal(initialFormData?.category)),
+      } : {}),
 
       // Dates
       date: getVal(patient?.date, getVal(initialFormData?.date)),
@@ -2416,11 +2578,14 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
       // Quick Entry
       department: getVal(patient?.department, getVal(initialFormData?.department)),
+      // For PWO: Do not include these fields in form state
+      ...(userRole && !isMWO(userRole) ? {
       unit_consit: getVal(patient?.unit_consit, getVal(initialFormData?.unit_consit)),
       room_no: getVal(patient?.room_no, getVal(initialFormData?.room_no)),
       serial_no: getVal(patient?.serial_no, getVal(initialFormData?.serial_no)),
-      file_no: getVal(patient?.file_no, getVal(initialFormData?.file_no)),
       unit_days: getVal(patient?.unit_days, getVal(initialFormData?.unit_days)),
+      } : {}),
+      file_no: getVal(patient?.file_no, getVal(initialFormData?.file_no)),
 
       // Personal Information
       age_group: getVal(patient?.age_group, getVal(initialFormData?.age_group)),
@@ -2524,7 +2689,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         if ('special_clinic_no' in patient) updated.special_clinic_no = getValue(patient.special_clinic_no);
         if ('contact_number' in patient) updated.contact_number = getValue(patient.contact_number);
         if ('father_name' in patient) updated.father_name = getValue(patient.father_name);
+        // For PWO: Do not update these fields
+        if (userRole && !isMWO(userRole)) {
         if ('category' in patient) updated.category = getValue(patient.category);
+        }
 
         // Dates
         if ('date' in patient) updated.date = getValue(patient.date);
@@ -2533,11 +2701,14 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
         // Quick Entry fields
         if ('department' in patient) updated.department = getValue(patient.department);
+        // For PWO: Do not update these fields
+        if (userRole && !isMWO(userRole)) {
         if ('unit_consit' in patient) updated.unit_consit = getValue(patient.unit_consit);
         if ('room_no' in patient) updated.room_no = getValue(patient.room_no);
         if ('serial_no' in patient) updated.serial_no = getValue(patient.serial_no);
-        if ('file_no' in patient) updated.file_no = getValue(patient.file_no);
         if ('unit_days' in patient) updated.unit_days = getValue(patient.unit_days);
+        }
+        if ('file_no' in patient) updated.file_no = getValue(patient.file_no);
 
         // Personal Information
         if ('age_group' in patient) updated.age_group = getValue(patient.age_group);
@@ -2983,11 +3154,14 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
         // Quick Entry fields
         department: formData.department || null,
+        // For PWO: These fields should not be included in update payload
+        ...(userRole && !isMWO(userRole) ? {
         unit_consit: formData.unit_consit || null,
         room_no: formData.room_no || null,
         serial_no: formData.serial_no || null,
-        file_no: formData.file_no || null,
         unit_days: formData.unit_days || null,
+        } : {}),
+        file_no: formData.file_no || null,
 
         // Address fields
         address_line: formData.address_line || null,
@@ -3023,7 +3197,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         local_address: formData.local_address || null,
 
         // Additional fields
+        // For PWO: category should not be included in update payload
+        ...(userRole && !isMWO(userRole) ? {
         category: formData.category || null,
+        } : {}),
         // assigned_doctor_id is integer
         ...(formData.assigned_doctor_id && { assigned_doctor_id: parseInt(formData.assigned_doctor_id, 10) }),
       };
@@ -3127,7 +3304,9 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
             </div>
             <div>
               <h3 className="text-xl font-bold text-gray-900">Patient Details</h3>
-              <p className="text-sm text-gray-500 mt-1">{patient?.name || 'New Patient'} - {patient?.cr_no || 'N/A'}</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {(formData?.name || patient?.name || 'New Patient')} - {(formData?.cr_no || patient?.cr_no || 'N/A')}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -3218,8 +3397,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                       />
                     </div>
 
-                    {/* Second Row - Age, Sex, Category, Father's Name */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Second Row - Age, Sex, Category (if not PWO), Father's Name */}
+                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
                       <IconInput
                         icon={<FiClock className="w-4 h-4" />}
                         label="Age"
@@ -3244,6 +3423,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                           className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
                         />
                       </div>
+                      {userRole && !isMWO(userRole) && (
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
                           <FiShield className="w-4 h-4 text-primary-600" />
@@ -3259,6 +3439,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                           className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
                         />
                       </div>
+                      )}
                       <IconInput
                         icon={<FiUsers className="w-4 h-4" />}
                         label="Father's Name"
@@ -3269,8 +3450,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         className=""
                       />
                     </div>
-                    {/* Fourth Row - Department, Unit/Consit, Room No., Serial No. */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Fourth Row - Department, Unit/Consit (if not PWO), Room No. (if not PWO), Serial No. (if not PWO) */}
+                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6`}>
                       <IconInput
                         icon={<FiLayers className="w-4 h-4" />}
                         label="Department"
@@ -3280,6 +3461,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         placeholder="Enter department"
                         className=""
                       />
+                      {userRole && !isMWO(userRole) && (
+                        <>
                       <IconInput
                         icon={<FiUsers className="w-4 h-4" />}
                         label="Unit/Consit"
@@ -3307,10 +3490,12 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         placeholder="Enter serial number"
                         className=""
                       />
+                        </>
+                      )}
                     </div>
 
-                    {/* Fifth Row - File No., Unit Days */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Fifth Row - File No., Unit Days (if not PWO) */}
+                    <div className={`grid grid-cols-1 ${userRole && !isMWO(userRole) ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-6`}>
                       <IconInput
                         icon={<FiFileText className="w-4 h-4" />}
                         label="File No."
@@ -3320,6 +3505,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         placeholder="Enter file number"
                         className=""
                       />
+                      {userRole && !isMWO(userRole) && (
                       <div className="space-y-2">
                         <Select
                           label="Unit Days"
@@ -3332,6 +3518,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                           className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
                         />
                       </div>
+                      )}
                     </div>
 
                     {/* Address Details */}
@@ -4180,7 +4367,9 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                 <h3 className="text-xl font-bold text-gray-900">Walk-in Clinical Proforma</h3>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <p className="text-sm text-gray-500">
-                    {isTodaysPatient && isExistingPatient
+                    {firstVisitProforma
+                      ? `First visit: ${formatDate(firstVisitProforma.visit_date || firstVisitProforma.created_at)}`
+                      : isTodaysPatient && isExistingPatient
                       ? `Today's Patient - ${pastProformas.length} past visit${pastProformas.length > 1 ? 's' : ''}`
                       : isTodaysPatient
                       ? "Today's Patient - First visit"
@@ -4188,15 +4377,11 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                       ? `Existing Patient - ${pastProformas.length} past visit${pastProformas.length > 1 ? 's' : ''}`
                       : 'No visits'}
                   </p>
-                  {currentVisitProforma && (
+                  {firstVisitProforma && (
                     <>
                       <span className="text-gray-400">•</span>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        currentVisitProforma.visit_type === 'first_visit' 
-                          ? 'bg-purple-100 text-purple-800' 
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {currentVisitProforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up'}
+                      <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                        First Visit
                       </span>
                     </>
                   )}
@@ -4219,8 +4404,84 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
           {expandedCards.clinical && (
             <div className="p-6 space-y-6">
-              {/* Current Visit Section - Show today's proforma if exists */}
-              {currentVisitProforma && !showProformaForm && (
+              {/* First Visit Proforma Section - Show only if first visit proforma exists (read-only) */}
+              {firstVisitProforma && (
+                <div className="space-y-4 border-t border-gray-200 pt-6">
+                  <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+                      First Visit
+                    </span>
+                    <span className="text-sm text-gray-500 font-normal">
+                      {formatDate(firstVisitProforma.visit_date || firstVisitProforma.created_at)}
+                    </span>
+                  </h4>
+                  
+                  <div className="border-2 border-purple-300 rounded-lg p-4 bg-purple-50/30">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                            First Visit
+                          </span>
+                          {firstVisitProforma.doctor_decision && (
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              firstVisitProforma.doctor_decision === 'complex_case' 
+                                ? 'bg-red-100 text-red-800' 
+                                : 'bg-green-100 text-green-800'
+                            }`}>
+                              {firstVisitProforma.doctor_decision === 'complex_case' 
+                                ? 'Complex Case' 
+                                : 'Simple Case'}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-3 mt-3">
+                          {firstVisitProforma.doctor_name && (
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <FiUser className="w-4 h-4" />
+                              <span><span className="font-medium text-gray-800">Doctor:</span> {firstVisitProforma.doctor_name}</span>
+                            </div>
+                          )}
+                          {firstVisitProforma.room_no && (
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <FiHome className="w-4 h-4" />
+                              <span><span className="font-medium text-gray-800">Room:</span> {firstVisitProforma.room_no}</span>
+                            </div>
+                          )}
+                          {firstVisitProforma.diagnosis && (
+                            <div className="flex items-start gap-2 text-sm text-gray-600">
+                              <FiFileText className="w-4 h-4 mt-0.5" />
+                              <span><span className="font-medium text-gray-800">Diagnosis:</span> {firstVisitProforma.diagnosis}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/clinical/${firstVisitProforma.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                        >
+                          <FiEye className="w-3.5 h-3.5" />
+                          View
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Show full proforma in read-only view mode */}
+                    <div className="mt-4">
+                      <ClinicalProformaDetails proforma={firstVisitProforma} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Current Visit Section - Show today's proforma if exists (only for first visits, not follow-ups) */}
+              {/* Note: Follow-up visits should NOT appear in Walk-In Clinical Proforma section */}
+              {currentVisitProforma && !showProformaForm && currentVisitProforma.visit_type === 'first_visit' && !hasFirstVisitProforma && (
                 <div className="space-y-4 border-t border-gray-200 pt-6">
                   <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                     <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
@@ -4307,30 +4568,24 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                 </div>
               )}
 
-              {/* Current Visit Form - Show if no current visit proforma exists OR if user is editing OR if new patient */}
-              {/* Always show for new patients without history */}
-              {(() => {
-                // Always show form for new patients without history
+              {/* Current Visit Form - Show ONLY if no first visit proforma exists (new patient) */}
+              {/* For existing patients with first visit, do NOT show form for creating new Walk-In Proforma */}
+              {!hasFirstVisitProforma && (() => {
+                // Only show form for new patients without first visit proforma
                 if (isNewPatientWithNoHistory) return true;
-                // Show form if no current visit proforma or user wants to edit
+                // Show form if no current visit proforma or user wants to edit (but only if no first visit exists)
                 return showProformaForm || !currentVisitProforma;
               })() && (
                 <div className={currentVisitProforma && !showProformaForm ? "border-t border-gray-200 pt-6 mt-6" : ""}>
-                  {/* Show header for new patients or when adding new proforma */}
-                  {(!isExistingPatient || !hasPastHistory || pastProformas.length === 0) && !currentVisitProforma ? (
+                  {/* Show header for new patients */}
+                  {/* {!isExistingPatient && !currentVisitProforma ? (
                     <div className="mb-4">
                       <h4 className="text-lg font-semibold text-gray-800">Walk-in Clinical Proforma</h4>
                       <p className="text-sm text-gray-600 mt-1">
-                        {!isExistingPatient 
-                          ? "Create the first walk-in clinical proforma for this new patient."
-                          : "Create a new walk-in clinical proforma for this visit."}
+                        Create the first walk-in clinical proforma for this new patient.
                       </p>
                     </div>
-                  ) : hasPastHistory && pastProformas.length > 0 ? (
-                    <div className="mb-4">
-                      <h4 className="text-lg font-semibold text-gray-800">New Walk-in Clinical Proforma</h4>
-                    </div>
-                  ) : null}
+                  ) : null} */}
                   <EditClinicalProforma
                     key={selectedProforma?.id || `new-proforma-${patient?.id || Date.now()}`} // Force re-render when selectedProforma changes
                     // CRITICAL RULES:
@@ -4723,8 +4978,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Past History</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  {trulyPastProformas.length > 0 
-                    ? `${trulyPastProformas.length} past visit${trulyPastProformas.length > 1 ? 's' : ''} - View only`
+                  {unifiedVisits.length > 0 
+                    ? `${unifiedVisits.length} past visit${unifiedVisits.length > 1 ? 's' : ''} - View only`
                     : 'No past visits - View only'}
                 </p>
               </div>
@@ -4938,10 +5193,17 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                           {visitDate}
                                         </h4>
                                         <div className="flex items-center gap-3 mt-2">
+                                          {visit.isFollowUp ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                              <FiFileText className="w-3 h-3" />
+                                              Follow-Up Visit
+                                            </span>
+                                          ) : (
                                           <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
                                             <FiFileText className="w-3 h-3" />
                                             Clinical Proforma
                                           </span>
+                                          )}
                                           {visit.hasAdl && (
                                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
                                               <FiFolder className="w-3 h-3" />
@@ -4985,7 +5247,40 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                       if (el) visitPrintRefs.current.set(visit.visitId, el);
                                       else visitPrintRefs.current.delete(visit.visitId);
                                     }} className="p-6 space-y-6">
-                                      {/* 1. Clinical Proforma Section */}
+                                      {/* 1. Clinical Proforma / Follow-Up Assessment Section */}
+                                      {visit.isFollowUp ? (
+                                        <div className="border-l-4 border-blue-500 pl-4">
+                                          <div className="flex items-center justify-between mb-3">
+                                            <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                              <FiFileText className="h-5 w-5 text-blue-600" />
+                                              Follow-Up Clinical Assessment
+                                            </h5>
+                                            {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') ? (
+                                              <FiChevronUp 
+                                                className="h-5 w-5 text-gray-500 cursor-pointer"
+                                                onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
+                                              />
+                                            ) : (
+                                              <FiChevronDown 
+                                                className="h-5 w-5 text-gray-500 cursor-pointer"
+                                                onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
+                                              />
+                                            )}
+                                          </div>
+                                          {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') && (
+                                            <div className="mt-3">
+                                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                  Follow-Up Clinical Assessment
+                                                </label>
+                                                <div className="bg-white border border-gray-300 rounded-lg p-4 min-h-[100px] whitespace-pre-wrap text-gray-900">
+                                                  {visit.clinicalAssessment || visit.proforma?.clinical_assessment || 'No assessment recorded'}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
                                       <div className="border-l-4 border-green-500 pl-4">
                                         <div className="flex items-center justify-between mb-3">
                                           <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -5022,6 +5317,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                           </div>
                                         )}
                                       </div>
+                                      )}
 
                                       {/* 2. ADL File Section (if exists) */}
                                       {visit.hasAdl && (
@@ -5084,7 +5380,20 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                           {isVisitSectionExpanded(visit.visitId, 'prescription') && (
                                             <div className="mt-3">
                                               <PrescriptionView 
-                                                clinicalProformaId={visit.proforma.id}
+                                                clinicalProformaId={visit.isFollowUp ? 
+                                                  (visit.minimalProformaId || 
+                                                   patientProformas.find(p => {
+                                                     if (p.record_type === 'followup_visit') return false; // Skip the follow-up visit record itself
+                                                     const proformaDate = toISTDateString(p.visit_date || p.created_at);
+                                                     const followUpDate = toISTDateString(visit.visitDate);
+                                                     return proformaDate === followUpDate && 
+                                                            p.visit_type === 'follow_up' &&
+                                                            p.record_type === 'clinical_proforma' &&
+                                                            (p.treatment_prescribed?.includes('Follow-up visit') || 
+                                                             p.treatment_prescribed?.includes('followup_visits') ||
+                                                             p.treatment_prescribed?.includes('see followup_visits'));
+                                                   })?.id) : visit.proforma?.id
+                                                }
                                                 patientId={patient?.id}
                                               />
                                             </div>

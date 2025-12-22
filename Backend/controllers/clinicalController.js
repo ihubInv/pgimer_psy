@@ -589,12 +589,32 @@ class ClinicalController {
   static async getClinicalProformaByPatientId(req, res) {
     try {
       const { patient_id } = req.params;
-      const proformas = await ClinicalProforma.findByPatientId(patient_id);
+      
+      // Validate patient_id
+      const patientIdInt = parseInt(patient_id, 10);
+      if (isNaN(patientIdInt) || patientIdInt <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid patient ID'
+        });
+      }
+
+      // Use Patient.getClinicalRecords() to get both clinical proformas AND follow-up visits
+      const patient = await Patient.findById(patientIdInt);
+      if (!patient) {
+        return res.status(404).json({
+          success: false,
+          message: 'Patient not found'
+        });
+      }
+
+      // This method returns both clinical_proforma and followup_visits records
+      const allRecords = await patient.getClinicalRecords();
 
       res.json({
         success: true,
         data: {
-          proformas: proformas.map(p => p.toJSON())
+          proformas: allRecords // Includes both clinical proformas and follow-up visits with record_type field
         }
       });
     } catch (error) {
