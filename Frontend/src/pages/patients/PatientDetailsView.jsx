@@ -5,7 +5,12 @@ import { formatDate, formatDateForDatePicker } from '../../utils/formatters';
 import {
   getFileStatusLabel, getCaseSeverityLabel,formatDateTime
 } from '../../utils/enumMappings';
-import { isAdmin, isJrSr, isMWO, PATIENT_REGISTRATION_FORM, isJR, isSR } from '../../utils/constants';
+import { 
+  isAdmin, isJrSr, isMWO, PATIENT_REGISTRATION_FORM, isJR, isSR, 
+  REFERRED_BY_OPTIONS, SEX_OPTIONS, MARITAL_STATUS, OCCUPATION_OPTIONS, 
+  EDUCATION_OPTIONS, RELIGION_OPTIONS, FAMILY_TYPE_OPTIONS, LOCALITY_OPTIONS, 
+  HEAD_RELATIONSHIP_OPTIONS, MOBILITY_OPTIONS 
+} from '../../utils/constants';
 import {
   FiUser, FiUsers, FiBriefcase,  FiHome, FiMapPin, FiPhone,
   FiCalendar, FiGlobe, FiFileText, FiHash, FiClock,
@@ -100,6 +105,27 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       referred_by: formData?.referred_by || patient?.referred_by || '',
     };
   }, [patient, formData]);
+
+  // Generic helper function to get label from options array
+  const getLabelFromOptions = (value, options) => {
+    if (!value) return 'N/A';
+    const option = options.find(opt => opt.value === value);
+    return option ? option.label : value;
+  };
+
+  // Helper functions for each field
+  const getSexLabel = (value) => getLabelFromOptions(value, SEX_OPTIONS);
+  const getMaritalStatusLabel = (value) => getLabelFromOptions(value, MARITAL_STATUS);
+  const getOccupationLabel = (value) => getLabelFromOptions(value, OCCUPATION_OPTIONS);
+  const getEducationLabel = (value) => getLabelFromOptions(value, EDUCATION_OPTIONS);
+  const getReligionLabel = (value) => getLabelFromOptions(value, RELIGION_OPTIONS);
+  const getFamilyTypeLabel = (value) => getLabelFromOptions(value, FAMILY_TYPE_OPTIONS);
+  const getLocalityLabel = (value) => getLabelFromOptions(value, LOCALITY_OPTIONS);
+  const getHeadRelationshipLabel = (value) => getLabelFromOptions(value, HEAD_RELATIONSHIP_OPTIONS);
+  const getHeadEducationLabel = (value) => getLabelFromOptions(value, EDUCATION_OPTIONS);
+  const getHeadOccupationLabel = (value) => getLabelFromOptions(value, OCCUPATION_OPTIONS);
+  const getMobilityLabel = (value) => getLabelFromOptions(value, MOBILITY_OPTIONS);
+  const getReferredByLabel = (value) => getLabelFromOptions(value, REFERRED_BY_OPTIONS);
 
   const [expandedCards, setExpandedCards] = useState({
     patient: true,
@@ -3530,7 +3556,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           Sex
                           </label>
                         <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
-                          {displayData.sex || 'N/A'}
+                          {getSexLabel(displayData.sex)}
                       </div>
                       </div>
                       {userRole && !isMWO(userRole) && (
@@ -3752,7 +3778,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                         <div className="space-y-2">
                           <label className="text-sm font-semibold text-gray-800">Sex</label>
                           <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
-                            {displayData.sex || 'N/A'}
+                            {getSexLabel(displayData.sex)}
                         </div>
                         </div>
                         <div className="space-y-2">
@@ -3765,7 +3791,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                             <label className="text-sm font-semibold text-gray-700 mb-2 block">Marital Status</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.marital_status || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getMaritalStatusLabel(displayData.marital_status)}</p>
                           </div>
                         </div>
                         <div className="relative">
@@ -3805,7 +3831,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                               <FiBriefcase className="w-4 h-4 text-primary-600" />
                               Occupation
                             </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.occupation || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getOccupationLabel(displayData.occupation)}</p>
                           </div>
                         </div>
                         <div className="relative">
@@ -3815,7 +3841,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                               <FiBookOpen className="w-4 h-4 text-primary-600" />
                               Education
                             </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.education || displayData.education_level || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getEducationLabel(displayData.education || displayData.education_level)}</p>
                           </div>
                         </div>
                         <div className="relative">
@@ -3842,21 +3868,21 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                             <label className="text-sm font-semibold text-gray-700 mb-2 block">Religion</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.religion || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getReligionLabel(displayData.religion)}</p>
                           </div>
                         </div>
                         <div className="relative">
                           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                             <label className="text-sm font-semibold text-gray-700 mb-2 block">Family Type</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.family_type || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getFamilyTypeLabel(displayData.family_type)}</p>
                           </div>
                         </div>
                         <div className="relative">
                           <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                             <label className="text-sm font-semibold text-gray-700 mb-2 block">Locality</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.locality || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getLocalityLabel(displayData.locality)}</p>
                           </div>
                         </div>
                         <div className="relative">
@@ -3893,7 +3919,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                             <label className="text-sm font-semibold text-gray-700 mb-2 block">Relationship With Family Head</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.head_relationship || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getHeadRelationshipLabel(displayData.head_relationship)}</p>
                           </div>
                         </div>
                         <div className="relative">
@@ -3903,7 +3929,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                               <FiBookOpen className="w-4 h-4 text-primary-600" />
                               Family Head Education
                             </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.head_education || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getHeadEducationLabel(displayData.head_education)}</p>
                           </div>
                         </div>
                         <div className="relative">
@@ -3913,7 +3939,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                               <FiBriefcase className="w-4 h-4 text-primary-600" />
                               Family Head Occupation
                             </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.head_occupation || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getHeadOccupationLabel(displayData.head_occupation)}</p>
                           </div>
                         </div>
                         <div className="relative">
@@ -3940,14 +3966,14 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                             <label className="text-sm font-semibold text-gray-700 mb-2 block">Mobility of the patient</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.mobility || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getMobilityLabel(displayData.mobility)}</p>
                           </div>
                         </div>
                         <div className="relative">
                           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                             <label className="text-sm font-semibold text-gray-700 mb-2 block">Referred by</label>
-                            <p className="text-base font-medium text-gray-900">{displayData.referred_by || 'N/A'}</p>
+                            <p className="text-base font-medium text-gray-900">{getReferredByLabel(displayData.referred_by)}</p>
                           </div>
                         </div>
                       </div>
