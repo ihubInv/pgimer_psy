@@ -1480,7 +1480,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                     /> */}
                 
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                   <Textarea
                     label="Disposal & Referral"
                     name="disposal"

@@ -18,7 +18,7 @@ const Textarea = memo(({
       {label && (
         <label
           htmlFor={name}
-          className="block text-sm font-medium text-gray-700 mb-1"
+          className="block text-sm font-bold text-gray-700 mb-1"
         >
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
