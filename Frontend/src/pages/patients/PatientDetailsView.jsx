@@ -3633,21 +3633,13 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                         />
 
-                        {/* Location Fields */}
+                        {/* City/Town/Village, District, State, Country, Pin Code */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <IconInput
-                            icon={<FiGlobe className="w-4 h-4" />}
-                            label="Country"
-                            name="country"
-                            value={displayData.country || ''}
-                            disabled={true}
-                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                          />
-                          <IconInput
-                            icon={<FiMapPin className="w-4 h-4" />}
-                            label="State"
-                            name="state"
-                            value={displayData.state || ''}
+                            icon={<FiHome className="w-4 h-4" />}
+                            label="City/Town/Village"
+                            name="city"
+                            value={displayData.city || ''}
                             disabled={true}
                             className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                           />
@@ -3660,17 +3652,21 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                             className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                           />
                           <IconInput
-                            icon={<FiHome className="w-4 h-4" />}
-                            label="City/Town/Village"
-                            name="city"
-                            value={displayData.city || ''}
+                            icon={<FiMapPin className="w-4 h-4" />}
+                            label="State"
+                            name="state"
+                            value={displayData.state || ''}
                             disabled={true}
                             className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                           />
-                        </div>
-
-                        {/* Pin Code Row */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <IconInput
+                            icon={<FiGlobe className="w-4 h-4" />}
+                            label="Country"
+                            name="country"
+                            value={displayData.country || ''}
+                            disabled={true}
+                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
+                          />
                           <IconInput
                             icon={<FiHash className="w-4 h-4" />}
                             label="Pin Code"
@@ -3971,11 +3967,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
                                    <FiHome className="w-4 h-4 text-primary-600" />
-                                   Address Line
+                                   Address Line (House No., Street, Locality)
                                  </label>
                                  <p className="text-base font-medium text-gray-900">{formData.permanent_address_line_1 || 'N/A'}</p>
                                </div>
                              </div>
+                             {/* City/Town/Village, District, State, Country, Pin Code */}
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                <div className="relative">
                                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
@@ -4008,16 +4005,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                  </div>
                                </div>
                                <div className="relative">
-                                 <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                                 <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                     <FiHash className="w-4 h-4 text-primary-600" />
-                                     Pin Code
-                                   </label>
-                                   <p className="text-base font-medium text-gray-900">{formData.permanent_pin_code || 'N/A'}</p>
-                                 </div>
-                               </div>
-                               <div className="relative">
                                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
                                  <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
@@ -4025,6 +4012,16 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                      Country
                                    </label>
                                    <p className="text-base font-medium text-gray-900">{formData.permanent_country || 'N/A'}</p>
+                                 </div>
+                               </div>
+                               <div className="relative">
+                                 <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
+                                 <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
+                                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                     <FiHash className="w-4 h-4 text-primary-600" />
+                                     Pin Code
+                                   </label>
+                                   <p className="text-base font-medium text-gray-900">{formData.permanent_pin_code || 'N/A'}</p>
                                  </div>
                                </div>
                              </div>
@@ -4046,11 +4043,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                               <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
                                   <FiHome className="w-4 h-4 text-primary-600" />
-                                  Address Line
+                                  Address Line (House No., Street, Locality)
                                 </label>
                                 <p className="text-base font-medium text-gray-900">{formData.present_address_line_1 || 'N/A'}</p>
                               </div>
                             </div>
+                            {/* City/Town/Village, District, State, Country, Pin Code */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <div className="relative">
                                 <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-amber-500/5 rounded-xl"></div>
@@ -4083,16 +4081,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                 </div>
                               </div>
                               <div className="relative">
-                                <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-amber-500/5 rounded-xl"></div>
-                                <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                    <FiHash className="w-4 h-4 text-primary-600" />
-                                    Pin Code
-                                  </label>
-                                  <p className="text-base font-medium text-gray-900">{formData.present_pin_code || 'N/A'}</p>
-                                </div>
-                              </div>
-                              <div className="relative">
                                 <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-yellow-500/5 rounded-xl"></div>
                                 <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
                                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
@@ -4100,6 +4088,16 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                     Country
                                   </label>
                                   <p className="text-base font-medium text-gray-900">{formData.present_country || 'N/A'}</p>
+                                </div>
+                              </div>
+                              <div className="relative">
+                                <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-amber-500/5 rounded-xl"></div>
+                                <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
+                                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                    <FiHash className="w-4 h-4 text-primary-600" />
+                                    Pin Code
+                                  </label>
+                                  <p className="text-base font-medium text-gray-900">{formData.present_pin_code || 'N/A'}</p>
                                 </div>
                               </div>
                             </div>

@@ -4020,15 +4020,17 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                            </h4>
 
                            <div className="space-y-6">
+                             {/* Address Line */}
                              <IconInput
                                icon={<FiHome className="w-4 h-4" />}
-                               label="Address Line"
+                               label="Address Line (House No., Street, Locality)"
                                name="permanent_address_line_1"
                                value={formData.permanent_address_line_1 || ''}
                                onChange={handleChange}
                                placeholder="Enter house number, street, locality"
                                className=""
                              />
+                             {/* City/Town/Village, District, State, Country, Pin Code */}
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                <IconInput
                                  icon={<FiHome className="w-4 h-4" />}
@@ -4058,6 +4060,15 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                  className=""
                                />
                                <IconInput
+                                 icon={<FiGlobe className="w-4 h-4" />}
+                                 label="Country"
+                                 name="permanent_country"
+                                 value={formData.permanent_country || ''}
+                                 onChange={handleChange}
+                                 placeholder="Enter country"
+                                 className=""
+                               />
+                               <IconInput
                                  icon={<FiHash className="w-4 h-4" />}
                                  label="Pin Code"
                                  name="permanent_pin_code"
@@ -4065,15 +4076,6 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                  onChange={handleChange}
                                  placeholder="Enter pin code"
                                  type="number"
-                                 className=""
-                               />
-                               <IconInput
-                                 icon={<FiGlobe className="w-4 h-4" />}
-                                 label="Country"
-                                 name="permanent_country"
-                                 value={formData.permanent_country || ''}
-                                 onChange={handleChange}
-                                 placeholder="Enter country"
                                  className=""
                                />
                              </div>
@@ -4129,9 +4131,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                           </div>
 
                           <div className="space-y-6">
+                            {/* Address Line */}
                             <IconInput
                               icon={<FiHome className="w-4 h-4" />}
-                              label="Address Line"
+                              label="Address Line (House No., Street, Locality)"
                               name="present_address_line_1"
                               value={formData.present_address_line_1 || ''}
                               onChange={handleChange}
@@ -4139,6 +4142,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                               disabled={sameAsPermanent}
                               className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                             />
+                            {/* City/Town/Village, District, State, Country, Pin Code */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <IconInput
                                 icon={<FiHome className="w-4 h-4" />}
@@ -4171,6 +4175,16 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
                               <IconInput
+                                icon={<FiGlobe className="w-4 h-4" />}
+                                label="Country"
+                                name="present_country"
+                                value={formData.present_country || ''}
+                                onChange={handleChange}
+                                placeholder="Enter country"
+                                disabled={sameAsPermanent}
+                                className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
+                              />
+                              <IconInput
                                 icon={<FiHash className="w-4 h-4" />}
                                 label="Pin Code"
                                 name="present_pin_code"
@@ -4178,16 +4192,6 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                 onChange={handleChange}
                                 placeholder="Enter pin code"
                                 type="number"
-                                disabled={sameAsPermanent}
-                                className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
-                              />
-                              <IconInput
-                                icon={<FiGlobe className="w-4 h-4" />}
-                                label="Country"
-                                name="present_country"
-                                value={formData.present_country || ''}
-                                onChange={handleChange}
-                                placeholder="Enter country"
                                 disabled={sameAsPermanent}
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
@@ -4215,24 +4219,6 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                               className=""
                             />
                           </div>
-
-                          <Select
-                                name="assigned_doctor_id"
-                                label="Assigned Doctor"
-                                value={formData.assigned_doctor_id}
-                                onChange={handlePatientChange}
-                                options={(usersData?.data?.users || [])
-                                  .map(u => ({
-                                    value: String(u.id),
-                                    label: `${u.name} - ${isJR(u.role) ? 'Resident' : isSR(u.role) ? 'Faculty' : u.role}`
-                                  }))}
-                                placeholder="Select doctor (optional)"
-                                searchable={true}
-                                className="bg-gradient-to-r from-violet-50 to-purple-50"
-                                containerClassName="relative z-[9999]"
-                                dropdownZIndex={2147483647}
-                              />
-
 
                               <IconInput
                                 icon={<FiHome className="w-4 h-4" />}

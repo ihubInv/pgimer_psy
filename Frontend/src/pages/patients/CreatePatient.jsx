@@ -1331,6 +1331,7 @@ const CreatePatient = () => {
                           </div>
 
                           <div className="space-y-6">
+                            {/* Address Line */}
                             <IconInput
                               icon={<FiHome className="w-4 h-4" />}
                               label="Address Line (House No., Street, Locality)"
@@ -1341,24 +1342,15 @@ const CreatePatient = () => {
                               disabled={sameAsPermanent}
                               className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                             />
+                            {/* City/Town/Village, District, State, Country, Pin Code */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <IconInput
-                                icon={<FiGlobe className="w-4 h-4" />}
-                                label="Country"
-                                name="present_country"
-                                value={formData.present_country || ''}
+                                icon={<FiHome className="w-4 h-4" />}
+                                label="City/Town/Village"
+                                name="present_city_town_village"
+                                value={formData.present_city_town_village || ''}
                                 onChange={handleChange}
-                                placeholder="Enter country"
-                                disabled={sameAsPermanent}
-                                className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
-                              />
-                              <IconInput
-                                icon={<FiMapPin className="w-4 h-4" />}
-                                label="State"
-                                name="present_state"
-                                value={formData.present_state || ''}
-                                onChange={handleChange}
-                                placeholder="Enter state"
+                                placeholder="Enter city, town or village"
                                 disabled={sameAsPermanent}
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
@@ -1373,12 +1365,22 @@ const CreatePatient = () => {
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
                               <IconInput
-                                icon={<FiHome className="w-4 h-4" />}
-                                label="City/Town/Village"
-                                name="present_city_town_village"
-                                value={formData.present_city_town_village || ''}
+                                icon={<FiMapPin className="w-4 h-4" />}
+                                label="State"
+                                name="present_state"
+                                value={formData.present_state || ''}
                                 onChange={handleChange}
-                                placeholder="Enter city, town or village"
+                                placeholder="Enter state"
+                                disabled={sameAsPermanent}
+                                className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
+                              />
+                              <IconInput
+                                icon={<FiGlobe className="w-4 h-4" />}
+                                label="Country"
+                                name="present_country"
+                                value={formData.present_country || ''}
+                                onChange={handleChange}
+                                placeholder="Enter country"
                                 disabled={sameAsPermanent}
                                 className={sameAsPermanent ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
@@ -1407,32 +1409,25 @@ const CreatePatient = () => {
                           </h4>
 
                           <div className="space-y-6">
+                            {/* Address Line */}
                             <IconInput
                               icon={<FiHome className="w-4 h-4" />}
-                              label="Address Line"
+                              label="Address Line (House No., Street, Locality)"
                               name="permanent_address_line_1"
                               value={formData.permanent_address_line_1 || ''}
                               onChange={handleChange}
                               placeholder="Enter house number, street, locality"
                               className=""
                             />
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {/* City/Town/Village, District, State, Country, Pin Code */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <IconInput
-                                icon={<FiGlobe className="w-4 h-4" />}
-                                label="Country"
-                                name="permanent_country"
-                                value={formData.permanent_country || ''}
+                                icon={<FiHome className="w-4 h-4" />}
+                                label="City/Town/Village"
+                                name="permanent_city_town_village"
+                                value={formData.permanent_city_town_village || ''}
                                 onChange={handleChange}
-                                placeholder="Enter country"
-                                className=""
-                              />
-                              <IconInput
-                                icon={<FiMapPin className="w-4 h-4" />}
-                                label="State"
-                                name="permanent_state"
-                                value={formData.permanent_state || ''}
-                                onChange={handleChange}
-                                placeholder="Enter state"
+                                placeholder="Enter city, town or village"
                                 className=""
                               />
                               <IconInput
@@ -1445,12 +1440,21 @@ const CreatePatient = () => {
                                 className=""
                               />
                               <IconInput
-                                icon={<FiHome className="w-4 h-4" />}
-                                label="City/Town/Village"
-                                name="permanent_city_town_village"
-                                value={formData.permanent_city_town_village || ''}
+                                icon={<FiMapPin className="w-4 h-4" />}
+                                label="State"
+                                name="permanent_state"
+                                value={formData.permanent_state || ''}
                                 onChange={handleChange}
-                                placeholder="Enter city, town or village"
+                                placeholder="Enter state"
+                                className=""
+                              />
+                              <IconInput
+                                icon={<FiGlobe className="w-4 h-4" />}
+                                label="Country"
+                                name="permanent_country"
+                                value={formData.permanent_country || ''}
+                                onChange={handleChange}
+                                placeholder="Enter country"
                                 className=""
                               />
                               <IconInput
