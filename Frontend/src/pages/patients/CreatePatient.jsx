@@ -62,6 +62,10 @@ const CreatePatient = () => {
   const [referredByOther, setReferredByOther] = useState('');
   const [sameAsPermanent, setSameAsPermanent] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  
+  // Track which permanent address fields were manually edited by the user
+  // This prevents auto-population from overwriting user edits
+  const manuallyEditedPermanentFields = useRef(new Set());
 
 
   
@@ -151,24 +155,65 @@ const CreatePatient = () => {
     }
   }, [formData.referred_by, formData.referred_by_other]);
 
-  // Auto-populate Permanent Address from main address if permanent address is empty
+  // Auto-populate Permanent Address from main address when main address fields change
+  // Populate each field individually if permanent address field is empty or needs syncing
   useEffect(() => {
-    if (!formData.permanent_address_line_1) {
-      // Copy main address to Permanent Address if permanent address is empty
-      if (formData.address_line || formData.city || formData.district || formData.state || formData.pin_code || formData.country) {
-        dispatch(updatePatientRegistrationForm({
-          permanent_address_line_1: formData.address_line || '',
-          permanent_city_town_village: formData.city || '',
-          permanent_district: formData.district || '',
-          permanent_state: formData.state || '',
-          permanent_pin_code: formData.pin_code || '',
-          permanent_country: formData.country || ''
-        }));
-      }
-    }
-  }, [formData.address_line, formData.city, formData.district, formData.state, formData.pin_code, formData.country, formData.permanent_address_line_1, dispatch]);
+    // Helper function to check if a field is empty (null, undefined, or empty/whitespace string)
+    const isEmpty = (value) => {
+      return !value || (typeof value === 'string' && value.trim() === '');
+    };
 
-  // Sync present address with permanent address when checkbox is checked
+    // Helper function to normalize values for comparison
+    const normalize = (value) => {
+      if (!value) return '';
+      return value.toString().trim();
+    };
+
+    const updates = {};
+    let hasUpdates = false;
+
+    // Field mapping: main address field -> permanent address field
+    const fieldMappings = [
+      { main: 'address_line', permanent: 'permanent_address_line_1' },
+      { main: 'city', permanent: 'permanent_city_town_village' },
+      { main: 'district', permanent: 'permanent_district' },
+      { main: 'state', permanent: 'permanent_state' },
+      { main: 'pin_code', permanent: 'permanent_pin_code' },
+      { main: 'country', permanent: 'permanent_country' }
+    ];
+
+    fieldMappings.forEach(({ main, permanent }) => {
+      const mainValue = normalize(formData[main]);
+      const permanentValue = normalize(formData[permanent]);
+      const wasManuallyEdited = manuallyEditedPermanentFields.current.has(permanent);
+
+      // Only auto-populate if:
+      // 1. The permanent field is empty AND main field has a value, OR
+      // 2. The permanent field doesn't match the main field AND it wasn't manually edited
+      // This allows syncing to continue as the user types, but respects manual edits
+      if (mainValue && (!wasManuallyEdited && (isEmpty(permanentValue) || permanentValue !== mainValue))) {
+        updates[permanent] = mainValue;
+        hasUpdates = true;
+      }
+    });
+
+    // Only dispatch if there are updates to make
+    if (hasUpdates) {
+      dispatch(updatePatientRegistrationForm(updates));
+    }
+  }, [
+    formData.address_line, 
+    formData.city, 
+    formData.district, 
+    formData.state, 
+    formData.pin_code, 
+    formData.country,
+    dispatch
+    // Removed permanent address fields from dependencies to prevent infinite loops
+    // The effect should only run when main address fields change
+  ]);
+
+  // Sync present address with permanent address when checkbox is checked or permanent address changes
   useEffect(() => {
     if (sameAsPermanent) {
       dispatch(updatePatientRegistrationForm({
@@ -195,6 +240,7 @@ const CreatePatient = () => {
   const handleCancel = () => {
     dispatch(resetPatientRegistrationForm());
     setSelectedFiles([]);
+    manuallyEditedPermanentFields.current.clear(); // Reset tracking
     navigate('/patients');
   };
 
@@ -205,6 +251,21 @@ const CreatePatient = () => {
     // Ensure department is always set to "Psychiatry" if it's the department field
     const updateValue = name === 'department' ? (value || 'Psychiatry') : value;
     dispatch(updatePatientRegistrationForm({ [name]: updateValue }));
+
+    // Track manual edits to permanent address fields
+    // If user manually edits a permanent address field, mark it as manually edited
+    // so auto-population won't overwrite their changes
+    const permanentAddressFields = [
+      'permanent_address_line_1',
+      'permanent_city_town_village',
+      'permanent_district',
+      'permanent_state',
+      'permanent_pin_code',
+      'permanent_country'
+    ];
+    if (permanentAddressFields.includes(name)) {
+      manuallyEditedPermanentFields.current.add(name);
+    }
 
     // Configuration for fields with "others"/"other" option
     const othersFieldsConfig = {
@@ -459,6 +520,7 @@ const CreatePatient = () => {
       // Reset form after successful submission
       dispatch(resetPatientRegistrationForm());
       setSelectedFiles([]);
+      manuallyEditedPermanentFields.current.clear(); // Reset tracking
 
       // Navigate to patients list
       navigate('/patients');
@@ -753,17 +815,12 @@ const CreatePatient = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <IconInput
                                 icon={<FiHash className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    Pin Code <span className="text-red-500">*</span>
-                                  </span>
-                                }
+                                label="Pin Code"
                                 name="pin_code"
                                 value={formData.pin_code || ''}
                                 onChange={handleChange}
                                 placeholder="Enter pin code"
                                 type="number"
-                                required
                                 className=""
                               />
                             </div>
@@ -1252,17 +1309,7 @@ const CreatePatient = () => {
                                 onChange={(e) => {
                                   const checked = e.target.checked;
                                   setSameAsPermanent(checked);
-                                  if (checked) {
-                                    // Copy permanent address to present address
-                                    dispatch(updatePatientRegistrationForm({
-                                      present_address_line_1: formData.permanent_address_line_1 || '',
-                                      present_city_town_village: formData.permanent_city_town_village || '',
-                                      present_district: formData.permanent_district || '',
-                                      present_state: formData.permanent_state || '',
-                                      present_pin_code: formData.permanent_pin_code || '',
-                                      present_country: formData.permanent_country || ''
-                                    }));
-                                  } else {
+                                  if (!checked) {
                                     // Clear present address fields when unchecked
                                     dispatch(updatePatientRegistrationForm({
                                       present_address_line_1: '',
@@ -1273,6 +1320,7 @@ const CreatePatient = () => {
                                       present_country: ''
                                     }));
                                   }
+                                  // If checked, the useEffect will handle syncing
                                 }}
                                 className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 focus:ring-2 cursor-pointer"
                               />
@@ -1368,7 +1416,7 @@ const CreatePatient = () => {
                               placeholder="Enter house number, street, locality"
                               className=""
                             />
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                               <IconInput
                                 icon={<FiGlobe className="w-4 h-4" />}
                                 label="Country"

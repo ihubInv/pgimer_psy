@@ -64,7 +64,7 @@ const validateFieldValue = (fieldName, value, options = {}) => {
   }
 
   // Skip further validation if value is empty and not required
-  if (value === null || value === undefined || value === '') {
+  if (value === null || value === undefined || value === '' || (typeof value === 'string' && value.trim() === '')) {
     return null;
   }
 
@@ -137,6 +137,10 @@ const getFieldValidationRules = (fieldName, step) => {
       type: 'string',
       pattern: /^\d{6}$/,
       customValidator: (value) => {
+        // Skip validation if value is empty/null/undefined (handled by required check)
+        if (!value || value === '' || value === null || value === undefined) {
+          return null;
+        }
         const pinCode = String(value).trim();
         if (pinCode && !/^\d{6}$/.test(pinCode)) {
           return 'Pin Code must be exactly 6 digits';
