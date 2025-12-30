@@ -232,6 +232,8 @@ export const HEAD_RELATIONSHIP_OPTIONS = [
   { value: 'mother', label: 'Mother' },
   { value: 'brother', label: 'Brother' },
   { value: 'sister', label: 'Sister' },
+  { value: 'husband', label: 'Husband' },
+  {value:'wife', label: 'Wife'},
   { value: 'other', label: 'Other' },
 ];
 
