@@ -20,28 +20,46 @@ class ClinicalProforma {
     this.illness_duration = data.illness_duration;
     this.current_episode_since = data.current_episode_since;
     this.mood = data.mood;
+    this.mood_notes = data.mood_notes;
     this.behaviour = data.behaviour;
+    this.behaviour_notes = data.behaviour_notes;
     this.speech = data.speech;
+    this.speech_notes = data.speech_notes;
     this.thought = data.thought;
+    this.thought_notes = data.thought_notes;
     this.perception = data.perception;
+    this.perception_notes = data.perception_notes;
     this.somatic = data.somatic;
+    this.somatic_notes = data.somatic_notes;
     this.bio_functions = data.bio_functions;
+    this.bio_functions_notes = data.bio_functions_notes;
     this.adjustment = data.adjustment;
+    this.adjustment_notes = data.adjustment_notes;
     this.cognitive_function = data.cognitive_function;
+    this.cognitive_function_notes = data.cognitive_function_notes;
     this.fits = data.fits;
+    this.fits_notes = data.fits_notes;
     this.sexual_problem = data.sexual_problem;
+    this.sexual_problem_notes = data.sexual_problem_notes;
     this.substance_use = data.substance_use;
+    this.substance_use_notes = data.substance_use_notes;
     this.present_history = data.present_history;
     this.past_history = data.past_history;
     this.treatment_history = data.treatment_history;
     this.family_history = data.family_history;
     this.associated_medical_surgical = data.associated_medical_surgical;
+    this.associated_medical_surgical_notes = data.associated_medical_surgical_notes;
     this.mse_behaviour = data.mse_behaviour;
+    this.mse_behaviour_notes = data.mse_behaviour_notes;
     this.mse_affect = data.mse_affect;
+    this.mse_affect_notes = data.mse_affect_notes;
     this.mse_thought = data.mse_thought;
+    this.mse_thought_notes = data.mse_thought_notes;
     this.mse_delusions = data.mse_delusions;
     this.mse_perception = data.mse_perception;
+    this.mse_perception_notes = data.mse_perception_notes;
     this.mse_cognitive_function = data.mse_cognitive_function;
+    this.mse_cognitive_function_notes = data.mse_cognitive_function_notes;
     this.gpe = data.gpe;
     this.diagnosis = data.diagnosis;
     this.icd_code = data.icd_code;
@@ -94,8 +112,11 @@ class ClinicalProforma {
         adjustment,
         cognitive_function,
         fits,
+        fits_notes,
         sexual_problem,
+        sexual_problem_notes,
         substance_use,
+        substance_use_notes,
         past_history,
         treatment_history,
         family_history,
@@ -150,28 +171,46 @@ class ClinicalProforma {
         illness_duration,
         current_episode_since,
         mood,
+        mood_notes,
         behaviour,
+        behaviour_notes,
         speech,
+        speech_notes,
         thought,
+        thought_notes,
         perception,
+        perception_notes,
         somatic,
+        somatic_notes,
         bio_functions,
+        bio_functions_notes,
         adjustment,
+        adjustment_notes,
         cognitive_function,
+        cognitive_function_notes,
         fits,
+        fits_notes,
         sexual_problem,
+        sexual_problem_notes,
         substance_use,
+        substance_use_notes,
         present_history,
         past_history,
         treatment_history,
         family_history,
         associated_medical_surgical,
+        associated_medical_surgical_notes,
         mse_behaviour,
+        mse_behaviour_notes,
         mse_affect,
+        mse_affect_notes,
         mse_thought,
+        mse_thought_notes,
         mse_delusions,
         mse_perception,
+        mse_perception_notes,
         mse_cognitive_function,
+        mse_cognitive_function_notes,
         gpe,
         diagnosis,
         icd_code,
@@ -196,30 +235,39 @@ class ClinicalProforma {
         `INSERT INTO clinical_proforma (
           patient_id, filled_by, visit_date, visit_type, room_no, assigned_doctor,
           informant_present, nature_of_information, onset_duration, course, 
-          precipitating_factor, illness_duration, current_episode_since, mood, behaviour,
-          speech, thought, perception, somatic, bio_functions, adjustment, cognitive_function,
-          fits, sexual_problem, substance_use, present_history, past_history, treatment_history, family_history, 
-          associated_medical_surgical, mse_behaviour, mse_affect, mse_thought, mse_delusions,
-          mse_perception, mse_cognitive_function, gpe, diagnosis, icd_code, disposal,
+          precipitating_factor, illness_duration, current_episode_since, mood, mood_notes, behaviour, behaviour_notes,
+          speech, speech_notes, thought, thought_notes, perception, perception_notes, somatic, somatic_notes,
+          bio_functions, bio_functions_notes, adjustment, adjustment_notes, cognitive_function, cognitive_function_notes,
+          fits, fits_notes, sexual_problem, sexual_problem_notes, substance_use, substance_use_notes,
+          present_history, past_history, treatment_history, family_history, 
+          associated_medical_surgical, associated_medical_surgical_notes,
+          mse_behaviour, mse_behaviour_notes, mse_affect, mse_affect_notes, mse_thought, mse_thought_notes, mse_delusions,
+          mse_perception, mse_perception_notes, mse_cognitive_function, mse_cognitive_function_notes,
+          gpe, diagnosis, icd_code, disposal,
           workup_appointment, referred_to, treatment_prescribed, prescriptions, doctor_decision,
           requires_adl_file, adl_reasoning, adl_file_id
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
           $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
-          $39, $40, $41, $42, $43, $44, $45, $46, $47
+          $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56,
+          $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72, $73
         ) RETURNING *`,
         [
           patient_id, filled_by, visit_date, visit_type, room_no, assigned_doctor,
           informant_present, allProformaData.nature_of_information, allProformaData.onset_duration, 
           allProformaData.course, allProformaData.precipitating_factor, allProformaData.illness_duration,
-          allProformaData.current_episode_since, allProformaData.mood, allProformaData.behaviour,
-          allProformaData.speech, allProformaData.thought, allProformaData.perception, 
-          allProformaData.somatic, allProformaData.bio_functions, allProformaData.adjustment,
-          allProformaData.cognitive_function, allProformaData.fits, allProformaData.sexual_problem,
-          allProformaData.substance_use, allProformaData.present_history, allProformaData.past_history, allProformaData.treatment_history, allProformaData.family_history,
-          allProformaData.associated_medical_surgical, allProformaData.mse_behaviour, 
-          allProformaData.mse_affect, allProformaData.mse_thought, allProformaData.mse_delusions,
-          allProformaData.mse_perception, allProformaData.mse_cognitive_function, allProformaData.gpe,
+          allProformaData.current_episode_since, allProformaData.mood, allProformaData.mood_notes,
+          allProformaData.behaviour, allProformaData.behaviour_notes, allProformaData.speech, allProformaData.speech_notes,
+          allProformaData.thought, allProformaData.thought_notes, allProformaData.perception, allProformaData.perception_notes,
+          allProformaData.somatic, allProformaData.somatic_notes, allProformaData.bio_functions, allProformaData.bio_functions_notes,
+          allProformaData.adjustment, allProformaData.adjustment_notes, allProformaData.cognitive_function, allProformaData.cognitive_function_notes,
+          allProformaData.fits, allProformaData.fits_notes, allProformaData.sexual_problem, allProformaData.sexual_problem_notes,
+          allProformaData.substance_use, allProformaData.substance_use_notes, allProformaData.present_history, allProformaData.past_history,
+          allProformaData.treatment_history, allProformaData.family_history, allProformaData.associated_medical_surgical,
+          allProformaData.associated_medical_surgical_notes, allProformaData.mse_behaviour, allProformaData.mse_behaviour_notes,
+          allProformaData.mse_affect, allProformaData.mse_affect_notes, allProformaData.mse_thought, allProformaData.mse_thought_notes,
+          allProformaData.mse_delusions, allProformaData.mse_perception, allProformaData.mse_perception_notes,
+          allProformaData.mse_cognitive_function, allProformaData.mse_cognitive_function_notes, allProformaData.gpe,
           allProformaData.diagnosis, allProformaData.icd_code, allProformaData.disposal,
           allProformaData.workup_appointment, allProformaData.referred_to, 
           allProformaData.treatment_prescribed, prescriptionsJson, doctor_decision,
@@ -459,12 +507,12 @@ class ClinicalProforma {
         'visit_date', 'visit_type', 'room_no', 'assigned_doctor', 
         'informant_present', 'nature_of_information', 'onset_duration', 
         'course', 'precipitating_factor', 'illness_duration',
-        'current_episode_since', 'mood', 'behaviour', 'speech', 'thought', 
-        'perception', 'somatic', 'bio_functions', 'adjustment', 
-        'cognitive_function', 'fits', 'sexual_problem', 'substance_use', 
-        'present_history', 'past_history', 'treatment_history', 'family_history', 'associated_medical_surgical', 
-        'mse_behaviour', 'mse_affect', 'mse_thought', 'mse_delusions', 
-        'mse_perception', 'mse_cognitive_function', 'gpe', 'diagnosis', 
+        'current_episode_since', 'mood', 'mood_notes', 'behaviour', 'behaviour_notes', 'speech', 'speech_notes', 'thought', 'thought_notes',
+        'perception', 'perception_notes', 'somatic', 'somatic_notes', 'bio_functions', 'bio_functions_notes', 'adjustment', 'adjustment_notes',
+        'cognitive_function', 'cognitive_function_notes', 'fits', 'fits_notes', 'sexual_problem', 'sexual_problem_notes', 'substance_use', 'substance_use_notes',
+        'present_history', 'past_history', 'treatment_history', 'family_history', 'associated_medical_surgical', 'associated_medical_surgical_notes',
+        'mse_behaviour', 'mse_behaviour_notes', 'mse_affect', 'mse_affect_notes', 'mse_thought', 'mse_thought_notes', 'mse_delusions',
+        'mse_perception', 'mse_perception_notes', 'mse_cognitive_function', 'mse_cognitive_function_notes', 'gpe', 'diagnosis', 
         'icd_code', 'disposal', 'workup_appointment', 'referred_to',
         'treatment_prescribed', 'doctor_decision', 
         'requires_adl_file', 'adl_reasoning', 'prescriptions'
@@ -748,28 +796,46 @@ toJSON() {
     illness_duration: this.illness_duration,
     current_episode_since: this.current_episode_since,
     mood: this.mood,
+    mood_notes: this.mood_notes,
     behaviour: this.behaviour,
+    behaviour_notes: this.behaviour_notes,
     speech: this.speech,
+    speech_notes: this.speech_notes,
     thought: this.thought,
+    thought_notes: this.thought_notes,
     perception: this.perception,
+    perception_notes: this.perception_notes,
     somatic: this.somatic,
+    somatic_notes: this.somatic_notes,
     bio_functions: this.bio_functions,
+    bio_functions_notes: this.bio_functions_notes,
     adjustment: this.adjustment,
+    adjustment_notes: this.adjustment_notes,
     cognitive_function: this.cognitive_function,
+    cognitive_function_notes: this.cognitive_function_notes,
     fits: this.fits,
+    fits_notes: this.fits_notes,
     sexual_problem: this.sexual_problem,
+    sexual_problem_notes: this.sexual_problem_notes,
     substance_use: this.substance_use,
+    substance_use_notes: this.substance_use_notes,
     present_history: this.present_history,
     past_history: this.past_history,
     treatment_history: this.treatment_history,
     family_history: this.family_history,
     associated_medical_surgical: this.associated_medical_surgical,
+    associated_medical_surgical_notes: this.associated_medical_surgical_notes,
     mse_behaviour: this.mse_behaviour,
+    mse_behaviour_notes: this.mse_behaviour_notes,
     mse_affect: this.mse_affect,
+    mse_affect_notes: this.mse_affect_notes,
     mse_thought: this.mse_thought,
+    mse_thought_notes: this.mse_thought_notes,
     mse_delusions: this.mse_delusions,
     mse_perception: this.mse_perception,
+    mse_perception_notes: this.mse_perception_notes,
     mse_cognitive_function: this.mse_cognitive_function,
+    mse_cognitive_function_notes: this.mse_cognitive_function_notes,
     gpe: this.gpe,
     diagnosis: this.diagnosis,
     icd_code: this.icd_code,

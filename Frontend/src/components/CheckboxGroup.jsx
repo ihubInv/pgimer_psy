@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useGetClinicalOptionsQuery, useAddClinicalOptionMutation, useDeleteClinicalOptionMutation } from '../features/clinical/clinicalApiSlice';
-import { FiX, FiSave, FiPlus, FiHeart, FiActivity, FiUser, FiClipboard, FiList, FiCheckSquare, FiFileText } from 'react-icons/fi';
+import { FiX, FiSave, FiPlus, FiHeart, FiActivity, FiUser, FiClipboard, FiList, FiCheckSquare, FiFileText, FiEdit3 } from 'react-icons/fi';
 import Input from './Input';
 import Button from './Button';
+import Textarea from './Textarea';
 
-export const CheckboxGroup = ({ label, name, value = [], onChange, options = [], rightInlineExtra = null, disabled = false }) => {
+export const CheckboxGroup = ({ label, name, value = [], onChange, options = [], rightInlineExtra = null, disabled = false, note = '', onNoteChange = null }) => {
     // Initialize with provided options to ensure they're always available
     const baseOptions = Array.isArray(options) ? options : [];
     const [localOptions, setLocalOptions] = useState(baseOptions);
@@ -12,9 +13,16 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
     const [userCreatedOptions, setUserCreatedOptions] = useState(new Set()); // Track user-created options explicitly
     const [showAdd, setShowAdd] = useState(false);
     const [customOption, setCustomOption] = useState('');
+    const [showNote, setShowNote] = useState(false);
+    const [localNote, setLocalNote] = useState(note || '');
     const { data: remoteOptionsData } = useGetClinicalOptionsQuery(name);
     const [addOption] = useAddClinicalOptionMutation();
     const [deleteOption] = useDeleteClinicalOptionMutation();
+    
+    // Sync local note with prop changes
+    useEffect(() => {
+      setLocalNote(note || '');
+    }, [note]);
     
     // Extract options and system flags from API response
     const remoteOptions = remoteOptionsData?.data?.options || [];
@@ -46,19 +54,17 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
       if (Array.isArray(remoteOptionsWithMeta)) {
         const userCreatedFromDB = new Set();
         remoteOptionsWithMeta.forEach(opt => {
-          if (opt.label && !opt.is_system) {
+          // Any option with is_system === false is user-created
+          // Also treat undefined/null is_system as user-created (for backwards compatibility)
+          if (opt.label && (opt.is_system === false || opt.is_system === null || opt.is_system === undefined)) {
             // This is a user-created option from database
             userCreatedFromDB.add(opt.label);
           }
         });
         
-        // Merge with existing user-created options (don't overwrite, just add)
-        if (userCreatedFromDB.size > 0) {
-          setUserCreatedOptions((prev) => {
-            const merged = new Set(prev);
-            userCreatedFromDB.forEach(opt => merged.add(opt));
-            return merged;
-          });
+        // Always update user-created options from database (overwrite to ensure sync after refresh)
+        if (userCreatedFromDB.size > 0 || remoteOptionsWithMeta.length > 0) {
+          setUserCreatedOptions(userCreatedFromDB);
         }
       }
     }, [remoteOptionsWithMeta]);
@@ -91,7 +97,21 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
       
       // Explicitly remove user-created options from system set
       // This ensures newly added options and existing user-created options are never marked as system
-      userCreatedOptions.forEach(opt => systemSet.delete(opt));
+      // CRITICAL: This must run after systemSet is populated to ensure user-created options are not system
+      userCreatedOptions.forEach(opt => {
+        systemSet.delete(opt);
+      });
+      
+      // Also check remoteOptionsWithMeta to ensure user-created options from DB are not marked as system
+      // This is a double-check to ensure options with is_system=false are never in systemSet
+      if (Array.isArray(remoteOptionsWithMeta)) {
+        remoteOptionsWithMeta.forEach(opt => {
+          if (opt.label && (opt.is_system === false || opt.is_system === null || opt.is_system === undefined)) {
+            // This is a user-created option, remove it from system set
+            systemSet.delete(opt.label);
+          }
+        });
+      }
       
       setSystemOptions(systemSet);
       
@@ -139,10 +159,38 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
       }
     };
   
-    const handleAddClick = () => setShowAdd(true);
+    const handleAddClick = () => {
+      setShowAdd(true);
+      setShowNote(false); // Close note if open
+    };
     const handleCancelAdd = () => {
       setShowAdd(false);
       setCustomOption('');
+    };
+    
+    const handleNoteClick = () => {
+      setShowNote(true);
+      setShowAdd(false); // Close add if open
+    };
+    
+    const handleNoteSave = () => {
+      if (onNoteChange) {
+        onNoteChange({ target: { name: `${name}_notes`, value: localNote } });
+      }
+      setShowNote(false);
+    };
+    
+    const handleNoteCancel = () => {
+      setLocalNote(note || ''); // Reset to original value
+      setShowNote(false);
+    };
+    
+    const handleNoteDelete = () => {
+      if (onNoteChange) {
+        onNoteChange({ target: { name: `${name}_notes`, value: '' } });
+      }
+      setLocalNote('');
+      setShowNote(false);
     };
   
     const handleSaveAdd = async () => {
@@ -270,17 +318,96 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
                   </Button>
                 </>
               ) : (
-                <Button
-                  type="button"
-                  onClick={handleAddClick}
-                  className="bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg shadow-green-500/30 px-4 py-2 rounded-md flex items-center gap-2 transition-all duration-200 hover:from-green-600 hover:to-green-700 hover:shadow-xl hover:shadow-green-500/40"
-                >
-                  <FiPlus className="w-4 h-4" /> Add
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    onClick={handleAddClick}
+                    className="bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg shadow-green-500/30 px-4 py-2 rounded-md flex items-center gap-2 transition-all duration-200 hover:from-green-600 hover:to-green-700 hover:shadow-xl hover:shadow-green-500/40"
+                  >
+                    <FiPlus className="w-4 h-4" /> Add
+                  </Button>
+                  {onNoteChange && (
+                    <Button
+                      type="button"
+                      onClick={handleNoteClick}
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30 px-4 py-2 rounded-md flex items-center gap-2 transition-all duration-200 hover:from-blue-600 hover:to-blue-700 hover:shadow-xl hover:shadow-blue-500/40"
+                    >
+                      <FiEdit3 className="w-4 h-4" /> Note
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           )}
         </div>
+        {showNote && onNoteChange && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <Textarea
+              label={`Notes for ${label}`}
+              value={localNote}
+              onChange={(e) => setLocalNote(e.target.value)}
+              rows={3}
+              placeholder="Enter notes for this section..."
+            />
+            <div className="flex items-center gap-2 mt-3">
+              <Button
+                type="button"
+                onClick={handleNoteCancel}
+                className="bg-gradient-to-r from-gray-500 to-gray-600 text-white shadow-lg shadow-gray-500/30 px-3 py-1.5 rounded-md flex items-center gap-2 text-sm hover:from-gray-600 hover:to-gray-700 hover:shadow-xl hover:shadow-gray-500/40"
+              >
+                <FiX className="w-4 h-4" /> Cancel
+              </Button>
+              {note && (
+                <Button
+                  type="button"
+                  onClick={handleNoteDelete}
+                  className="bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-500/30 px-3 py-1.5 rounded-md flex items-center gap-2 text-sm hover:from-red-600 hover:to-red-700 hover:shadow-xl hover:shadow-red-500/40"
+                >
+                  <FiX className="w-4 h-4" /> Delete Note
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={handleNoteSave}
+                className="bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg shadow-green-500/30 px-3 py-1.5 rounded-md flex items-center gap-2 text-sm hover:from-green-600 hover:to-green-700 hover:shadow-xl hover:shadow-green-500/40"
+              >
+                <FiSave className="w-4 h-4" /> Save Note
+              </Button>
+            </div>
+          </div>
+        )}
+        {!showNote && note && onNoteChange && (
+          <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-xs font-medium text-gray-500 mb-1">Notes:</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{note}</p>
+              </div>
+              <div className="flex items-center gap-2 ml-2">
+                <Button
+                  type="button"
+                  onClick={handleNoteClick}
+                  variant="ghost"
+                  size="sm"
+                  className="text-blue-600 hover:text-blue-700"
+                  title="Edit note"
+                >
+                  <FiEdit3 className="w-4 h-4" />
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleNoteDelete}
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700"
+                  title="Delete note"
+                >
+                  <FiX className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };

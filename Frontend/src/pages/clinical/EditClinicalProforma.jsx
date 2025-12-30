@@ -51,12 +51,13 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   const isFollowUpMode = searchParams.get('followup') === 'true'; // Follow-up mode - only show Clinical Assessment and Prescription
   const [createPrescriptions, { isLoading: isSavingPrescriptions }] = useCreatePrescriptionMutation();
 
-  const { data: proformaData, isLoading, isFetching, refetch, error } = useGetAllClinicalProformasQuery({});
+  const { data: proformaData, isLoading: isLoadingProforma, isFetching, refetch, error: proformaError } = useGetAllClinicalProformasQuery({});
 
   // Convert id to number for comparison since patient_id is a number
   // URL params return strings, but patient_id in database is integer
   const patientIdFromUrl = id ? parseInt(id, 10) : null;
   const proforma = proformaData?.data?.proformas?.find(p => p.patient_id === patientIdFromUrl);
+  const isErrorProforma = !!proformaError;
   const isComplexCase = proforma?.doctor_decision === 'complex_case' && proforma?.adl_file_id;
 
   // Check if the case is already marked as complex (from original data, not form state)
@@ -213,28 +214,46 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         illness_duration: getValue(propInitialData.illness_duration),
         current_episode_since: formatDate(propInitialData.current_episode_since),
         mood: normalizeArrayField(propInitialData.mood),
+        mood_notes: getValue(propInitialData.mood_notes),
         behaviour: normalizeArrayField(propInitialData.behaviour),
+        behaviour_notes: getValue(propInitialData.behaviour_notes),
         speech: normalizeArrayField(propInitialData.speech),
+        speech_notes: getValue(propInitialData.speech_notes),
         thought: normalizeArrayField(propInitialData.thought),
+        thought_notes: getValue(propInitialData.thought_notes),
         perception: normalizeArrayField(propInitialData.perception),
+        perception_notes: getValue(propInitialData.perception_notes),
         somatic: normalizeArrayField(propInitialData.somatic),
+        somatic_notes: getValue(propInitialData.somatic_notes),
         bio_functions: normalizeArrayField(propInitialData.bio_functions),
+        bio_functions_notes: getValue(propInitialData.bio_functions_notes),
         adjustment: normalizeArrayField(propInitialData.adjustment),
+        adjustment_notes: getValue(propInitialData.adjustment_notes),
         cognitive_function: normalizeArrayField(propInitialData.cognitive_function),
+        cognitive_function_notes: getValue(propInitialData.cognitive_function_notes),
         fits: normalizeArrayField(propInitialData.fits),
+        fits_notes: getValue(propInitialData.fits_notes),
         sexual_problem: normalizeArrayField(propInitialData.sexual_problem),
+        sexual_problem_notes: getValue(propInitialData.sexual_problem_notes),
         substance_use: normalizeArrayField(propInitialData.substance_use),
+        substance_use_notes: getValue(propInitialData.substance_use_notes),
         present_history: getValue(propInitialData.present_history),
         past_history: getValue(propInitialData.past_history),
         treatment_history: getValue(propInitialData.treatment_history),
         family_history: getValue(propInitialData.family_history),
         associated_medical_surgical: normalizeArrayField(propInitialData.associated_medical_surgical),
+        associated_medical_surgical_notes: getValue(propInitialData.associated_medical_surgical_notes),
         mse_behaviour: normalizeArrayField(propInitialData.mse_behaviour),
+        mse_behaviour_notes: getValue(propInitialData.mse_behaviour_notes),
         mse_affect: normalizeArrayField(propInitialData.mse_affect),
+        mse_affect_notes: getValue(propInitialData.mse_affect_notes),
         mse_thought: getValue(propInitialData.mse_thought),
+        mse_thought_notes: getValue(propInitialData.mse_thought_notes),
         mse_delusions: getValue(propInitialData.mse_delusions),
         mse_perception: normalizeArrayField(propInitialData.mse_perception),
+        mse_perception_notes: getValue(propInitialData.mse_perception_notes),
         mse_cognitive_function: normalizeArrayField(propInitialData.mse_cognitive_function),
+        mse_cognitive_function_notes: getValue(propInitialData.mse_cognitive_function_notes),
         gpe: getValue(propInitialData.gpe),
         diagnosis: getValue(propInitialData.diagnosis),
         icd_code: getValue(propInitialData.icd_code),
@@ -268,17 +287,29 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         illness_duration: '',
         current_episode_since: '',
         mood: [],
+        mood_notes: '',
         behaviour: [],
+        behaviour_notes: '',
         speech: [],
+        speech_notes: '',
         thought: [],
+        thought_notes: '',
         perception: [],
+        perception_notes: '',
         somatic: [],
+        somatic_notes: '',
         bio_functions: [],
+        bio_functions_notes: '',
         adjustment: [],
+        adjustment_notes: '',
         cognitive_function: [],
+        cognitive_function_notes: '',
         fits: [],
+        fits_notes: '',
         sexual_problem: [],
+        sexual_problem_notes: '',
         substance_use: [],
+        substance_use_notes: '',
         present_history: '',
         past_history: '',
         treatment_history: '',
@@ -315,28 +346,46 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
       illness_duration: proforma.illness_duration || '',
       current_episode_since: proforma.current_episode_since || '',
       mood: normalizeArrayField(proforma.mood),
+      mood_notes: proforma.mood_notes || '',
       behaviour: normalizeArrayField(proforma.behaviour),
+      behaviour_notes: proforma.behaviour_notes || '',
       speech: normalizeArrayField(proforma.speech),
+      speech_notes: proforma.speech_notes || '',
       thought: normalizeArrayField(proforma.thought),
+      thought_notes: proforma.thought_notes || '',
       perception: normalizeArrayField(proforma.perception),
+      perception_notes: proforma.perception_notes || '',
       somatic: normalizeArrayField(proforma.somatic),
+      somatic_notes: proforma.somatic_notes || '',
       bio_functions: normalizeArrayField(proforma.bio_functions),
+      bio_functions_notes: proforma.bio_functions_notes || '',
       adjustment: normalizeArrayField(proforma.adjustment),
+      adjustment_notes: proforma.adjustment_notes || '',
       cognitive_function: normalizeArrayField(proforma.cognitive_function),
+      cognitive_function_notes: proforma.cognitive_function_notes || '',
       fits: normalizeArrayField(proforma.fits),
+      fits_notes: proforma.fits_notes || '',
       sexual_problem: normalizeArrayField(proforma.sexual_problem),
+      sexual_problem_notes: proforma.sexual_problem_notes || '',
       substance_use: normalizeArrayField(proforma.substance_use),
+      substance_use_notes: proforma.substance_use_notes || '',
       present_history: proforma.present_history || '',
       past_history: proforma.past_history || '',
       treatment_history: proforma.treatment_history || '',
       family_history: proforma.family_history || '',
       associated_medical_surgical: normalizeArrayField(proforma.associated_medical_surgical),
+      associated_medical_surgical_notes: proforma.associated_medical_surgical_notes || '',
       mse_behaviour: normalizeArrayField(proforma.mse_behaviour),
+      mse_behaviour_notes: proforma.mse_behaviour_notes || '',
       mse_affect: normalizeArrayField(proforma.mse_affect),
+      mse_affect_notes: proforma.mse_affect_notes || '',
       mse_thought: proforma.mse_thought || '',
+      mse_thought_notes: proforma.mse_thought_notes || '',
       mse_delusions: proforma.mse_delusions || '',
       mse_perception: normalizeArrayField(proforma.mse_perception),
+      mse_perception_notes: proforma.mse_perception_notes || '',
       mse_cognitive_function: normalizeArrayField(proforma.mse_cognitive_function),
+      mse_cognitive_function_notes: proforma.mse_cognitive_function_notes || '',
       gpe: proforma.gpe || '',
       diagnosis: proforma.diagnosis || '',
       icd_code: proforma.icd_code || '',
@@ -365,26 +414,46 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     illness_duration: '',
     current_episode_since: '',
     mood: [],
+    mood_notes: '',
     behaviour: [],
+    behaviour_notes: '',
     speech: [],
+    speech_notes: '',
     thought: [],
+    thought_notes: '',
     perception: [],
+    perception_notes: '',
     somatic: [],
+    somatic_notes: '',
     bio_functions: [],
+    bio_functions_notes: '',
     adjustment: [],
+    adjustment_notes: '',
     cognitive_function: [],
+    cognitive_function_notes: '',
     fits: [],
+    fits_notes: '',
     sexual_problem: [],
+    sexual_problem_notes: '',
     substance_use: [],
+    substance_use_notes: '',
+    present_history: '',
     past_history: '',
+    treatment_history: '',
     family_history: '',
     associated_medical_surgical: [],
+    associated_medical_surgical_notes: '',
     mse_behaviour: [],
+    mse_behaviour_notes: '',
     mse_affect: [],
+    mse_affect_notes: '',
     mse_thought: '',
+    mse_thought_notes: '',
     mse_delusions: '',
     mse_perception: [],
+    mse_perception_notes: '',
     mse_cognitive_function: [],
+    mse_cognitive_function_notes: '',
     gpe: '',
     diagnosis: '',
     icd_code: '',
@@ -444,15 +513,41 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   useEffect(() => {
   }, [patientFilesData, existingFiles]);
 
-  // Card expand/collapse state
-  const [expandedCards, setExpandedCards] = useState({
-    clinicalProforma: true, // Default to expanded
-    adlfile: true,
-    prescription: true,
-  });
+  // Card expand/collapse state - persist in localStorage
+  const getInitialExpandedCards = () => {
+    try {
+      const saved = localStorage.getItem('clinicalProformaExpandedCards');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          clinicalProforma: parsed.clinicalProforma !== false, // Default to true if not explicitly false
+          adlfile: parsed.adlfile !== false,
+          prescription: parsed.prescription !== false,
+        };
+      }
+    } catch (e) {
+      console.error('Error loading expanded cards state:', e);
+    }
+    return {
+      clinicalProforma: true, // Default to expanded
+      adlfile: true,
+      prescription: true,
+    };
+  };
+
+  const [expandedCards, setExpandedCards] = useState(getInitialExpandedCards);
 
   const toggleCard = (cardName) => {
-    setExpandedCards(prev => ({ ...prev, [cardName]: !prev[cardName] }));
+    setExpandedCards(prev => {
+      const updated = { ...prev, [cardName]: !prev[cardName] };
+      // Persist to localStorage
+      try {
+        localStorage.setItem('clinicalProformaExpandedCards', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Error saving expanded cards state:', e);
+      }
+      return updated;
+    });
   };
 
   // Print functionality for Walk-in Clinical Proforma section
@@ -767,19 +862,29 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         (!prevData.proformaId && propInitialData.id)
       );
 
+      // Detect when data loads from API after page refresh
+      // This happens when: proforma exists, we have prevData but it was from defaults (no proformaId), and user hasn't edited
+      // Check if proforma ID exists now but didn't in prevData (data just loaded)
+      const proformaIdJustLoaded = proforma?.id && prevData && !prevData.proformaId && !propInitialData && !userHasEditedRef.current;
+      // Also check if proforma data just became available (was undefined/null, now has data)
+      const proformaDataJustLoaded = !prevData?.hasProformaData && proforma && !propInitialData && !userHasEditedRef.current;
+      const dataJustLoaded = proformaIdJustLoaded || proformaDataJustLoaded || (!prevData && proforma && !userHasEditedRef.current && !propInitialData);
+
       // Only update if:
       // 1. No previous data exists, OR
       // 2. Patient ID changed (different patient), OR
       // 3. Proforma ID changed (different proforma), OR
       // 4. propInitialData changed (different proforma passed as prop), OR
       // 5. Key fields in initialFormData changed AND it's the same patient (initial data was updated externally)
+      // 6. Data just loaded from API (important for page refresh - when proforma loads after initial empty state)
       // DO NOT update if user is just changing form fields - only update if the source data changed
       // IMPORTANT: Don't reset if user has manually edited the form (unless it's a different patient/proforma)
       const shouldUpdate = (!prevData && !userHasEditedRef.current) ||
         patientIdChanged ||
         proformaIdChanged ||
         (propDataChanged && !userHasEditedRef.current) ||
-        (keyFieldsChanged && prevData.patient_id === initialFormData.patient_id && prevData.proformaId === (propInitialData?.id || null) && !userHasEditedRef.current);
+        (keyFieldsChanged && prevData.patient_id === initialFormData.patient_id && prevData.proformaId === (propInitialData?.id || null) && !userHasEditedRef.current) ||
+        dataJustLoaded;
 
       if (shouldUpdate) {
         setFormData(initialFormData);
@@ -794,11 +899,30 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         }
         prevInitialDataRef.current = {
           ...initialFormData,
-          proformaId: propInitialData?.id || null
+          proformaId: propInitialData?.id || proforma?.id || null,
+          hasProformaData: !!proforma
         };
       }
     }
-  }, [initialFormData, onFormDataChange, propInitialData?.id]);
+  }, [initialFormData, onFormDataChange, propInitialData?.id, proforma?.id, proforma, isLoadingProforma]);
+
+  // Additional effect to handle data loading after page refresh
+  // This ensures formData is updated when proforma data becomes available
+  useEffect(() => {
+    // Only run if we're not using propInitialData (standalone mode) and data has finished loading
+    if (!propInitialData && !isLoadingProforma && proforma && initialFormData) {
+      // Use a ref to check current formData without causing dependency issues
+      const currentFormData = formDataRef.current;
+      // Check if formData is still using defaults but we have real data
+      const hasDefaultData = !currentFormData?.mood?.length && !currentFormData?.mood_notes && 
+                             (initialFormData.mood?.length > 0 || initialFormData.mood_notes);
+      
+      if (hasDefaultData && !userHasEditedRef.current) {
+        setFormData(initialFormData);
+        formDataRef.current = initialFormData;
+      }
+    }
+  }, [proforma, isLoadingProforma, initialFormData, propInitialData]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -879,28 +1003,46 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           illness_duration: currentFormData.illness_duration,
           current_episode_since: currentFormData.current_episode_since,
           mood: join(currentFormData.mood),
+          mood_notes: currentFormData.mood_notes,
           behaviour: join(currentFormData.behaviour),
+          behaviour_notes: currentFormData.behaviour_notes,
           speech: join(currentFormData.speech),
+          speech_notes: currentFormData.speech_notes,
           thought: join(currentFormData.thought),
+          thought_notes: currentFormData.thought_notes,
           perception: join(currentFormData.perception),
+          perception_notes: currentFormData.perception_notes,
           somatic: join(currentFormData.somatic),
+          somatic_notes: currentFormData.somatic_notes,
           bio_functions: join(currentFormData.bio_functions),
+          bio_functions_notes: currentFormData.bio_functions_notes,
           adjustment: join(currentFormData.adjustment),
+          adjustment_notes: currentFormData.adjustment_notes,
           cognitive_function: join(currentFormData.cognitive_function),
+          cognitive_function_notes: currentFormData.cognitive_function_notes,
           fits: join(currentFormData.fits),
+          fits_notes: currentFormData.fits_notes,
           sexual_problem: join(currentFormData.sexual_problem),
+          sexual_problem_notes: currentFormData.sexual_problem_notes,
           substance_use: join(currentFormData.substance_use),
+          substance_use_notes: currentFormData.substance_use_notes,
           present_history: currentFormData.present_history,
           past_history: currentFormData.past_history,
           treatment_history: currentFormData.treatment_history,
           family_history: currentFormData.family_history,
           associated_medical_surgical: join(currentFormData.associated_medical_surgical),
+          associated_medical_surgical_notes: currentFormData.associated_medical_surgical_notes,
           mse_behaviour: join(currentFormData.mse_behaviour),
+          mse_behaviour_notes: currentFormData.mse_behaviour_notes,
           mse_affect: join(currentFormData.mse_affect),
+          mse_affect_notes: currentFormData.mse_affect_notes,
           mse_thought: currentFormData.mse_thought,
+          mse_thought_notes: currentFormData.mse_thought_notes,
           mse_delusions: currentFormData.mse_delusions,
           mse_perception: join(currentFormData.mse_perception),
+          mse_perception_notes: currentFormData.mse_perception_notes,
           mse_cognitive_function: join(currentFormData.mse_cognitive_function),
+          mse_cognitive_function_notes: currentFormData.mse_cognitive_function_notes,
           gpe: currentFormData.gpe,
           diagnosis: currentFormData.diagnosis,
           icd_code: currentFormData.icd_code,
@@ -937,28 +1079,46 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         illness_duration: currentFormData.illness_duration || null,
         current_episode_since: currentFormData.current_episode_since || null,
         mood: join(currentFormData.mood) || null,
+        mood_notes: currentFormData.mood_notes || null,
         behaviour: join(currentFormData.behaviour) || null,
+        behaviour_notes: currentFormData.behaviour_notes || null,
         speech: join(currentFormData.speech) || null,
+        speech_notes: currentFormData.speech_notes || null,
         thought: join(currentFormData.thought) || null,
+        thought_notes: currentFormData.thought_notes || null,
         perception: join(currentFormData.perception) || null,
+        perception_notes: currentFormData.perception_notes || null,
         somatic: join(currentFormData.somatic) || null,
+        somatic_notes: currentFormData.somatic_notes || null,
         bio_functions: join(currentFormData.bio_functions) || null,
+        bio_functions_notes: currentFormData.bio_functions_notes || null,
         adjustment: join(currentFormData.adjustment) || null,
+        adjustment_notes: currentFormData.adjustment_notes || null,
         cognitive_function: join(currentFormData.cognitive_function) || null,
+        cognitive_function_notes: currentFormData.cognitive_function_notes || null,
         fits: join(currentFormData.fits) || null,
+        fits_notes: currentFormData.fits_notes || null,
         sexual_problem: join(currentFormData.sexual_problem) || null,
+        sexual_problem_notes: currentFormData.sexual_problem_notes || null,
         substance_use: join(currentFormData.substance_use) || null,
+        substance_use_notes: currentFormData.substance_use_notes || null,
         present_history: currentFormData.present_history || null,
         past_history: currentFormData.past_history || null,
         treatment_history: currentFormData.treatment_history || null,
         family_history: currentFormData.family_history || null,
         associated_medical_surgical: join(currentFormData.associated_medical_surgical) || null,
+        associated_medical_surgical_notes: currentFormData.associated_medical_surgical_notes || null,
         mse_behaviour: join(currentFormData.mse_behaviour) || null,
+        mse_behaviour_notes: currentFormData.mse_behaviour_notes || null,
         mse_affect: join(currentFormData.mse_affect) || null,
+        mse_affect_notes: currentFormData.mse_affect_notes || null,
         mse_thought: currentFormData.mse_thought || null,
+        mse_thought_notes: currentFormData.mse_thought_notes || null,
         mse_delusions: currentFormData.mse_delusions || null,
         mse_perception: join(currentFormData.mse_perception) || null,
+        mse_perception_notes: currentFormData.mse_perception_notes || null,
         mse_cognitive_function: join(currentFormData.mse_cognitive_function) || null,
+        mse_cognitive_function_notes: currentFormData.mse_cognitive_function_notes || null,
         gpe: currentFormData.gpe || null,
         diagnosis: currentFormData.diagnosis || null,
         icd_code: currentFormData.icd_code || null,
@@ -1378,18 +1538,18 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Complaints / History of Presenting Illness</h2>
                 <div className="space-y-6">
-                  <CheckboxGroup label="Mood" name="mood" value={formData.mood || []} onChange={handleChange} options={clinicalOptions.mood || []} />
-                  <CheckboxGroup label="Behaviour" name="behaviour" value={formData.behaviour || []} onChange={handleChange} options={clinicalOptions.behaviour || []} />
-                  <CheckboxGroup label="Speech" name="speech" value={formData.speech || []} onChange={handleChange} options={clinicalOptions.speech || []} />
-                  <CheckboxGroup label="Thought" name="thought" value={formData.thought || []} onChange={handleChange} options={clinicalOptions.thought || []} />
-                  <CheckboxGroup label="Perception" name="perception" value={formData.perception || []} onChange={handleChange} options={clinicalOptions.perception || []} />
-                  <CheckboxGroup label="Somatic" name="somatic" value={formData.somatic || []} onChange={handleChange} options={clinicalOptions.somatic || []} />
-                  <CheckboxGroup label="Bio-functions" name="bio_functions" value={formData.bio_functions || []} onChange={handleChange} options={clinicalOptions.bio_functions || []} />
-                  <CheckboxGroup label="Adjustment" name="adjustment" value={formData.adjustment || []} onChange={handleChange} options={clinicalOptions.adjustment || []} />
-                  <CheckboxGroup label="Cognitive Function" name="cognitive_function" value={formData.cognitive_function || []} onChange={handleChange} options={clinicalOptions.cognitive_function || []} />
-                  <CheckboxGroup label="Fits" name="fits" value={formData.fits || []} onChange={handleChange} options={clinicalOptions.fits || []} />
-                  <CheckboxGroup label="Sexual Problem" name="sexual_problem" value={formData.sexual_problem || []} onChange={handleChange} options={clinicalOptions.sexual_problem || []} />
-                  <CheckboxGroup label="Substance Use" name="substance_use" value={formData.substance_use || []} onChange={handleChange} options={clinicalOptions.substance_use || []} />
+                  <CheckboxGroup label="Mood" name="mood" value={formData.mood || []} onChange={handleChange} options={clinicalOptions.mood || []} note={formData.mood_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Behaviour" name="behaviour" value={formData.behaviour || []} onChange={handleChange} options={clinicalOptions.behaviour || []} note={formData.behaviour_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Speech" name="speech" value={formData.speech || []} onChange={handleChange} options={clinicalOptions.speech || []} note={formData.speech_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Thought" name="thought" value={formData.thought || []} onChange={handleChange} options={clinicalOptions.thought || []} note={formData.thought_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Perception" name="perception" value={formData.perception || []} onChange={handleChange} options={clinicalOptions.perception || []} note={formData.perception_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Somatic" name="somatic" value={formData.somatic || []} onChange={handleChange} options={clinicalOptions.somatic || []} note={formData.somatic_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Bio-functions" name="bio_functions" value={formData.bio_functions || []} onChange={handleChange} options={clinicalOptions.bio_functions || []} note={formData.bio_functions_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Adjustment" name="adjustment" value={formData.adjustment || []} onChange={handleChange} options={clinicalOptions.adjustment || []} note={formData.adjustment_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Cognitive Function" name="cognitive_function" value={formData.cognitive_function || []} onChange={handleChange} options={clinicalOptions.cognitive_function || []} note={formData.cognitive_function_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Fits" name="fits" value={formData.fits || []} onChange={handleChange} options={clinicalOptions.fits || []} note={formData.fits_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Sexual Problem" name="sexual_problem" value={formData.sexual_problem || []} onChange={handleChange} options={clinicalOptions.sexual_problem || []} note={formData.sexual_problem_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Substance Use" name="substance_use" value={formData.substance_use || []} onChange={handleChange} options={clinicalOptions.substance_use || []} note={formData.substance_use_notes || ''} onNoteChange={handleChange} />
                 </div>
               </div>
 
@@ -1431,6 +1591,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                     value={formData.associated_medical_surgical || []}
                     onChange={handleChange}
                     options={clinicalOptions.associated_medical_surgical || []}
+                    note={formData.associated_medical_surgical_notes || ''}
+                    onNoteChange={handleChange}
                   />
                 </div>
               </div>
@@ -1439,14 +1601,16 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Mental State Examination (MSE)</h2>
                 <div className="space-y-6">
-                  <CheckboxGroup label="Behaviour" name="mse_behaviour" value={formData.mse_behaviour || []} onChange={handleChange} options={clinicalOptions.mse_behaviour || []} />
-                  <CheckboxGroup label="Affect & Mood" name="mse_affect" value={formData.mse_affect || []} onChange={handleChange} options={clinicalOptions.mse_affect || []} />
+                  <CheckboxGroup label="Behaviour" name="mse_behaviour" value={formData.mse_behaviour || []} onChange={handleChange} options={clinicalOptions.mse_behaviour || []} note={formData.mse_behaviour_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Affect & Mood" name="mse_affect" value={formData.mse_affect || []} onChange={handleChange} options={clinicalOptions.mse_affect || []} note={formData.mse_affect_notes || ''} onNoteChange={handleChange} />
                   <CheckboxGroup
                     label="Thought (Flow, Form, Content)"
                     name="mse_thought"
                     value={formData.mse_thought || []}
                     onChange={handleChange}
                     options={clinicalOptions.mse_thought || []}
+                    note={formData.mse_thought_notes || ''}
+                    onNoteChange={handleChange}
                     rightInlineExtra={
                       <Input
                         name="mse_delusions"
@@ -1457,8 +1621,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                       />
                     }
                   />
-                  <CheckboxGroup label="Perception" name="mse_perception" value={formData.mse_perception || []} onChange={handleChange} options={clinicalOptions.mse_perception || []} />
-                  <CheckboxGroup label="Cognitive Functions" name="mse_cognitive_function" value={formData.mse_cognitive_function || []} onChange={handleChange} options={clinicalOptions.mse_cognitive_function || []} />
+                  <CheckboxGroup label="Perception" name="mse_perception" value={formData.mse_perception || []} onChange={handleChange} options={clinicalOptions.mse_perception || []} note={formData.mse_perception_notes || ''} onNoteChange={handleChange} />
+                  <CheckboxGroup label="Cognitive Functions" name="mse_cognitive_function" value={formData.mse_cognitive_function || []} onChange={handleChange} options={clinicalOptions.mse_cognitive_function || []} note={formData.mse_cognitive_function_notes || ''} onNoteChange={handleChange} />
                 </div>
               </div>
 
@@ -1833,18 +1997,18 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Complaints / History of Presenting Illness</h2>
                 <div className="space-y-6">
-                    <CheckboxGroup label="Mood" name="mood" value={formData.mood || []} onChange={handleChange} options={clinicalOptions.mood || []} />
-                    <CheckboxGroup label="Behaviour" name="behaviour" value={formData.behaviour || []} onChange={handleChange} options={clinicalOptions.behaviour || []} />
-                    <CheckboxGroup label="Speech" name="speech" value={formData.speech || []} onChange={handleChange} options={clinicalOptions.speech || []} />
-                    <CheckboxGroup label="Thought" name="thought" value={formData.thought || []} onChange={handleChange} options={clinicalOptions.thought || []} />
-                    <CheckboxGroup label="Perception" name="perception" value={formData.perception || []} onChange={handleChange} options={clinicalOptions.perception || []} />
-                    <CheckboxGroup label="Somatic" name="somatic" value={formData.somatic || []} onChange={handleChange} options={clinicalOptions.somatic || []} />
-                    <CheckboxGroup label="Bio-functions" name="bio_functions" value={formData.bio_functions || []} onChange={handleChange} options={clinicalOptions.bio_functions || []} />
-                    <CheckboxGroup label="Adjustment" name="adjustment" value={formData.adjustment || []} onChange={handleChange} options={clinicalOptions.adjustment || []} />
-                    <CheckboxGroup label="Cognitive Function" name="cognitive_function" value={formData.cognitive_function || []} onChange={handleChange} options={clinicalOptions.cognitive_function || []} />
-                    <CheckboxGroup label="Fits" name="fits" value={formData.fits || []} onChange={handleChange} options={clinicalOptions.fits || []} />
-                    <CheckboxGroup label="Sexual Problem" name="sexual_problem" value={formData.sexual_problem || []} onChange={handleChange} options={clinicalOptions.sexual_problem || []} />
-                    <CheckboxGroup label="Substance Use" name="substance_use" value={formData.substance_use || []} onChange={handleChange} options={clinicalOptions.substance_use || []} />
+                    <CheckboxGroup label="Mood" name="mood" value={formData.mood || []} onChange={handleChange} options={clinicalOptions.mood || []} note={formData.mood_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Behaviour" name="behaviour" value={formData.behaviour || []} onChange={handleChange} options={clinicalOptions.behaviour || []} note={formData.behaviour_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Speech" name="speech" value={formData.speech || []} onChange={handleChange} options={clinicalOptions.speech || []} note={formData.speech_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Thought" name="thought" value={formData.thought || []} onChange={handleChange} options={clinicalOptions.thought || []} note={formData.thought_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Perception" name="perception" value={formData.perception || []} onChange={handleChange} options={clinicalOptions.perception || []} note={formData.perception_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Somatic" name="somatic" value={formData.somatic || []} onChange={handleChange} options={clinicalOptions.somatic || []} note={formData.somatic_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Bio-functions" name="bio_functions" value={formData.bio_functions || []} onChange={handleChange} options={clinicalOptions.bio_functions || []} note={formData.bio_functions_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Adjustment" name="adjustment" value={formData.adjustment || []} onChange={handleChange} options={clinicalOptions.adjustment || []} note={formData.adjustment_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Cognitive Function" name="cognitive_function" value={formData.cognitive_function || []} onChange={handleChange} options={clinicalOptions.cognitive_function || []} note={formData.cognitive_function_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Fits" name="fits" value={formData.fits || []} onChange={handleChange} options={clinicalOptions.fits || []} note={formData.fits_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Sexual Problem" name="sexual_problem" value={formData.sexual_problem || []} onChange={handleChange} options={clinicalOptions.sexual_problem || []} note={formData.sexual_problem_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Substance Use" name="substance_use" value={formData.substance_use || []} onChange={handleChange} options={clinicalOptions.substance_use || []} note={formData.substance_use_notes || ''} onNoteChange={handleChange} />
                 </div>
               </div>
 
@@ -1885,7 +2049,9 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                     name="associated_medical_surgical"
                     value={formData.associated_medical_surgical || []}
                     onChange={handleChange}
-                      options={clinicalOptions.associated_medical_surgical || []}
+                    options={clinicalOptions.associated_medical_surgical || []}
+                    note={formData.associated_medical_surgical_notes || ''}
+                    onNoteChange={handleChange}
                   />
                 </div>
               </div>
@@ -1894,14 +2060,16 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Mental State Examination (MSE)</h2>
                 <div className="space-y-6">
-                    <CheckboxGroup label="Behaviour" name="mse_behaviour" value={formData.mse_behaviour || []} onChange={handleChange} options={clinicalOptions.mse_behaviour || []} />
-                    <CheckboxGroup label="Affect & Mood" name="mse_affect" value={formData.mse_affect || []} onChange={handleChange} options={clinicalOptions.mse_affect || []} />
+                    <CheckboxGroup label="Behaviour" name="mse_behaviour" value={formData.mse_behaviour || []} onChange={handleChange} options={clinicalOptions.mse_behaviour || []} note={formData.mse_behaviour_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Affect & Mood" name="mse_affect" value={formData.mse_affect || []} onChange={handleChange} options={clinicalOptions.mse_affect || []} note={formData.mse_affect_notes || ''} onNoteChange={handleChange} />
                   <CheckboxGroup
                     label="Thought (Flow, Form, Content)"
                     name="mse_thought"
                     value={formData.mse_thought || []}
                     onChange={handleChange}
-                      options={clinicalOptions.mse_thought || []}
+                    options={clinicalOptions.mse_thought || []}
+                    note={formData.mse_thought_notes || ''}
+                    onNoteChange={handleChange}
                     rightInlineExtra={
                       <Input
                         name="mse_delusions"
@@ -1912,8 +2080,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                       />
                     }
                   />
-                    <CheckboxGroup label="Perception" name="mse_perception" value={formData.mse_perception || []} onChange={handleChange} options={clinicalOptions.mse_perception || []} />
-                    <CheckboxGroup label="Cognitive Functions" name="mse_cognitive_function" value={formData.mse_cognitive_function || []} onChange={handleChange} options={clinicalOptions.mse_cognitive_function || []} />
+                    <CheckboxGroup label="Perception" name="mse_perception" value={formData.mse_perception || []} onChange={handleChange} options={clinicalOptions.mse_perception || []} note={formData.mse_perception_notes || ''} onNoteChange={handleChange} />
+                    <CheckboxGroup label="Cognitive Functions" name="mse_cognitive_function" value={formData.mse_cognitive_function || []} onChange={handleChange} options={clinicalOptions.mse_cognitive_function || []} note={formData.mse_cognitive_function_notes || ''} onNoteChange={handleChange} />
                 </div>
               </div>
 
