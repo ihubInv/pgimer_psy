@@ -226,6 +226,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         substance_use: normalizeArrayField(propInitialData.substance_use),
         present_history: getValue(propInitialData.present_history),
         past_history: getValue(propInitialData.past_history),
+        treatment_history: getValue(propInitialData.treatment_history),
         family_history: getValue(propInitialData.family_history),
         associated_medical_surgical: normalizeArrayField(propInitialData.associated_medical_surgical),
         mse_behaviour: normalizeArrayField(propInitialData.mse_behaviour),
@@ -280,6 +281,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         substance_use: [],
         present_history: '',
         past_history: '',
+        treatment_history: '',
         family_history: '',
         associated_medical_surgical: [],
         mse_behaviour: [],
@@ -326,6 +328,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
       substance_use: normalizeArrayField(proforma.substance_use),
       present_history: proforma.present_history || '',
       past_history: proforma.past_history || '',
+      treatment_history: proforma.treatment_history || '',
       family_history: proforma.family_history || '',
       associated_medical_surgical: normalizeArrayField(proforma.associated_medical_surgical),
       mse_behaviour: normalizeArrayField(proforma.mse_behaviour),
@@ -889,6 +892,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           substance_use: join(currentFormData.substance_use),
           present_history: currentFormData.present_history,
           past_history: currentFormData.past_history,
+          treatment_history: currentFormData.treatment_history,
           family_history: currentFormData.family_history,
           associated_medical_surgical: join(currentFormData.associated_medical_surgical),
           mse_behaviour: join(currentFormData.mse_behaviour),
@@ -946,6 +950,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         substance_use: join(currentFormData.substance_use) || null,
         present_history: currentFormData.present_history || null,
         past_history: currentFormData.past_history || null,
+        treatment_history: currentFormData.treatment_history || null,
         family_history: currentFormData.family_history || null,
         associated_medical_surgical: join(currentFormData.associated_medical_surgical) || null,
         mse_behaviour: join(currentFormData.mse_behaviour) || null,
@@ -1407,6 +1412,13 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                     rows={4}
                   />
                   <Textarea
+                    label="Treatment History"
+                    name="treatment_history"
+                    value={formData.treatment_history}
+                    onChange={handleChange}
+                    rows={4}
+                  />
+                  <Textarea
                     label="Family History"
                     name="family_history"
                     value={formData.family_history}
@@ -1851,6 +1863,13 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                     label="Past Psychiatric History"
                     name="past_history"
                     value={formData.past_history}
+                    onChange={handleChange}
+                    rows={4}
+                  />
+                  <Textarea
+                    label="Treatment History"
+                    name="treatment_history"
+                    value={formData.treatment_history}
                     onChange={handleChange}
                     rows={4}
                   />

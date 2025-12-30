@@ -396,7 +396,8 @@ export const CLINICAL_PROFORMA_FORM = [
 
   //  Additional History
   { value: 'present_history', label: 'Present History' },
-  { value: 'past_history', label: 'Past Psychiatric History' },
+  { value: 'past_history', label: 'Past Psychiatric History'},
+  {value:" treatment_history", label: "Treatment History"},
   { value: 'family_history', label: 'Family History' },
   { value: 'associated_medical_surgical', label: 'Associated Medical/Surgical Illness' },
 
