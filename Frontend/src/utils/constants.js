@@ -395,6 +395,7 @@ export const CLINICAL_PROFORMA_FORM = [
   { value: 'substance_use', label: 'Substance Use' },
 
   //  Additional History
+  { value: 'present_history', label: 'Present History' },
   { value: 'past_history', label: 'Past Psychiatric History' },
   { value: 'family_history', label: 'Family History' },
   { value: 'associated_medical_surgical', label: 'Associated Medical/Surgical Illness' },

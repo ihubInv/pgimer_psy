@@ -191,6 +191,7 @@ class ClinicalController {
             fits: data.fits,
             sexual_problem: data.sexual_problem,
             substance_use: data.substance_use,
+            present_history: data.present_history,
             past_history: data.past_history,
             family_history: data.family_history,
             associated_medical_surgical: data.associated_medical_surgical,

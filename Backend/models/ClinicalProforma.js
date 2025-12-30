@@ -31,6 +31,7 @@ class ClinicalProforma {
     this.fits = data.fits;
     this.sexual_problem = data.sexual_problem;
     this.substance_use = data.substance_use;
+    this.present_history = data.present_history;
     this.past_history = data.past_history;
     this.family_history = data.family_history;
     this.associated_medical_surgical = data.associated_medical_surgical;
@@ -158,6 +159,7 @@ class ClinicalProforma {
         fits,
         sexual_problem,
         substance_use,
+        present_history,
         past_history,
         family_history,
         associated_medical_surgical,
@@ -193,7 +195,7 @@ class ClinicalProforma {
           informant_present, nature_of_information, onset_duration, course, 
           precipitating_factor, illness_duration, current_episode_since, mood, behaviour,
           speech, thought, perception, somatic, bio_functions, adjustment, cognitive_function,
-          fits, sexual_problem, substance_use, past_history, family_history, 
+          fits, sexual_problem, substance_use, present_history, past_history, family_history, 
           associated_medical_surgical, mse_behaviour, mse_affect, mse_thought, mse_delusions,
           mse_perception, mse_cognitive_function, gpe, diagnosis, icd_code, disposal,
           workup_appointment, referred_to, treatment_prescribed, prescriptions, doctor_decision,
@@ -201,7 +203,7 @@ class ClinicalProforma {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
           $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
-          $39, $40, $41, $42, $43, $44, $45
+          $39, $40, $41, $42, $43, $44, $45, $46
         ) RETURNING *`,
         [
           patient_id, filled_by, visit_date, visit_type, room_no, assigned_doctor,
@@ -211,7 +213,7 @@ class ClinicalProforma {
           allProformaData.speech, allProformaData.thought, allProformaData.perception, 
           allProformaData.somatic, allProformaData.bio_functions, allProformaData.adjustment,
           allProformaData.cognitive_function, allProformaData.fits, allProformaData.sexual_problem,
-          allProformaData.substance_use, allProformaData.past_history, allProformaData.family_history,
+          allProformaData.substance_use, allProformaData.present_history, allProformaData.past_history, allProformaData.family_history,
           allProformaData.associated_medical_surgical, allProformaData.mse_behaviour, 
           allProformaData.mse_affect, allProformaData.mse_thought, allProformaData.mse_delusions,
           allProformaData.mse_perception, allProformaData.mse_cognitive_function, allProformaData.gpe,
@@ -457,7 +459,7 @@ class ClinicalProforma {
         'current_episode_since', 'mood', 'behaviour', 'speech', 'thought', 
         'perception', 'somatic', 'bio_functions', 'adjustment', 
         'cognitive_function', 'fits', 'sexual_problem', 'substance_use', 
-        'past_history', 'family_history', 'associated_medical_surgical', 
+        'present_history', 'past_history', 'family_history', 'associated_medical_surgical', 
         'mse_behaviour', 'mse_affect', 'mse_thought', 'mse_delusions', 
         'mse_perception', 'mse_cognitive_function', 'gpe', 'diagnosis', 
         'icd_code', 'disposal', 'workup_appointment', 'referred_to',
@@ -754,6 +756,7 @@ toJSON() {
     fits: this.fits,
     sexual_problem: this.sexual_problem,
     substance_use: this.substance_use,
+    present_history: this.present_history,
     past_history: this.past_history,
     family_history: this.family_history,
     associated_medical_surgical: this.associated_medical_surgical,

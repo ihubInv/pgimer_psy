@@ -85,6 +85,8 @@ const {
  *           type: string
  *         substance_use:
  *           type: string
+ *         present_history:
+ *           type: string
  *         past_history:
  *           type: string
  *         family_history:
@@ -243,6 +245,8 @@ const {
  *         sexual_problem:
  *           type: string
  *         substance_use:
+ *           type: string
+ *         present_history:
  *           type: string
  *         past_history:
  *           type: string
