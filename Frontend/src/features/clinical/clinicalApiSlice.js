@@ -12,7 +12,7 @@ export const clinicalApiSlice = apiSlice.injectEndpoints({
     getClinicalOptions: builder.query({
       query: (group) => `/clinical-proformas/options/${group}`,
       providesTags: (result, error, group) => [{ type: 'ClinicalOptions', id: group }, 'ClinicalOptions'],
-      transformResponse: (resp) => resp?.data?.options || [],
+      transformResponse: (resp) => resp?.data || { options: [], optionsWithMeta: [] }, // Return full data object with metadata
     }),
     addClinicalOption: builder.mutation({
       query: ({ group, label, display_order }) => ({

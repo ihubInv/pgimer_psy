@@ -11,6 +11,7 @@
     "migrate:status": "node database/supabaseMigrate.js status",
     "seed": "node database/supabaseSeed.js seed",
     "seed:clear": "node database/supabaseSeed.js clear",
+    "seed:clinical-options": "node scripts/seedClinicalOptions.js",
     "db:setup": "npm run migrate && npm run seed",
     "audit-fix": "npm audit fix",
     "lint": "eslint .",

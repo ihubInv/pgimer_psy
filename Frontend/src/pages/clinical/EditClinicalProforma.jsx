@@ -206,7 +206,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         room_no: getValue(propInitialData.room_no),
         assigned_doctor: getValue(propInitialData.assigned_doctor),
         informant_present: propInitialData.informant_present ?? true,
-        nature_of_information: getValue(propInitialData.nature_of_information),
+        nature_of_information: normalizeArrayField(propInitialData.nature_of_information),
         onset_duration: getValue(propInitialData.onset_duration),
         course: getValue(propInitialData.course),
         precipitating_factor: getValue(propInitialData.precipitating_factor),
@@ -259,7 +259,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         room_no: '',
         assigned_doctor: '',
         informant_present: true,
-        nature_of_information: '',
+        nature_of_information: [],
         onset_duration: '',
         course: '',
         precipitating_factor: '',
@@ -304,7 +304,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
       room_no: proforma.room_no || '',
       assigned_doctor: proforma.assigned_doctor?.toString() || '',
       informant_present: proforma.informant_present ?? true,
-      nature_of_information: proforma.nature_of_information || '',
+      nature_of_information: normalizeArrayField(proforma.nature_of_information),
       onset_duration: proforma.onset_duration || '',
       course: proforma.course || '',
       precipitating_factor: proforma.precipitating_factor || '',
@@ -352,7 +352,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     room_no: '',
     assigned_doctor: '',
     informant_present: true,
-    nature_of_information: '',
+    nature_of_information: [],
     onset_duration: '',
     course: '',
     precipitating_factor: '',
@@ -796,7 +796,9 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    const newValue = type === 'checkbox' ? checked : value;
+    // Handle checkbox groups (arrays) and regular checkboxes/inputs
+    // CheckboxGroup passes arrays directly, regular inputs pass strings/booleans
+    const newValue = type === 'checkbox' ? checked : (Array.isArray(value) ? value : value);
     
     // Mark that user has manually edited the form
     userHasEditedRef.current = true;
@@ -864,7 +866,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           room_no: currentFormData.room_no,
           assigned_doctor: currentFormData.assigned_doctor,
           informant_present: currentFormData.informant_present,
-          nature_of_information: currentFormData.nature_of_information,
+          nature_of_information: join(currentFormData.nature_of_information),
           onset_duration: currentFormData.onset_duration,
           course: currentFormData.course,
           precipitating_factor: currentFormData.precipitating_factor,
@@ -920,7 +922,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         room_no: currentFormData.room_no || null,
         assigned_doctor: currentFormData.assigned_doctor ? parseInt(currentFormData.assigned_doctor, 10) : null,
         informant_present: currentFormData.informant_present ?? true,
-        nature_of_information: currentFormData.nature_of_information || null,
+        nature_of_information: join(currentFormData.nature_of_information) || null,
         onset_duration: currentFormData.onset_duration || null,
         course: currentFormData.course || null,
         precipitating_factor: currentFormData.precipitating_factor || null,
@@ -1175,6 +1177,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     mse_affect: ['Sad', 'Anxious', 'Elated', 'Inappropriate', 'Blunted', 'Labile'],
     mse_perception: ['Hallucinations - Auditory', 'Hallucinations - Visual', 'Hallucinations - Tactile', 'Hallucinations - Olfactory', 'Illusions', 'Depersonalization', 'Derealization'],
     mse_cognitive_function: ['Impaired', 'Not impaired'],
+    nature_of_information: ['Reliable', 'Unreliable', 'Adequate', 'Inadequate'],
   };
 
   // Use database options if available, otherwise fallback to defaults
@@ -1292,23 +1295,13 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                       </label>
                     ))}
                   </div>
-                  <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Nature of information</h2>
-                  <div className="flex flex-wrap gap-3">
-                    {['Reliable', 'Unreliable', 'Adequate', 'Inadequate'].map((opt) => (
-                      <label key={opt} className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${formData.nature_of_information === opt ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-gray-200 bg-white hover:bg-gray-50'
-                        }`}>
-                        <input
-                          type="radio"
-                          name="nature_of_information"
-                          value={opt}
-                          checked={formData.nature_of_information === opt}
-                          onChange={handleChange}
-                          className="h-4 w-4 text-primary-600"
-                        />
-                        <span className="font-medium">{opt}</span>
-                      </label>
-                    ))}
-                  </div>
+                  <CheckboxGroup 
+                    label="Nature of information" 
+                    name="nature_of_information" 
+                    value={formData.nature_of_information || []} 
+                    onChange={handleChange} 
+                    options={clinicalOptions.nature_of_information || ['Reliable', 'Unreliable', 'Adequate', 'Inadequate']} 
+                  />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-3">
                       <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Onset Duration</h2>
@@ -1743,23 +1736,13 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                       </label>
                     ))}
                   </div>
-                  <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Nature of information</h2>
-                  <div className="flex flex-wrap gap-3">
-                    {['Reliable', 'Unreliable', 'Adequate', 'Inadequate'].map((opt) => (
-                      <label key={opt} className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${formData.nature_of_information === opt ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-gray-200 bg-white hover:bg-gray-50'
-                        }`}>
-                        <input
-                          type="radio"
-                          name="nature_of_information"
-                          value={opt}
-                          checked={formData.nature_of_information === opt}
-                          onChange={handleChange}
-                          className="h-4 w-4 text-primary-600"
-                        />
-                        <span className="font-medium">{opt}</span>
-                      </label>
-                    ))}
-                  </div>
+                  <CheckboxGroup 
+                    label="Nature of information" 
+                    name="nature_of_information" 
+                    value={formData.nature_of_information || []} 
+                    onChange={handleChange} 
+                    options={clinicalOptions.nature_of_information || ['Reliable', 'Unreliable', 'Adequate', 'Inadequate']} 
+                  />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-3">
                       <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Onset Duration</h2>

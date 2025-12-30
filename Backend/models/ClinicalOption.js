@@ -7,6 +7,7 @@ class ClinicalOption {
     this.option_label = data.option_label;
     this.display_order = data.display_order || 0;
     this.is_active = data.is_active !== undefined ? data.is_active : true;
+    this.is_system = data.is_system !== undefined ? data.is_system : false;
     this.created_at = data.created_at;
     this.updated_at = data.updated_at;
   }
@@ -18,6 +19,7 @@ class ClinicalOption {
       option_label: this.option_label,
       display_order: this.display_order,
       is_active: this.is_active,
+      is_system: this.is_system,
       created_at: this.created_at,
       updated_at: this.updated_at
     };
@@ -56,7 +58,7 @@ class ClinicalOption {
       
       const result = await db.query(query, params);
       
-      // Group by option_group
+      // Group by option_group - return just labels for backward compatibility
       const grouped = {};
       result.rows.forEach(row => {
         const option = new ClinicalOption(row);
@@ -111,7 +113,7 @@ class ClinicalOption {
   // Create a new option
   static async create(data) {
     try {
-      const { option_group, option_label, display_order = 0 } = data;
+      const { option_group, option_label, display_order = 0, is_system = false } = data;
       
       // Check if option already exists
       const existing = await ClinicalOption.findByGroupAndLabel(option_group, option_label);
@@ -128,10 +130,10 @@ class ClinicalOption {
       const finalDisplayOrder = display_order || maxOrder + 1;
 
       const result = await db.query(
-        `INSERT INTO clinical_options (option_group, option_label, display_order, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `INSERT INTO clinical_options (option_group, option_label, display_order, is_active, is_system, created_at, updated_at)
+         VALUES ($1, $2, $3, true, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
-        [option_group, option_label, finalDisplayOrder]
+        [option_group, option_label, finalDisplayOrder, is_system]
       );
 
       return new ClinicalOption(result.rows[0]);
@@ -195,9 +197,38 @@ class ClinicalOption {
     }
   }
 
-  // Delete (soft delete by setting is_active = false)
+  // Hard delete (permanently remove from database)
+  // System options cannot be deleted
+  async hardDelete() {
+    try {
+      // Prevent deletion of system options
+      if (this.is_system) {
+        throw new Error('Cannot delete system option. System options are protected and cannot be removed.');
+      }
+
+      const result = await db.query(
+        'DELETE FROM clinical_options WHERE id = $1 RETURNING *',
+        [this.id]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('Option not found');
+      }
+
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Delete (soft delete) - also prevents deletion of system options
   async delete() {
     try {
+      // Prevent deletion of system options
+      if (this.is_system) {
+        throw new Error('Cannot delete system option. System options are protected and cannot be removed.');
+      }
+
       const result = await db.query(
         `UPDATE clinical_options 
          SET is_active = false, updated_at = CURRENT_TIMESTAMP
@@ -212,24 +243,6 @@ class ClinicalOption {
 
       this.is_active = false;
       return this;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  // Hard delete (permanently remove from database)
-  async hardDelete() {
-    try {
-      const result = await db.query(
-        'DELETE FROM clinical_options WHERE id = $1 RETURNING *',
-        [this.id]
-      );
-
-      if (result.rows.length === 0) {
-        throw new Error('Option not found');
-      }
-
-      return true;
     } catch (error) {
       throw error;
     }

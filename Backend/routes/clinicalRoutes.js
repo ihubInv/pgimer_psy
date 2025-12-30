@@ -1579,4 +1579,37 @@ router.put('/options/:id', authenticateToken, ClinicalOptionsController.updateOp
  */
 router.delete('/options/:group', authenticateToken, ClinicalOptionsController.deleteOption);
 
+/**
+ * @swagger
+ * /api/clinical-proformas/options/seed:
+ *   post:
+ *     summary: Seed all clinical options from JSON file into database
+ *     description: Reads clinical_options.json and inserts all options into the database. Skips options that already exist.
+ *     tags: [Walk-in Clinical Proforma]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Options seeded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     inserted:
+ *                       type: integer
+ *                     skipped:
+ *                       type: integer
+ *                     errors:
+ *                       type: integer
+ */
+router.post('/options/seed', authenticateToken, ClinicalOptionsController.seedOptions);
+
 module.exports = router;

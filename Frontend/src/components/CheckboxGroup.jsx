@@ -5,12 +5,20 @@ import Input from './Input';
 import Button from './Button';
 
 export const CheckboxGroup = ({ label, name, value = [], onChange, options = [], rightInlineExtra = null, disabled = false }) => {
-    const [localOptions, setLocalOptions] = useState(options);
+    // Initialize with provided options to ensure they're always available
+    const baseOptions = Array.isArray(options) ? options : [];
+    const [localOptions, setLocalOptions] = useState(baseOptions);
+    const [systemOptions, setSystemOptions] = useState(new Set()); // Track which options are system (cannot be deleted)
+    const [userCreatedOptions, setUserCreatedOptions] = useState(new Set()); // Track user-created options explicitly
     const [showAdd, setShowAdd] = useState(false);
     const [customOption, setCustomOption] = useState('');
-    const { data: remoteOptions } = useGetClinicalOptionsQuery(name);
+    const { data: remoteOptionsData } = useGetClinicalOptionsQuery(name);
     const [addOption] = useAddClinicalOptionMutation();
     const [deleteOption] = useDeleteClinicalOptionMutation();
+    
+    // Extract options and system flags from API response
+    const remoteOptions = remoteOptionsData?.data?.options || [];
+    const remoteOptionsWithMeta = remoteOptionsData?.data?.optionsWithMeta || [];
   
     const iconByGroup = {
       mood: <FiHeart className="w-6 h-6 text-rose-600" />,
@@ -33,14 +41,66 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
       mse_cognitive_function: <FiActivity className="w-6 h-6 text-fuchsia-600" />,
     };
   
+    // Separate effect to sync user-created options from database metadata
     useEffect(() => {
-      // Prioritize remote options from database over hardcoded options prop
-      // This ensures deleted items don't reappear from the options prop
-      const mergedOptions = remoteOptions && remoteOptions.length > 0 
-        ? remoteOptions 
-        : (options || []);
-      setLocalOptions(Array.from(new Set(mergedOptions)));
-    }, [remoteOptions, options]);
+      if (Array.isArray(remoteOptionsWithMeta)) {
+        const userCreatedFromDB = new Set();
+        remoteOptionsWithMeta.forEach(opt => {
+          if (opt.label && !opt.is_system) {
+            // This is a user-created option from database
+            userCreatedFromDB.add(opt.label);
+          }
+        });
+        
+        // Merge with existing user-created options (don't overwrite, just add)
+        if (userCreatedFromDB.size > 0) {
+          setUserCreatedOptions((prev) => {
+            const merged = new Set(prev);
+            userCreatedFromDB.forEach(opt => merged.add(opt));
+            return merged;
+          });
+        }
+      }
+    }, [remoteOptionsWithMeta]);
+
+    useEffect(() => {
+      // Merge remote options from database with hardcoded options prop
+      // This ensures both database options and hardcoded defaults are available
+      const baseOptions = Array.isArray(options) ? options : [];
+      const remoteOpts = Array.isArray(remoteOptions) ? remoteOptions : [];
+      
+      // Track which options are system (from metadata)
+      const systemSet = new Set();
+      
+      // First, mark options from database metadata as system (only if is_system is true)
+      if (Array.isArray(remoteOptionsWithMeta)) {
+        remoteOptionsWithMeta.forEach(opt => {
+          if (opt.is_system && opt.label) {
+            // Mark as system option (hardcoded in database)
+            systemSet.add(opt.label);
+          }
+        });
+      }
+      
+      // Also mark all hardcoded options (from props) as system (they cannot be deleted)
+      // These are the default options passed from the parent component
+      // IMPORTANT: Hardcoded options from props are ALWAYS system, regardless of database state
+      baseOptions.forEach(opt => {
+        systemSet.add(opt);
+      });
+      
+      // Explicitly remove user-created options from system set
+      // This ensures newly added options and existing user-created options are never marked as system
+      userCreatedOptions.forEach(opt => systemSet.delete(opt));
+      
+      setSystemOptions(systemSet);
+      
+      // Merge both arrays, keeping all unique options
+      // This ensures that when a new option is added, existing hardcoded options don't disappear
+      // Priority: Show all options from both sources, with remote options appearing first
+      const mergedOptions = Array.from(new Set([...remoteOpts, ...baseOptions]));
+      setLocalOptions(mergedOptions.length > 0 ? mergedOptions : baseOptions);
+    }, [remoteOptions, options, remoteOptionsWithMeta, userCreatedOptions]);
   
     const toggle = (opt) => {
       const exists = value.includes(opt);
@@ -49,6 +109,13 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
     };
   
     const handleDelete = async (opt) => {
+      // Remove from user-created options tracking
+      setUserCreatedOptions((prev) => {
+        const updated = new Set(prev);
+        updated.delete(opt);
+        return updated;
+      });
+      
       // Remove from UI immediately
       setLocalOptions((prev) => prev.filter((o) => o !== opt));
       if (value.includes(opt)) {
@@ -66,6 +133,8 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
           console.error('Failed to delete option:', softError);
           // Re-add to UI if deletion failed
           setLocalOptions((prev) => [...prev, opt].sort());
+          // Re-add to user-created options if deletion failed
+          setUserCreatedOptions((prev) => new Set(prev).add(opt));
         }
       }
     };
@@ -76,18 +145,41 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
       setCustomOption('');
     };
   
-    const handleSaveAdd = () => {
+    const handleSaveAdd = async () => {
       const opt = customOption.trim();
       if (!opt) {
         setShowAdd(false);
         return;
       }
+      
+      // Mark this as a user-created option (not system)
+      setUserCreatedOptions((prev) => new Set(prev).add(opt));
+      
+      // Immediately ensure the new option is NOT in systemOptions (user-created options are not system)
+      setSystemOptions((prev) => {
+        const updated = new Set(prev);
+        updated.delete(opt); // Remove from system options - new options are never system
+        return updated;
+      });
+      
       setLocalOptions((prev) => (prev.includes(opt) ? prev : [...prev, opt]));
       const next = value.includes(opt) ? value : [...value, opt];
       onChange({ target: { name, value: next } });
       setCustomOption('');
       setShowAdd(false);
-      addOption({ group: name, label: opt }).catch(() => { });
+      
+      // Add option to database - this will trigger a refetch and update systemOptions
+      try {
+        await addOption({ group: name, label: opt }).unwrap();
+      } catch (error) {
+        console.error('Failed to add option:', error);
+        // If add fails, remove from userCreatedOptions
+        setUserCreatedOptions((prev) => {
+          const updated = new Set(prev);
+          updated.delete(opt);
+          return updated;
+        });
+      }
     };
   
     return (
@@ -99,20 +191,33 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
           </div>
         )}
         <div className="flex flex-wrap items-center gap-3">
-          {localOptions?.map((opt) => (
+          {localOptions?.map((opt) => {
+            // Determine if this is a system option (hardcoded or from database with is_system=true)
+            const isSystemOption = systemOptions.has(opt);
+            // Show delete button only for non-system, non-disabled options
+            // System options (hardcoded) should NEVER show delete button
+            // User-created options (not in systemOptions) SHOULD show delete button
+            const showDeleteButton = !disabled && !isSystemOption;
+            
+            return (
             <div key={opt} className="relative inline-flex items-center group">
-              {!disabled && (
+              {showDeleteButton && (
                 <button
                   type="button"
-                  onClick={() => handleDelete(opt)}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 pointer-events-none transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-red-600"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDelete(opt);
+                  }}
+                  className="absolute -top-2 -right-2 z-20 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-600 hover:scale-110"
                   aria-label={`Remove ${opt}`}
+                  title={`Delete ${opt}`}
                 >
                   <FiX className="w-3 h-3" />
                 </button>
               )}
               <label
-                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors duration-150 ${
+                className={`relative inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors duration-150 ${
                   disabled ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
                 }
                   ${value.includes(opt)
@@ -125,12 +230,13 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
                   checked={value.includes(opt)}
                   onChange={() => toggle(opt)}
                   disabled={disabled}
-                  className="h-4 w-4 text-primary-600 rounded cursor-not-allowed"
+                  className={`h-4 w-4 text-primary-600 rounded ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                 />
                 <span>{opt}</span>
               </label>
             </div>
-          ))}
+            );
+          })}
           {rightInlineExtra && (
             <div className="inline-flex items-center">
               {rightInlineExtra}

@@ -515,6 +515,19 @@ const validateClinicalProforma = [
     .optional()
     .isLength({ max: 255 })
     .withMessage('Assigned doctor name must not exceed 255 characters'),
+  body('nature_of_information')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (!value) return true; // Allow null/empty
+      // Handle both string (comma-separated) and array formats
+      const values = Array.isArray(value) ? value : value.split(',').map(v => v.trim());
+      const validValues = ['Reliable', 'Unreliable', 'Adequate', 'Inadequate'];
+      const invalidValues = values.filter(v => !validValues.includes(v));
+      if (invalidValues.length > 0) {
+        throw new Error(`Invalid nature_of_information values: ${invalidValues.join(', ')}. Must be one or more of: ${validValues.join(', ')}`);
+      }
+      return true;
+    }),
   handleValidationErrors
 ];
 

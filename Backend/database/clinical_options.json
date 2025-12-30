@@ -158,6 +158,12 @@
     "Impaired",
     "Not impaired"
   ],
+  "nature_of_information": [
+    "Reliable",
+    "Unreliable",
+    "Adequate",
+    "Inadequate"
+  ],
   "past_history": [],
   "family_history": []
 }

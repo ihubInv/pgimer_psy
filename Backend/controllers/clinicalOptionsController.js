@@ -7,12 +7,17 @@ class ClinicalOptionsController {
       const group = req.params.group;
       const options = await ClinicalOption.findByGroup(group, true);
       const optionLabels = options.map(opt => opt.option_label);
+      const optionData = options.map(opt => ({
+        label: opt.option_label,
+        is_system: opt.is_system
+      }));
       
       return res.json({ 
         success: true, 
         data: { 
           group, 
-          options: optionLabels 
+          options: optionLabels,
+          optionsWithMeta: optionData // Include metadata for frontend to know which are system
         } 
       });
     } catch (error) {
@@ -30,9 +35,20 @@ class ClinicalOptionsController {
     try {
       const groupedOptions = await ClinicalOption.findAllGroups(true);
       
+      // Convert to format expected by frontend (array of labels, but preserve is_system info)
+      const formattedOptions = {};
+      for (const [group, options] of Object.entries(groupedOptions)) {
+        // If options are objects with label and is_system, extract labels
+        if (Array.isArray(options) && options.length > 0 && typeof options[0] === 'object' && options[0].label) {
+          formattedOptions[group] = options.map(opt => opt.label);
+        } else {
+          formattedOptions[group] = options;
+        }
+      }
+      
       return res.json({ 
         success: true, 
-        data: groupedOptions 
+        data: formattedOptions 
       });
     } catch (error) {
       console.error('Get all groups error:', error);
@@ -60,12 +76,17 @@ class ClinicalOptionsController {
       const option = await ClinicalOption.create({
         option_group: group,
         option_label: label.trim(),
-        display_order: display_order
+        display_order: display_order,
+        is_system: false // Explicitly set to false for user-created options
       });
 
-      // Get updated list of options for this group
+      // Get updated list of options for this group with metadata
       const allOptions = await ClinicalOption.findByGroup(group, true);
       const optionLabels = allOptions.map(opt => opt.option_label);
+      const optionData = allOptions.map(opt => ({
+        label: opt.option_label,
+        is_system: opt.is_system
+      }));
 
       res.status(201).json({ 
         success: true, 
@@ -73,7 +94,8 @@ class ClinicalOptionsController {
         data: { 
           group, 
           option: option.toJSON(),
-          options: optionLabels 
+          options: optionLabels,
+          optionsWithMeta: optionData // Include metadata so frontend knows which are system
         } 
       });
     } catch (error) {
@@ -173,6 +195,14 @@ class ClinicalOptionsController {
         });
       }
 
+      // Prevent deletion of system options
+      if (option.is_system) {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Cannot delete system option. System options are protected and cannot be removed.' 
+        });
+      }
+
       // Perform delete (hard delete by default, soft delete if explicitly requested)
       try {
         if (hard_delete) {
@@ -212,6 +242,27 @@ class ClinicalOptionsController {
       res.status(500).json({ 
         success: false, 
         message: 'Failed to delete option',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  // Seed all clinical options from JSON file
+  static async seedOptions(req, res) {
+    try {
+      const seedClinicalOptions = require('../scripts/seedClinicalOptions');
+      const result = await seedClinicalOptions();
+      
+      return res.json({
+        success: true,
+        message: 'Clinical options seeded successfully',
+        data: result
+      });
+    } catch (error) {
+      console.error('Seed options error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to seed clinical options',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
