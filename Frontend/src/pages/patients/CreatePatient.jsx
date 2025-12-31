@@ -355,6 +355,59 @@ const CreatePatient = () => {
     dispatch(updatePatientRegistrationForm({ [name]: value }));
   };
 
+  // Handle Year of Marriage calculation on blur - replaces entered year with calculated years
+  const handleMarriageYearBlur = (e) => {
+    const { value } = e.target;
+    const currentYear = new Date().getFullYear();
+    
+    // Clear previous error
+    if (errors.year_of_marriage) {
+      setErrors((prev) => ({ ...prev, year_of_marriage: '' }));
+    }
+    
+    // If empty, clear the field
+    if (!value || value.trim() === '') {
+      dispatch(updatePatientRegistrationForm({ year_of_marriage: '' }));
+      return;
+    }
+    
+    const inputValue = parseInt(value, 10);
+    
+    // Validate: must be a valid number
+    if (isNaN(inputValue)) {
+      setErrors((prev) => ({ 
+        ...prev, 
+        year_of_marriage: 'Please enter a valid year (YYYY)' 
+      }));
+      return;
+    }
+    
+    // Check if input is a year (>= 1900) - treat as year and calculate
+    if (inputValue >= 1900) {
+      // Validate: cannot be in the future
+      if (inputValue > currentYear) {
+        setErrors((prev) => ({ 
+          ...prev, 
+          year_of_marriage: `Year cannot be greater than ${currentYear}` 
+        }));
+        return;
+      }
+      
+      // Input is a year - calculate years of marriage and replace in same field
+      const yearsOfMarriage = currentYear - inputValue;
+      dispatch(updatePatientRegistrationForm({ 
+        year_of_marriage: yearsOfMarriage >= 0 ? yearsOfMarriage : 0 
+      }));
+    } else if (inputValue < 0 || inputValue > 150) {
+      // Invalid input (negative or too large for years)
+      setErrors((prev) => ({ 
+        ...prev, 
+        year_of_marriage: 'Please enter a valid year (YYYY) or years (0-150)' 
+      }));
+    }
+    // If input is already in years range (0-150), keep it as is (user might have manually entered years)
+  };
+
   const validate = () => {
     // Validate all fields
     const validationResult = validatePatientRegistration(formData, 2);
@@ -996,14 +1049,18 @@ const CreatePatient = () => {
                                 icon={<FiCalendar className="w-4 h-4" />}
                                 label="Years of Marriage"
                                 name="year_of_marriage"
-                                value={formData.year_of_marriage}
+                                value={formData.year_of_marriage || ''}
                                 onChange={handleChange}
+                                onBlur={handleMarriageYearBlur}
                                 type="number"
-                                placeholder="Enter years of marriage (e.g., 5, 10, 25)"
-                                min="0"
-                                max="80"
-                                className=""
+                                placeholder="Enter year of marriage (e.g., 2000, 2010)"
+                                min="1900"
+                                max={new Date().getFullYear()}
+                                className={errors.year_of_marriage ? "border-red-500" : ""}
                               />
+                              {errors.year_of_marriage && (
+                                <p className="text-sm text-red-600 mt-1">{errors.year_of_marriage}</p>
+                              )}
 
 
                               <IconInput
