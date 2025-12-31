@@ -27,7 +27,7 @@ import {
   MARITAL_STATUS, FAMILY_TYPE_OPTIONS, LOCALITY_OPTIONS, RELIGION_OPTIONS, SEX_OPTIONS,
   AGE_GROUP_OPTIONS, OCCUPATION_OPTIONS, EDUCATION_OPTIONS,
   MOBILITY_OPTIONS, REFERRED_BY_OPTIONS, UNIT_DAYS_OPTIONS,
-   isSR, isJR, HEAD_RELATIONSHIP_OPTIONS, CATEGORY_OPTIONS, isMWO
+   isSR, isJR, HEAD_RELATIONSHIP_OPTIONS, CATEGORY_OPTIONS, isMWO, INDIA_STATES
 } from '../../utils/constants';
 import { validatePatientRegistration } from '../../utils/patientValidation';
 
@@ -77,6 +77,15 @@ const CreatePatient = () => {
       dispatch(updatePatientRegistrationForm({ department: 'Psychiatry' }));
     }
   }, []);
+
+  // Initialize country field with default value "India" on initial load and after reset
+  useEffect(() => {
+    // Only set default if country is not already set (to preserve user selections)
+    // This applies on initial load and after form reset
+    if (!formData.country) {
+      dispatch(updatePatientRegistrationForm({ country: 'India' }));
+    }
+  }, [formData.country, dispatch]);
 
   // Check if fields with "others"/"other" are selected to show custom inputs
   useEffect(() => {
@@ -263,6 +272,22 @@ const CreatePatient = () => {
     dispatch
   ]);
 
+  // Auto-select mobility when state matches Punjab, Haryana, or Himachal Pradesh
+  // This handles cases where state is set before country, or when form loads with existing data
+  useEffect(() => {
+    // Only apply when country is India and state is selected
+    if (formData.country && formData.country.toLowerCase() === 'india' && formData.state) {
+      const eligibleStates = ['punjab', 'haryana', 'himachal_pradesh'];
+      
+      // Auto-select permanent resident mobility if state matches eligible states
+      // Selection occurs immediately - user input not required
+      if (eligibleStates.includes(formData.state)) {
+        dispatch(updatePatientRegistrationForm({ mobility: 'permanent_resident' }));
+      }
+      // If any other state is selected, default mobility option is not applied
+    }
+  }, [formData.state, formData.country, dispatch]);
+
   // Handle cancel - reset form and navigate away
   const handleCancel = () => {
     dispatch(resetPatientRegistrationForm());
@@ -346,6 +371,32 @@ const CreatePatient = () => {
           age <= 60 ? '45-60' : '60+';
         dispatch(updatePatientRegistrationForm({ age_group: ageGroup }));
       }
+    }
+
+    // Clear state field when country changes to avoid mismatched values
+    // (dropdown value vs text value)
+    if (name === 'country') {
+      const isIndia = value && value.toLowerCase() === 'india';
+      const wasIndia = formData.country && formData.country.toLowerCase() === 'india';
+      
+      // If switching between India and non-India, clear state field
+      if (isIndia !== wasIndia) {
+        dispatch(updatePatientRegistrationForm({ state: '' }));
+      }
+    }
+
+    // Auto-select mobility when state matches Punjab, Haryana, or Himachal Pradesh
+    if (name === 'state' && formData.country && formData.country.toLowerCase() === 'india') {
+      const stateValue = value;
+      const eligibleStates = ['punjab', 'haryana', 'himachal_pradesh'];
+      
+      // Auto-select permanent resident mobility when eligible state is selected
+      // Selection occurs immediately after state is chosen
+      // User input not required - value is preselected by default
+      if (stateValue && eligibleStates.includes(stateValue)) {
+        dispatch(updatePatientRegistrationForm({ mobility: 'permanent_resident' }));
+      }
+      // If any other state is selected, default mobility option is not applied
     }
   };
 
@@ -862,20 +913,40 @@ const CreatePatient = () => {
                                 required
                                 className=""
                               />
-                              <IconInput
-                                icon={<FiMapPin className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    State <span className="text-red-500">*</span>
-                                  </span>
-                                }
-                                name="state"
-                                value={formData.state || ''}
-                                onChange={handleChange}
-                                placeholder="Enter state"
-                                required
-                                className=""
-                              />
+                              {/* Conditional State Field: Dropdown for India, Text Input for other countries */}
+                              {(formData.country && formData.country.toLowerCase() === 'india') ? (
+                                <Select
+                                  icon={<FiMapPin className="w-4 h-4" />}
+                                  label={
+                                    <span>
+                                      State <span className="text-red-500">*</span>
+                                    </span>
+                                  }
+                                  name="state"
+                                  value={formData.state || ''}
+                                  onChange={handleChange}
+                                  options={INDIA_STATES}
+                                  placeholder="Select state"
+                                  searchable={true}
+                                  required
+                                  className=""
+                                />
+                              ) : (
+                                <IconInput
+                                  icon={<FiMapPin className="w-4 h-4" />}
+                                  label={
+                                    <span>
+                                      State <span className="text-red-500">*</span>
+                                    </span>
+                                  }
+                                  name="state"
+                                  value={formData.state || ''}
+                                  onChange={handleChange}
+                                  placeholder="Enter state/province"
+                                  required
+                                  className=""
+                                />
+                              )}
                               <IconInput
                                 icon={<FiGlobe className="w-4 h-4" />}
                                 label={
