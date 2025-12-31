@@ -228,12 +228,22 @@ export const RELIGION_OPTIONS = [
 
 
 export const HEAD_RELATIONSHIP_OPTIONS = [
+  { value: 'self', label: 'Self' },
   { value: 'father', label: 'Father' },
   { value: 'mother', label: 'Mother' },
   { value: 'brother', label: 'Brother' },
   { value: 'sister', label: 'Sister' },
   { value: 'husband', label: 'Husband' },
   {value:'wife', label: 'Wife'},
+  {value:'son', label: 'Son'},
+  {value:'daughter', label: 'Daughter'},
+  {value:'grandson', label: 'Grandson'},
+  {value:'granddaughter', label: 'Granddaughter'},
+  {value:'nephew', label: 'Nephew'},
+  {value:'niece', label: 'Niece'},
+  {value:'uncle', label: 'Uncle'},
+  {value:'aunt', label: 'Aunt'},
+  {value:'cousin', label: 'Cousin'},
   { value: 'other', label: 'Other' },
 ];
 

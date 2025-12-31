@@ -61,6 +61,7 @@ const CreatePatient = () => {
   const [showReferredByOther, setShowReferredByOther] = useState(false);
   const [referredByOther, setReferredByOther] = useState('');
   const [sameAsPermanent, setSameAsPermanent] = useState(false);
+  const [sameAsPatientName, setSameAsPatientName] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   
   // Track which permanent address fields were manually edited by the user
@@ -233,6 +234,32 @@ const CreatePatient = () => {
     formData.permanent_state,
     formData.permanent_pin_code,
     formData.permanent_country,
+    dispatch
+  ]);
+
+  // Sync head_name, head_age, head_relationship, and head_income with patient data when checkbox is checked
+  useEffect(() => {
+    // Only update fields when checkbox is checked
+    // When unchecked, fields keep their current values and become editable (no clearing)
+    if (sameAsPatientName) {
+      const updates = {
+        head_name: formData.name || '',
+        head_age: formData.age || '',
+        head_relationship: 'self',
+        head_relationship_other: null,
+        head_income: formData.patient_income || ''
+      };
+      dispatch(updatePatientRegistrationForm(updates));
+      // Hide custom input for relationship when set to "self"
+      setShowHeadRelationshipOther(false);
+      setHeadRelationshipOther('');
+    }
+    // When unchecked (sameAsPatientName is false), do nothing - fields keep their values
+  }, [
+    sameAsPatientName,
+    formData.name,
+    formData.age,
+    formData.patient_income,
     dispatch
   ]);
 
@@ -1136,19 +1163,41 @@ const CreatePatient = () => {
 
                              
 
-                              <IconInput
-                                icon={<FiUser className="w-4 h-4" />}
-                                label={
-                                  <span>
-                                    Family Head Name <span className="text-red-500">*</span>
-                                  </span>
-                                }
-                                name="head_name"
-                                value={formData.head_name}
-                                onChange={handleChange}
-                                placeholder="Enter head of family name"
-                                className=""
-                              />
+                            
+
+<div className="flex-1">
+  <IconInput
+    icon={<FiUser className="w-4 h-4" />}
+    label={
+      <div className="flex items-center justify-between w-full">
+        <span>
+          Family Head Name <span className="text-red-500">*</span>
+        </span>
+
+        <label className="flex items-center gap-1 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={sameAsPatientName}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setSameAsPatientName(checked);
+            }}
+            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+          />
+          <span className="text-xs text-gray-600 whitespace-nowrap">
+            Same as Patient Name
+          </span>
+        </label>
+      </div>
+    }
+    name="head_name"
+    value={formData.head_name}
+    onChange={handleChange}
+    placeholder="Enter head of family name"
+    disabled={sameAsPatientName}
+    className={sameAsPatientName ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
+  />
+</div>
                               <IconInput
                                 icon={<FiClock className="w-4 h-4" />}
                                 label={
@@ -1163,7 +1212,8 @@ const CreatePatient = () => {
                                 placeholder="Enter age"
                                 min="0"
                                 max="150"
-                                className=""
+                                disabled={sameAsPatientName}
+                                className={sameAsPatientName ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
 
                               <SelectWithOther
@@ -1178,7 +1228,8 @@ const CreatePatient = () => {
                                 options={HEAD_RELATIONSHIP_OPTIONS}
                                 placeholder="Select relationship"
                                 searchable={true}
-                                className=""
+                                disabled={sameAsPatientName}
+                                className={sameAsPatientName ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                                 customValue={headRelationshipOther}
                                 setCustomValue={setHeadRelationshipOther}
                                 showCustomInput={showHeadRelationshipOther}
@@ -1232,7 +1283,8 @@ const CreatePatient = () => {
                                 type="number"
                                 placeholder="Monthly income"
                                 min="0"
-                                className=""
+                                disabled={sameAsPatientName}
+                                className={sameAsPatientName ? "disabled:bg-gray-100 disabled:cursor-not-allowed" : ""}
                               />
 
                               <IconInput
