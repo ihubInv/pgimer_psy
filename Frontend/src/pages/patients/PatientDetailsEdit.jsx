@@ -4220,7 +4220,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                             />
                           </div>
 
-                              <IconInput
+                              {/* <IconInput
                                 icon={<FiHome className="w-4 h-4" />}
                                 label="Assigned Room"
                                 name="assigned_room"
@@ -4228,7 +4228,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                 onChange={handleChange}
                                 placeholder="Enter assigned room"
                                 className="bg-gradient-to-r from-teal-50 to-cyan-50"
-                              />
+                              /> */}
                         </div>
                     </div>
 
