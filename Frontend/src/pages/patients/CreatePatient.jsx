@@ -15,7 +15,7 @@ import { useCreatePatientFilesMutation } from '../../features/patients/patientFi
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { updatePatientRegistrationForm, resetPatientRegistrationForm, selectPatientRegistrationForm } from '../../features/form/formSlice';
 import { useCreateClinicalProformaMutation } from '../../features/clinical/clinicalApiSlice';
-import { useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
+import { useGetAllRoomsQuery, useGetAvailableRoomsQuery } from '../../features/rooms/roomsApiSlice';
 import { SelectWithOther } from '../../components/SelectWithOther';
 import { IconInput } from '../../components/IconInput';
 import Card from '../../components/Card';
@@ -42,6 +42,8 @@ const CreatePatient = () => {
   const [createProforma] = useCreateClinicalProformaMutation();
   const [createPatientFiles] = useCreatePatientFilesMutation();
   const { data: roomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
+  // Fetch today's patient count per room for display in dropdown
+  const { data: availableRoomsData, refetch: refetchRoomCounts } = useGetAvailableRoomsQuery();
   const token = useSelector(selectCurrentToken);
   const currentUser = useSelector(selectCurrentUser);
   const [errors, setErrors] = useState({});
@@ -1690,10 +1692,17 @@ const CreatePatient = () => {
                                   onChange={handleChange}
                                   options={(roomsData?.data?.rooms || [])
                                     .filter(room => room.is_active)
-                                    .map(room => ({
-                                      value: room.room_number,
-                                      label: room.room_number + (room.description ? ` - ${room.description}` : '')
-                                    }))}
+                                    .map(room => {
+                                      // Get today's patient count for this room
+                                      const todayCount = availableRoomsData?.data?.distribution_today?.[room.room_number] || 0;
+                                      const baseLabel = room.room_number + (room.description ? ` - ${room.description}` : '');
+                                      // Add patient count: "Room 101 — 3 patients today"
+                                      const labelWithCount = `${baseLabel} — ${todayCount} patient${todayCount !== 1 ? 's' : ''} today`;
+                                      return {
+                                        value: room.room_number,
+                                        label: labelWithCount
+                                      };
+                                    })}
                                   placeholder={isMWO(currentUser?.role) ? "Select room or leave empty for auto-assignment" : "Select room"}
                                   searchable={true}
                                   className=""
