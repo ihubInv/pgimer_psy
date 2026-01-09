@@ -163,10 +163,11 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
     } else {
       // Ensure at least one empty row is shown when no prescriptions exist
       setPrescriptionRows(prev => {
-        // Only set if we don't already have at least one empty row
-        if (prev.length === 0 || (prev.length === 1 && prev[0].medicine === '' && !prev[0].id)) {
+        // Always ensure at least one empty row exists
+        if (prev.length === 0) {
           return [{ medicine: '', dosage: '', when: '', frequency: '', duration: '', qty: '', details: '', notes: '' }];
         }
+        // If we have rows but they're all empty and have no IDs, keep them
         return prev;
       });
     }
@@ -702,7 +703,21 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
 
           <div className="overflow-y-auto" style={{ maxHeight: '600px' }}>
             <div className="space-y-4 p-4">
-              {prescriptionRows.map((row, idx) => (
+              {prescriptionRows.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="mb-4">No prescription fields available. Adding a new row...</p>
+                  <Button
+                    type="button"
+                    onClick={addPrescriptionRow}
+                    variant="primary"
+                    className="flex items-center gap-2 mx-auto"
+                  >
+                    <FiPlus className="w-4 h-4" />
+                    Add First Medicine
+                  </Button>
+                </div>
+              ) : (
+                prescriptionRows.map((row, idx) => (
                 <div key={row.id || idx} className="bg-white border-2 border-amber-200 rounded-lg p-4 hover:shadow-lg transition-all duration-200">
                   {/* Header with number and remove button */}
                   <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
@@ -976,7 +991,8 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
                     </div>
                   </div>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           </div>
 
@@ -1011,7 +1027,7 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
             </div>
           ))}
 
-          {/* Action Buttons */}
+            {/* Action Buttons */}
           <div className="flex items-center justify-between pt-4 pb-2 px-6 bg-gradient-to-r from-gray-50 to-slate-50 border-t-2 border-gray-200">
             <div className="flex items-center gap-3">
               <Button

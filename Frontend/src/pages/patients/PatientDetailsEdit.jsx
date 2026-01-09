@@ -2471,8 +2471,17 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       setShowProformaForm(true);
       // Also ensure card is expanded for new patients
       setExpandedCards(prev => ({ ...prev, clinical: true }));
+      // Auto-expand Prescription card when form is open
+      setExpandedCards(prev => ({ ...prev, prescriptions: true }));
     }
   }, [isNewPatientWithNoHistory, currentVisitProforma]);
+  
+  // Auto-expand Prescription card when proforma form is open in create mode
+  useEffect(() => {
+    if (showProformaForm && (isCreateMode || isEdit)) {
+      setExpandedCards(prev => ({ ...prev, prescriptions: true }));
+    }
+  }, [showProformaForm, isCreateMode, isEdit]);
 
   // Update showProformaForm when user explicitly edits a past proforma (corrections only)
   useEffect(() => {
@@ -4903,28 +4912,52 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
           {expandedCards.prescriptions && (
             <div ref={prescriptionPrintRef} className="p-6">
-              {/* Check URL params for edit mode */}
-              {isEdit && isCreateMode ? (
-                // Show CreatePrescription with empty fields when ?edit=true&mode=create
-                <CreatePrescription
-                  patientId={patient?.id}
-                  clinicalProformaId={currentVisitProforma?.id}
-                  returnTab={null}
-                  currentUser={currentUser}
-                />
-              ) : patientProformas.length > 0 ? (
-                // Show all proformas with PrescriptionEdit (both normal view and edit=true without mode=create)
-                <div className="space-y-6">
-                  {patientProformas.map((proforma, index) => (
-                    <React.Fragment key={proforma.id || index}>
-                      <PrescriptionEdit
-                        proforma={proforma}
-                        index={index}
-                        patientId={patient?.id}
-                      />
-                    </React.Fragment>
-                  ))}
-                </div>
+              {/* Show Prescription form if:
+                  1. In edit mode with create mode (from Today's Patients)
+                  2. Proforma form is open (showProformaForm is true) - allows creating prescription after proforma is saved
+                  3. There are existing proformas
+              */}
+              {(isEdit && isCreateMode) || showProformaForm || patientProformas.length > 0 ? (
+                <>
+                  {/* If proforma form is open but no proforma exists yet, show message */}
+                  {showProformaForm && !currentVisitProforma && patientProformas.length === 0 ? (
+                    <div className="mb-6">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm text-blue-800 mb-2">
+                          <strong>Note:</strong> Please save the Walk-in Clinical Proforma above first, then you can add prescriptions here.
+                        </p>
+                        <p className="text-xs text-blue-600">
+                          Once the proforma is saved, the prescription form will be enabled automatically.
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+                  
+                  {/* Show CreatePrescription when in create mode or when form is open */}
+                  {(isEdit && isCreateMode) || (showProformaForm && currentVisitProforma) ? (
+                    <CreatePrescription
+                      patientId={patient?.id}
+                      clinicalProformaId={currentVisitProforma?.id}
+                      returnTab={null}
+                      currentUser={currentUser}
+                    />
+                  ) : null}
+                  
+                  {/* Show PrescriptionEdit for existing proformas */}
+                  {patientProformas.length > 0 ? (
+                    <div className="space-y-6">
+                      {patientProformas.map((proforma, index) => (
+                        <React.Fragment key={proforma.id || index}>
+                          <PrescriptionEdit
+                            proforma={proforma}
+                            index={index}
+                            patientId={patient?.id}
+                          />
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <div className="text-center py-12">
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 max-w-2xl mx-auto">
