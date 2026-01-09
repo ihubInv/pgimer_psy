@@ -102,9 +102,8 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
   const isCompleted = patient.visit_status === 'completed';
   
   // Show "Mark as Completed" button for ALL patients in today's list
-  // Since patients are already filtered to show only today's patients (created today OR has visit today),
+  // Since patients are already filtered to show only patients registered today (from 12:00 AM IST),
   // we should show the button for all of them, except those already completed
-  // This ensures the button appears for both new patients and existing patients with visits
   const shouldShowCompleteButton = !isCompleted;
   
   // Refetch proformas when component becomes visible (e.g., after returning from deletion)
@@ -563,10 +562,9 @@ const ClinicalTodayPatients = () => {
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
   // Create room options with disabled state for occupied rooms and rooms with zero patients
-  // Note: distribution_today shows patients created today OR with visits today
-  // We'll show the count but clarify in the UI that it includes both new and existing patients
+  // Note: distribution_today shows only patients registered today (from 12:00 AM IST)
   const roomOptions = rooms.map(room => {
-    const totalPatients = distribution[room] || 0; // This shows today's patients (new + existing with visits)
+    const totalPatients = distribution[room] || 0; // This shows only patients registered today
     const isOccupied = occupiedRooms[room] !== undefined;
     const occupiedBy = isOccupied ? occupiedRooms[room]?.doctor_name : null;
     
@@ -651,21 +649,13 @@ const ClinicalTodayPatients = () => {
     return patients.filter((patient) => {
       if (!patient) return false;
 
-      // Check if patient was created today - be more lenient with date comparison
+      // Only show patients registered today (from 12:00 AM IST)
+      // Exclude all patients registered yesterday or earlier
       const patientCreatedDate = patient?.created_at ? toISTDateString(patient.created_at) : '';
       const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
 
-      // Check if patient has a visit today (from latest assignment date, visit date, or has_visit_today flag)
-      const hasVisitToday = patient?.has_visit_today === true ||
-        (patient?.last_assigned_date && 
-        toISTDateString(patient.last_assigned_date) === targetDate) ||
-        (patient?.visit_date && 
-        toISTDateString(patient.visit_date) === targetDate);
-
-      // Patient appears if created today OR has visit today
-      // Show all patients created today regardless of who created them
-      // The role-based filtering happens later in the component
-      return createdToday || hasVisitToday;
+      // Strictly include only patients whose registration date is today
+      return createdToday;
     });
   };
 
@@ -690,6 +680,7 @@ const ClinicalTodayPatients = () => {
   // Helper function to determine if patient is new (created today AND no past history)
   // Note: This is a simplified check for the list view. The PatientRow component does a more detailed check
   // by fetching visit history and proformas. For the list view, we use a basic check.
+  // Since we only show patients registered today, all patients here are registered today.
   const isNewPatientBasic = (patient) => {
     if (!patient?.created_at) return false;
     const targetDate = toISTDateString(selectedDate || new Date());
@@ -697,21 +688,14 @@ const ClinicalTodayPatients = () => {
     return patientCreatedDate && patientCreatedDate === targetDate;
   };
 
-  // For existing patient check: has visit today OR was not created today
-  // The PatientRow component will do a more accurate check using actual history data
+  // Note: Since we only show patients registered today, the concept of "existing patient" 
+  // (registered yesterday but visiting today) no longer applies in this view.
+  // All patients shown are registered today. This function is kept for compatibility
+  // but will always return false since we filter out non-today registrations.
   const isExistingPatientBasic = (patient) => {
-    const targetDate = toISTDateString(selectedDate || new Date());
-    const hasVisitToday = patient?.has_visit_today === true ||
-      (patient?.last_assigned_date && 
-      toISTDateString(patient.last_assigned_date) === targetDate) ||
-      (patient?.visit_date && 
-      toISTDateString(patient.visit_date) === targetDate);
-    
-    // Existing patient: has visit today but NOT created today
-    const patientCreatedDate = patient?.created_at ? toISTDateString(patient.created_at) : '';
-    const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
-    
-    return hasVisitToday && !createdToday;
+    // Since filterTodayPatients only includes patients registered today,
+    // there are no "existing patients" (registered yesterday) in this view
+    return false;
   };
 
   // First filter by date (today's patients)
@@ -846,22 +830,15 @@ const ClinicalTodayPatients = () => {
     return { midnightTodayIST };
   };
 
-  // Calculate total patients count (New + Existing) with midnight reset logic
+  // Calculate total patients count - only patients registered today (from 12:00 AM IST)
   const calculateTotalPatients = () => {
     const { midnightTodayIST } = getISTTimeInfo();
     const cutoffTime = midnightTodayIST;
     
     return allTodayPatients.filter(patient => {
-      // Check if patient was created after today's midnight
+      // Only count patients registered today (after midnight IST)
       const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
-      const createdAfterMidnight = patientCreatedDate && patientCreatedDate >= cutoffTime;
-      
-      // Check if patient has visit after today's midnight
-      const visitDate = patient?.visit_date ? new Date(patient.visit_date) : 
-                       patient?.last_assigned_date ? new Date(patient.last_assigned_date) : null;
-      const visitedAfterMidnight = visitDate && visitDate >= cutoffTime;
-      
-      return createdAfterMidnight || visitedAfterMidnight;
+      return patientCreatedDate && patientCreatedDate >= cutoffTime;
     }).length;
   };
 
@@ -877,17 +854,12 @@ const ClinicalTodayPatients = () => {
     }).length;
   };
 
-  // Calculate existing patients count with midnight reset logic
+  // Calculate existing patients count - always 0 since we only show patients registered today
+  // (No patients registered yesterday are shown)
   const calculateExistingPatientsCount = () => {
-    const { midnightTodayIST } = getISTTimeInfo();
-    const cutoffTime = midnightTodayIST;
-    const existingPatients = todayPatients.filter(isExistingPatientBasic);
-    
-    return existingPatients.filter(patient => {
-      const visitDate = patient?.visit_date ? new Date(patient.visit_date) : 
-                       patient?.last_assigned_date ? new Date(patient.last_assigned_date) : null;
-      return visitDate && visitDate >= cutoffTime;
-    }).length;
+    // Since we only show patients registered today, there are no "existing patients"
+    // (patients registered yesterday but visiting today) in this view
+    return 0;
   };
 
   const totalPatientsCount = calculateTotalPatients();
@@ -969,7 +941,7 @@ const ClinicalTodayPatients = () => {
                     </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Count resets at 12:00 AM (midnight) each day
+                    Only patients registered today (from 12:00 AM IST) are shown. Count resets at 12:00 AM (midnight) each day.
                   </p>
                 </div>
               </div>

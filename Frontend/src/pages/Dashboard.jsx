@@ -947,8 +947,6 @@ const Dashboard = () => {
     // Calculate summary statistics
     const stats = useMemo(() => {
       const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
 
       const allPatientsCount = assignedPatients.length;
       const adlFileCount = assignedPatients.filter(p => p.has_adl_file === true).length;
@@ -958,12 +956,15 @@ const Dashboard = () => {
             return assignedDate && assignedDate >= userCreatedAt;
           }).length
         : allPatientsCount;
+      // Only show patients registered today (from 12:00 AM IST)
+      // Use only created_at, not last_assigned_date, to strictly show only patients registered today
       const todayPatients = assignedPatients.filter(p => {
-        const assignedDate = p.last_assigned_date ? new Date(p.last_assigned_date) : (p.created_at ? new Date(p.created_at) : null);
-        if (!assignedDate) return false;
-        const patientDate = new Date(assignedDate);
-        patientDate.setHours(0, 0, 0, 0);
-        return patientDate.getTime() === today.getTime();
+        if (!p.created_at) return false;
+        // Get today's date in IST (YYYY-MM-DD format)
+        const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        // Get patient's registration date in IST
+        const patientCreatedDate = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        return patientCreatedDate === todayIST;
       });
 
       // Gender distribution
@@ -1384,8 +1385,6 @@ const Dashboard = () => {
     // Calculate summary statistics
     const stats = useMemo(() => {
       const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
 
       const allPatientsCount = assignedPatients.length;
       const adlFileCount = assignedPatients.filter(p => p.has_adl_file === true).length;
@@ -1395,12 +1394,15 @@ const Dashboard = () => {
             return assignedDate && assignedDate >= userCreatedAt;
           }).length
         : allPatientsCount;
+      // Only show patients registered today (from 12:00 AM IST)
+      // Use only created_at, not last_assigned_date, to strictly show only patients registered today
       const todayPatients = assignedPatients.filter(p => {
-        const assignedDate = p.last_assigned_date ? new Date(p.last_assigned_date) : (p.created_at ? new Date(p.created_at) : null);
-        if (!assignedDate) return false;
-        const patientDate = new Date(assignedDate);
-        patientDate.setHours(0, 0, 0, 0);
-        return patientDate.getTime() === today.getTime();
+        if (!p.created_at) return false;
+        // Get today's date in IST (YYYY-MM-DD format)
+        const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        // Get patient's registration date in IST
+        const patientCreatedDate = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        return patientCreatedDate === todayIST;
       });
 
       // Gender distribution
