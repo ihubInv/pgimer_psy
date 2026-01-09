@@ -832,58 +832,43 @@ const ClinicalTodayPatients = () => {
     return dateB.getTime() - dateA.getTime();
   });
 
-  // Helper function to get current time in IST and check if after 12 PM
+  // Helper function to get midnight (00:00:00) of current day in IST
   const getISTTimeInfo = () => {
     const now = new Date();
-    
-    // Get current hour in IST using Intl.DateTimeFormat for reliable parsing
-    const istFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Kolkata',
-      hour: '2-digit',
-      hour12: false
-    });
-    const istHour = parseInt(istFormatter.format(now), 10);
-    const isAfterNoon = istHour >= 12;
     
     // Get today's date in IST (YYYY-MM-DD format)
     const todayIST = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     
-    // Create noon timestamp for today in IST (using ISO string with timezone offset)
+    // Create midnight timestamp for today in IST (using ISO string with timezone offset)
     // IST is UTC+5:30
-    const noonTodayIST = new Date(`${todayIST}T12:00:00+05:30`);
+    const midnightTodayIST = new Date(`${todayIST}T00:00:00+05:30`);
     
-    // Get yesterday's date in IST
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayIST = yesterday.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const noonYesterdayIST = new Date(`${yesterdayIST}T12:00:00+05:30`);
-    
-    return { isAfterNoon, noonTodayIST, noonYesterdayIST };
+    return { midnightTodayIST };
   };
 
-  // Calculate total patients count (New + Existing) with 12 PM reset logic
+  // Calculate total patients count (New + Existing) with midnight reset logic
   const calculateTotalPatients = () => {
-    const { isAfterNoon, noonTodayIST, noonYesterdayIST } = getISTTimeInfo();
-    const cutoffTime = isAfterNoon ? noonTodayIST : noonYesterdayIST;
+    const { midnightTodayIST } = getISTTimeInfo();
+    const cutoffTime = midnightTodayIST;
     
     return allTodayPatients.filter(patient => {
-      // Check if patient was created after the relevant noon
+      // Check if patient was created after today's midnight
       const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
-      const createdAfterRelevantNoon = patientCreatedDate && patientCreatedDate >= cutoffTime;
+      const createdAfterMidnight = patientCreatedDate && patientCreatedDate >= cutoffTime;
       
-      // Check if patient has visit after the relevant noon
+      // Check if patient has visit after today's midnight
       const visitDate = patient?.visit_date ? new Date(patient.visit_date) : 
                        patient?.last_assigned_date ? new Date(patient.last_assigned_date) : null;
-      const visitedAfterRelevantNoon = visitDate && visitDate >= cutoffTime;
+      const visitedAfterMidnight = visitDate && visitDate >= cutoffTime;
       
-      return createdAfterRelevantNoon || visitedAfterRelevantNoon;
+      return createdAfterMidnight || visitedAfterMidnight;
     }).length;
   };
 
-  // Calculate new patients count with 12 PM reset logic
+  // Calculate new patients count with midnight reset logic
   const calculateNewPatientsCount = () => {
-    const { isAfterNoon, noonTodayIST, noonYesterdayIST } = getISTTimeInfo();
-    const cutoffTime = isAfterNoon ? noonTodayIST : noonYesterdayIST;
+    const { midnightTodayIST } = getISTTimeInfo();
+    const cutoffTime = midnightTodayIST;
     const newPatients = todayPatients.filter(isNewPatientBasic);
     
     return newPatients.filter(patient => {
@@ -892,10 +877,10 @@ const ClinicalTodayPatients = () => {
     }).length;
   };
 
-  // Calculate existing patients count with 12 PM reset logic
+  // Calculate existing patients count with midnight reset logic
   const calculateExistingPatientsCount = () => {
-    const { isAfterNoon, noonTodayIST, noonYesterdayIST } = getISTTimeInfo();
-    const cutoffTime = isAfterNoon ? noonTodayIST : noonYesterdayIST;
+    const { midnightTodayIST } = getISTTimeInfo();
+    const cutoffTime = midnightTodayIST;
     const existingPatients = todayPatients.filter(isExistingPatientBasic);
     
     return existingPatients.filter(patient => {
@@ -984,7 +969,7 @@ const ClinicalTodayPatients = () => {
                     </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Count resets after 12 PM (noon) each day
+                    Count resets at 12:00 AM (midnight) each day
                   </p>
                 </div>
               </div>
