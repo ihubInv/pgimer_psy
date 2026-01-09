@@ -119,6 +119,7 @@ class ClinicalProforma {
         sexual_problem_notes,
         substance_use,
         substance_use_notes,
+        present_history,
         past_history,
         treatment_history,
         family_history,

@@ -460,6 +460,7 @@ class ClinicalController {
           sexual_problem_notes: data.sexual_problem_notes,
           substance_use: data.substance_use,
           substance_use_notes: data.substance_use_notes,
+          present_history: data.present_history,
           past_history: data.past_history,
           treatment_history: data.treatment_history,
           family_history: data.family_history,
