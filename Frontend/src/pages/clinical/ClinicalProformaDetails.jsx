@@ -1,10 +1,11 @@
 import { Link, useNavigate, useSearchParams, useParams } from 'react-router-dom';
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { FiEdit, FiTrash2, FiArrowLeft, FiPrinter, FiFileText, FiActivity } from 'react-icons/fi';
 import {
   useDeleteClinicalProformaMutation,
   useGetClinicalProformaByIdQuery,
+  useUpdateClinicalProformaMutation,
 } from '../../features/clinical/clinicalApiSlice';
 import { useGetADLFileByIdQuery } from '../../features/adl/adlApiSlice';
 import { useGetPatientFilesQuery } from '../../features/patients/patientFilesApiSlice';
@@ -43,6 +44,20 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
   
   // Delete mutation
   const [deleteProforma, { isLoading: isDeleting }] = useDeleteClinicalProformaMutation();
+  
+  // Update mutation for informant_who field
+  const [updateProforma, { isLoading: isUpdating }] = useUpdateClinicalProformaMutation();
+  
+  // State for informant_who field (for inline editing)
+  const [informantWho, setInformantWho] = useState(proforma?.informant_who || '');
+  const [isEditingInformantWho, setIsEditingInformantWho] = useState(false);
+  
+  // Sync state when proforma data changes
+  useEffect(() => {
+    if (proforma?.informant_who !== undefined && !isEditingInformantWho) {
+      setInformantWho(proforma.informant_who || '');
+    }
+  }, [proforma?.informant_who, isEditingInformantWho]);
   
   // Fetch ADL file data if this is a complex case
   const isComplexCase = proforma?.doctor_decision === 'complex_case' && proforma?.adl_file_id;
@@ -1038,6 +1053,39 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
                 </label>
               ))}
             </div>
+
+            {/* Who is present - shown only when Present is selected */}
+            {proforma.informant_present === true && (
+              <div className="mt-4">
+                <Input
+                  label="Who is present with the patient?"
+                  name="informant_who"
+                  value={informantWho}
+                  onChange={(e) => {
+                    setInformantWho(e.target.value);
+                    setIsEditingInformantWho(true);
+                  }}
+                  onBlur={async () => {
+                    if (isEditingInformantWho && id) {
+                      try {
+                        await updateProforma({
+                          id,
+                          informant_who: informantWho,
+                        }).unwrap();
+                        toast.success('Informant information updated successfully');
+                        setIsEditingInformantWho(false);
+                      } catch (error) {
+                        toast.error(error?.data?.message || 'Failed to update informant information');
+                        // Revert to original value on error
+                        setInformantWho(proforma?.informant_who || '');
+                      }
+                    }
+                  }}
+                  placeholder="Enter who is present with the patient (e.g., Spouse, Parent, Sibling, etc.)"
+                  disabled={isUpdating}
+                />
+              </div>
+            )}
 
             {/* Nature of information */}
             <h2 className="text-xl font-semibold text-gray-800 border-b pb-2 mt-4">Nature of information</h2>

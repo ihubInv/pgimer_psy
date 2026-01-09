@@ -339,6 +339,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
       room_no: proforma.room_no || '',
       assigned_doctor: proforma.assigned_doctor?.toString() || '',
       informant_present: proforma.informant_present ?? true,
+      informant_who: proforma.informant_who || '',
       nature_of_information: normalizeArrayField(proforma.nature_of_information),
       onset_duration: proforma.onset_duration || '',
       course: proforma.course || '',
@@ -407,6 +408,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     room_no: '',
     assigned_doctor: '',
     informant_present: true,
+    informant_who: '',
     nature_of_information: [],
     onset_duration: '',
     course: '',
@@ -1465,6 +1467,18 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                       </label>
                     ))}
                   </div>
+                  
+                  {/* Who is present - shown only when Present is selected */}
+                  {formData.informant_present === true && (
+                    <Input
+                      label="Who is present with the patient?"
+                      name="informant_who"
+                      value={formData.informant_who || ''}
+                      onChange={handleChange}
+                      placeholder="Enter who is present with the patient (e.g., Spouse, Parent, Sibling, etc.)"
+                    />
+                  )}
+                  
                   <CheckboxGroup 
                     label="Nature of information" 
                     name="nature_of_information" 
@@ -1924,6 +1938,18 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                       </label>
                     ))}
                   </div>
+                  
+                  {/* Who is present - shown only when Present is selected */}
+                  {formData.informant_present === true && (
+                    <Input
+                      label="Who is present with the patient?"
+                      name="informant_who"
+                      value={formData.informant_who || ''}
+                      onChange={handleChange}
+                      placeholder="Enter who is present with the patient (e.g., Spouse, Parent, Sibling, etc.)"
+                    />
+                  )}
+                  
                   <CheckboxGroup 
                     label="Nature of information" 
                     name="nature_of_information" 

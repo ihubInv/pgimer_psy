@@ -13,6 +13,7 @@ class ClinicalProforma {
     this.room_no = data.room_no;
     this.assigned_doctor = data.assigned_doctor;
     this.informant_present = data.informant_present;
+    this.informant_who = data.informant_who;
     this.nature_of_information = data.nature_of_information;
     this.onset_duration = data.onset_duration;
     this.course = data.course;
@@ -96,6 +97,7 @@ class ClinicalProforma {
         room_no,
         assigned_doctor,
         informant_present,
+        informant_who,
         nature_of_information,
         onset_duration,
         course,
@@ -234,7 +236,7 @@ class ClinicalProforma {
       const proformaResult = await db.query(
         `INSERT INTO clinical_proforma (
           patient_id, filled_by, visit_date, visit_type, room_no, assigned_doctor,
-          informant_present, nature_of_information, onset_duration, course, 
+          informant_present, informant_who, nature_of_information, onset_duration, course, 
           precipitating_factor, illness_duration, current_episode_since, mood, mood_notes, behaviour, behaviour_notes,
           speech, speech_notes, thought, thought_notes, perception, perception_notes, somatic, somatic_notes,
           bio_functions, bio_functions_notes, adjustment, adjustment_notes, cognitive_function, cognitive_function_notes,
@@ -250,11 +252,11 @@ class ClinicalProforma {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
           $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
           $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56,
-          $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72, $73
+          $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72, $73, $74
         ) RETURNING *`,
         [
           patient_id, filled_by, visit_date, visit_type, room_no, assigned_doctor,
-          informant_present, allProformaData.nature_of_information, allProformaData.onset_duration, 
+          informant_present, informant_who || null, allProformaData.nature_of_information, allProformaData.onset_duration, 
           allProformaData.course, allProformaData.precipitating_factor, allProformaData.illness_duration,
           allProformaData.current_episode_since, allProformaData.mood, allProformaData.mood_notes,
           allProformaData.behaviour, allProformaData.behaviour_notes, allProformaData.speech, allProformaData.speech_notes,
@@ -505,7 +507,7 @@ class ClinicalProforma {
       // This ensures no duplication - clinical_proforma only stores a reference (adl_file_id) to the ADL file
       const allowedFields = [
         'visit_date', 'visit_type', 'room_no', 'assigned_doctor', 
-        'informant_present', 'nature_of_information', 'onset_duration', 
+        'informant_present', 'informant_who', 'nature_of_information', 'onset_duration', 
         'course', 'precipitating_factor', 'illness_duration',
         'current_episode_since', 'mood', 'mood_notes', 'behaviour', 'behaviour_notes', 'speech', 'speech_notes', 'thought', 'thought_notes',
         'perception', 'perception_notes', 'somatic', 'somatic_notes', 'bio_functions', 'bio_functions_notes', 'adjustment', 'adjustment_notes',
@@ -789,6 +791,7 @@ toJSON() {
     room_no: this.room_no,
     assigned_doctor: this.assigned_doctor,
     informant_present: this.informant_present,
+          informant_who: this.informant_who,
     nature_of_information: this.nature_of_information,
     onset_duration: this.onset_duration,
     course: this.course,
