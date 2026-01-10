@@ -66,7 +66,8 @@ const { validateId } = require('../middleware/validation');
  *       200:
  *         description: Rooms retrieved successfully
  */
-router.get('/', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer'), RoomController.getAllRooms);
+// Allow Faculty and Resident to read rooms for room change feature
+router.get('/', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), RoomController.getAllRooms);
 
 /**
  * @swagger

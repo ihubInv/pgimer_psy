@@ -1944,6 +1944,202 @@ class PatientController {
       });
     }
   }
+
+  /**
+   * Change patient's assigned room
+   * This will:
+   * 1. Update patient's assigned_room
+   * 2. Update today's visit record with new room
+   * 3. Update assigned_doctor based on new room's doctor
+   * 4. Remove patient from old doctor's list (by changing room/doctor assignment)
+   * 5. Add patient to new doctor's list
+   */
+  static async changePatientRoom(req, res) {
+    try {
+      const { id } = req.params;
+      const { new_room } = req.body;
+      const patientIdInt = parseInt(id, 10);
+
+      console.log(`[changePatientRoom] Request to change patient ${id} to room "${new_room}"`);
+
+      // Validate patient ID
+      if (isNaN(patientIdInt) || patientIdInt <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid patient ID format'
+        });
+      }
+
+      // Validate new_room
+      if (!new_room || String(new_room).trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: 'New room is required',
+          code: 'ROOM_REQUIRED'
+        });
+      }
+
+      const newRoomTrimmed = String(new_room).trim();
+
+      // Find the patient
+      const patient = await Patient.findById(patientIdInt);
+      if (!patient) {
+        return res.status(404).json({
+          success: false,
+          message: 'Patient not found'
+        });
+      }
+
+      const oldRoom = patient.assigned_room;
+      const oldDoctorId = patient.assigned_doctor_id;
+      const oldDoctorName = patient.assigned_doctor_name;
+
+      console.log(`[changePatientRoom] Patient ${patientIdInt} current room: "${oldRoom}", current doctor: ${oldDoctorId} (${oldDoctorName})`);
+
+      // Check if the room is actually changing
+      if (oldRoom === newRoomTrimmed) {
+        return res.status(200).json({
+          success: true,
+          message: 'Patient is already in this room',
+          data: {
+            patient: patient.toJSON(),
+            room_changed: false,
+            old_room: oldRoom,
+            new_room: newRoomTrimmed
+          }
+        });
+      }
+
+      const db = require('../config/database');
+
+      // Get today's date using database CURRENT_DATE for IST consistency
+      const todayResult = await db.query('SELECT CURRENT_DATE as today');
+      const todayDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+
+      // Find the doctor assigned to the new room for today
+      const newRoomDoctorResult = await db.query(
+        `SELECT id, name, role 
+         FROM users 
+         WHERE current_room = $1 
+           AND DATE(room_assignment_time) = $2
+         LIMIT 1`,
+        [newRoomTrimmed, todayDate]
+      );
+
+      let newDoctorId = null;
+      let newDoctorName = null;
+      let newDoctorRole = null;
+
+      if (newRoomDoctorResult.rows.length > 0) {
+        const newDoctor = newRoomDoctorResult.rows[0];
+        newDoctorId = newDoctor.id;
+        newDoctorName = newDoctor.name;
+        newDoctorRole = newDoctor.role;
+        console.log(`[changePatientRoom] Found doctor ${newDoctorId} (${newDoctorName}) in room ${newRoomTrimmed}`);
+      } else {
+        console.log(`[changePatientRoom] No doctor currently assigned to room ${newRoomTrimmed}`);
+      }
+
+      // Update patient record with new room and doctor
+      const updatePatientResult = await db.query(
+        `UPDATE registered_patient 
+         SET assigned_room = $1,
+             assigned_doctor_id = $2,
+             assigned_doctor_name = $3,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $4
+         RETURNING *`,
+        [newRoomTrimmed, newDoctorId, newDoctorName, patientIdInt]
+      );
+
+      if (updatePatientResult.rows.length === 0) {
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to update patient room'
+        });
+      }
+
+      console.log(`[changePatientRoom] Updated patient ${patientIdInt} assigned_room to "${newRoomTrimmed}", doctor to ${newDoctorId}`);
+
+      // Update today's visit record with the new room and doctor
+      const updateVisitResult = await db.query(
+        `UPDATE patient_visits 
+         SET room_no = $1,
+             assigned_doctor_id = $2,
+             notes = COALESCE(notes, '') || $5,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE patient_id = $3 AND DATE(visit_date) = $4
+         RETURNING *`,
+        [
+          newRoomTrimmed, 
+          newDoctorId, 
+          patientIdInt, 
+          todayDate,
+          `\n[Room changed from "${oldRoom}" to "${newRoomTrimmed}" by ${req.user?.name || 'Unknown'} at ${new Date().toISOString()}]`
+        ]
+      );
+
+      if (updateVisitResult.rows.length > 0) {
+        console.log(`[changePatientRoom] Updated today's visit record for patient ${patientIdInt}`);
+      } else {
+        // No visit record for today - create one
+        console.log(`[changePatientRoom] No visit record for today, creating one...`);
+        
+        // Check if this is first visit or follow-up
+        const visitCountResult = await db.query(
+          `SELECT COUNT(*) as count FROM patient_visits WHERE patient_id = $1`,
+          [patientIdInt]
+        );
+        const visitCount = parseInt(visitCountResult.rows[0]?.count || 0, 10);
+        const visitType = visitCount === 0 ? 'first_visit' : 'follow_up';
+
+        await db.query(
+          `INSERT INTO patient_visits 
+           (patient_id, visit_date, visit_type, has_file, assigned_doctor_id, room_no, visit_status, notes)
+           VALUES ($1, $2, $3, false, $4, $5, 'scheduled', $6)`,
+          [
+            patientIdInt,
+            todayDate,
+            visitType,
+            newDoctorId,
+            newRoomTrimmed,
+            `Room assigned to ${newRoomTrimmed} by ${req.user?.name || 'Unknown'} at ${new Date().toISOString()}`
+          ]
+        );
+        console.log(`[changePatientRoom] Created new visit record for patient ${patientIdInt}`);
+      }
+
+      // Fetch the updated patient with joined data
+      const updatedPatient = await Patient.findById(patientIdInt);
+
+      console.log(`[changePatientRoom] ✅ Successfully changed patient ${patientIdInt} room from "${oldRoom}" to "${newRoomTrimmed}"`);
+      console.log(`[changePatientRoom] Doctor changed from ${oldDoctorId} (${oldDoctorName}) to ${newDoctorId} (${newDoctorName})`);
+
+      res.status(200).json({
+        success: true,
+        message: `Patient room changed from "${oldRoom || 'None'}" to "${newRoomTrimmed}"${newDoctorName ? `. Now assigned to Dr. ${newDoctorName}` : ''}`,
+        data: {
+          patient: updatedPatient.toJSON(),
+          room_changed: true,
+          old_room: oldRoom,
+          new_room: newRoomTrimmed,
+          old_doctor_id: oldDoctorId,
+          old_doctor_name: oldDoctorName,
+          new_doctor_id: newDoctorId,
+          new_doctor_name: newDoctorName,
+          new_doctor_role: newDoctorRole
+        }
+      });
+    } catch (error) {
+      console.error('[changePatientRoom] Error:', error);
+      console.error('[changePatientRoom] Stack:', error.stack);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to change patient room',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
 }
 
 module.exports = PatientController;

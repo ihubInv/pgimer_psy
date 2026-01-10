@@ -678,6 +678,83 @@ router.post('/:id/visits/complete', authenticateToken, authorizeRoles('Admin', '
 
 /**
  * @swagger
+ * /api/patients/{id}/change-room:
+ *   post:
+ *     summary: Change patient's assigned room
+ *     description: |
+ *       Change the room assignment for a patient. This will:
+ *       - Update the patient's assigned_room
+ *       - Update today's visit record with the new room
+ *       - Update assigned_doctor based on the doctor currently in the new room
+ *       - The patient will appear in the new room's doctor's Today's Patients list
+ *       - The patient will be removed from the old room's doctor's Today's Patients list
+ *     tags: [Patient Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Patient ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - new_room
+ *             properties:
+ *               new_room:
+ *                 type: string
+ *                 description: The new room to assign the patient to
+ *                 example: "Room 207"
+ *     responses:
+ *       200:
+ *         description: Room changed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Patient room changed from 'Room 206' to 'Room 207'. Now assigned to Dr. Smith"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     patient:
+ *                       $ref: '#/components/schemas/Patient'
+ *                     room_changed:
+ *                       type: boolean
+ *                     old_room:
+ *                       type: string
+ *                     new_room:
+ *                       type: string
+ *                     old_doctor_id:
+ *                       type: integer
+ *                     old_doctor_name:
+ *                       type: string
+ *                     new_doctor_id:
+ *                       type: integer
+ *                     new_doctor_name:
+ *                       type: string
+ *       400:
+ *         description: Invalid request (missing new_room or invalid patient ID)
+ *       404:
+ *         description: Patient not found
+ *       500:
+ *         description: Server error
+ */
+router.post('/:id/change-room', authenticateToken, authorizeRoles('Admin', 'Faculty', 'Resident'), validateId, PatientController.changePatientRoom);
+
+/**
+ * @swagger
  * /api/patients/{id}:
  *   delete:
  *     summary: Delete patient (Admin only)

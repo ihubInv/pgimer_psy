@@ -201,6 +201,20 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         { type: 'PatientVisit', id: patient_id },
       ],
     }),
+    changePatientRoom: builder.mutation({
+      query: ({ patient_id, new_room }) => ({
+        url: `/patients/${patient_id}/change-room`,
+        method: 'POST',
+        body: { new_room },
+      }),
+      // Invalidate patient cache to trigger real-time updates across all doctor views
+      invalidatesTags: (result, error, { patient_id }) => [
+        { type: 'Patient', id: patient_id },
+        { type: 'Patient', id: 'LIST' },
+        { type: 'PatientVisit', id: patient_id },
+        'Patient', // Invalidate all patient queries to refresh both doctors' lists
+      ],
+    }),
     uploadPatientFiles: builder.mutation({
       queryFn: async ({ patientId, files }, _queryApi, _extraOptions, fetchWithBQ) => {
         const formData = new FormData();
@@ -277,6 +291,7 @@ export const {
   useGetPatientVisitCountQuery,
   useGetPatientVisitHistoryQuery,
   useMarkVisitCompletedMutation,
+  useChangePatientRoomMutation,
   useUploadPatientFilesMutation,
   useGetPatientFilesQuery,
   useDeletePatientFileMutation,

@@ -3,11 +3,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiPhone,  FiClock, FiEye,
-  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus, FiClipboard
+  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus, FiClipboard, FiRepeat
 } from 'react-icons/fi';
-import { useGetAllPatientsQuery, useMarkVisitCompletedMutation } from '../../features/patients/patientsApiSlice';
+import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useChangePatientRoomMutation } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
-import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice } from '../../features/rooms/roomsApiSlice';
+import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice, useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
 import { useDispatch } from 'react-redux';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
@@ -19,13 +19,18 @@ import { selectCurrentUser } from '../../features/auth/authSlice';
 import { isAdmin, isMWO, isJrSr, isSR, isJR } from '../../utils/constants';
 
 // Component to check for existing proforma and render patient row
-const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkCompleted }) => {
+const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkCompleted, onRoomChanged, availableRooms = [] }) => {
   // Get patient ID safely - use 0 if invalid to satisfy hook rules (skip will prevent API call)
   const patientId = patient?.id || 0;
   const isValidPatient = Boolean(patient && patient.id);
   
   // ALL HOOKS MUST BE CALLED UNCONDITIONALLY - React rules of hooks
   const [markCompleted, { isLoading: isMarkingCompleted }] = useMarkVisitCompletedMutation();
+  const [changeRoom, { isLoading: isChangingRoom }] = useChangePatientRoomMutation();
+  const [showRoomDropdown, setShowRoomDropdown] = useState(false);
+  const [selectedNewRoom, setSelectedNewRoom] = useState('');
+  const roomDropdownRef = useRef(null);
+  
   const { data: proformaData, isLoading: isLoadingProformas, refetch: refetchProformas } = useGetClinicalProformaByPatientIdQuery(
     patientId, 
     { 
@@ -35,6 +40,44 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
       refetchOnReconnect: false,
     }
   );
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (roomDropdownRef.current && !roomDropdownRef.current.contains(event.target)) {
+        setShowRoomDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  
+  // Handle room change
+  const handleRoomChange = async () => {
+    if (!selectedNewRoom || selectedNewRoom === patient.assigned_room) {
+      toast.warning('Please select a different room');
+      return;
+    }
+    
+    try {
+      const result = await changeRoom({ 
+        patient_id: patient.id, 
+        new_room: selectedNewRoom 
+      }).unwrap();
+      
+      toast.success(result.message || `Patient moved to ${selectedNewRoom}`);
+      setShowRoomDropdown(false);
+      setSelectedNewRoom('');
+      
+      // Call parent callback to trigger list refresh
+      if (onRoomChanged) {
+        onRoomChanged();
+      }
+    } catch (error) {
+      console.error('Failed to change room:', error);
+      toast.error(error?.data?.message || 'Failed to change patient room');
+    }
+  };
   
   // Safety check - AFTER all hooks are called (React rules of hooks)
   if (!isValidPatient) {
@@ -223,7 +266,10 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
               <span className="text-gray-500">PSY: <span className="font-medium text-gray-700">{patient.psy_no}</span></span>
             )}
             {patient.assigned_room && (
-              <span className="text-gray-500">Room: <span className="font-medium text-gray-700">{patient.assigned_room}</span></span>
+              <span className="flex items-center gap-1 text-gray-500">
+                <FiHome className="w-3 h-3" />
+                <span>Room: <span className="font-medium text-gray-700">{patient.assigned_room}</span></span>
+              </span>
             )}
           </div>
 
@@ -301,6 +347,64 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
               <span className="whitespace-nowrap">Prescription</span>
             </Button>
             
+            {/* Change Room Button - Opens room change dropdown */}
+            {patient.assigned_room && availableRooms.length > 0 && (
+              <div className="relative col-span-2" ref={roomDropdownRef}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowRoomDropdown(!showRoomDropdown)}
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100 hover:border-orange-400 transition-all hover:shadow-sm"
+                >
+                  <FiRepeat className="w-3.5 h-3.5" />
+                  <span className="whitespace-nowrap">Change Room (Current: {patient.assigned_room})</span>
+                </Button>
+                
+                {/* Room Change Dropdown */}
+                {showRoomDropdown && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+                    <h5 className="text-sm font-semibold text-gray-700 mb-2">Move Patient to Different Room</h5>
+                    <select
+                      value={selectedNewRoom}
+                      onChange={(e) => setSelectedNewRoom(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 mb-2"
+                      disabled={isChangingRoom}
+                    >
+                      <option value="">Select new room...</option>
+                      {availableRooms
+                        .filter(room => room.room_number !== patient.assigned_room)
+                        .map(room => (
+                          <option key={room.room_number} value={room.room_number}>
+                            {room.room_number}{room.description ? ` - ${room.description}` : ''}
+                          </option>
+                        ))}
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleRoomChange}
+                        disabled={!selectedNewRoom || isChangingRoom}
+                        className="flex-1 px-3 py-1.5 text-sm bg-orange-500 text-white rounded-md hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isChangingRoom ? 'Moving...' : 'Move Patient'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowRoomDropdown(false);
+                          setSelectedNewRoom('');
+                        }}
+                        className="px-3 py-1.5 text-sm bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      ⚠️ Patient will be moved to the new room and assigned to the doctor in that room (if any).
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            
             {/* Mark as Completed Button - Show for all patients in today's list (not already completed) */}
             {shouldShowCompleteButton && (
               <Button
@@ -343,6 +447,10 @@ const ClinicalTodayPatients = () => {
   
   // Room selection state and queries
   const { data: roomsData, isLoading: isLoadingRooms, refetch: refetchRooms } = useGetAvailableRoomsQuery(undefined, {
+    skip: !isDoctor,
+  });
+  // Get all active rooms for room change dropdown
+  const { data: allRoomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true }, {
     skip: !isDoctor,
   });
   const [selectRoom, { isLoading: isSelectingRoom }] = useSelectRoomMutation();
@@ -1176,12 +1284,14 @@ const ClinicalTodayPatients = () => {
           ) : (
             <div className="p-4 sm:p-5 space-y-3">
               {filteredPatients.map((patient) => (
-                <PatientRow 
-                  key={patient.id} 
-                  patient={patient} 
+                <PatientRow
+                  key={patient.id}
+                  patient={patient}
                   isNewPatient={isNewPatientBasic(patient)}
                   navigate={navigate}
                   onMarkCompleted={handleMarkCompleted}
+                  onRoomChanged={handleMarkCompleted}
+                  availableRooms={(allRoomsData?.data?.rooms || []).filter(room => room.is_active)}
                 />
               ))}
             </div>
