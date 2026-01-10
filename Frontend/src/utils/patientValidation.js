@@ -381,7 +381,7 @@ const getFieldValidationRules = (fieldName, step) => {
       type: 'integer', 
       min: 1 
     },
-    assigned_room: { required: false, type: 'string', max: 50 },
+    assigned_room: { required: true, type: 'string', max: 50 },
   };
 
   return rules[fieldName] || { required: false };

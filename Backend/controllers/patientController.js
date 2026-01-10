@@ -443,10 +443,8 @@ class PatientController {
         }
       }
 
-      // Auto-assign room if room not manually specified (works for ALL users)
-      // Check if assigned_room is empty, null, undefined, or placeholder text
-      // Handle empty strings, null, undefined, and any placeholder-like values
-      // IMPORTANT: Only check if assigned_room exists in req.body - if it doesn't exist at all, it means it wasn't provided
+      // Room is MANDATORY for patient registration - no auto-assignment
+      // Validate that assigned_room is provided and is a valid non-empty value
       const roomValue = patientData.assigned_room;
       const roomExistsInBody = 'assigned_room' in req.body;
       const hasRoom = roomExistsInBody && 
@@ -457,26 +455,22 @@ class PatientController {
                       !String(roomValue).toLowerCase().includes('select room') &&
                       !String(roomValue).toLowerCase().includes('auto-assign');
       
-      console.log(`[patientController] Before auto-assignment - assigned_room: "${roomValue}" (type: ${typeof roomValue}), existsInBody: ${roomExistsInBody}, hasRoom: ${hasRoom}`);
+      console.log(`[patientController] Room validation - assigned_room: "${roomValue}" (type: ${typeof roomValue}), existsInBody: ${roomExistsInBody}, hasRoom: ${hasRoom}`);
       
+      // MANDATORY: Room selection is required for patient registration
       if (!hasRoom) {
-        console.log(`[patientController] No room specified, starting auto-assignment for user ${req.user.id} (role: ${req.user.role})...`);
-        try {
-          const { autoAssignRoom } = require('../utils/roomAssignment');
-          const assignedRoom = await autoAssignRoom();
-          if (assignedRoom) {
-            patientData.assigned_room = assignedRoom;
-            console.log(`[patientController] ✅ Auto-assigned room "${assignedRoom}" for user ${req.user.id} (role: ${req.user.role})`);
-          } else {
-            console.error(`[patientController] ⚠️  WARNING: autoAssignRoom returned null/undefined! No room assigned.`);
-          }
-        } catch (autoAssignError) {
-          console.error(`[patientController] ❌ ERROR during auto-assignment:`, autoAssignError);
-          // Don't fail the patient creation if auto-assignment fails, but log the error
-        }
-      } else {
-        console.log(`[patientController] Using manually selected room: "${patientData.assigned_room}" for user ${req.user.id}`);
+        console.log(`[patientController] ❌ Room not selected by user ${req.user.id} (role: ${req.user.role}) - rejecting patient registration`);
+        return res.status(400).json({
+          success: false,
+          message: 'Room selection is mandatory. Please select a room before registering the patient.',
+          code: 'ROOM_REQUIRED'
+        });
       }
+      
+      console.log(`[patientController] ✅ Using selected room: "${patientData.assigned_room}" for user ${req.user.id}`);
+      
+      // Trim the room value to ensure consistency
+      patientData.assigned_room = String(roomValue).trim();
       
       console.log(`[patientController] Final assigned_room value before Patient.create: "${patientData.assigned_room}"`);
       

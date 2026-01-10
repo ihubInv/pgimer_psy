@@ -307,7 +307,9 @@ async function getTodayRoomDistribution() {
 }
 
 /**
- * Auto-assign room using round-robin distribution
+ * @deprecated This function is no longer used. Room selection is now mandatory.
+ * 
+ * Previously: Auto-assign room using round-robin distribution
  * Ensures equal distribution across ALL active rooms from rooms table
  * INCLUDES rooms that are already assigned to doctors today (for equal distribution)
  * Uses TODAY's distribution to ensure equal distribution for today's patients only
@@ -315,6 +317,9 @@ async function getTodayRoomDistribution() {
  * 
  * IMPORTANT: This function distributes patients equally to ALL rooms, even if they're occupied by doctors.
  * This ensures fair distribution regardless of doctor assignments.
+ * 
+ * NOTE: As of 2026-01-10, room selection is mandatory during patient registration.
+ * The Psychiatric Welfare Officer must select a room - auto-assignment is no longer allowed.
  */
 async function autoAssignRoom() {
   try {
@@ -665,7 +670,7 @@ module.exports = {
   getOccupiedRooms,
   getRoomDistribution,
   getTodayRoomDistribution,
-  autoAssignRoom,
+  // autoAssignRoom - DEPRECATED: Room selection is now mandatory, no auto-assignment
   assignPatientsToDoctor,
   isRoomOccupied,
   hasRoomToday

@@ -1620,12 +1620,7 @@ const CreatePatient = () => {
                                   icon={<FiHome className="w-4 h-4" />}
                                   label={
                                     <span>
-                                      Assigned Room
-                                      {isMWO(currentUser?.role) && (
-                                        <span className="ml-2 text-xs text-gray-500 font-normal">
-                                          (Auto-assigned if not selected)
-                                        </span>
-                                      )}
+                                      Assigned Room <span className="text-red-500">*</span>
                                     </span>
                                   }
                                   name="assigned_room"
@@ -1644,15 +1639,15 @@ const CreatePatient = () => {
                                         label: labelWithCount
                                       };
                                     })}
-                                  placeholder={isMWO(currentUser?.role) ? "Select room or leave empty for auto-assignment" : "Select room"}
+                                  placeholder="Select room (required)"
                                   searchable={true}
                                   className=""
+                                  required
+                                  error={errors.assigned_room}
                                 />
-                                {isMWO(currentUser?.role) && (
-                                  <p className="text-xs text-gray-500 italic">
-                                    If no room is selected, the patient will be automatically assigned to an active room using round-robin distribution. When a doctor selects a room, all patients in that room will be assigned to that doctor.
-                                  </p>
-                                )}
+                                <p className="text-xs text-gray-500 italic">
+                                  Room selection is mandatory. When a doctor selects a room, all patients in that room will be assigned to that doctor.
+                                </p>
                               </div>
                         </div>
 
