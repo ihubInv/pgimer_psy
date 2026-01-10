@@ -66,6 +66,61 @@ class PatientController {
     }
   }
 
+  // Get patient registrations grouped by date
+  static async getRegistrationsByDate(req, res) {
+    try {
+      const { start_date, end_date } = req.query;
+      
+      const registrations = await Patient.getRegistrationsByDate(start_date || null, end_date || null);
+
+      res.json({
+        success: true,
+        data: {
+          registrations
+        }
+      });
+    } catch (error) {
+      console.error('Get registrations by date error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get patient registrations by date',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  // Get patients assigned to a specific room for today
+  static async getPatientsByRoom(req, res) {
+    try {
+      const { room_number } = req.params;
+      
+      if (!room_number || room_number.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: 'Room number is required'
+        });
+      }
+
+      const patients = await Patient.getPatientsByRoom(room_number.trim());
+
+      res.json({
+        success: true,
+        data: {
+          patients,
+          room_number: room_number.trim(),
+          count: patients.length
+        }
+      });
+    } catch (error) {
+      console.error('Get patients by room error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get patients for room',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
   static async createPatient(req, res) {
     try {
       const { name, sex, age, assigned_room, cr_no, psy_no, patient_id } = req.body;

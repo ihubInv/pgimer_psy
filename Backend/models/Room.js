@@ -78,36 +78,93 @@ class Room {
   static async findAll(page = 1, limit = 10, filters = {}) {
     try {
       const offset = (page - 1) * limit;
-      let query = 'SELECT * FROM rooms WHERE 1=1';
+      
+      // Get today's date using database CURRENT_DATE for consistency with IST timezone
+      const todayResult = await db.query('SELECT CURRENT_DATE as today');
+      const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+      
+      // Build query with LEFT JOIN to get assigned doctor information for today
+      // Use a derived table to get today's room assignments first, then join
+      let query = `
+        SELECT 
+          r.*,
+          u.id as assigned_doctor_id,
+          u.name as assigned_doctor_name,
+          u.role as assigned_doctor_role,
+          u.room_assignment_time
+        FROM rooms r
+        LEFT JOIN (
+          SELECT DISTINCT ON (current_room) 
+            id, name, role, current_room, room_assignment_time
+          FROM users
+          WHERE current_room IS NOT NULL 
+            AND current_room != ''
+            AND DATE(room_assignment_time) = $1
+          ORDER BY current_room, room_assignment_time DESC
+        ) u ON TRIM(COALESCE(r.room_number::text, '')) = TRIM(COALESCE(u.current_room::text, ''))
+        WHERE 1=1
+      `;
+      
       let countQuery = 'SELECT COUNT(*) FROM rooms WHERE 1=1';
-      const params = [];
-      let paramCount = 0;
+      const params = [today]; // First param is today's date
+      const countParams = []; // Separate params for count query
+      let paramCount = 1;
+      let countParamCount = 0;
 
       // Filter by is_active
       if (filters.is_active !== undefined) {
         paramCount++;
-        query += ` AND is_active = $${paramCount}`;
-        countQuery += ` AND is_active = $${paramCount}`;
+        countParamCount++;
+        query += ` AND r.is_active = $${paramCount}`;
+        countQuery += ` AND is_active = $${countParamCount}`;
         params.push(filters.is_active);
+        countParams.push(filters.is_active);
       }
 
       // Filter by search term (room_number)
       if (filters.search) {
         paramCount++;
-        query += ` AND room_number ILIKE $${paramCount}`;
-        countQuery += ` AND room_number ILIKE $${paramCount}`;
+        countParamCount++;
+        query += ` AND r.room_number ILIKE $${paramCount}`;
+        countQuery += ` AND room_number ILIKE $${countParamCount}`;
         params.push(`%${filters.search}%`);
+        countParams.push(`%${filters.search}%`);
       }
 
-      query += ` ORDER BY room_number ASC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+      query += ` ORDER BY r.room_number ASC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
       params.push(limit, offset);
 
       const [roomsResult, countResult] = await Promise.all([
         db.query(query, params),
-        db.query(countQuery, params.slice(0, -2)) // Remove limit and offset for count
+        db.query(countQuery, countParams)
       ]);
 
-      const rooms = roomsResult.rows.map(row => new Room(row));
+      // Map results and include assigned doctor info
+      const rooms = roomsResult.rows.map(row => {
+        const room = new Room({
+          id: row.id,
+          room_number: row.room_number,
+          description: row.description,
+          is_active: row.is_active,
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        });
+        
+        // Add assigned doctor information if available
+        if (row.assigned_doctor_id) {
+          room.assigned_doctor = {
+            id: row.assigned_doctor_id,
+            name: row.assigned_doctor_name,
+            role: row.assigned_doctor_role,
+            assignment_time: row.room_assignment_time
+          };
+        } else {
+          room.assigned_doctor = null;
+        }
+        
+        return room;
+      });
+      
       const total = parseInt(countResult.rows[0].count);
 
       return {
@@ -218,7 +275,7 @@ class Room {
 
   // Convert to JSON
   toJSON() {
-    return {
+    const json = {
       id: this.id,
       room_number: this.room_number,
       description: this.description,
@@ -226,6 +283,15 @@ class Room {
       created_at: this.created_at,
       updated_at: this.updated_at
     };
+    
+    // Include assigned doctor information if available
+    if (this.assigned_doctor) {
+      json.assigned_doctor = this.assigned_doctor;
+    } else {
+      json.assigned_doctor = null;
+    }
+    
+    return json;
   }
 }
 

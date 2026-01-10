@@ -1356,6 +1356,106 @@ class Patient {
     }
   }
 
+  // Get patient registrations grouped by date
+  static async getRegistrationsByDate(startDate = null, endDate = null) {
+    try {
+      // Use database CURRENT_DATE for consistency with IST timezone
+      let query = `
+        SELECT 
+          DATE(created_at) as registration_date,
+          COUNT(*) as patient_count
+        FROM registered_patient
+        WHERE 1=1
+      `;
+      const params = [];
+      let paramCount = 0;
+
+      // Add date range filters if provided
+      if (startDate) {
+        paramCount++;
+        query += ` AND DATE(created_at) >= $${paramCount}`;
+        params.push(startDate);
+      }
+
+      if (endDate) {
+        paramCount++;
+        query += ` AND DATE(created_at) <= $${paramCount}`;
+        params.push(endDate);
+      }
+
+      query += ` GROUP BY DATE(created_at) ORDER BY DATE(created_at) DESC`;
+
+      const result = await db.query(query, params);
+      return result.rows;
+    } catch (error) {
+      console.error('[Patient.getRegistrationsByDate] Error:', error);
+      throw error;
+    }
+  }
+
+  // Get patients assigned to a specific room for today
+  static async getPatientsByRoom(roomNumber) {
+    try {
+      if (!roomNumber || roomNumber.trim() === '') {
+        return [];
+      }
+
+      // Use CURRENT_DATE from database to ensure consistency with IST timezone
+      const todayResult = await db.query('SELECT CURRENT_DATE as today');
+      const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+
+      // Get patients that are in this room today
+      // Logic: Either created today with this room OR have a visit today with this room
+      // Use DISTINCT ON to avoid duplicates from multiple ADL files or visits
+      const query = `
+        SELECT DISTINCT ON (p.id)
+          p.*,
+          CASE WHEN af.id IS NOT NULL THEN true ELSE COALESCE(p.has_adl_file, false) END as has_adl_file,
+          CASE
+            WHEN af.id IS NOT NULL THEN 'complex'
+            WHEN p.case_complexity IS NOT NULL THEN p.case_complexity
+            ELSE 'simple'
+          END as case_complexity,
+          af.id as adl_file_id,
+          af.adl_no,
+          u.name as assigned_doctor_name,
+          u.role as assigned_doctor_role,
+          pv.room_no as visit_room_no,
+          pv.visit_date as latest_visit_date
+        FROM registered_patient p
+        LEFT JOIN adl_files af ON af.patient_id = p.id
+        LEFT JOIN users u ON u.id = p.assigned_doctor_id
+        LEFT JOIN patient_visits pv ON pv.patient_id = p.id AND DATE(pv.visit_date) = $2
+        WHERE (
+          -- New patients created today with this room
+          (DATE(p.created_at) = $2 
+           AND TRIM(COALESCE(p.assigned_room::text, '')) = TRIM($1::text))
+          OR
+          -- Existing patients with visits today in this room
+          (pv.id IS NOT NULL 
+           AND TRIM(COALESCE(pv.room_no::text, p.assigned_room::text, '')) = TRIM($1::text))
+        )
+        ORDER BY p.id, af.id DESC NULLS LAST, pv.visit_date DESC NULLS LAST
+      `;
+
+      const result = await db.query(query, [roomNumber.trim(), today]);
+      
+      return result.rows.map(row => {
+        const patient = new Patient(row);
+        // Ensure assigned_doctor_name is set properly
+        const doctorName = row.assigned_doctor_name && row.assigned_doctor_name !== 'Unknown Doctor' 
+          ? row.assigned_doctor_name 
+          : null;
+        patient.assigned_doctor_name = doctorName;
+        patient.assigned_doctor_role = row.assigned_doctor_role || null;
+        return patient.toJSON();
+      });
+    } catch (error) {
+      console.error('[Patient.getPatientsByRoom] Error:', error);
+      throw error;
+    }
+  }
+
   // toJSON: return all fields for comprehensive export
   toJSON() {
     return {

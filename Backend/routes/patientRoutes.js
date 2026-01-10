@@ -542,6 +542,10 @@ router.get('/stats', authenticateToken, authorizeRoles('Admin', 'Psychiatric Wel
 
 router.get('/age-distribution', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), PatientController.getAgeDistribution);
 
+router.get('/registrations-by-date', authenticateToken, authorizeRoles('Admin'), PatientController.getRegistrationsByDate);
+
+router.get('/by-room/:room_number', authenticateToken, authorizeRoles('Admin'), PatientController.getPatientsByRoom);
+
 /**
  * @swagger
  * /api/patients/cr/{cr_no}:

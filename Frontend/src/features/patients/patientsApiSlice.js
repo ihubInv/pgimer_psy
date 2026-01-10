@@ -158,6 +158,22 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       query: () => '/patients/age-distribution',
       providesTags: ['Stats'],
     }),
+    getRegistrationsByDate: builder.query({
+      query: ({ start_date, end_date } = {}) => {
+        const params = new URLSearchParams();
+        if (start_date) params.append('start_date', start_date);
+        if (end_date) params.append('end_date', end_date);
+        return `/patients/registrations-by-date?${params.toString()}`;
+      },
+      providesTags: ['Stats'],
+    }),
+    getPatientsByRoom: builder.query({
+      query: (room_number) => `/patients/by-room/${encodeURIComponent(room_number)}`,
+      providesTags: (result, error, room_number) => [
+        { type: 'Patient', id: 'LIST' },
+        { type: 'Patient', room: room_number }
+      ],
+    }),
     getPatientVisitCount: builder.query({
       query: (patientId) => `/patients/${patientId}/visits/count`,
       providesTags: (result, error, patientId) => [
@@ -256,6 +272,8 @@ export const {
   //dashboard stats queries
   useGetPatientsStatsQuery,
   useGetAgeDistributionQuery,
+  useGetRegistrationsByDateQuery,
+  useGetPatientsByRoomQuery,
   useGetPatientVisitCountQuery,
   useGetPatientVisitHistoryQuery,
   useMarkVisitCompletedMutation,

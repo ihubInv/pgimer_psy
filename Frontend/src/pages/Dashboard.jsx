@@ -8,6 +8,8 @@ import {
   FiArrowRight, FiClock, FiBell, FiSettings, FiRefreshCw, FiDownload,
   FiUser, FiBriefcase, FiHome, FiDollarSign, FiGlobe, FiLayers
 } from 'react-icons/fi';
+import PatientRegistrationCalendar from '../components/PatientRegistrationCalendar';
+import RoomPatientsModal from '../components/RoomPatientsModal';
 import { selectCurrentUser, selectIsAuthenticated } from '../features/auth/authSlice';
 import { 
   useGetAllPatientsQuery, 
@@ -32,7 +34,7 @@ import {
 import { useGetAllPrescriptionQuery } from '../features/prescriptions/prescriptionApiSlice';
 import { useGetPatientFilesQuery, useGetFileStatsQuery } from '../features/patients/patientFilesApiSlice';
 import { useGetDoctorsQuery, useGetUserStatsQuery } from '../features/users/usersApiSlice';
-import { useGetAllRoomsQuery } from '../features/rooms/roomsApiSlice';
+import { useGetAllRoomsQuery, useGetAvailableRoomsQuery } from '../features/rooms/roomsApiSlice';
 import Card from '../components/Card';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Badge from '../components/Badge';
@@ -167,6 +169,8 @@ const Dashboard = () => {
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const navigate = useNavigate();
   const [selectedPeriod, setSelectedPeriod] = useState('month'); // day, week, month
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [selectedRoomForPatients, setSelectedRoomForPatients] = useState(null);
   
   // Role detection
   const isAdminUser = isAdmin(user?.role);
@@ -304,6 +308,13 @@ const Dashboard = () => {
   const { data: allRoomsForAdmin } = useGetAllRoomsQuery({ page: 1, limit: 1000 }, { 
     skip: !isAdminUser, 
     refetchOnMountOrArgChange: true 
+  });
+
+  // Get room distribution with patient counts for today
+  const { data: roomDistributionData } = useGetAvailableRoomsQuery(undefined, {
+    skip: !isAdminUser,
+    pollingInterval: isAdminUser ? 60000 : 0,
+    refetchOnMountOrArgChange: true,
   });
 
   // Get recent prescriptions - skip for MWO (Psychiatric Welfare Officer)
@@ -746,11 +757,20 @@ const Dashboard = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
           {/* Welcome Header */}
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">
-              Welcome back, {user?.name || 'Admin'}! 👑
-            </h1>
-            <p className="text-gray-600 mt-1">System Administrator Dashboard - Full System Analytics</p>
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Welcome back, {user?.name || 'Admin'}! 👑
+              </h1>
+              <p className="text-gray-600 mt-1">System Administrator Dashboard - Full System Analytics</p>
+            </div>
+            <Button
+              onClick={() => setIsCalendarOpen(true)}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 flex items-center gap-2"
+            >
+              <FiCalendar className="w-5 h-5" />
+              View Registration Calendar
+            </Button>
           </div>
 
           {/* Admin KPI Cards */}
@@ -862,6 +882,98 @@ const Dashboard = () => {
             </Card>
           </div>
 
+          {/* Rooms with Patient Counts Section */}
+          <Card
+            title={
+              <div className="flex items-center gap-2">
+                <FiHome className="w-5 h-5 text-primary-600" />
+                <span>Rooms & Patient Assignments (Today)</span>
+              </div>
+            }
+            className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
+          >
+            {(() => {
+              const rooms = allRoomsForAdmin?.data?.rooms || [];
+              const distributionToday = roomDistributionData?.data?.distribution_today || {};
+              
+              // Combine rooms with patient counts
+              const roomsWithCounts = rooms
+                .filter(room => room.is_active)
+                .map(room => ({
+                  ...room,
+                  patientCount: distributionToday[room.room_number] || 0
+                }))
+                .sort((a, b) => {
+                  // Sort by patient count (descending), then by room number
+                  if (b.patientCount !== a.patientCount) {
+                    return b.patientCount - a.patientCount;
+                  }
+                  return a.room_number.localeCompare(b.room_number);
+                });
+
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {roomsWithCounts.length === 0 ? (
+                    <div className="col-span-full text-center py-8 text-gray-500">
+                      No active rooms found
+                    </div>
+                  ) : (
+                    roomsWithCounts.map((room) => (
+                      <div
+                        key={room.id}
+                        onClick={() => setSelectedRoomForPatients(room.room_number)}
+                        className={`
+                          p-4 rounded-lg border-2 cursor-pointer transition-all transform hover:scale-105
+                          ${room.patientCount > 0
+                            ? 'border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50 hover:shadow-lg'
+                            : 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:shadow-md'
+                          }
+                        `}
+                      >
+                        <div className="flex flex-col items-center text-center space-y-2">
+                          <div className={`
+                            w-12 h-12 rounded-full flex items-center justify-center
+                            ${room.patientCount > 0
+                              ? 'bg-blue-100 text-blue-600'
+                              : 'bg-gray-100 text-gray-400'
+                            }
+                          `}>
+                            <FiHome className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900">{room.room_number}</p>
+                            <p className="text-xs text-gray-600 mt-1">Room</p>
+                          </div>
+                          <div className={`
+                            px-3 py-1 rounded-full text-sm font-bold
+                            ${room.patientCount > 0
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-gray-100 text-gray-500'
+                            }
+                          `}>
+                            {room.patientCount} {room.patientCount === 1 ? 'Patient' : 'Patients'}
+                          </div>
+                          {room.assigned_doctor && (
+                            <div className="pt-1 border-t border-gray-200 w-full">
+                              <p className="text-xs text-gray-500 truncate" title={room.assigned_doctor.name}>
+                                <FiUser className="w-3 h-3 inline mr-1" />
+                                {room.assigned_doctor.name}
+                              </p>
+                              <p className="text-xs text-gray-400">{room.assigned_doctor.role}</p>
+                            </div>
+                          )}
+                          <p className="text-xs text-primary-600 font-medium mt-2">
+                            Click to view patients
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })()}
+          </Card>
+
           {/* Recent Activity & Quick Actions Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Recent Activity - Weekly Patients */}
@@ -924,6 +1036,19 @@ const Dashboard = () => {
             </Card>
           </div>
         </div>
+        
+        {/* Patient Registration Calendar Modal */}
+        <PatientRegistrationCalendar 
+          isOpen={isCalendarOpen} 
+          onClose={() => setIsCalendarOpen(false)} 
+        />
+        
+        {/* Room Patients Modal */}
+        <RoomPatientsModal
+          isOpen={!!selectedRoomForPatients}
+          onClose={() => setSelectedRoomForPatients(null)}
+          roomNumber={selectedRoomForPatients}
+        />
       </div>
     );
   }

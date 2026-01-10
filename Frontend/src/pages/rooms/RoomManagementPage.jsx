@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { 
-  FiPlus, FiSearch, FiEdit, FiTrash2, FiCheck, FiX
+  FiPlus, FiSearch, FiEdit, FiTrash2, FiCheck, FiX, FiUser
 } from 'react-icons/fi';
 import {
   useGetAllRoomsQuery,
@@ -230,6 +230,7 @@ const RoomManagementPage = () => {
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Room Number</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Description</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Assigned Doctor</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Created</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Actions</th>
                 </tr>
@@ -237,7 +238,7 @@ const RoomManagementPage = () => {
               <tbody>
                 {rooms.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="text-center py-8 text-gray-500">
+                    <td colSpan="5" className="text-center py-8 text-gray-500">
                       No rooms found
                     </td>
                   </tr>
@@ -255,6 +256,35 @@ const RoomManagementPage = () => {
                               : room.description}
                           </span>
                         ) : '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {room.assigned_doctor ? (
+                          <div className="flex items-start gap-2">
+                            <FiUser className="w-4 h-4 text-primary-600 mt-0.5 flex-shrink-0" />
+                            <div className="flex flex-col gap-1">
+                              <span className="font-medium text-gray-900">{room.assigned_doctor.name}</span>
+                              <span className="text-xs text-gray-500">
+                                <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded text-xs font-medium">
+                                  {room.assigned_doctor.role}
+                                </span>
+                                {room.assigned_doctor.assignment_time && (
+                                  <span className="ml-2">
+                                    {new Date(room.assigned_doctor.assignment_time).toLocaleTimeString('en-IN', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      timeZone: 'Asia/Kolkata'
+                                    })} IST
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-gray-400">
+                            <FiUser className="w-4 h-4" />
+                            <span className="text-sm italic">Not assigned</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-gray-600 text-sm">
                         {room.created_at ? formatDate(room.created_at) : '-'}
