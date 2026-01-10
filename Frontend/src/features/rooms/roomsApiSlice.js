@@ -79,14 +79,15 @@ export const roomManagementApiSlice = apiSlice.injectEndpoints({
       ],
     }),
     deleteRoom: builder.mutation({
-      query: (id) => ({
-        url: `/rooms/${id}`,
+      query: ({ id, force = false }) => ({
+        url: `/rooms/${id}${force ? '?force=true' : ''}`,
         method: 'DELETE',
       }),
-      invalidatesTags: (result, error, id) => [
+      invalidatesTags: (result, error, { id }) => [
         { type: 'RoomManagement', id },
         'RoomManagement',
         'Rooms',
+        'Patient', // Also invalidate patient cache as room references may have been cleared
       ],
     }),
   }),

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { 
-  FiPlus, FiSearch, FiEdit, FiTrash2, FiCheck, FiX, FiUser
+  FiPlus, FiSearch, FiEdit, FiTrash2, FiCheck, FiX, FiUser, FiAlertTriangle
 } from 'react-icons/fi';
 import {
   useGetAllRoomsQuery,
@@ -28,6 +28,20 @@ const RoomManagementPage = () => {
     description: '',
     is_active: true,
   });
+  
+  // Delete confirmation modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [roomToDelete, setRoomToDelete] = useState(null);
+  const [isForceDelete, setIsForceDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+  const [deleteDetails, setDeleteDetails] = useState({
+    historicalPatientsCount: 0,
+    todayPatientsCount: 0,
+    assignedDoctors: '',
+    hasDoctorAssignment: false,
+    hasTodayPatients: false
+  });
+  
   const limit = 10;
 
   // Reset page when filters change
@@ -108,19 +122,65 @@ const RoomManagementPage = () => {
     }
   };
 
-  const handleDelete = async (room) => {
-    const confirmMessage = `Are you sure you want to permanently delete room "${room.room_number}"?\n\nThis action cannot be undone.`;
+  // Open delete confirmation modal
+  const openDeleteModal = (room) => {
+    setRoomToDelete(room);
+    setIsForceDelete(false);
+    setDeleteError(null);
+    setDeleteDetails({
+      historicalPatientsCount: 0,
+      todayPatientsCount: 0,
+      assignedDoctors: '',
+      hasDoctorAssignment: false,
+      hasTodayPatients: false
+    });
+    setIsDeleteModalOpen(true);
+  };
+  
+  // Close delete confirmation modal
+  const closeDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setRoomToDelete(null);
+    setIsForceDelete(false);
+    setDeleteError(null);
+    setDeleteDetails({
+      historicalPatientsCount: 0,
+      todayPatientsCount: 0,
+      assignedDoctors: '',
+      hasDoctorAssignment: false,
+      hasTodayPatients: false
+    });
+  };
+
+  // Execute deletion
+  const handleDelete = async (forceDelete = false) => {
+    if (!roomToDelete) return;
     
-    if (window.confirm(confirmMessage)) {
-      try {
-        await deleteRoom(room.id).unwrap();
-        toast.success(`Room "${room.room_number}" deleted successfully`);
-        refetch();
-      } catch (err) {
-        const errorMessage = err?.data?.message || err?.message || 'Failed to delete room';
+    try {
+      await deleteRoom({ id: roomToDelete.id, force: forceDelete }).unwrap();
+      toast.success(`Room "${roomToDelete.room_number}" deleted successfully`);
+      closeDeleteModal();
+      refetch();
+    } catch (err) {
+      const errorMessage = err?.data?.message || err?.message || 'Failed to delete room';
+      const canForceDelete = err?.data?.canForceDelete;
+      
+      if (canForceDelete) {
+        // Show force delete option in the modal
+        setDeleteError(errorMessage);
+        setIsForceDelete(true);
+        setDeleteDetails({
+          historicalPatientsCount: err?.data?.historicalPatientsCount || 0,
+          todayPatientsCount: err?.data?.todayPatientsCount || 0,
+          assignedDoctors: err?.data?.assignedDoctors || '',
+          hasDoctorAssignment: err?.data?.hasDoctorAssignment || false,
+          hasTodayPatients: err?.data?.hasTodayPatients || false
+        });
+      } else {
         toast.error(errorMessage);
-        console.error('Delete room error:', err);
+        closeDeleteModal();
       }
+      console.error('Delete room error:', err);
     }
   };
 
@@ -317,7 +377,7 @@ const RoomManagementPage = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDelete(room)}
+                            onClick={() => openDeleteModal(room)}
                             loading={isDeleting}
                             className="text-red-600 hover:text-red-700"
                             title="Permanently delete room"
@@ -417,6 +477,92 @@ const RoomManagementPage = () => {
               </Button>
             </div>
           </form>
+        </Modal>
+
+        {/* Delete Confirmation Modal */}
+        <Modal
+          isOpen={isDeleteModalOpen}
+          onClose={closeDeleteModal}
+          title={isForceDelete ? '⚠️ Force Delete Room' : 'Delete Room'}
+          size="md"
+        >
+          <div className="space-y-4">
+            {/* Warning Icon */}
+            <div className="flex justify-center">
+              <div className={`p-4 rounded-full ${isForceDelete ? 'bg-red-100' : 'bg-orange-100'}`}>
+                <FiAlertTriangle className={`w-12 h-12 ${isForceDelete ? 'text-red-600' : 'text-orange-600'}`} />
+              </div>
+            </div>
+
+            {/* Message */}
+            <div className="text-center">
+              {isForceDelete ? (
+                <>
+                  <p className="text-gray-700 mb-3">
+                    {deleteError}
+                  </p>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-left">
+                    <p className="font-semibold text-red-800 mb-2">Force Delete will:</p>
+                    <ul className="text-sm text-red-700 space-y-1">
+                      {deleteDetails.hasDoctorAssignment && (
+                        <li>• Clear room assignment from doctor(s): <strong>{deleteDetails.assignedDoctors}</strong></li>
+                      )}
+                      {deleteDetails.hasTodayPatients && (
+                        <li>• Clear room from <strong>{deleteDetails.todayPatientsCount}</strong> patient(s) registered today</li>
+                      )}
+                      {deleteDetails.historicalPatientsCount > 0 && (
+                        <li>• Clear room assignment from <strong>{deleteDetails.historicalPatientsCount}</strong> historical patient record(s)</li>
+                      )}
+                      <li>• Clear room from all visit records</li>
+                      <li>• Permanently delete room "<strong>{roomToDelete?.room_number}</strong>"</li>
+                    </ul>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-medium text-gray-900 mb-2">
+                    Delete room "{roomToDelete?.room_number}"?
+                  </p>
+                  <p className="text-gray-600">
+                    This action cannot be undone. The room will be permanently deleted.
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-center gap-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeDeleteModal}
+                className="px-6"
+              >
+                Cancel
+              </Button>
+              {isForceDelete ? (
+                <Button
+                  type="button"
+                  onClick={() => handleDelete(true)}
+                  loading={isDeleting}
+                  className="px-6 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <FiTrash2 className="mr-2" />
+                  Force Delete
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={() => handleDelete(false)}
+                  loading={isDeleting}
+                  className="px-6 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <FiTrash2 className="mr-2" />
+                  Delete
+                </Button>
+              )}
+            </div>
+          </div>
         </Modal>
       </div>
     </div>

@@ -189,8 +189,11 @@ class RoomController {
 
       const db = require('../config/database');
       const today = new Date().toISOString().slice(0, 10);
+      
+      // Check if force delete is requested
+      const forceDelete = req.query.force === 'true';
 
-      // Check if any patients are assigned to this room TODAY
+      // Check if any patients are assigned to this room TODAY (not historical - created today)
       const todayPatientsResult = await db.query(
         `SELECT COUNT(*) as count 
          FROM registered_patient 
@@ -201,14 +204,41 @@ class RoomController {
 
       const todayPatientsCount = parseInt(todayPatientsResult.rows[0].count, 10);
 
-      if (todayPatientsCount > 0) {
+      if (todayPatientsCount > 0 && !forceDelete) {
         return res.status(400).json({
           success: false,
-          message: `Cannot delete room "${room.room_number}". There are ${todayPatientsCount} patient(s) assigned to this room today. Please reassign or remove patients before deleting.`
+          message: `Cannot delete room "${room.room_number}". There are ${todayPatientsCount} patient(s) assigned to this room today. Use "Force Delete" to clear all assignments and delete.`,
+          canForceDelete: true,
+          todayPatientsCount: todayPatientsCount,
+          hasTodayPatients: true
         });
       }
 
-      // Check if any patients are assigned to this room (any time)
+      // Check if room is currently assigned to a doctor today
+      const doctorAssignmentResult = await db.query(
+        `SELECT id, name, current_room 
+         FROM users 
+         WHERE current_room = $1 
+           AND DATE(room_assignment_time) = $2`,
+        [room.room_number, today]
+      );
+
+      const doctorAssignmentCount = doctorAssignmentResult.rows.length;
+      const assignedDoctors = doctorAssignmentResult.rows;
+
+      if (doctorAssignmentCount > 0 && !forceDelete) {
+        const doctorNames = assignedDoctors.map(d => d.name).join(', ');
+        return res.status(400).json({
+          success: false,
+          message: `Cannot delete room "${room.room_number}". Doctor(s) currently assigned: ${doctorNames}. Use "Force Delete" to clear all assignments and delete.`,
+          canForceDelete: true,
+          assignedDoctorsCount: doctorAssignmentCount,
+          assignedDoctors: doctorNames,
+          hasDoctorAssignment: true
+        });
+      }
+
+      // Check if any patients are assigned to this room (any time - historical)
       const allPatientsResult = await db.query(
         `SELECT COUNT(*) as count 
          FROM registered_patient 
@@ -218,29 +248,62 @@ class RoomController {
 
       const allPatientsCount = parseInt(allPatientsResult.rows[0].count, 10);
 
-      if (allPatientsCount > 0) {
+      if (allPatientsCount > 0 && !forceDelete) {
+        // Historical patients exist - ask for force delete confirmation
         return res.status(400).json({
           success: false,
-          message: `Cannot delete room "${room.room_number}". There are ${allPatientsCount} patient(s) historically assigned to this room. Please ensure no patients are linked to this room before deleting.`
+          message: `Cannot delete room "${room.room_number}". There are ${allPatientsCount} patient(s) historically assigned to this room. Use "Force Delete" to clear historical references and delete the room.`,
+          canForceDelete: true,
+          historicalPatientsCount: allPatientsCount
         });
       }
 
-      // Check if room is currently assigned to a doctor today
-      const doctorAssignmentResult = await db.query(
-        `SELECT COUNT(*) as count 
-         FROM users 
-         WHERE current_room = $1 
-           AND DATE(room_assignment_time) = $2`,
-        [room.room_number, today]
-      );
-
-      const doctorAssignmentCount = parseInt(doctorAssignmentResult.rows[0].count, 10);
-
-      if (doctorAssignmentCount > 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Cannot delete room "${room.room_number}". A doctor is currently assigned to this room today. Please clear the doctor assignment before deleting.`
-        });
+      // Force delete - clear all assignments
+      if (forceDelete) {
+        console.log(`[deleteRoom] Force deleting room "${room.room_number}"`);
+        
+        // Clear doctor assignments first
+        if (doctorAssignmentCount > 0) {
+          console.log(`[deleteRoom] Clearing room assignment for ${doctorAssignmentCount} doctor(s)`);
+          await db.query(
+            `UPDATE users 
+             SET current_room = NULL, room_assignment_time = NULL, updated_at = CURRENT_TIMESTAMP
+             WHERE current_room = $1`,
+            [room.room_number]
+          );
+        }
+        
+        // Clear today's patient room assignments
+        if (todayPatientsCount > 0) {
+          console.log(`[deleteRoom] Clearing room for ${todayPatientsCount} today's patient(s)`);
+          await db.query(
+            `UPDATE registered_patient 
+             SET assigned_room = NULL, updated_at = CURRENT_TIMESTAMP
+             WHERE assigned_room = $1 AND DATE(created_at) = $2`,
+            [room.room_number, today]
+          );
+        }
+        
+        // Clear historical patient room assignments
+        if (allPatientsCount > 0) {
+          console.log(`[deleteRoom] Clearing assigned_room for ${allPatientsCount} historical patient(s)`);
+          const clearResult = await db.query(
+            `UPDATE registered_patient 
+             SET assigned_room = NULL, updated_at = CURRENT_TIMESTAMP
+             WHERE assigned_room = $1`,
+            [room.room_number]
+          );
+          console.log(`[deleteRoom] Cleared assigned_room for ${clearResult.rowCount} patient(s)`);
+        }
+        
+        // Clear room_no from patient_visits for this room
+        const clearVisitsResult = await db.query(
+          `UPDATE patient_visits 
+           SET room_no = NULL, updated_at = CURRENT_TIMESTAMP
+           WHERE room_no = $1`,
+          [room.room_number]
+        );
+        console.log(`[deleteRoom] Cleared room_no from ${clearVisitsResult.rowCount} visit record(s)`);
       }
 
       // All checks passed - proceed with permanent deletion
@@ -248,7 +311,9 @@ class RoomController {
 
       res.json({
         success: true,
-        message: 'Room deleted successfully',
+        message: forceDelete && allPatientsCount > 0 
+          ? `Room deleted successfully. Cleared room reference from ${allPatientsCount} historical patient(s).`
+          : 'Room deleted successfully',
         data: room.toJSON()
       });
     } catch (error) {
