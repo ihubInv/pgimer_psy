@@ -1,4 +1,5 @@
 const { body, param, query, validationResult } = require('express-validator');
+const ClinicalOption = require('../models/ClinicalOption');
 
 // Validation result handler
 const handleValidationErrors = (req, res, next) => {
@@ -517,11 +518,13 @@ const validateClinicalProforma = [
     .withMessage('Assigned doctor name must not exceed 255 characters'),
   body('nature_of_information')
     .optional({ nullable: true })
-    .custom((value) => {
+    .custom(async (value) => {
       if (!value) return true; // Allow null/empty
       // Handle both string (comma-separated) and array formats
       const values = Array.isArray(value) ? value : value.split(',').map(v => v.trim());
-      const validValues = ['Reliable', 'Unreliable', 'Adequate', 'Inadequate'];
+      // Fetch valid values from database dynamically
+      const options = await ClinicalOption.findByGroup('nature_of_information');
+      const validValues = options.map(opt => opt.option_label);
       const invalidValues = values.filter(v => !validValues.includes(v));
       if (invalidValues.length > 0) {
         throw new Error(`Invalid nature_of_information values: ${invalidValues.join(', ')}. Must be one or more of: ${validValues.join(', ')}`);
