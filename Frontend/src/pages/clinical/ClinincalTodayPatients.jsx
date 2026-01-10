@@ -102,7 +102,7 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
   const isCompleted = patient.visit_status === 'completed';
   
   // Show "Mark as Completed" button for ALL patients in today's list
-  // Since patients are already filtered to show only patients registered today (from 12:00 AM IST),
+  // Since patients are already filtered to show only patients registered today (from 12:00 AM IST to 11:59 PM IST),
   // we should show the button for all of them, except those already completed
   const shouldShowCompleteButton = !isCompleted;
   
@@ -562,7 +562,7 @@ const ClinicalTodayPatients = () => {
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
   // Create room options with disabled state for occupied rooms and rooms with zero patients
-  // Note: distribution_today shows only patients registered today (from 12:00 AM IST)
+  // Note: distribution_today shows only patients registered today (from 12:00 AM IST to 11:59 PM IST)
   const roomOptions = rooms.map(room => {
     const totalPatients = distribution[room] || 0; // This shows only patients registered today
     const isOccupied = occupiedRooms[room] !== undefined;
@@ -649,7 +649,7 @@ const ClinicalTodayPatients = () => {
     return patients.filter((patient) => {
       if (!patient) return false;
 
-      // Only show patients registered today (from 12:00 AM IST)
+      // Only show patients registered today (from 12:00 AM IST to 11:59 PM IST)
       // Exclude all patients registered yesterday or earlier
       const patientCreatedDate = patient?.created_at ? toISTDateString(patient.created_at) : '';
       const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
@@ -816,7 +816,7 @@ const ClinicalTodayPatients = () => {
     return dateB.getTime() - dateA.getTime();
   });
 
-  // Helper function to get midnight (00:00:00) of current day in IST
+  // Helper function to get start (00:00:00) and end (23:59:59) of current day in IST
   const getISTTimeInfo = () => {
     const now = new Date();
     
@@ -827,30 +827,35 @@ const ClinicalTodayPatients = () => {
     // IST is UTC+5:30
     const midnightTodayIST = new Date(`${todayIST}T00:00:00+05:30`);
     
-    return { midnightTodayIST };
+    // Create end of day timestamp (11:59:59 PM) for today in IST
+    const endOfDayIST = new Date(`${todayIST}T23:59:59+05:30`);
+    
+    return { midnightTodayIST, endOfDayIST };
   };
 
-  // Calculate total patients count - only patients registered today (from 12:00 AM IST)
+  // Calculate total patients count - only patients registered today (from 12:00 AM IST to 11:59 PM IST)
   const calculateTotalPatients = () => {
-    const { midnightTodayIST } = getISTTimeInfo();
-    const cutoffTime = midnightTodayIST;
+    const { midnightTodayIST, endOfDayIST } = getISTTimeInfo();
+    const startTime = midnightTodayIST;
+    const endTime = endOfDayIST;
     
     return allTodayPatients.filter(patient => {
-      // Only count patients registered today (after midnight IST)
+      // Only count patients registered today (from 12:00 AM IST to 11:59 PM IST)
       const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
-      return patientCreatedDate && patientCreatedDate >= cutoffTime;
+      return patientCreatedDate && patientCreatedDate >= startTime && patientCreatedDate <= endTime;
     }).length;
   };
 
   // Calculate new patients count with midnight reset logic
   const calculateNewPatientsCount = () => {
-    const { midnightTodayIST } = getISTTimeInfo();
-    const cutoffTime = midnightTodayIST;
+    const { midnightTodayIST, endOfDayIST } = getISTTimeInfo();
+    const startTime = midnightTodayIST;
+    const endTime = endOfDayIST;
     const newPatients = todayPatients.filter(isNewPatientBasic);
     
     return newPatients.filter(patient => {
       const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
-      return patientCreatedDate && patientCreatedDate >= cutoffTime;
+      return patientCreatedDate && patientCreatedDate >= startTime && patientCreatedDate <= endTime;
     }).length;
   };
 
@@ -941,7 +946,7 @@ const ClinicalTodayPatients = () => {
                     </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Only patients registered today (from 12:00 AM IST) are shown. Count resets at 12:00 AM (midnight) each day.
+                    Only patients registered today (from 12:00 AM IST to 11:59 PM IST) are counted. The counter resets at the start of a new day.
                   </p>
                 </div>
               </div>
