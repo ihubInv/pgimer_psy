@@ -17,14 +17,27 @@ import { PRESCRIPTION_OPTIONS, PRESCRIPTION_FORM } from '../../utils/constants';
 
 
 
-const PrescriptionEdit = ({ proforma, index, patientId }) => {
+const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const mode = searchParams.get('mode'); // 'create' or 'update' from URL
   
+  // Get patient_id and clinical_proforma_id from query params (for standalone mode)
+  const patientIdFromQuery = searchParams.get('patient_id');
+  const clinicalProformaIdFromQuery = searchParams.get('clinical_proforma_id');
+  
+  // Resolve patient ID: prop > query param > proforma
+  const patientId = propPatientId || (patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : null) || proforma?.patient_id;
+  
+  // Resolve clinical proforma ID: proforma prop > query param
+  const clinicalProformaId = proforma?.id || (clinicalProformaIdFromQuery ? parseInt(clinicalProformaIdFromQuery, 10) : null);
+  
+  // Check if running in standalone mode (no proforma prop, accessed via route)
+  const isStandaloneMode = !proforma && (patientIdFromQuery || clinicalProformaIdFromQuery);
+  
   const { data: prescriptionsData, isLoading: loadingPrescriptions } = useGetPrescriptionByIdQuery(
-    { clinical_proforma_id: proforma.id },
-    { skip: !proforma.id }
+    { clinical_proforma_id: clinicalProformaId },
+    { skip: !clinicalProformaId }
   );
   const [createPrescription, { isLoading: isSaving }] = useCreatePrescriptionMutation();
   
@@ -238,7 +251,7 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
         // Update prescription via API
         await updatePrescription({
           id: prescriptionData.id,
-          clinical_proforma_id: Number(proforma.id),
+          clinical_proforma_id: clinicalProformaId ? Number(clinicalProformaId) : null,
           prescription: updatedPrescriptions
         }).unwrap();
 
@@ -367,8 +380,8 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
  
 
   const handleSavePrescriptions = async () => {
-    if (!proforma?.id) {
-      toast.error("Clinical proforma ID is required");
+    if (!clinicalProformaId && !patientId) {
+      toast.error("Patient ID or Clinical proforma ID is required");
       return;
     }
   
@@ -401,7 +414,7 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
         // Update existing prescription
         const result = await updatePrescription({
           id: prescriptionData.id,
-          clinical_proforma_id: Number(proforma.id),
+          clinical_proforma_id: clinicalProformaId ? Number(clinicalProformaId) : null,
           prescription: prescriptionArray
         }).unwrap();
         savedPrescription = result?.data?.prescription;
@@ -419,7 +432,7 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
         }
         
         const result = await createPrescription({
-          clinical_proforma_id: Number(proforma.id),
+          clinical_proforma_id: clinicalProformaId ? Number(clinicalProformaId) : null,
           patient_id: patientIdInt,
           prescription: prescriptionArray // Use 'prescription' for new format
         }).unwrap();
@@ -609,8 +622,6 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
     // Keep modal open so user can load more templates
   };
 
-  
-  
   return (
     <>
       <style>{`
@@ -629,16 +640,31 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
           background: #4f46e5;
         }
       `}</style>
-      <div className="border border-gray-200 rounded-lg p-6 bg-gradient-to-r from-amber-50 to-yellow-50">
-      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
-        <div>
-          <h4 className="text-lg font-semibold text-gray-900">Visit #{index + 1}</h4>
-          <p className="text-sm text-gray-500 mt-1">
-            {proforma.visit_date ? formatDate(proforma.visit_date) : 'N/A'}
-            {proforma.visit_type && ` • ${proforma.visit_type.replace('_', ' ')}`}
-          </p>
+      
+      {/* Standalone Header - Show when accessed directly via route */}
+      {isStandaloneMode && (
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Create Prescription</h1>
+          <p className="text-gray-600 mt-1">Add medications for the patient</p>
+          {patientId && (
+            <p className="text-sm text-gray-500 mt-2">Patient ID: {patientId}</p>
+          )}
         </div>
-      </div>
+      )}
+      
+      <div className="border border-gray-200 rounded-lg p-6 bg-gradient-to-r from-amber-50 to-yellow-50">
+      {/* Visit Header - Show only when proforma is provided (embedded mode) */}
+      {proforma && (
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+          <div>
+            <h4 className="text-lg font-semibold text-gray-900">Visit #{(index || 0) + 1}</h4>
+            <p className="text-sm text-gray-500 mt-1">
+              {proforma.visit_date ? formatDate(proforma.visit_date) : 'N/A'}
+              {proforma.visit_type && ` • ${proforma.visit_type.replace('_', ' ')}`}
+            </p>
+          </div>
+        </div>
+      )}
 
       {loadingPrescriptions ? (
         <div className="text-center py-4">
@@ -999,27 +1025,27 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
           {/* Datalist suggestions for prescription fields */}
           {prescriptionRows.map((_, rowIdx) => (
             <div key={`datalists-${rowIdx}`} style={{ display: 'none' }}>
-              <datalist id={`dosageOptions-${proforma.id}-${rowIdx}`}>
+              <datalist id={`dosageOptions-${clinicalProformaId || 'new'}-${rowIdx}`}>
                 {PRESCRIPTION_OPTIONS.DOSAGE.map((option) => (
                   <option key={option.value} value={option.value} />
                 ))}
               </datalist>
-              <datalist id={`whenOptions-${proforma.id}-${rowIdx}`}>
+              <datalist id={`whenOptions-${clinicalProformaId || 'new'}-${rowIdx}`}>
                 {PRESCRIPTION_OPTIONS.WHEN.map((option) => (
                   <option key={option.value} value={option.value} />
                 ))}
               </datalist>
-              <datalist id={`frequencyOptions-${proforma.id}-${rowIdx}`}>
+              <datalist id={`frequencyOptions-${clinicalProformaId || 'new'}-${rowIdx}`}>
                 {PRESCRIPTION_OPTIONS.FREQUENCY.map((option) => (
                   <option key={option.value} value={option.value} />
                 ))}
               </datalist>
-              <datalist id={`durationOptions-${proforma.id}-${rowIdx}`}>
+              <datalist id={`durationOptions-${clinicalProformaId || 'new'}-${rowIdx}`}>
                 {PRESCRIPTION_OPTIONS.DURATION.map((option) => (
                   <option key={option.value} value={option.value} />
                 ))}
               </datalist>
-              <datalist id={`quantityOptions-${proforma.id}-${rowIdx}`}>
+              <datalist id={`quantityOptions-${clinicalProformaId || 'new'}-${rowIdx}`}>
                 {PRESCRIPTION_OPTIONS.QUANTITY.map((option) => (
                   <option key={option.value} value={option.value} />
                 ))}
@@ -1052,7 +1078,7 @@ const PrescriptionEdit = ({ proforma, index, patientId }) => {
               </Button>
             </div>
             <div className="flex items-center gap-3">
-              {proforma.id && (
+              {(clinicalProformaId || patientId) && (
                 <Button
                   type="button"
                   onClick={handleSavePrescriptions}

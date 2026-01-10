@@ -98,6 +98,7 @@ function App() {
               <Route element={<ProtectedRoute allowedRoles={['Admin', 'Faculty', 'Resident']} />}>
                 <Route path="/clinical" element={<ClinicalProformaPage />} />
                 <Route path="/clinical-today-patients" element={<ClinicalTodayPatients />} />
+                <Route path="/clinical/new" element={<EditClinicalProforma />} />
                 <Route path="/clinical/:id" element={<ClinicalProformaDetails />} />
                 <Route path="/clinical/:id/edit" element={<EditClinicalProforma />} />
                 <Route path="/follow-up/:id" element={<FollowUpForm />} />
@@ -105,6 +106,7 @@ function App() {
 
               {/* Prescription Routes - Faculty, Resident and Admin */}
               <Route element={<ProtectedRoute allowedRoles={['Admin', 'Faculty', 'Resident']} />}>
+                <Route path="/prescriptions/create" element={<PrescriptionEdit />} />
                 <Route path="/prescriptions/edit/:id" element={<PrescriptionEdit />} />
                 <Route path="/prescriptions/view" element={<PrescriptionView />} />
               </Route>
@@ -112,6 +114,8 @@ function App() {
               {/* Out Patient Intake Record - Faculty, Resident and Admin */}
               <Route element={<ProtectedRoute allowedRoles={['Admin', 'Faculty', 'Resident']} />}>
                 <Route path="/adl-files" element={<ADLFilesPage />} />
+                <Route path="/adl/new" element={<EditADL />} />
+                <Route path="/adl/patient/:id" element={<EditADL />} />
                 <Route path="/adl-files/:id/edit" element={<EditADL />} />
                 <Route path="/adl-files/:id/view" element={<ViewADL />} />
               </Route>

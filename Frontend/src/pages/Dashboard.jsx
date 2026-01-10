@@ -1147,6 +1147,8 @@ const Dashboard = () => {
         .sort((a, b) => b.count - a.count);
 
       // Recent patients (last 7 days - today to previous 7 days, where doctor accepted room)
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       sevenDaysAgo.setHours(0, 0, 0, 0);
@@ -1585,6 +1587,8 @@ const Dashboard = () => {
         .sort((a, b) => b.count - a.count);
 
       // Recent patients (last 7 days - today to previous 7 days, where doctor accepted room)
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       sevenDaysAgo.setHours(0, 0, 0, 0);

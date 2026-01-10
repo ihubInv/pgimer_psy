@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiPhone,  FiClock, FiEye,
-  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus
+  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus, FiClipboard
 } from 'react-icons/fi';
-import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
+import { useGetAllPatientsQuery, useMarkVisitCompletedMutation } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
 import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice } from '../../features/rooms/roomsApiSlice';
 import { useDispatch } from 'react-redux';
@@ -20,22 +20,26 @@ import { isAdmin, isMWO, isJrSr, isSR, isJR } from '../../utils/constants';
 
 // Component to check for existing proforma and render patient row
 const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkCompleted }) => {
+  // Get patient ID safely - use 0 if invalid to satisfy hook rules (skip will prevent API call)
+  const patientId = patient?.id || 0;
+  const isValidPatient = Boolean(patient && patient.id);
+  
+  // ALL HOOKS MUST BE CALLED UNCONDITIONALLY - React rules of hooks
   const [markCompleted, { isLoading: isMarkingCompleted }] = useMarkVisitCompletedMutation();
   const { data: proformaData, isLoading: isLoadingProformas, refetch: refetchProformas } = useGetClinicalProformaByPatientIdQuery(
-    patient.id, 
+    patientId, 
     { 
-      skip: !patient.id,
-      refetchOnMountOrArgChange: true,
-      refetchOnFocus: true,
-      refetchOnReconnect: true,
+      skip: !isValidPatient, // Skip API call if patient is invalid
+      refetchOnMountOrArgChange: false,
+      refetchOnFocus: false,
+      refetchOnReconnect: false,
     }
   );
   
-  // Fetch visit history to check for past visits
-  const { data: visitHistoryData } = useGetPatientVisitHistoryQuery(
-    patient.id,
-    { skip: !patient.id }
-  );
+  // Safety check - AFTER all hooks are called (React rules of hooks)
+  if (!isValidPatient) {
+    return null;
+  }
   
   const handleMarkCompleted = async () => {
     try {
@@ -75,25 +79,22 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
     return patientCreatedDate && patientCreatedDate === todayDateString;
   };
 
-  // Get visit history and proformas
-  const visitHistory = visitHistoryData?.visitHistory || [];
+  // Get visit history and proformas - simplified to avoid API calls
+  const visitHistory = []; // Disabled to prevent 500 errors
   const proformas = proformaData?.data?.proformas || [];
   
   // Filter out today's visits from history to get only past visits
   const todayDateString = toISTDateString(new Date());
-  const pastVisitHistory = visitHistory.filter(visit => {
-    const visitDate = toISTDateString(visit.visit_date);
-    return visitDate && visitDate !== todayDateString;
-  });
   
-  // Filter out today's proformas to get only past proformas
+  // Since visit history is disabled, use proforma history only
   const pastProformas = proformas.filter(proforma => {
     const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
     return proformaDate && proformaDate !== todayDateString;
   });
 
-  // Check if patient has actual past history (not including today's visits/proformas)
-  const hasPastHistory = pastVisitHistory.length > 0 || pastProformas.length > 0;
+  // Check if patient has actual past history (not including today's proformas)
+  // Simplified: just check if they have past proformas
+  const hasPastHistory = pastProformas.length > 0;
 
   // Determine if patient is truly new: created today AND has no past history
   const isNewPatient = isPatientCreatedToday() && !hasPastHistory;
@@ -106,17 +107,17 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
   // we should show the button for all of them, except those already completed
   const shouldShowCompleteButton = !isCompleted;
   
-  // Refetch proformas when component becomes visible (e.g., after returning from deletion)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && patient.id) {
-        refetchProformas();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [patient.id, refetchProformas]);
+  // Refetch proformas when component becomes visible - DISABLED to prevent re-render loops
+  // useEffect(() => {
+  //   const handleVisibilityChange = () => {
+  //     if (!document.hidden && patient.id) {
+  //       refetchProformas();
+  //     }
+  //   };
+  //   
+  //   document.addEventListener('visibilitychange', handleVisibilityChange);
+  //   return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  // }, [patient.id, refetchProformas]);
 
   const hasExistingProforma = proformas.length > 0;
   const latestProformaId = hasExistingProforma ? proformas[0].id : null;
@@ -236,56 +237,69 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
           </div>
         </div>
 
-        {/* Action Buttons Section - More Compact */}
+        {/* Action Buttons Section - 2 Column Grid Layout */}
         <div className="lg:w-auto shrink-0">
-          <div className="flex flex-row lg:flex-col gap-2">
-            {/* View Details Button */}
+          <div className="grid grid-cols-2 gap-2 w-full lg:w-auto">
+            {/* View Details Button - Shows only patient registration details */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => navigate(`/patients/${patient.id}?edit=false&mode=view`)}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all hover:shadow-sm"
+              className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all hover:shadow-sm"
             >
               <FiEye className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">View Details</span>
             </Button>
             
-            {/* Walk-in Clinical Proforma Button (for new patients) / Follow Up Button (for existing patients) */}
-            {isNewPatient ? (
+            {/* Walk-In Clinical Proforma Button - Opens only the Walk-In Clinical Proforma form */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
-                navigate(`/patients/${patient.id}?edit=true&mode=create`)
+                // Check if patient has an existing proforma
+                if (hasExistingProforma && latestProformaId) {
+                  // Open existing proforma for editing
+                  navigate(`/clinical/${latestProformaId}/edit`);
+                } else {
+                  // Create new proforma
+                  navigate(`/clinical/new?patient_id=${patient.id}`);
+                }
               }}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all hover:shadow-sm"
+              className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all hover:shadow-sm"
             >
-              <FiPlusCircle className="w-3.5 h-3.5" />
-              <span className="whitespace-nowrap">Walk-in Clinical Proforma</span>
+              <FiFileText className="w-3.5 h-3.5" />
+              <span className="whitespace-nowrap">Clinical Proforma</span>
             </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  navigate(`/follow-up/${patient.id}`)
-                }}
-                className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-green-50 border-green-300 text-green-700 hover:bg-green-100 hover:border-green-400 transition-all hover:shadow-sm"
-              >
-                <FiPlusCircle className="w-3.5 h-3.5" />
-                <span className="whitespace-nowrap">Follow Up</span>
-              </Button>
-            )}
             
-            {/* Prescribe Medication Button */}
-            {/* <Button
+            {/* Out Patient Intake Record Button - Opens only the Out Patient Intake Record form */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // Navigate to ADL (Out Patient Intake Record) form
+                // If patient has existing ADL, open for editing, otherwise create new
+                if (patient.has_adl_file) {
+                  navigate(`/adl/patient/${patient.id}`);
+                } else {
+                  navigate(`/adl/new?patient_id=${patient.id}`);
+                }
+              }}
+              className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100 hover:border-purple-400 transition-all hover:shadow-sm"
+            >
+              <FiClipboard className="w-3.5 h-3.5" />
+              <span className="whitespace-nowrap">Intake Record</span>
+            </Button>
+            
+            {/* Prescription Button - Opens only the Prescription form */}
+            <Button
               variant="outline"
               size="sm"
               onClick={() => navigate(`/prescriptions/create?patient_id=${patient.id}`)}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100 hover:border-purple-400 transition-all hover:shadow-sm"
+              className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100 hover:border-teal-400 transition-all hover:shadow-sm"
             >
               <FiPlusCircle className="w-3.5 h-3.5" />
-            </Button> */}
+              <span className="whitespace-nowrap">Prescription</span>
+            </Button>
             
             {/* Mark as Completed Button - Show for all patients in today's list (not already completed) */}
             {shouldShowCompleteButton && (
@@ -294,7 +308,7 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
                 size="sm"
                 onClick={handleMarkCompleted}
                 loading={isMarkingCompleted}
-                className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-gradient-to-r from-green-500 to-emerald-500 border-green-500 text-white hover:from-green-600 hover:to-emerald-600 hover:border-green-600 transition-all hover:shadow-md shadow-sm"
+                className="col-span-2 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-gradient-to-r from-green-500 to-emerald-500 border-green-500 text-white hover:from-green-600 hover:to-emerald-600 hover:border-green-600 transition-all hover:shadow-md shadow-sm"
               >
                 <FiCheck className="w-3.5 h-3.5" />
                 <span className="whitespace-nowrap">Mark as Completed</span>
@@ -681,22 +695,22 @@ const ClinicalTodayPatients = () => {
   // Note: This is a simplified check for the list view. The PatientRow component does a more detailed check
   // by fetching visit history and proformas. For the list view, we use a basic check.
   // Since we only show patients registered today, all patients here are registered today.
-  const isNewPatientBasic = (patient) => {
+  const isNewPatientBasic = useCallback((patient) => {
     if (!patient?.created_at) return false;
     const targetDate = toISTDateString(selectedDate || new Date());
     const patientCreatedDate = toISTDateString(patient.created_at);
     return patientCreatedDate && patientCreatedDate === targetDate;
-  };
+  }, [selectedDate]);
 
   // Note: Since we only show patients registered today, the concept of "existing patient" 
   // (registered yesterday but visiting today) no longer applies in this view.
   // All patients shown are registered today. This function is kept for compatibility
   // but will always return false since we filter out non-today registrations.
-  const isExistingPatientBasic = (patient) => {
+  const isExistingPatientBasic = useCallback((patient) => {
     // Since filterTodayPatients only includes patients registered today,
     // there are no "existing patients" (registered yesterday) in this view
     return false;
-  };
+  }, []);
 
   // First filter by date (today's patients)
   const todayPatientsByDate = filterTodayPatients(deduplicatedApiPatients);
@@ -834,7 +848,7 @@ const ClinicalTodayPatients = () => {
   };
 
   // Calculate total patients count - only patients registered today (from 12:00 AM IST to 11:59 PM IST)
-  const calculateTotalPatients = () => {
+  const totalPatientsCount = useMemo(() => {
     const { midnightTodayIST, endOfDayIST } = getISTTimeInfo();
     const startTime = midnightTodayIST;
     const endTime = endOfDayIST;
@@ -844,10 +858,10 @@ const ClinicalTodayPatients = () => {
       const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
       return patientCreatedDate && patientCreatedDate >= startTime && patientCreatedDate <= endTime;
     }).length;
-  };
+  }, [allTodayPatients]);
 
   // Calculate new patients count with midnight reset logic
-  const calculateNewPatientsCount = () => {
+  const newPatientsCount = useMemo(() => {
     const { midnightTodayIST, endOfDayIST } = getISTTimeInfo();
     const startTime = midnightTodayIST;
     const endTime = endOfDayIST;
@@ -857,19 +871,11 @@ const ClinicalTodayPatients = () => {
       const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
       return patientCreatedDate && patientCreatedDate >= startTime && patientCreatedDate <= endTime;
     }).length;
-  };
+  }, [todayPatients, isNewPatientBasic]);
 
   // Calculate existing patients count - always 0 since we only show patients registered today
   // (No patients registered yesterday are shown)
-  const calculateExistingPatientsCount = () => {
-    // Since we only show patients registered today, there are no "existing patients"
-    // (patients registered yesterday but visiting today) in this view
-    return 0;
-  };
-
-  const totalPatientsCount = calculateTotalPatients();
-  const newPatientsCount = calculateNewPatientsCount();
-  const existingPatientsCount = calculateExistingPatientsCount();
+  const existingPatientsCount = 0;
 
 
 

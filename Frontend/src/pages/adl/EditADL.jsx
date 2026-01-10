@@ -72,29 +72,42 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
   const { id: urlId } = useParams();
   const [searchParams] = useSearchParams();
   const mode = searchParams.get('mode'); // 'create' or 'update' from URL
+  
+  // Get patient_id from query params (for /adl/new?patient_id=X)
+  const patientIdFromQuery = searchParams.get('patient_id');
+  const clinicalProformaIdFromQuery = searchParams.get('clinical_proforma_id');
 
   // Use prop id if provided, otherwise use URL param
+  // Note: for /adl/patient/:id route, the :id is the patient_id, not the ADL file id
   const id = adlFileId || urlId;
+  
+  // Check if this is the /adl/patient/:id route (viewing/creating ADL by patient ID)
+  const isPatientRoute = window.location.pathname.includes('/adl/patient/');
+  const isNewRoute = window.location.pathname.includes('/adl/new');
 
-  const { data: adlData, isLoading: isLoadingADL } = useGetADLFileByIdQuery(id, { skip: !id });
+  // For /adl/patient/:id route, we need to find ADL by patient_id, not by ADL id
+  const { data: adlData, isLoading: isLoadingADL } = useGetADLFileByIdQuery(
+    isPatientRoute ? undefined : id, 
+    { skip: !id || isPatientRoute || isNewRoute }
+  );
+  
   // Handle different possible API response structures
   // Backend returns: { success: true, data: { adlFile: ... } }
   const adlFile = adlData?.data?.adlFile || adlData?.data?.adl_file || adlData?.data?.file || adlData?.data;
   
-  
-
   const [updateADLFile, { isLoading: isUpdating }] = useUpdateADLFileMutation();
   const [createADLFile, { isLoading: isCreating }] = useCreateADLFileMutation();
   const currentUser = useSelector(selectCurrentUser);
 
   // Determine if this is create or update mode
   // Update mode: id exists AND adlFile exists OR mode === 'update'
-  // Create mode: no id OR no adlFile OR mode === 'create'
-  const isUpdateMode = mode === 'update' || (mode !== 'create' && id && adlFile);
+  // Create mode: no id OR no adlFile OR mode === 'create' OR isNewRoute
+  const isUpdateMode = mode === 'update' || (mode !== 'create' && !isNewRoute && !isPatientRoute && id && adlFile);
   
   // Get patientId and clinicalProformaId - must be declared before useGetPatientFilesQuery
-  const patientId = propPatientId || adlFile?.patient_id;
-  const clinicalProformaId = propClinicalProformaId || adlFile?.clinical_proforma_id;
+  // Priority: prop > query param > URL id (if patient route) > adlFile
+  const patientId = propPatientId || (patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : null) || (isPatientRoute && id ? parseInt(id, 10) : null) || adlFile?.patient_id;
+  const clinicalProformaId = propClinicalProformaId || (clinicalProformaIdFromQuery ? parseInt(clinicalProformaIdFromQuery, 10) : null) || adlFile?.clinical_proforma_id;
 
   // File upload state
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -3391,11 +3404,14 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
   }
 
   // Full page mode
-  if (isLoadingADL || isLoadingPatient) {
+  // Only show loading if we're actually fetching data (not for new creation routes)
+  if ((isLoadingADL || isLoadingPatient) && !isNewRoute && !isPatientRoute) {
     return <LoadingSpinner />;
   }
 
-  if (!adlFile && !isEmbedded) {
+  // Show "Not Found" only when trying to edit a specific ADL that doesn't exist
+  // Don't show for new creation routes (/adl/new) or patient routes (/adl/patient/:id)
+  if (!adlFile && !isEmbedded && !isNewRoute && !isPatientRoute && id) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-teal-50 flex items-center justify-center">
         <Card className="p-8 max-w-md text-center">

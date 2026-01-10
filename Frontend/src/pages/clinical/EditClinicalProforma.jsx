@@ -13,7 +13,7 @@ import {
   useGetAllClinicalProformasQuery
 } from '../../features/clinical/clinicalApiSlice';
 import { useGetADLFileByIdQuery, useGetAllADLFilesQuery,useUpdateADLFileMutation, useCreateADLFileMutation } from '../../features/adl/adlApiSlice';
-import { useGetPatientByIdQuery, useGetPatientVisitHistoryQuery } from '../../features/patients/patientsApiSlice';
+import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
 import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
 import { useGetPatientFilesQuery, useUpdatePatientFilesMutation, useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
@@ -49,14 +49,22 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   const returnPath = searchParams.get('returnPath');
   const mode = searchParams.get('mode'); // 'create' or 'update' from URL
   const isFollowUpMode = searchParams.get('followup') === 'true'; // Follow-up mode - only show Clinical Assessment and Prescription
+  
+  // Get patient_id from query params (for /clinical/new?patient_id=X) or from URL params (for /clinical/:id/edit)
+  const patientIdFromQuery = searchParams.get('patient_id');
   const [createPrescriptions, { isLoading: isSavingPrescriptions }] = useCreatePrescriptionMutation();
 
   const { data: proformaData, isLoading: isLoadingProforma, isFetching, refetch, error: proformaError } = useGetAllClinicalProformasQuery({});
 
   // Convert id to number for comparison since patient_id is a number
   // URL params return strings, but patient_id in database is integer
-  const patientIdFromUrl = id ? parseInt(id, 10) : null;
-  const proforma = proformaData?.data?.proformas?.find(p => p.patient_id === patientIdFromUrl);
+  // Priority: query param patient_id > URL id param
+  const patientIdFromUrl = patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : (id ? parseInt(id, 10) : null);
+  
+  // Find existing proforma: first check if id is a proforma ID, then check by patient_id
+  const proformaById = id ? proformaData?.data?.proformas?.find(p => p.id === parseInt(id, 10)) : null;
+  const proformaByPatientId = patientIdFromUrl ? proformaData?.data?.proformas?.find(p => p.patient_id === patientIdFromUrl) : null;
+  const proforma = proformaById || proformaByPatientId;
   const isErrorProforma = !!proformaError;
   const isComplexCase = proforma?.doctor_decision === 'complex_case' && proforma?.adl_file_id;
 
@@ -91,49 +99,27 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     { skip: !isComplexCase }
   );
 
-  // Fetch patient data - use patient_id from propInitialData or proforma or URL
-  const patientId = propInitialData?.patient_id || proforma?.patient_id || patientIdFromUrl;
+  // Fetch patient data - use patient_id from propInitialData or proforma or URL (query param or route param)
+  const patientId = propInitialData?.patient_id || proforma?.patient_id || patientIdFromUrl || (patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : null);
   const { data: patientData } = useGetPatientByIdQuery(
     patientId,
     { skip: !patientId }
   );
   const patient = patientData?.data?.patient;
 
-  // Fetch visit history and clinical proformas for existing patients in create mode
+  // Determine if this is create mode
   const isCreateMode = mode === 'create' || (!isUpdateMode && !propInitialData?.id);
-  const { data: visitHistoryData, isLoading: isLoadingVisitHistory } = useGetPatientVisitHistoryQuery(
+  
+  // Fetch clinical proformas for this patient (to check for history) - skip visit history API as it returns 500 error
+  const { data: patientClinicalData, isLoading: isLoadingPatientClinical } = useGetClinicalProformaByPatientIdQuery(
     patientId,
-    { skip: !patientId || !isCreateMode || !!propInitialData } // Skip if embedded (handled by parent)
+    { skip: !patientId || !!propInitialData } // Skip if embedded (handled by parent)
   );
-  const { data: patientClinicalData } = useGetClinicalProformaByPatientIdQuery(
-    patientId,
-    { skip: !patientId || !isCreateMode || !!propInitialData } // Skip if embedded (handled by parent)
-  );
-  const visitHistory = visitHistoryData || [];
   const patientProformas = patientClinicalData?.data?.proformas || [];
-  const hasHistory = visitHistory.length > 0 || patientProformas.length > 0;
+  const hasHistory = patientProformas.length > 0;
 
-  // State to control showing history vs form
-  const [showProformaForm, setShowProformaForm] = useState(() => {
-    // If embedded (has propInitialData), always show form
-    if (propInitialData) return true;
-    // Otherwise show form directly initially, will update when data loads
-    return true;
-  });
-
-  // Update showProformaForm when history data loads
-  useEffect(() => {
-    if (!propInitialData && isCreateMode) {
-      // If we have history data and haven't shown form yet, show history first
-      if (hasHistory && showProformaForm) {
-        setShowProformaForm(false);
-      }
-      // If no history and we're showing history, switch to form
-      else if (!hasHistory && !showProformaForm && !isLoadingVisitHistory) {
-        setShowProformaForm(true);
-      }
-    }
-  }, [hasHistory, isCreateMode, propInitialData, isLoadingVisitHistory, showProformaForm]);
+  // State to control showing history vs form - always show form directly (simplified)
+  const [showProformaForm, setShowProformaForm] = useState(true);
 
   const { data: existingAdlFileData } = useGetAllADLFilesQuery({});
 
@@ -145,6 +131,9 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
   const { data: doctorsData } = useGetDoctorsQuery({ page: 1, limit: 100 });
   const doctors = doctorsData?.data?.doctors || [];
+  
+  // Fetch all clinical options from database - MUST be called before any early returns
+  const { data: allOptionsData, isLoading: isLoadingOptions } = useGetAllClinicalOptionsQuery();
 
   // Update and Create mutations
   const [updateProforma, { isLoading: isUpdating }] = useUpdateClinicalProformaMutation();
@@ -1284,8 +1273,14 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
 
 
-  // Loading state - only show if fetching by ID (not when using initialData prop)
-  if (!propInitialData && (isLoadingProforma || (isComplexCase && isLoadingADL))) {
+  // Check if this is a new creation route (/clinical/new?patient_id=X)
+  const isNewCreationRoute = window.location.pathname === '/clinical/new' || window.location.pathname.endsWith('/clinical/new');
+  
+  // Loading state - only show if:
+  // 1. Not using initialData prop (embedded mode)
+  // 2. Not a new creation route (for new, we show empty form immediately)
+  // 3. Actually loading AND we're trying to edit an existing proforma (has id in URL)
+  if (!propInitialData && !isNewCreationRoute && id && (isLoadingProforma || (isComplexCase && isLoadingADL))) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner />
@@ -1293,8 +1288,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     );
   }
 
-  // Error state - only show if fetching by ID (not when using initialData prop)
-  if (!propInitialData && isErrorProforma) {
+  // Error state - only show if fetching by ID for editing (not for new creation)
+  if (!propInitialData && !isNewCreationRoute && id && isErrorProforma) {
     return (
       <div className="container mx-auto px-4 py-8">
         <Card>
@@ -1327,9 +1322,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
   // Always show form, even if proforma not found - allow editing/creating
   // initialFormData will always have default values now
-
-  // Fetch all clinical options from database
-  const { data: allOptionsData, isLoading: isLoadingOptions } = useGetAllClinicalOptionsQuery();
   
   // Default options for checkbox groups - only used as fallback if database is completely empty
   // These should be seeded into the database, not used directly
@@ -1372,10 +1364,10 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
       {shouldShowHistory && (
         <PatientClinicalHistory
           patient={patient}
-          visitHistory={visitHistory}
+          visitHistory={[]}
           clinicalProformas={patientProformas}
           onAddNewProforma={() => setShowProformaForm(true)}
-          isLoading={isLoadingVisitHistory}
+          isLoading={isLoadingPatientClinical}
         />
       )}
 
@@ -1422,20 +1414,20 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                   />
                   <Input
                     label="Patient Name"
-                    value={patient.name || ''}
+                    value={patient?.name || ''}
                     onChange={handleChange}
 
                   />
 
                   <Input
                     label="Age"
-                    value={patient.age || ''}
+                    value={patient?.age || ''}
                     onChange={handleChange}
 
                   />
                   <Input
                     label="Sex"
-                    value={patient.sex || ''}
+                    value={patient?.sex || ''}
                     onChange={handleChange}
 
                   />
@@ -1726,25 +1718,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                     rows={4}
                     placeholder="Treatment details..."
                   />
-
-<div>
-                      <Select
-                        label="Doctor Decision"
-                        name="doctor_decision"
-                        value={formData.doctor_decision}
-                        onChange={handleChange}
-                        options={DOCTOR_DECISION}
-                        required
-                        disabled={isAlreadyComplex}
-                        title={isAlreadyComplex ? "Cannot change from Instantly Requires Detailed Work-Up to Requires Detailed Workup on Next Follow-Up" : ""}
-                      />
-                      {isAlreadyComplex && (
-                        <p className="mt-1 text-xs text-amber-600 flex items-center gap-1">
-                          <FiAlertCircle className="w-3 h-3" />
-                          This case is already marked as Instantly Requires Detailed Work-Up and cannot be changed back to Requires Detailed Workup on Next Follow-Up.
-                        </p>
-                      )}
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1902,17 +1875,17 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                   />
                   <Input
                     label="Patient Name"
-                    value={patient.name || ''}
+                    value={patient?.name || ''}
                     onChange={handleChange}
                   />
                   <Input
                     label="Age"
-                    value={patient.age || ''}
+                    value={patient?.age || ''}
                     onChange={handleChange}
                   />
                   <Input
                     label="Sex"
-                    value={patient.sex || ''}
+                    value={patient?.sex || ''}
                     onChange={handleChange}
                   />
                 </div>
@@ -2180,24 +2153,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                     rows={4}
                     placeholder="Treatment details..."
                   />
-<div>
-                      <Select
-                        label="Doctor Decision"
-                        name="doctor_decision"
-                        value={formData.doctor_decision}
-                        onChange={handleChange}
-                        options={DOCTOR_DECISION}
-                        required
-                        disabled={isAlreadyComplex}
-                        title={isAlreadyComplex ? "Cannot change from Instantly Requires Detailed Work-Up to Requires Detailed Workup on Next Follow-Up" : ""}
-                      />
-                      {isAlreadyComplex && (
-                        <p className="mt-1 text-xs text-amber-600 flex items-center gap-1">
-                          <FiAlertCircle className="w-3 h-3" />
-                          This case is already marked as Instantly Requires Detailed Work-Up and cannot be changed back to Requires Detailed Workup on Next Follow-Up.
-                        </p>
-                      )}
-                    </div>
                   </div>
                 </div>
               </div>
