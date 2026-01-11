@@ -11,14 +11,7 @@ const createPrescription = async (req, res) => {
   try {
     const data = req.body;
 
-    // Ensure required IDs exist
-    if (!data.clinical_proforma_id) {
-      return res.status(400).json({
-        success: false,
-        message: "clinical_proforma_id is required"
-      });
-    }
-
+    // Ensure patient_id is provided
     if (!data.patient_id) {
       return res.status(400).json({
         success: false,
@@ -26,13 +19,16 @@ const createPrescription = async (req, res) => {
       });
     }
 
-    // Check clinical_proforma exists
-    const proforma = await ClinicalProforma.findById(data.clinical_proforma_id);
-    if (!proforma) {
-      return res.status(404).json({
-        success: false,
-        message: "Clinical proforma not found"
-      });
+    // clinical_proforma_id is optional - prescriptions can be created without it
+    // If provided, verify it exists
+    if (data.clinical_proforma_id) {
+      const proforma = await ClinicalProforma.findById(data.clinical_proforma_id);
+      if (!proforma) {
+        return res.status(404).json({
+          success: false,
+          message: "Clinical proforma not found"
+        });
+      }
     }
 
     // Handle both new structure (prescription array) and legacy structure (prescriptions array)
@@ -103,6 +99,41 @@ const createPrescription = async (req, res) => {
   }
 };
 
+
+/**
+ * Get all prescriptions for a patient by patient_id
+ */
+const getPrescriptionsByPatientId = async (req, res) => {
+  try {
+    const { patient_id } = req.params;
+    
+    const patientIdInt = parseInt(patient_id, 10);
+    if (isNaN(patientIdInt)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid patient_id format'
+      });
+    }
+
+    console.log('[getPrescriptionsByPatientId] Fetching prescriptions for patient:', patientIdInt);
+    const prescriptions = await Prescription.findByPatientId(patientIdInt);
+
+    res.status(200).json({
+      success: true,
+      message: `Found ${prescriptions.length} prescription(s) for patient`,
+      data: {
+        prescriptions: prescriptions.map(p => p.toJSON())
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching prescriptions by patient_id:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch prescriptions',
+      error: error.message
+    });
+  }
+};
 
 /**
  * Get a single prescription by ID or clinical_proforma_id
@@ -332,6 +363,7 @@ const deletePrescription = async (req, res) => {
 module.exports = {
   createPrescription,
   getPrescriptionById,
+  getPrescriptionsByPatientId,
   getAllPrescription,
   updatePrescription,
   deletePrescription

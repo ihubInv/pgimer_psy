@@ -23,7 +23,7 @@ import { IconInput } from '../../components/IconInput';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx-js-style';
 
-import { useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
+import { useGetPrescriptionByIdQuery, useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 import { useGetPatientVisitHistoryQuery, useGetPatientFilesQuery } from '../../features/patients/patientsApiSlice';
 import ViewADL from '../adl/ViewADL';
 import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
@@ -377,6 +377,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   const prescriptionResult9 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[8] }, { skip: !proformaIds[8] });
   const prescriptionResult10 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[9] }, { skip: !proformaIds[9] });
 
+  // Fetch ALL prescriptions by patient_id (includes prescriptions without clinical_proforma_id)
+  const { data: patientPrescriptionsData } = useGetPrescriptionsByPatientIdQuery(
+    patient?.id, 
+    { skip: !patient?.id }
+  );
+
   // Combine all prescription results - always use all 10 results
   const prescriptionResults = [
     prescriptionResult1,
@@ -394,28 +400,58 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   // Combine all prescriptions and group by proforma/visit date
   const allPrescriptions = useMemo(() => {
     const prescriptions = [];
+    const addedIds = new Set(); // Track added prescription IDs to avoid duplicates
+    
+    // First, add prescriptions from patient-level query (includes those without proforma)
+    const patientPrescriptions = patientPrescriptionsData?.data?.prescriptions || [];
+    patientPrescriptions.forEach(prescRecord => {
+      if (prescRecord.prescription && Array.isArray(prescRecord.prescription)) {
+        prescRecord.prescription.forEach(prescription => {
+          const uniqueKey = `${prescRecord.id}-${prescription.id || prescription.medicine}`;
+          if (!addedIds.has(uniqueKey)) {
+            addedIds.add(uniqueKey);
+            prescriptions.push({
+              ...prescription,
+              prescription_record_id: prescRecord.id,
+              proforma_id: prescRecord.clinical_proforma_id,
+              visit_date: prescRecord.visit_date || prescRecord.created_at,
+              visit_type: prescRecord.visit_type,
+              created_at: prescRecord.created_at
+            });
+          }
+        });
+      }
+    });
+    
+    // Then add prescriptions from proforma queries (fallback for any missed)
     prescriptionResults.forEach((result, index) => {
       const proformaId = proformaIds[index];
       if (proformaId && result.data?.data?.prescription?.prescription) {
         const proforma = patientProformas.find(p => p.id === proformaId);
         const prescriptionData = result.data.data.prescription;
         prescriptionData.prescription.forEach(prescription => {
-          prescriptions.push({
-            ...prescription,
-            proforma_id: proformaId,
-            visit_date: proforma?.visit_date || proforma?.created_at,
-            visit_type: proforma?.visit_type
-          });
+          const uniqueKey = `${prescriptionData.id}-${prescription.id || prescription.medicine}`;
+          if (!addedIds.has(uniqueKey)) {
+            addedIds.add(uniqueKey);
+            prescriptions.push({
+              ...prescription,
+              prescription_record_id: prescriptionData.id,
+              proforma_id: proformaId,
+              visit_date: proforma?.visit_date || proforma?.created_at,
+              visit_type: proforma?.visit_type
+            });
+          }
         });
       }
     });
-    // Sort by visit date (most recent first)
+    
+    // Sort by visit date/created_at (most recent first)
     return prescriptions.sort((a, b) => {
-      const dateA = new Date(a.visit_date || 0);
-      const dateB = new Date(b.visit_date || 0);
+      const dateA = new Date(a.visit_date || a.created_at || 0);
+      const dateB = new Date(b.visit_date || b.created_at || 0);
       return dateB - dateA;
     });
-  }, [prescriptionResults, patientProformas, proformaIds]);
+  }, [prescriptionResults, patientProformas, proformaIds, patientPrescriptionsData]);
 
   // Group prescriptions by visit date (keep for backward compatibility if needed)
   const prescriptionsByVisit = useMemo(() => {
@@ -481,8 +517,11 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       return dateB - dateA; // Newest first (latest visit at top)
     });
 
+    // Track which prescription records have been associated with visits
+    const usedPrescriptionRecordIds = new Set();
+
     // Create visit objects with all associated forms
-    return sortedProformas.map((proforma) => {
+    const proformaVisits = sortedProformas.map((proforma) => {
       // Handle follow-up visits (record_type === 'followup_visit')
       const isFollowUp = proforma.record_type === 'followup_visit';
       const visitId = isFollowUp ? proforma.followup_id : proforma.id;
@@ -528,15 +567,46 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           }
         }
       } else {
-      const prescriptionResult = prescriptionResults.find((result, idx) => {
-        return proformaIds[idx] === visitId && result.data?.data?.prescription?.prescription;
-      });
+        const prescriptionResult = prescriptionResults.find((result, idx) => {
+          return proformaIds[idx] === visitId && result.data?.data?.prescription?.prescription;
+        });
         prescription = prescriptionResult?.data?.data?.prescription?.prescription || null;
       }
 
       // Store the minimal clinical proforma ID for follow-up visits (for PrescriptionView to fetch directly)
       const minimalProformaId = isFollowUp && followUpProforma ? followUpProforma.id : null;
 
+      // Also check patient-level prescriptions (includes those without proforma)
+      if (!prescription && allPrescriptions.length > 0) {
+        // Find prescriptions that match this visit date or proforma ID
+        const visitDateStr = toISTDateString(visitDate);
+        const matchingPrescriptions = allPrescriptions.filter(p => {
+          const prescDateStr = toISTDateString(p.visit_date || p.created_at);
+          return prescDateStr === visitDateStr || p.proforma_id === visitId;
+        });
+        if (matchingPrescriptions.length > 0) {
+          prescription = matchingPrescriptions;
+          // Mark these prescription records as used
+          matchingPrescriptions.forEach(p => {
+            if (p.prescription_record_id) usedPrescriptionRecordIds.add(p.prescription_record_id);
+          });
+        }
+      }
+      
+      // Also mark prescriptions with matching proforma_id as used
+      allPrescriptions.forEach(p => {
+        if (p.proforma_id === visitId && p.prescription_record_id) {
+          usedPrescriptionRecordIds.add(p.prescription_record_id);
+        }
+      });
+
+      // Check if there are any prescriptions for this visit (by proforma_id OR by date)
+      const visitDateStr = toISTDateString(visitDate);
+      const hasPrescriptionByDate = allPrescriptions.some(p => {
+        const prescDateStr = toISTDateString(p.visit_date || p.created_at);
+        return prescDateStr === visitDateStr || p.proforma_id === visitId;
+      });
+      
       return {
         visitId,
         visitDate,
@@ -544,13 +614,61 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         adlFile: adlFile || null,
         prescription: prescription || null,
         hasAdl: !!adlFile,
-        hasPrescription: !!prescription || !!minimalProformaId, // Mark as having prescription if minimal proforma exists
+        hasPrescription: !!prescription || !!minimalProformaId || hasPrescriptionByDate, // Mark as having prescription if any exists (by proforma OR by date)
         isFollowUp: isFollowUp, // Flag to identify follow-up visits
         clinicalAssessment: isFollowUp ? proforma.clinical_assessment : null, // Follow-up assessment
         minimalProformaId: minimalProformaId, // Store minimal proforma ID for PrescriptionView
+        isStandalonePrescription: false, // Not a standalone prescription
       };
     });
-  }, [trulyPastProformas, patientAdlFiles, prescriptionResults, proformaIds, patientProformas]);
+    
+    // Create visit entries for standalone prescriptions (those without an associated proforma)
+    // Group standalone prescriptions by date
+    const standalonePrescriptionsByDate = {};
+    allPrescriptions.forEach(p => {
+      // Skip if this prescription record is already used in a proforma visit
+      if (p.prescription_record_id && usedPrescriptionRecordIds.has(p.prescription_record_id)) {
+        return;
+      }
+      // Skip if it has a proforma_id (it should be linked to a proforma visit)
+      if (p.proforma_id) {
+        return;
+      }
+      
+      const dateStr = toISTDateString(p.visit_date || p.created_at);
+      if (!standalonePrescriptionsByDate[dateStr]) {
+        standalonePrescriptionsByDate[dateStr] = [];
+      }
+      standalonePrescriptionsByDate[dateStr].push(p);
+    });
+    
+    // Create standalone prescription visits
+    const standalonePrescriptionVisits = Object.entries(standalonePrescriptionsByDate).map(([dateStr, prescriptions]) => {
+      const firstPrescription = prescriptions[0];
+      return {
+        visitId: `standalone-prescription-${dateStr}`,
+        visitDate: firstPrescription.visit_date || firstPrescription.created_at,
+        proforma: null, // No proforma
+        adlFile: null,
+        prescription: prescriptions, // Array of prescription items
+        hasAdl: false,
+        hasPrescription: true,
+        isFollowUp: false,
+        clinicalAssessment: null,
+        minimalProformaId: null,
+        isStandalonePrescription: true, // Flag to identify standalone prescription visits
+      };
+    });
+    
+    // Combine proforma visits and standalone prescription visits, sort by date (newest first)
+    const allVisits = [...proformaVisits, ...standalonePrescriptionVisits].sort((a, b) => {
+      const dateA = new Date(a.visitDate || 0);
+      const dateB = new Date(b.visitDate || 0);
+      return dateB - dateA;
+    });
+    
+    return allVisits;
+  }, [trulyPastProformas, patientAdlFiles, prescriptionResults, proformaIds, patientProformas, allPrescriptions]);
 
   // Print functionality refs
   const patientDetailsPrintRef = useRef(null);
@@ -4589,7 +4707,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                           {visitDate}
                                         </h4>
                                         <div className="flex items-center gap-3 mt-2">
-                                          {visit.isFollowUp ? (
+                                          {visit.isStandalonePrescription ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-medium">
+                                              <FiPackage className="w-3 h-3" />
+                                              Prescription Only
+                                            </span>
+                                          ) : visit.isFollowUp ? (
                                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
                                               <FiFileText className="w-3 h-3" />
                                               Follow-Up Visit
@@ -4606,7 +4729,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                               ADL Record
                                             </span>
                                           )}
-                                          {visit.hasPrescription && (
+                                          {visit.hasPrescription && !visit.isStandalonePrescription && (
                                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-medium">
                                               <FiPackage className="w-3 h-3" />
                                               Prescription
@@ -4643,8 +4766,11 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                       if (el) visitPrintRefs.current.set(visit.visitId, el);
                                       else visitPrintRefs.current.delete(visit.visitId);
                                     }} className="p-6 space-y-6">
-                                      {/* 1. Clinical Proforma / Follow-Up Assessment Section */}
-                                      {visit.isFollowUp ? (
+                                      {/* 1. Clinical Proforma / Follow-Up Assessment Section - Skip for standalone prescriptions */}
+                                      {visit.isStandalonePrescription ? (
+                                        /* Standalone prescription - no proforma section */
+                                        null
+                                      ) : visit.isFollowUp ? (
                                         <div className="border-l-4 border-blue-500 pl-4">
                                           <div className="flex items-center justify-between mb-3">
                                             <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -4753,23 +4879,60 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                           </div>
                                           {isVisitSectionExpanded(visit.visitId, 'prescription') && (
                                             <div className="mt-3">
-                                              <PrescriptionView 
-                                                clinicalProformaId={visit.isFollowUp ? 
-                                                  (visit.minimalProformaId || 
-                                                   patientProformas.find(p => {
-                                                     if (p.record_type === 'followup_visit') return false; // Skip the follow-up visit record itself
-                                                     const proformaDate = toISTDateString(p.visit_date || p.created_at);
-                                                     const followUpDate = toISTDateString(visit.visitDate);
-                                                     return proformaDate === followUpDate && 
-                                                            p.visit_type === 'follow_up' &&
-                                                            p.record_type === 'clinical_proforma' &&
-                                                            (p.treatment_prescribed?.includes('Follow-up visit') || 
-                                                             p.treatment_prescribed?.includes('followup_visits') ||
-                                                             p.treatment_prescribed?.includes('see followup_visits'));
-                                                   })?.id) : visit.proforma?.id
-                                                }
-                                                patientId={patient?.id}
-                                              />
+                                              {/* For standalone prescriptions, render prescription data directly */}
+                                              {visit.isStandalonePrescription && Array.isArray(visit.prescription) ? (
+                                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                                                  <div className="overflow-x-auto">
+                                                    <table className="min-w-full divide-y divide-gray-200">
+                                                      <thead className="bg-amber-100">
+                                                        <tr>
+                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">#</th>
+                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Medicine</th>
+                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Dosage</th>
+                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">When</th>
+                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Frequency</th>
+                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Duration</th>
+                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Qty</th>
+                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Notes</th>
+                                                        </tr>
+                                                      </thead>
+                                                      <tbody className="bg-white divide-y divide-gray-200">
+                                                        {visit.prescription.map((item, idx) => (
+                                                          <tr key={item.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{idx + 1}</td>
+                                                            <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{item.medicine || '-'}</td>
+                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.dosage || '-'}</td>
+                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.when_to_take || item.when || '-'}</td>
+                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.frequency || '-'}</td>
+                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.duration || '-'}</td>
+                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.quantity || item.qty || '-'}</td>
+                                                            <td className="px-3 py-2 text-sm text-gray-600">{item.notes || item.details || '-'}</td>
+                                                          </tr>
+                                                        ))}
+                                                      </tbody>
+                                                    </table>
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <PrescriptionView 
+                                                  clinicalProformaId={visit.isFollowUp ? 
+                                                    (visit.minimalProformaId || 
+                                                     patientProformas.find(p => {
+                                                       if (p.record_type === 'followup_visit') return false; // Skip the follow-up visit record itself
+                                                       const proformaDate = toISTDateString(p.visit_date || p.created_at);
+                                                       const followUpDate = toISTDateString(visit.visitDate);
+                                                       return proformaDate === followUpDate && 
+                                                              p.visit_type === 'follow_up' &&
+                                                              p.record_type === 'clinical_proforma' &&
+                                                              (p.treatment_prescribed?.includes('Follow-up visit') || 
+                                                               p.treatment_prescribed?.includes('followup_visits') ||
+                                                               p.treatment_prescribed?.includes('see followup_visits'));
+                                                     })?.id) : visit.proforma?.id
+                                                  }
+                                                  patientId={patient?.id}
+                                                  visitDate={visit.visitDate}
+                                                />
+                                              )}
                                             </div>
                                           )}
                                         </div>

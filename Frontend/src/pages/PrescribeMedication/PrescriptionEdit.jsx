@@ -145,9 +145,23 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
   ]);
 
   // Update rows when prescriptions data loads
+  // Skip populating with existing prescriptions when mode is 'create' - always start fresh
   useEffect(() => {
     // Only update if we're not currently loading
     if (loadingPrescriptions) {
+      return;
+    }
+
+    // If mode is 'create', always start with empty form - don't load existing prescriptions
+    if (mode === 'create') {
+      setPrescriptionRows(prev => {
+        // Keep existing rows if user has already started adding
+        if (prev.length > 0 && prev.some(r => r.medicine || r.dosage || r.frequency)) {
+          return prev;
+        }
+        // Otherwise ensure at least one empty row
+        return [{ medicine: '', dosage: '', when: '', frequency: '', duration: '', qty: '', details: '', notes: '' }];
+      });
       return;
     }
 
@@ -184,7 +198,7 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
         return prev;
       });
     }
-  }, [existingPrescriptions, loadingPrescriptions]);
+  }, [existingPrescriptions, loadingPrescriptions, mode]);
 
   const addPrescriptionRow = () => {
     setPrescriptionRows(prev => [...prev, { medicine: '', dosage: '', when: '', frequency: '', duration: '', qty: '', details: '', notes: '' }]);
@@ -644,8 +658,8 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
       {/* Standalone Header - Show when accessed directly via route */}
       {isStandaloneMode && (
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Create Prescription</h1>
-          <p className="text-gray-600 mt-1">Add medications for the patient</p>
+          <h1 className="text-2xl font-bold text-gray-900">{mode === 'create' ? 'Create Prescription' : 'Edit Prescription'}</h1>
+          <p className="text-gray-600 mt-1">{mode === 'create' ? 'Add medications for the patient' : 'Edit medications for the patient'}</p>
           {patientId && (
             <p className="text-sm text-gray-500 mt-2">Patient ID: {patientId}</p>
           )}
@@ -681,7 +695,7 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-white">Prescription Form</h2>
-                  <p className="text-sm text-amber-100">Edit medications for the patient</p>
+                  <p className="text-sm text-amber-100">{mode === 'create' ? 'Add medications for the patient' : 'Edit medications for the patient'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">

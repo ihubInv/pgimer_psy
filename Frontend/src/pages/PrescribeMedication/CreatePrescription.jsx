@@ -13,7 +13,7 @@ import Card from '../../components/Card';
 import Button from '../../components/Button';
 import Select from '../../components/Select';
 import Modal from '../../components/Modal';
-import { FiPackage, FiUser, FiSave, FiX, FiPlus, FiTrash2, FiHome, FiUserCheck, FiCalendar, FiFileText, FiClock, FiPrinter, FiSearch, FiDroplet, FiActivity, FiBookmark, FiDownload } from 'react-icons/fi';
+import { FiPackage, FiUser, FiSave, FiX, FiPlus, FiTrash2, FiHome, FiUserCheck, FiCalendar, FiFileText, FiClock, FiPrinter, FiSearch, FiDroplet, FiActivity, FiBookmark, FiDownload, FiArrowLeft } from 'react-icons/fi';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import { 
   PRESCRIPTION_FORM,
@@ -1194,6 +1194,28 @@ const CreatePrescription = ({
       `}</style>
 
         <div className="w-full px-6 py-8 space-y-8">
+          {/* Back Button - Show at top in standalone mode */}
+          {!isEmbedded && (
+            <div className="mb-4">
+              <Button
+                type="button"
+                onClick={() => {
+                  if (returnTab) {
+                    navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
+                  } else if (patientId) {
+                    navigate(`/patients/${patientId}`);
+                  } else {
+                    navigate(-1);
+                  }
+                }}
+                variant="outline"
+                className="flex items-center gap-2 bg-white hover:bg-gray-50 border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:text-gray-900 font-medium shadow-sm transition-all duration-200"
+              >
+                <FiArrowLeft className="w-4 h-4" />
+                Back to {returnTab ? "Today's Patients" : patientId ? "Patient Details" : "Previous Page"}
+              </Button>
+            </div>
+          )}
        
           {/* Print Content - Hidden on screen, visible when printing */}
           <div className="print-content" ref={printRef}>

@@ -40,19 +40,30 @@ export const prescriptionApiSlice = apiSlice.injectEndpoints({
         'Prescription',
       ],
     }),
+    // New endpoint to get all prescriptions by patient_id
+    getPrescriptionsByPatientId: builder.query({
+      query: (patient_id) => `/prescriptions/by-patient/${patient_id}`,
+      providesTags: (result, error, patient_id) => [
+        { type: 'Prescription', id: `patient-${patient_id}` },
+        { type: 'Prescription', id: 'LIST' },
+        'Prescription',
+      ],
+    }),
     createPrescription: builder.mutation({
       query: (prescriptionData) => ({
         url: '/prescriptions',
         method: 'POST',
         body: prescriptionData,
       }),
-      invalidatesTags: (result, error, { clinical_proforma_id }) => [
+      invalidatesTags: (result, error, { clinical_proforma_id, patient_id }) => [
         { type: 'Prescription', id: `proforma-${clinical_proforma_id}` },
+        { type: 'Prescription', id: `patient-${patient_id}` },
+        { type: 'Prescription', id: 'LIST' },
         'Prescription',
       ],
     }),
     updatePrescription: builder.mutation({
-      query: ({ id, clinical_proforma_id, ...data }) => {
+      query: ({ id, clinical_proforma_id, patient_id, ...data }) => {
         // If we have clinical_proforma_id but no id, we need to find the prescription first
         // For now, use id if available, otherwise use 1 as placeholder (backend will handle finding by clinical_proforma_id)
         const prescriptionId = id || (clinical_proforma_id ? 1 : null);
@@ -62,12 +73,14 @@ export const prescriptionApiSlice = apiSlice.injectEndpoints({
         return {
           url: `/prescriptions/${prescriptionId}`,
           method: 'PUT',
-          body: { ...data, clinical_proforma_id },
+          body: { ...data, clinical_proforma_id, patient_id },
         };
       },
-      invalidatesTags: (result, error, { id, clinical_proforma_id }) => [
+      invalidatesTags: (result, error, { id, clinical_proforma_id, patient_id }) => [
         { type: 'Prescription', id },
         { type: 'Prescription', id: `proforma-${clinical_proforma_id}` },
+        { type: 'Prescription', id: `patient-${patient_id}` },
+        { type: 'Prescription', id: 'LIST' },
         'Prescription'
       ],
     }),
@@ -76,7 +89,7 @@ export const prescriptionApiSlice = apiSlice.injectEndpoints({
         url: `/prescriptions/${id}`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['Prescription'],
+      invalidatesTags: ['Prescription', { type: 'Prescription', id: 'LIST' }],
     }),
   }),
 });
@@ -84,6 +97,7 @@ export const prescriptionApiSlice = apiSlice.injectEndpoints({
 export const {
   useGetAllPrescriptionQuery,
   useGetPrescriptionByIdQuery,
+  useGetPrescriptionsByPatientIdQuery,
   useCreatePrescriptionMutation,
   useUpdatePrescriptionMutation,
   useDeletePrescriptionMutation,

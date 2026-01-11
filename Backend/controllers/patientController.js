@@ -322,7 +322,8 @@ class PatientController {
 
       // Filter patient data based on user role before sending response
       const patientJson = patient.toJSON();
-      const filteredPatient = this.filterPatientDataForRole(
+      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
+      const filteredPatient = PatientController.filterPatientDataForRole(
         patientJson,
         req.user?.role
       );
@@ -1279,7 +1280,8 @@ class PatientController {
       ]);
 
       const patientJson = patient.toJSON();
-      const filteredPatient = this.filterPatientDataForRole(patientJson, req.user?.role);
+      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
+      const filteredPatient = PatientController.filterPatientDataForRole(patientJson, req.user?.role);
       
       res.json({
         success: true,
@@ -1323,7 +1325,8 @@ class PatientController {
       }
 
       const patientJson = patient.toJSON();
-      const filteredPatient = this.filterPatientDataForRole(patientJson, req.user?.role);
+      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
+      const filteredPatient = PatientController.filterPatientDataForRole(patientJson, req.user?.role);
       
       res.json({
         success: true,
@@ -1358,7 +1361,8 @@ class PatientController {
       const clinicalRecords = await patient.getClinicalRecords();
 
       const patientJson = patient.toJSON();
-      const filteredPatient = this.filterPatientDataForRole(patientJson, req.user?.role);
+      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
+      const filteredPatient = PatientController.filterPatientDataForRole(patientJson, req.user?.role);
       
       res.json({
         success: true,
@@ -1393,7 +1397,8 @@ class PatientController {
       const adlFiles = await patient.getADLFiles();
 
       const patientJson = patient.toJSON();
-      const filteredPatient = this.filterPatientDataForRole(patientJson, req.user?.role);
+      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
+      const filteredPatient = PatientController.filterPatientDataForRole(patientJson, req.user?.role);
       
       res.json({
         success: true,

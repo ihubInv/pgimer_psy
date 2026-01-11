@@ -297,25 +297,37 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
               <span className="whitespace-nowrap">View Details</span>
             </Button>
             
-            {/* Walk-In Clinical Proforma Button - Opens only the Walk-In Clinical Proforma form */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                // Check if patient has an existing proforma
-                if (hasExistingProforma && latestProformaId) {
-                  // Open existing proforma for editing
-                  navigate(`/clinical/${latestProformaId}/edit`);
-                } else {
-                  // Create new proforma
+            {/* Walk-In Clinical Proforma Button - ONLY show for NEW patients without any proforma */}
+            {!hasExistingProforma && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Create new proforma for new patient
                   navigate(`/clinical/new?patient_id=${patient.id}`);
-                }
-              }}
-              className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all hover:shadow-sm"
-            >
-              <FiFileText className="w-3.5 h-3.5" />
-              <span className="whitespace-nowrap">Clinical Proforma</span>
-            </Button>
+                }}
+                className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all hover:shadow-sm"
+              >
+                <FiFileText className="w-3.5 h-3.5" />
+                <span className="whitespace-nowrap">Clinical Proforma</span>
+              </Button>
+            )}
+            
+            {/* Follow-Up Button - ONLY show for EXISTING patients who already have a proforma */}
+            {hasExistingProforma && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Navigate to follow-up form for existing patient
+                  navigate(`/follow-up/${patient.id}`);
+                }}
+                className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400 transition-all hover:shadow-sm"
+              >
+                <FiRefreshCw className="w-3.5 h-3.5" />
+                <span className="whitespace-nowrap">Follow-Up</span>
+              </Button>
+            )}
             
             {/* Out Patient Intake Record Button - Opens only the Out Patient Intake Record form */}
             <Button
@@ -336,11 +348,11 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
               <span className="whitespace-nowrap">Intake Record</span>
             </Button>
             
-            {/* Prescription Button - Opens only the Prescription form */}
+            {/* Prescription Button - Always opens Create Prescription screen */}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/prescriptions/create?patient_id=${patient.id}`)}
+              onClick={() => navigate(`/prescriptions/create?patient_id=${patient.id}&mode=create`)}
               className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100 hover:border-teal-400 transition-all hover:shadow-sm"
             >
               <FiPlusCircle className="w-3.5 h-3.5" />

@@ -1,8 +1,9 @@
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { useMemo } from 'react';
 import { selectCurrentUser } from '../../features/auth/authSlice';
-import { useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
+import { useGetPrescriptionByIdQuery, useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 import { useGetClinicalProformaByIdQuery } from '../../features/clinical/clinicalApiSlice';
 import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import Card from '../../components/Card';
@@ -11,7 +12,7 @@ import { FiPackage, FiUser, FiEdit, FiPrinter, FiFileText, FiArrowLeft, FiChevro
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { isAdmin, isJrSr } from '../../utils/constants';
 
-const PrescriptionView = ({ prescription: prescriptionProp, clinicalProformaId: clinicalProformaIdProp, patientId: patientIdProp }) => {
+const PrescriptionView = ({ prescription: prescriptionProp, clinicalProformaId: clinicalProformaIdProp, patientId: patientIdProp, visitDate: visitDateProp }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
@@ -22,6 +23,17 @@ const PrescriptionView = ({ prescription: prescriptionProp, clinicalProformaId: 
   
   const currentUser = useSelector(selectCurrentUser);
  
+  // Helper function to convert date to IST date string (YYYY-MM-DD)
+  const toISTDateString = (dateInput) => {
+    try {
+      if (!dateInput) return '';
+      const d = new Date(dateInput);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+    } catch (_) {
+      return '';
+    }
+  };
 
   // Fetch proforma data if clinicalProformaId is available
   const { data: proformaData, isLoading: loadingProforma } = useGetClinicalProformaByIdQuery(
@@ -37,19 +49,61 @@ const PrescriptionView = ({ prescription: prescriptionProp, clinicalProformaId: 
     { skip: !patientId }
   );
 
-  // Fetch prescriptions data
-  const { data: prescriptionsData, isLoading: loadingPrescriptions } = useGetPrescriptionByIdQuery(
+  // Fetch prescriptions data by clinical_proforma_id (if available)
+  const { data: prescriptionsData, isLoading: loadingPrescriptionsByProforma } = useGetPrescriptionByIdQuery(
     { clinical_proforma_id: clinicalProformaId },
     { skip: !clinicalProformaId }
   );
 
+  // Also fetch prescriptions by patient_id (for prescriptions without clinical_proforma_id)
+  const { data: patientPrescriptionsData, isLoading: loadingPrescriptionsByPatient } = useGetPrescriptionsByPatientIdQuery(
+    patientId,
+    { skip: !patientId || !!clinicalProformaId } // Skip if we have a proforma ID (prefer proforma-based fetch)
+  );
+
+  const loadingPrescriptions = loadingPrescriptionsByProforma || loadingPrescriptionsByPatient;
+
   
   const prescriptionData = prescriptionsData?.data?.prescription;
   
-  // Use prescription prop if provided, otherwise use data from query
-  const prescriptions = prescriptionProp 
-    ? (Array.isArray(prescriptionProp) ? prescriptionProp : [prescriptionProp])
-    : (prescriptionData?.prescription || []);
+  // Combine prescriptions from both sources
+  const prescriptions = useMemo(() => {
+    // If prescription prop is provided, use it
+    if (prescriptionProp) {
+      return Array.isArray(prescriptionProp) ? prescriptionProp : [prescriptionProp];
+    }
+    
+    // If we have prescriptions from proforma query, use them
+    if (prescriptionData?.prescription && prescriptionData.prescription.length > 0) {
+      return prescriptionData.prescription;
+    }
+    
+    // Otherwise, try to get prescriptions from patient-level query
+    const patientPrescriptions = patientPrescriptionsData?.data?.prescriptions || [];
+    if (patientPrescriptions.length > 0) {
+      // If visitDate is provided, filter to only prescriptions from that date
+      const visitDateStr = visitDateProp ? toISTDateString(visitDateProp) : null;
+      
+      let allPrescriptionItems = [];
+      patientPrescriptions.forEach(prescRecord => {
+        if (prescRecord.prescription && Array.isArray(prescRecord.prescription)) {
+          // If we have a visit date, filter by date
+          if (visitDateStr) {
+            const prescDateStr = toISTDateString(prescRecord.visit_date || prescRecord.created_at);
+            if (prescDateStr === visitDateStr) {
+              allPrescriptionItems.push(...prescRecord.prescription);
+            }
+          } else {
+            // No date filter, include all
+            allPrescriptionItems.push(...prescRecord.prescription);
+          }
+        }
+      });
+      return allPrescriptionItems;
+    }
+    
+    return [];
+  }, [prescriptionProp, prescriptionData, patientPrescriptionsData, visitDateProp]);
 
   
 

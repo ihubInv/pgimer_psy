@@ -306,6 +306,51 @@ router.get('/by-proforma/:clinical_proforma_id', authenticateToken, [
 
 /**
  * @swagger
+ * /api/prescriptions/by-patient/{patient_id}:
+ *   get:
+ *     summary: Get all prescriptions by patient ID
+ *     description: Retrieves all prescriptions for a specific patient, including those without a clinical proforma
+ *     tags: [Prescriptions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: patient_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Patient ID
+ *     responses:
+ *       200:
+ *         description: Prescriptions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     prescriptions:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Prescription'
+ *       400:
+ *         description: Invalid patient ID
+ *       500:
+ *         description: Server error
+ */
+// Route to get all prescriptions by patient_id (path parameter)
+router.get('/by-patient/:patient_id', authenticateToken, [
+  param('patient_id').isInt().withMessage('Patient ID must be an integer')
+], handleValidationErrors, prescriptionController.getPrescriptionsByPatientId);
+
+/**
+ * @swagger
  * /api/prescriptions/{id}:
  *   get:
  *     summary: Get a prescription by ID

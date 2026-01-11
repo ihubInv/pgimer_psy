@@ -33,6 +33,10 @@ class Prescription {
       this.prescription = [];
     }
     
+    // Additional metadata from joins (when fetched by patient_id)
+    this.visit_date = data.visit_date;
+    this.visit_type = data.visit_type;
+    
     this.created_at = data.created_at;
     this.updated_at = data.updated_at;
   }
@@ -46,11 +50,7 @@ class Prescription {
         prescriptions
       } = prescriptionData;
   
-      // Validate required fields
-      if (!clinical_proforma_id) {
-        throw new Error("clinical_proforma_id is required");
-      }
-
+      // Validate required fields - patient_id is required, clinical_proforma_id is optional
       if (!patient_id) {
         throw new Error("patient_id is required");
       }
@@ -82,13 +82,17 @@ class Prescription {
 
       // Allow empty prescriptions - no validation error
 
-      // Delete existing prescription for this clinical_proforma_id
-      await db.query(
-        'DELETE FROM prescriptions WHERE clinical_proforma_id = $1',
-        [clinical_proforma_id]
-      );
+      // Delete existing prescription for this clinical_proforma_id (if provided)
+      // If no clinical_proforma_id, we don't delete existing - allow multiple prescriptions per patient
+      if (clinical_proforma_id) {
+        await db.query(
+          'DELETE FROM prescriptions WHERE clinical_proforma_id = $1',
+          [clinical_proforma_id]
+        );
+      }
 
       // Insert new prescription with JSONB
+      // clinical_proforma_id can be null - prescriptions can be linked to patient only
       const result = await db.query(
         `INSERT INTO prescriptions (
            patient_id,
@@ -99,7 +103,7 @@ class Prescription {
          RETURNING *`,
         [
           patient_id,
-          clinical_proforma_id,
+          clinical_proforma_id || null,
           JSON.stringify(validPrescriptions)
         ]
       );
@@ -150,6 +154,44 @@ class Prescription {
         prescriptions: prescriptionsArray,
         created_at: row.created_at,
         updated_at: row.updated_at
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Find all prescriptions by patient_id (including those without clinical_proforma_id)
+  static async findByPatientId(patient_id) {
+    try {
+      const result = await db.query(
+        `SELECT p.*, cp.visit_date, cp.visit_type 
+         FROM prescriptions p
+         LEFT JOIN clinical_proforma cp ON p.clinical_proforma_id = cp.id
+         WHERE p.patient_id = $1
+         ORDER BY p.created_at DESC`,
+        [patient_id]
+      );
+
+      if (result.rows.length === 0) {
+        return [];
+      }
+
+      return result.rows.map(row => {
+        // Parse JSONB to array
+        const prescriptionsArray = typeof row.prescriptions === 'string' 
+          ? JSON.parse(row.prescriptions) 
+          : row.prescriptions;
+
+        return new Prescription({
+          id: row.id,
+          patient_id: row.patient_id,
+          clinical_proforma_id: row.clinical_proforma_id,
+          prescriptions: prescriptionsArray,
+          visit_date: row.visit_date,
+          visit_type: row.visit_type,
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        });
       });
     } catch (error) {
       throw error;
@@ -421,7 +463,7 @@ class Prescription {
   }
 
   toJSON() {
-    return {
+    const json = {
       id: this.id,
       patient_id: this.patient_id,
       clinical_proforma_id: this.clinical_proforma_id,
@@ -429,6 +471,12 @@ class Prescription {
       created_at: this.created_at,
       updated_at: this.updated_at
     };
+    
+    // Include visit info if available (from patient query joins)
+    if (this.visit_date) json.visit_date = this.visit_date;
+    if (this.visit_type) json.visit_type = this.visit_type;
+    
+    return json;
   }
 }
 
