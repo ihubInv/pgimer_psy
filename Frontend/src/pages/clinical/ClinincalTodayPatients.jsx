@@ -771,13 +771,17 @@ const ClinicalTodayPatients = () => {
     return patients.filter((patient) => {
       if (!patient) return false;
 
-      // Only show patients registered today (from 12:00 AM IST to 11:59 PM IST)
-      // Exclude all patients registered yesterday or earlier
+      // Show patients who either:
+      // 1. Were registered/created today (new patients), OR
+      // 2. Have a visit record for today (existing patients added via "Existing Patient" flow)
       const patientCreatedDate = patient?.created_at ? toISTDateString(patient.created_at) : '';
       const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
+      
+      // Check if patient has a visit today (set by backend when visit is created)
+      const hasVisitToday = patient?.has_visit_today === true;
 
-      // Strictly include only patients whose registration date is today
-      return createdToday;
+      // Include patient if they were created today OR have a visit today
+      return createdToday || hasVisitToday;
     });
   };
 
@@ -810,15 +814,20 @@ const ClinicalTodayPatients = () => {
     return patientCreatedDate && patientCreatedDate === targetDate;
   }, [selectedDate]);
 
-  // Note: Since we only show patients registered today, the concept of "existing patient" 
-  // (registered yesterday but visiting today) no longer applies in this view.
-  // All patients shown are registered today. This function is kept for compatibility
-  // but will always return false since we filter out non-today registrations.
+  // Existing patient = patient who was NOT created today but has a visit today
+  // These are patients added via the "Existing Patient" flow (follow-up visits)
   const isExistingPatientBasic = useCallback((patient) => {
-    // Since filterTodayPatients only includes patients registered today,
-    // there are no "existing patients" (registered yesterday) in this view
-    return false;
-  }, []);
+    if (!patient?.created_at) return false;
+    const targetDate = toISTDateString(selectedDate || new Date());
+    const patientCreatedDate = toISTDateString(patient.created_at);
+    const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
+    
+    // Patient is "existing" if they were NOT created today but have a visit today
+    // has_visit_today is set by the backend when a visit record exists for today
+    const hasVisitToday = patient?.has_visit_today === true;
+    
+    return !createdToday && hasVisitToday;
+  }, [selectedDate]);
 
   // First filter by date (today's patients)
   const todayPatientsByDate = filterTodayPatients(deduplicatedApiPatients);
@@ -981,9 +990,10 @@ const ClinicalTodayPatients = () => {
     }).length;
   }, [todayPatients, isNewPatientBasic]);
 
-  // Calculate existing patients count - always 0 since we only show patients registered today
-  // (No patients registered yesterday are shown)
-  const existingPatientsCount = 0;
+  // Calculate existing patients count - patients NOT created today but with visits today
+  const existingPatientsCount = useMemo(() => {
+    return todayPatients.filter(isExistingPatientBasic).length;
+  }, [todayPatients, isExistingPatientBasic]);
 
 
 
