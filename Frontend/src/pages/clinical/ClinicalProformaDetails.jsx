@@ -5,7 +5,6 @@ import { FiEdit, FiTrash2, FiArrowLeft, FiPrinter, FiFileText, FiActivity } from
 import {
   useDeleteClinicalProformaMutation,
   useGetClinicalProformaByIdQuery,
-  useUpdateClinicalProformaMutation,
 } from '../../features/clinical/clinicalApiSlice';
 import { useGetADLFileByIdQuery } from '../../features/adl/adlApiSlice';
 import { useGetPatientFilesQuery } from '../../features/patients/patientFilesApiSlice';
@@ -14,7 +13,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import FilePreview from '../../components/FilePreview';
-import { formatDate } from '../../utils/formatters';
+// formatDate removed - not used in view mode
 import { getDoctorDecisionLabel } from '../../utils/enumMappings';
 import { useGetPatientVisitHistoryQuery, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery, useGetAllClinicalOptionsQuery } from '../../features/clinical/clinicalApiSlice';
@@ -45,19 +44,8 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
   // Delete mutation
   const [deleteProforma, { isLoading: isDeleting }] = useDeleteClinicalProformaMutation();
   
-  // Update mutation for informant_who field
-  const [updateProforma, { isLoading: isUpdating }] = useUpdateClinicalProformaMutation();
-  
-  // State for informant_who field (for inline editing)
-  const [informantWho, setInformantWho] = useState(proforma?.informant_who || '');
-  const [isEditingInformantWho, setIsEditingInformantWho] = useState(false);
-  
-  // Sync state when proforma data changes
-  useEffect(() => {
-    if (proforma?.informant_who !== undefined && !isEditingInformantWho) {
-      setInformantWho(proforma.informant_who || '');
-    }
-  }, [proforma?.informant_who, isEditingInformantWho]);
+  // Note: Editing functionality removed - this is a read-only view component
+  // For editing, use EditClinicalProforma component instead
   
   // Fetch ADL file data if this is a complex case
   const isComplexCase = proforma?.doctor_decision === 'complex_case' && proforma?.adl_file_id;
@@ -945,51 +933,7 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
         </div>
       </div> */}
 
-      {/* Patient & Visit Info */}
-      <Card 
-        title="Patient & Visit Information"
-        // actions={
-        //   <Button
-        //     type="button"
-        //     variant="ghost"
-        //     size="sm"
-        //     onClick={handlePrintPatientDetails}
-        //     className="h-8 w-8 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-        //     title="Print Patient Details"
-        //   >
-        //     <FiPrinter className="w-4 h-4 text-blue-600" />
-        //   </Button>
-        // }
-      >
-        <div ref={patientDetailsPrintRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div>
-            <label className="text-sm font-medium text-gray-500">Patient Name</label>
-            <p className="text-lg font-semibold">{proforma.patient_name || 'N/A'}</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-500">Visit Date</label>
-            <p className="text-lg">{formatDate(proforma.visit_date)}</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-500">Visit Type</label>
-            <Badge variant={proforma.visit_type === 'first_visit' ? 'primary' : 'default'}>
-              {proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow Up'}
-            </Badge>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-500">Room Number</label>
-            <p className="text-lg">{proforma.room_no || 'Not specified'}</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-500">Doctor</label>
-            <p className="text-lg">{proforma.doctor_name || 'N/A'}</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-500">Created On</label>
-            <p className="text-lg">{formatDate(proforma.created_at)}</p>
-          </div>
-        </div>
-      </Card>
+      {/* Patient & Visit Information section removed - displaying only clinical proforma data */}
 
       {/* Walk-in Clinical Proforma Section */}
       <Card title="Walk-in Clinical Proforma" className="border-2 border-green-200 bg-green-50/30">
@@ -1054,36 +998,15 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
               ))}
             </div>
 
-            {/* Who is present - shown only when Present is selected */}
-            {proforma.informant_present === true && (
+            {/* Who is present - shown only when Present is selected (read-only in view mode) */}
+            {proforma.informant_present === true && proforma.informant_who && (
               <div className="mt-4">
-                <Input
-                  label="Who is present with the patient?"
-                  name="informant_who"
-                  value={informantWho}
-                  onChange={(e) => {
-                    setInformantWho(e.target.value);
-                    setIsEditingInformantWho(true);
-                  }}
-                  onBlur={async () => {
-                    if (isEditingInformantWho && id) {
-                      try {
-                        await updateProforma({
-                          id,
-                          informant_who: informantWho,
-                        }).unwrap();
-                        toast.success('Informant information updated successfully');
-                        setIsEditingInformantWho(false);
-                      } catch (error) {
-                        toast.error(error?.data?.message || 'Failed to update informant information');
-                        // Revert to original value on error
-                        setInformantWho(proforma?.informant_who || '');
-                      }
-                    }
-                  }}
-                  placeholder="Enter who is present with the patient (e.g., Spouse, Parent, Sibling, etc.)"
-                  disabled={isUpdating}
-                />
+                <div className="space-y-1">
+                  <label className="block text-sm font-medium text-gray-700">Who is present with the patient?</label>
+                  <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-800">
+                    {proforma.informant_who}
+                  </div>
+                </div>
               </div>
             )}
 

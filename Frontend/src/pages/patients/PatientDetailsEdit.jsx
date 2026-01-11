@@ -2093,7 +2093,15 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     isJrSr(userRole)
   );
   const canViewClinicalProforma = canViewAllSections;
-  const canViewPrescriptions = canViewAllSections;
+  
+  // In edit mode (edit=true), Faculty/Resident should only see:
+  // - Patient Details (OUT PATIENT CARD)
+  // - Walk-in Clinical Proforma
+  // - Outpatient Intake Record (ADL)
+  // Hide Prescription and Past History cards in edit mode for non-admin users
+  const isFacultyOrResident = isJrSr(userRole) && !isAdmin(userRole);
+  const shouldHideInEditMode = isEdit && isFacultyOrResident;
+  const canViewPrescriptions = canViewAllSections && !shouldHideInEditMode;
 
   // ADL File: Show only if case is complex OR ADL file already exists
   // Handle different possible data structures from API
@@ -2668,7 +2676,9 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   }, [patientProformas.length, selectedProforma?.doctor_decision]);
 
   const hasAdlFiles = patientAdlFiles.length > 0 || selectedProforma?.adl_file_id;
-  const canViewADLFile = canViewAllSections && hasAdlFiles;
+  // In edit mode, always show ADL card for Faculty/Resident so they can create/edit ADL records
+  // Otherwise, only show if ADL files already exist
+  const canViewADLFile = canViewAllSections && (hasAdlFiles || isEdit);
   const isSelectedComplexCase = selectedProforma?.doctor_decision === 'complex_case' && selectedProforma?.adl_file_id;
 
   // Removed auto-expand logic - cards now default to collapsed (false)
@@ -3526,8 +3536,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                       />
                     </div>
 
-                    {/* Second Row - Age, Sex, Category (if not PWO), Father's Name */}
-                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
+                    {/* Second Row - Age, Sex, Category (if not PWO and not edit mode), Father's Name */}
+                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) && !isEdit ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
                       <IconInput
                         icon={<FiClock className="w-4 h-4" />}
                         label="Age"
@@ -3552,7 +3562,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                           className="bg-white/60 backdrop-blur-md border-2 border-gray-300/60"
                         />
                       </div>
-                      {userRole && !isMWO(userRole) && (
+                      {userRole && !isMWO(userRole) && !isEdit && (
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
                           <FiShield className="w-4 h-4 text-primary-600" />
@@ -3579,8 +3589,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         className=""
                       />
                     </div>
-                    {/* Fourth Row - Department, Unit/Consit (if not PWO), Room No. (if not PWO), Serial No. (if not PWO) */}
-                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6`}>
+                    {/* Fourth Row - Department, Unit/Consit (if not PWO and not edit mode), Room No. (if not PWO and not edit mode), Serial No. (if not PWO and not edit mode) */}
+                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) && !isEdit ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6`}>
                       <IconInput
                         icon={<FiLayers className="w-4 h-4" />}
                         label="Department"
@@ -3590,7 +3600,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         placeholder="Enter department"
                         className=""
                       />
-                      {userRole && !isMWO(userRole) && (
+                      {userRole && !isMWO(userRole) && !isEdit && (
                         <>
                       <IconInput
                         icon={<FiUsers className="w-4 h-4" />}
@@ -3623,8 +3633,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                       )}
                     </div>
 
-                    {/* Fifth Row - File No., Unit Days (if not PWO) */}
-                    <div className={`grid grid-cols-1 ${userRole && !isMWO(userRole) ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-6`}>
+                    {/* Fifth Row - File No., Unit Days (if not PWO and not edit mode) */}
+                    <div className={`grid grid-cols-1 ${userRole && !isMWO(userRole) && !isEdit ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-6`}>
                       <IconInput
                         icon={<FiFileText className="w-4 h-4" />}
                         label="File No."
@@ -3634,7 +3644,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         placeholder="Enter file number"
                         className=""
                       />
-                      {userRole && !isMWO(userRole) && (
+                      {userRole && !isMWO(userRole) && !isEdit && (
                       <div className="space-y-2">
                         <Select
                           label="Unit Days"
@@ -4519,78 +4529,120 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
           {expandedCards.clinical && (
             <div className="p-6 space-y-6">
-              {/* First Visit Proforma Section - Show only if first visit proforma exists (read-only) */}
+              {/* First Visit Proforma Section - Show editable form in edit mode, read-only otherwise */}
               {firstVisitProforma && (
                 <div className="space-y-4 border-t border-gray-200 pt-6">
                   <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                     <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
-                      First Visit
+                      First Visit {isEdit ? '(Editing)' : ''}
                     </span>
                     <span className="text-sm text-gray-500 font-normal">
                       {formatDate(firstVisitProforma.visit_date || firstVisitProforma.created_at)}
                     </span>
                   </h4>
                   
-                  <div className="border-2 border-purple-300 rounded-lg p-4 bg-purple-50/30">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2 flex-wrap">
-                          <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                            First Visit
-                          </span>
-                          {firstVisitProforma.doctor_decision && (
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              firstVisitProforma.doctor_decision === 'complex_case' 
-                                ? 'bg-red-100 text-red-800' 
-                                : 'bg-green-100 text-green-800'
-                            }`}>
-                              {firstVisitProforma.doctor_decision === 'complex_case' 
-                                ? 'Complex Case' 
-                                : 'Simple Case'}
+                  {/* In edit mode, show editable form */}
+                  {isEdit ? (
+                    <div className="border-2 border-green-300 rounded-lg p-4 bg-green-50/30">
+                      <EditClinicalProforma
+                        key={`edit-first-visit-${firstVisitProforma.id}`}
+                        onAutoFillADL={(adlData) => {
+                          setAutoFillAdlData(adlData);
+                        }}
+                        initialData={{
+                          ...firstVisitProforma,
+                          id: firstVisitProforma.id, // Include ID for update
+                          patient_id: firstVisitProforma.patient_id?.toString() || patient?.id?.toString() || '',
+                          visit_date: firstVisitProforma.visit_date ? (firstVisitProforma.visit_date.includes('T') ? firstVisitProforma.visit_date.split('T')[0] : firstVisitProforma.visit_date) : new Date().toISOString().split('T')[0],
+                          assigned_doctor: firstVisitProforma.assigned_doctor?.toString() || patient?.assigned_doctor_id?.toString() || '',
+                          informant_present: firstVisitProforma.informant_present ?? true,
+                          informant_who: firstVisitProforma.informant_who || '',
+                          onset_duration: firstVisitProforma.onset_duration || '',
+                          course: firstVisitProforma.course || '',
+                          precipitating_factor: firstVisitProforma.precipitating_factor || '',
+                          illness_duration: firstVisitProforma.illness_duration || '',
+                          current_episode_since: firstVisitProforma.current_episode_since || '',
+                          past_history: firstVisitProforma.past_history || '',
+                          family_history: firstVisitProforma.family_history || '',
+                          gpe: firstVisitProforma.gpe || '',
+                          diagnosis: firstVisitProforma.diagnosis || '',
+                          icd_code: firstVisitProforma.icd_code || '',
+                          disposal: firstVisitProforma.disposal || '',
+                          workup_appointment: firstVisitProforma.workup_appointment || '',
+                          referred_to: firstVisitProforma.referred_to || '',
+                          treatment_prescribed: firstVisitProforma.treatment_prescribed || '',
+                          mse_delusions: firstVisitProforma.mse_delusions || '',
+                          adl_reasoning: firstVisitProforma.adl_reasoning || '',
+                        }}
+                        isEmbedded={true}
+                        patientId={patient?.id?.toString()}
+                        returnPath={null}
+                        returnTab={null}
+                      />
+                    </div>
+                  ) : (
+                    /* In view mode, show read-only view */
+                    <div className="border-2 border-purple-300 rounded-lg p-4 bg-purple-50/30">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                              First Visit
                             </span>
-                          )}
+                            {firstVisitProforma.doctor_decision && (
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                firstVisitProforma.doctor_decision === 'complex_case' 
+                                  ? 'bg-red-100 text-red-800' 
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {firstVisitProforma.doctor_decision === 'complex_case' 
+                                  ? 'Complex Case' 
+                                  : 'Simple Case'}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 gap-3 mt-3">
+                            {firstVisitProforma.doctor_name && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <FiUser className="w-4 h-4" />
+                                <span><span className="font-medium text-gray-800">Doctor:</span> {firstVisitProforma.doctor_name}</span>
+                              </div>
+                            )}
+                            {firstVisitProforma.room_no && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <FiHome className="w-4 h-4" />
+                                <span><span className="font-medium text-gray-800">Room:</span> {firstVisitProforma.room_no}</span>
+                              </div>
+                            )}
+                            {firstVisitProforma.diagnosis && (
+                              <div className="flex items-start gap-2 text-sm text-gray-600">
+                                <FiFileText className="w-4 h-4 mt-0.5" />
+                                <span><span className="font-medium text-gray-800">Diagnosis:</span> {firstVisitProforma.diagnosis}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         
-                        <div className="grid grid-cols-1 gap-3 mt-3">
-                          {firstVisitProforma.doctor_name && (
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <FiUser className="w-4 h-4" />
-                              <span><span className="font-medium text-gray-800">Doctor:</span> {firstVisitProforma.doctor_name}</span>
-                            </div>
-                          )}
-                          {firstVisitProforma.room_no && (
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <FiHome className="w-4 h-4" />
-                              <span><span className="font-medium text-gray-800">Room:</span> {firstVisitProforma.room_no}</span>
-                            </div>
-                          )}
-                          {firstVisitProforma.diagnosis && (
-                            <div className="flex items-start gap-2 text-sm text-gray-600">
-                              <FiFileText className="w-4 h-4 mt-0.5" />
-                              <span><span className="font-medium text-gray-800">Diagnosis:</span> {firstVisitProforma.diagnosis}</span>
-                            </div>
-                          )}
+                        <div className="flex items-center gap-2 ml-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate(`/clinical/${firstVisitProforma.id}`)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                          >
+                            <FiEye className="w-3.5 h-3.5" />
+                            View
+                          </Button>
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-2 ml-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/clinical/${firstVisitProforma.id}`)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
-                        >
-                          <FiEye className="w-3.5 h-3.5" />
-                          View
-                        </Button>
+                      {/* Show full proforma in read-only view mode */}
+                      <div className="mt-4">
+                        <ClinicalProformaDetails proforma={firstVisitProforma} />
                       </div>
                     </div>
-                    
-                    {/* Show full proforma in read-only view mode */}
-                    <div className="mt-4">
-                      <ClinicalProformaDetails proforma={firstVisitProforma} />
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -5102,7 +5154,8 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       )}
 
       {/* Card 4: Past History - View-only display organized by card type */}
-      {(canViewPrescriptions || canViewClinicalProforma) && (
+      {/* Hide Past History in edit mode for Faculty/Resident - they should focus on current visit */}
+      {(canViewPrescriptions || canViewClinicalProforma) && !shouldHideInEditMode && (
         <Card className="shadow-lg border-0 bg-white">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
