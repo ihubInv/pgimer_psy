@@ -1083,6 +1083,7 @@ const Dashboard = () => {
         : allPatientsCount;
       // Only show patients registered today (from 12:00 AM IST)
       // Use only created_at, not last_assigned_date, to strictly show only patients registered today
+      // Sort by FCFS (First Come First Serve) - earliest registration first
       const todayPatients = assignedPatients.filter(p => {
         if (!p.created_at) return false;
         // Get today's date in IST (YYYY-MM-DD format)
@@ -1090,6 +1091,11 @@ const Dashboard = () => {
         // Get patient's registration date in IST
         const patientCreatedDate = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
         return patientCreatedDate === todayIST;
+      }).sort((a, b) => {
+        // FCFS order: earliest registration first (ascending by created_at)
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        return dateA - dateB;
       });
 
       // Gender distribution
@@ -1164,9 +1170,10 @@ const Dashboard = () => {
           return patientDate >= sevenDaysAgo && patientDate <= today;
         })
         .sort((a, b) => {
-          const dateA = a.last_assigned_date ? new Date(a.last_assigned_date) : new Date(a.created_at);
-          const dateB = b.last_assigned_date ? new Date(b.last_assigned_date) : new Date(b.created_at);
-          return dateB - dateA;
+          // FCFS order: earliest registration first (ascending by created_at)
+          const dateA = new Date(a.created_at).getTime();
+          const dateB = new Date(b.created_at).getTime();
+          return dateA - dateB;
         });
 
       return {
@@ -1401,8 +1408,13 @@ const Dashboard = () => {
                       key={patient.id || idx}
                       className="flex items-start gap-4 p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/40 hover:bg-white/70 transition-all duration-200"
                     >
-                      <div className="p-2 rounded-lg bg-gradient-to-br from-green-500 to-green-600 shadow-md">
-                        <FiUser className="h-5 w-5 text-white" />
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-xs font-bold">
+                          {idx + 1}
+                        </span>
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-green-500 to-green-600 shadow-md">
+                          <FiUser className="h-5 w-5 text-white" />
+                        </div>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-900">{patient.name || 'N/A'}</p>
@@ -1412,9 +1424,7 @@ const Dashboard = () => {
                         <div className="flex items-center gap-2 mt-2">
                           <FiClock className="w-3 h-3 text-gray-400" />
                           <span className="text-xs text-gray-500">
-                            {patient.last_assigned_date 
-                              ? formatDateTime(patient.last_assigned_date) 
-                              : (patient.created_at ? formatDateTime(patient.created_at) : 'N/A')}
+                            {patient.created_at ? formatDateTime(patient.created_at) : 'N/A'}
                           </span>
                         </div>
                       </div>
@@ -1441,7 +1451,7 @@ const Dashboard = () => {
               title={
                 <div className="flex items-center gap-2">
                   <FiCalendar className="w-5 h-5 text-primary-600" />
-                  <span>Today's Patients</span>
+                  <span>Today's Patients (FCFS Order)</span>
                 </div>
               }
               className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
@@ -1459,6 +1469,13 @@ const Dashboard = () => {
                       className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200/50 hover:from-green-100 hover:to-emerald-100 transition-all duration-200"
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {/* Queue/Token Number */}
+                        <div className="flex flex-col items-center justify-center min-w-[40px]">
+                          <span className="text-xs text-gray-500 font-medium">Token</span>
+                          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-green-500 text-white text-sm font-bold shadow-md">
+                            {idx + 1}
+                          </span>
+                        </div>
                         <div className="p-2 rounded-lg bg-gradient-to-br from-green-500 to-green-600 shadow-md">
                           <FiUser className="h-5 w-5 text-white" />
                         </div>
@@ -1467,6 +1484,10 @@ const Dashboard = () => {
                           <p className="text-sm text-gray-600 truncate">
                             {patient.cr_no ? `CR No: ${patient.cr_no}` : 'N/A'}
                           </p>
+                          <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                            <FiClock className="w-3 h-3" />
+                            <span>{patient.created_at ? new Date(patient.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'}</span>
+                          </div>
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -1523,6 +1544,7 @@ const Dashboard = () => {
         : allPatientsCount;
       // Only show patients registered today (from 12:00 AM IST)
       // Use only created_at, not last_assigned_date, to strictly show only patients registered today
+      // Sort by FCFS (First Come First Serve) - earliest registration first
       const todayPatients = assignedPatients.filter(p => {
         if (!p.created_at) return false;
         // Get today's date in IST (YYYY-MM-DD format)
@@ -1530,6 +1552,11 @@ const Dashboard = () => {
         // Get patient's registration date in IST
         const patientCreatedDate = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
         return patientCreatedDate === todayIST;
+      }).sort((a, b) => {
+        // FCFS order: earliest registration first (ascending by created_at)
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        return dateA - dateB;
       });
 
       // Gender distribution
@@ -1604,9 +1631,10 @@ const Dashboard = () => {
           return patientDate >= sevenDaysAgo && patientDate <= today;
         })
         .sort((a, b) => {
-          const dateA = a.last_assigned_date ? new Date(a.last_assigned_date) : new Date(a.created_at);
-          const dateB = b.last_assigned_date ? new Date(b.last_assigned_date) : new Date(b.created_at);
-          return dateB - dateA;
+          // FCFS order: earliest registration first (ascending by created_at)
+          const dateA = new Date(a.created_at).getTime();
+          const dateB = new Date(b.created_at).getTime();
+          return dateA - dateB;
         });
 
       return {
@@ -1881,7 +1909,7 @@ const Dashboard = () => {
               title={
                 <div className="flex items-center gap-2">
                   <FiCalendar className="w-5 h-5 text-primary-600" />
-                  <span>Today's Patients</span>
+                  <span>Today's Patients (FCFS Order)</span>
                 </div>
               }
               className="bg-white/90 backdrop-blur-sm shadow-lg border border-white/50"
@@ -1899,6 +1927,13 @@ const Dashboard = () => {
                       className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200/50 hover:from-blue-100 hover:to-indigo-100 transition-all duration-200"
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {/* Queue/Token Number */}
+                        <div className="flex flex-col items-center justify-center min-w-[40px]">
+                          <span className="text-xs text-gray-500 font-medium">Token</span>
+                          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-500 text-white text-sm font-bold shadow-md">
+                            {idx + 1}
+                          </span>
+                        </div>
                         <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 shadow-md">
                           <FiUser className="h-5 w-5 text-white" />
                         </div>
@@ -1907,6 +1942,10 @@ const Dashboard = () => {
                           <p className="text-sm text-gray-600 truncate">
                             {patient.cr_no ? `CR No: ${patient.cr_no}` : 'N/A'}
                           </p>
+                          <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                            <FiClock className="w-3 h-3" />
+                            <span>{patient.created_at ? new Date(patient.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'}</span>
+                          </div>
                         </div>
                       </div>
                       <div className="flex gap-2">

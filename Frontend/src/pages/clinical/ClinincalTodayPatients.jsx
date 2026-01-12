@@ -925,38 +925,31 @@ const ClinicalTodayPatients = () => {
     });
   });
 
-  // Sort patients: newly added patients (by visit_date or last_assigned_date) at the top
-  // Most recent visit/assignment first, then by created_at for new patients
+  // Sort patients: FIRST COME FIRST SERVE (FCFS) order
+  // Patients who registered first appear at the top of the list
   const filteredPatients = [...filteredPatientsUnsorted].sort((a, b) => {
-    // Get the most recent activity date for each patient
-    const getMostRecentDate = (patient) => {
-      const dates = [];
-      
-      // Check visit_date (for existing patients with visits)
-      if (patient.visit_date) {
-        dates.push(new Date(patient.visit_date));
-      }
-      
-      // Check last_assigned_date (for existing patients)
-      if (patient.last_assigned_date) {
-        dates.push(new Date(patient.last_assigned_date));
-      }
-      
-      // Check created_at (for new patients or fallback)
+    // Get registration timestamp - use created_at for consistent FCFS ordering
+    const getRegistrationTime = (patient) => {
+      // Primary: Use created_at (registration timestamp) for FCFS
       if (patient.created_at) {
-        dates.push(new Date(patient.created_at));
+        return new Date(patient.created_at).getTime();
       }
-      
-      // Return the most recent date, or 0 if no dates found
-      if (dates.length === 0) return new Date(0);
-      return new Date(Math.max(...dates.map(d => d.getTime())));
+      // Fallback for existing patients with visit_date
+      if (patient.visit_date) {
+        return new Date(patient.visit_date).getTime();
+      }
+      // Last resort: use last_assigned_date
+      if (patient.last_assigned_date) {
+        return new Date(patient.last_assigned_date).getTime();
+      }
+      return Number.MAX_SAFE_INTEGER; // Put patients without dates at the end
     };
 
-    const dateA = getMostRecentDate(a);
-    const dateB = getMostRecentDate(b);
+    const timeA = getRegistrationTime(a);
+    const timeB = getRegistrationTime(b);
     
-    // Sort descending (newest first) - most recently added/visited at top
-    return dateB.getTime() - dateA.getTime();
+    // Sort ascending (oldest/first registered first) - FCFS order
+    return timeA - timeB;
   });
 
   // Helper function to get start (00:00:00) and end (23:59:59) of current day in IST

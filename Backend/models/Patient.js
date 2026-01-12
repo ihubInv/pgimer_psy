@@ -840,7 +840,7 @@ class Patient {
         LEFT JOIN adl_files af ON af.patient_id = p.id
         ${whereClause}
         GROUP BY p.id, af.id
-        ORDER BY p.created_at DESC
+        ORDER BY p.created_at ASC
         LIMIT $${idx++} OFFSET $${idx++}
       `;
       params.push(limit, offset);
@@ -1359,10 +1359,10 @@ class Patient {
   // Get patient registrations grouped by date
   static async getRegistrationsByDate(startDate = null, endDate = null) {
     try {
-      // Use database CURRENT_DATE for consistency with IST timezone
+      // Use IST timezone for consistent date grouping
       let query = `
         SELECT 
-          DATE(created_at) as registration_date,
+          DATE(created_at AT TIME ZONE 'Asia/Kolkata') as registration_date,
           COUNT(*) as patient_count
         FROM registered_patient
         WHERE 1=1
@@ -1373,22 +1373,57 @@ class Patient {
       // Add date range filters if provided
       if (startDate) {
         paramCount++;
-        query += ` AND DATE(created_at) >= $${paramCount}`;
+        query += ` AND DATE(created_at AT TIME ZONE 'Asia/Kolkata') >= $${paramCount}`;
         params.push(startDate);
       }
 
       if (endDate) {
         paramCount++;
-        query += ` AND DATE(created_at) <= $${paramCount}`;
+        query += ` AND DATE(created_at AT TIME ZONE 'Asia/Kolkata') <= $${paramCount}`;
         params.push(endDate);
       }
 
-      query += ` GROUP BY DATE(created_at) ORDER BY DATE(created_at) DESC`;
+      query += ` GROUP BY DATE(created_at AT TIME ZONE 'Asia/Kolkata') ORDER BY DATE(created_at AT TIME ZONE 'Asia/Kolkata') DESC`;
 
       const result = await db.query(query, params);
       return result.rows;
     } catch (error) {
       console.error('[Patient.getRegistrationsByDate] Error:', error);
+      throw error;
+    }
+  }
+
+  // Get patients registered on a specific date
+  static async getPatientsByRegistrationDate(date) {
+    try {
+      if (!date) {
+        throw new Error('Date parameter is required');
+      }
+
+      const query = `
+        SELECT 
+          rp.id,
+          rp.cr_no,
+          rp.name,
+          rp.age,
+          rp.sex,
+          rp.locality,
+          rp.state,
+          rp.district,
+          rp.room_no,
+          rp.created_at,
+          u.name as assigned_doctor_name,
+          u.role as assigned_doctor_role
+        FROM registered_patient rp
+        LEFT JOIN users u ON rp.assigned_doctor_id = u.id
+        WHERE DATE(rp.created_at AT TIME ZONE 'Asia/Kolkata') = $1
+        ORDER BY rp.created_at DESC
+      `;
+
+      const result = await db.query(query, [date]);
+      return result.rows;
+    } catch (error) {
+      console.error('[Patient.getPatientsByRegistrationDate] Error:', error);
       throw error;
     }
   }

@@ -167,6 +167,13 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       },
       providesTags: ['Stats'],
     }),
+    getPatientsByRegistrationDate: builder.query({
+      query: (date) => `/patients/patients-by-date/${date}`,
+      providesTags: (result, error, date) => [
+        { type: 'Patient', id: `date-${date}` },
+        'Stats'
+      ],
+    }),
     getPatientsByRoom: builder.query({
       query: (room_number) => `/patients/by-room/${encodeURIComponent(room_number)}`,
       providesTags: (result, error, room_number) => [
@@ -287,6 +294,7 @@ export const {
   useGetPatientsStatsQuery,
   useGetAgeDistributionQuery,
   useGetRegistrationsByDateQuery,
+  useGetPatientsByRegistrationDateQuery,
   useGetPatientsByRoomQuery,
   useGetPatientVisitCountQuery,
   useGetPatientVisitHistoryQuery,

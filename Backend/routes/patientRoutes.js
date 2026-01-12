@@ -544,6 +544,8 @@ router.get('/age-distribution', authenticateToken, authorizeRoles('Admin', 'Psyc
 
 router.get('/registrations-by-date', authenticateToken, authorizeRoles('Admin'), PatientController.getRegistrationsByDate);
 
+router.get('/patients-by-date/:date', authenticateToken, authorizeRoles('Admin'), PatientController.getPatientsByRegistrationDate);
+
 router.get('/by-room/:room_number', authenticateToken, authorizeRoles('Admin'), PatientController.getPatientsByRoom);
 
 /**

@@ -89,6 +89,47 @@ class PatientController {
     }
   }
 
+  // Get patients registered on a specific date
+  static async getPatientsByRegistrationDate(req, res) {
+    try {
+      const { date } = req.params;
+      
+      if (!date) {
+        return res.status(400).json({
+          success: false,
+          message: 'Date parameter is required (format: YYYY-MM-DD)'
+        });
+      }
+
+      // Validate date format
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(date)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid date format. Use YYYY-MM-DD'
+        });
+      }
+
+      const patients = await Patient.getPatientsByRegistrationDate(date);
+
+      res.json({
+        success: true,
+        data: {
+          date,
+          count: patients.length,
+          patients
+        }
+      });
+    } catch (error) {
+      console.error('Get patients by registration date error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get patients by registration date',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
   // Get patients assigned to a specific room for today
   static async getPatientsByRoom(req, res) {
     try {
