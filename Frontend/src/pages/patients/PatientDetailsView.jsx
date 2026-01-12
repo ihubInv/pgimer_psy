@@ -28,6 +28,7 @@ import { useGetPatientVisitHistoryQuery, useGetPatientFilesQuery } from '../../f
 import ViewADL from '../adl/ViewADL';
 import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
 import PrescriptionView from '../PrescribeMedication/PrescriptionView';
+import EditClinicalProforma from '../clinical/EditClinicalProforma';
 import FilePreview from '../../components/FilePreview';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useSelector } from 'react-redux';
@@ -432,13 +433,13 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           const uniqueKey = `${prescriptionData.id}-${prescription.id || prescription.medicine}`;
           if (!addedIds.has(uniqueKey)) {
             addedIds.add(uniqueKey);
-            prescriptions.push({
-              ...prescription,
+          prescriptions.push({
+            ...prescription,
               prescription_record_id: prescriptionData.id,
-              proforma_id: proformaId,
-              visit_date: proforma?.visit_date || proforma?.created_at,
-              visit_type: proforma?.visit_type
-            });
+            proforma_id: proformaId,
+            visit_date: proforma?.visit_date || proforma?.created_at,
+            visit_type: proforma?.visit_type
+          });
           }
         });
       }
@@ -566,9 +567,9 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           }
         }
       } else {
-        const prescriptionResult = prescriptionResults.find((result, idx) => {
-          return proformaIds[idx] === visitId && result.data?.data?.prescription?.prescription;
-        });
+      const prescriptionResult = prescriptionResults.find((result, idx) => {
+        return proformaIds[idx] === visitId && result.data?.data?.prescription?.prescription;
+      });
         prescription = prescriptionResult?.data?.data?.prescription?.prescription || null;
       }
 
@@ -605,7 +606,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         const prescDateStr = toISTDateString(p.visit_date || p.created_at);
         return prescDateStr === visitDateStr || p.proforma_id === visitId;
       });
-      
+
       return {
         visitId,
         visitDate,
@@ -3657,8 +3658,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                       />
                     </div>
 
-                    {/* Second Row - Age, Sex, Category (Admin only), Father's Name */}
-                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && isAdmin(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
+                    {/* Second Row - Age, Sex, Category (if not PWO), Father's Name */}
+                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
                       <IconInput
                         icon={<FiClock className="w-4 h-4" />}
                         label="Age"
@@ -3676,7 +3677,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           {getSexLabel(displayData.sex)}
                       </div>
                       </div>
-                      {userRole && isAdmin(userRole) && (
+                      {userRole && !isMWO(userRole) && (
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
                           <FiShield className="w-4 h-4 text-primary-600" />
@@ -3696,8 +3697,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                         className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                       />
                     </div>
-                    {/* Fourth Row - Department, Unit/Consit (Admin only), Room No. (Admin only), Serial No. (Admin only) */}
-                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && isAdmin(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6`}>
+                    {/* Fourth Row - Department, Unit/Consit (if not PWO), Room No. (if not PWO), Serial No. (if not PWO) */}
+                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6`}>
                       <IconInput
                         icon={<FiLayers className="w-4 h-4" />}
                         label="Department"
@@ -3706,7 +3707,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                         disabled={true}
                         className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                       />
-                      {userRole && isAdmin(userRole) && (
+                      {userRole && !isMWO(userRole) && (
                         <>
                       <IconInput
                         icon={<FiUsers className="w-4 h-4" />}
@@ -3736,8 +3737,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                       )}
                     </div>
 
-                    {/* Fifth Row - File No., Unit Days (Admin only) */}
-                    <div className={`grid grid-cols-1 ${userRole && isAdmin(userRole) ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-6`}>
+                    {/* Fifth Row - File No., Unit Days (if not PWO) */}
+                    <div className={`grid grid-cols-1 ${userRole && !isMWO(userRole) ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-6`}>
                       <IconInput
                         icon={<FiFileText className="w-4 h-4" />}
                         label="File No."
@@ -3746,7 +3747,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                         disabled={true}
                         className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                       />
-                      {userRole && isAdmin(userRole) && (
+                      {userRole && !isMWO(userRole) && (
                       <div className="space-y-2">
                         <label className="text-sm font-semibold text-gray-800">Unit Days</label>
                         <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
@@ -3843,7 +3844,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                   <div className="space-y-8">
                     {/* Patient Identification */}
                     <div className="space-y-6">
-                      <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && isAdmin(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <IconInput
                           icon={<FiCalendar className="w-4 h-4" />}
                           label="Seen in Walk-in-on"
@@ -3852,7 +3853,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           disabled={true}
                           className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                         />
-                        {userRole && isAdmin(userRole) && (
                         <IconInput
                           icon={<FiCalendar className="w-4 h-4" />}
                           label="Worked up on"
@@ -3861,7 +3861,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           disabled={true}
                           className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
                         />
-                        )}
                         <IconInput
                           icon={<FiHash className="w-4 h-4" />}
                           label="CR No."
@@ -4004,7 +4003,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                             <p className="text-base font-medium text-gray-900">{getLocalityLabel(displayData.locality)}</p>
                           </div>
                         </div>
-                        {userRole && isAdmin(userRole) && (
                         <div className="relative">
                           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
@@ -4015,7 +4013,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                             <p className="text-base font-medium text-gray-900">{displayData.assigned_room || 'N/A'}</p>
                           </div>
                         </div>
-                        )}
                         <div className="relative">
                           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
                           <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
@@ -4271,7 +4268,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                 <p className="text-base font-medium text-gray-900">{formData.local_address || 'N/A'}</p>
                               </div>
                             </div>
-                            {userRole && isAdmin(userRole) && (
                             <div className="relative">
                               <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
                               <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
@@ -4282,7 +4278,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                 <p className="text-base font-medium text-gray-900">{formData.assigned_room || 'N/A'}</p>
                               </div>
                             </div>
-                            )}
                           </div>
                         </div>
                     </div>
@@ -4381,9 +4376,55 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                   </span>
                   </h4>
                   
-                  {/* Show clinical proforma in read-only view mode */}
-                  <div ref={clinicalProformaPrintRef} className="border-2 border-purple-300 rounded-lg p-4 bg-purple-50/30 clinical-proforma-view">
-                    <ClinicalProformaDetails proforma={lastVisitProforma} />
+                  {/* Show clinical proforma form with all fields */}
+                  <div ref={clinicalProformaPrintRef} className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50/30 clinical-proforma-view">
+                    <EditClinicalProforma
+                      key={`view-proforma-${lastVisitProforma?.id || Date.now()}`}
+                      initialData={{
+                        ...lastVisitProforma,
+                        patient_id: lastVisitProforma.patient_id?.toString() || patient?.id?.toString() || '',
+                        visit_date: lastVisitProforma.visit_date ? (lastVisitProforma.visit_date.includes('T') ? lastVisitProforma.visit_date.split('T')[0] : lastVisitProforma.visit_date) : new Date().toISOString().split('T')[0],
+                        assigned_doctor: lastVisitProforma.assigned_doctor?.toString() || patient?.assigned_doctor_id?.toString() || '',
+                        onset_duration: lastVisitProforma.onset_duration || '',
+                        course: lastVisitProforma.course || '',
+                        precipitating_factor: lastVisitProforma.precipitating_factor || '',
+                        illness_duration: lastVisitProforma.illness_duration || '',
+                        current_episode_since: lastVisitProforma.current_episode_since || '',
+                        past_history: lastVisitProforma.past_history || '',
+                        family_history: lastVisitProforma.family_history || '',
+                        gpe: lastVisitProforma.gpe || '',
+                        diagnosis: lastVisitProforma.diagnosis || '',
+                        icd_code: lastVisitProforma.icd_code || '',
+                        disposal: lastVisitProforma.disposal || '',
+                        workup_appointment: lastVisitProforma.workup_appointment || '',
+                        referred_to: lastVisitProforma.referred_to || '',
+                        treatment_prescribed: lastVisitProforma.treatment_prescribed || '',
+                        mse_delusions: lastVisitProforma.mse_delusions || '',
+                        adl_reasoning: lastVisitProforma.adl_reasoning || '',
+                        mood: lastVisitProforma.mood || [],
+                        behaviour: lastVisitProforma.behaviour || [],
+                        speech: lastVisitProforma.speech || [],
+                        thought: lastVisitProforma.thought || [],
+                        perception: lastVisitProforma.perception || [],
+                        somatic: lastVisitProforma.somatic || [],
+                        bio_functions: lastVisitProforma.bio_functions || [],
+                        adjustment: lastVisitProforma.adjustment || [],
+                        cognitive_function: lastVisitProforma.cognitive_function || [],
+                        fits: lastVisitProforma.fits || [],
+                        sexual_problem: lastVisitProforma.sexual_problem || [],
+                        substance_use: lastVisitProforma.substance_use || [],
+                        associated_medical_surgical: lastVisitProforma.associated_medical_surgical || [],
+                        mse_behaviour: lastVisitProforma.mse_behaviour || [],
+                        mse_affect: lastVisitProforma.mse_affect || [],
+                        mse_thought: lastVisitProforma.mse_thought || [],
+                        mse_perception: lastVisitProforma.mse_perception || [],
+                        mse_cognitive_function: lastVisitProforma.mse_cognitive_function || [],
+                        informant_present: lastVisitProforma.informant_present ?? true,
+                        nature_of_information: lastVisitProforma.nature_of_information || '',
+                      }}
+                      onUpdate={() => {}}
+                      hideFileUpload={true}
+                    />
                   </div>
                 </div>
               ) : (
@@ -4629,7 +4670,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                     className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
                                   />
                                 </div>
-                                {userRole && isAdmin(userRole) && (
                                 <div>
                                   <label className="text-xs font-medium text-gray-500">Assigned Room</label>
                                   <input
@@ -4639,7 +4679,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                     className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
                                   />
                                 </div>
-                                )}
                               </div>
                             </div>
                           )}
@@ -4875,24 +4914,24 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                                   </div>
                                                 </div>
                                               ) : (
-                                                <PrescriptionView 
-                                                  clinicalProformaId={visit.isFollowUp ? 
-                                                    (visit.minimalProformaId || 
-                                                     patientProformas.find(p => {
-                                                       if (p.record_type === 'followup_visit') return false; // Skip the follow-up visit record itself
-                                                       const proformaDate = toISTDateString(p.visit_date || p.created_at);
-                                                       const followUpDate = toISTDateString(visit.visitDate);
-                                                       return proformaDate === followUpDate && 
-                                                              p.visit_type === 'follow_up' &&
-                                                              p.record_type === 'clinical_proforma' &&
-                                                              (p.treatment_prescribed?.includes('Follow-up visit') || 
-                                                               p.treatment_prescribed?.includes('followup_visits') ||
-                                                               p.treatment_prescribed?.includes('see followup_visits'));
-                                                     })?.id) : visit.proforma?.id
-                                                  }
-                                                  patientId={patient?.id}
+                                              <PrescriptionView 
+                                                clinicalProformaId={visit.isFollowUp ? 
+                                                  (visit.minimalProformaId || 
+                                                   patientProformas.find(p => {
+                                                     if (p.record_type === 'followup_visit') return false; // Skip the follow-up visit record itself
+                                                     const proformaDate = toISTDateString(p.visit_date || p.created_at);
+                                                     const followUpDate = toISTDateString(visit.visitDate);
+                                                     return proformaDate === followUpDate && 
+                                                            p.visit_type === 'follow_up' &&
+                                                            p.record_type === 'clinical_proforma' &&
+                                                            (p.treatment_prescribed?.includes('Follow-up visit') || 
+                                                             p.treatment_prescribed?.includes('followup_visits') ||
+                                                             p.treatment_prescribed?.includes('see followup_visits'));
+                                                   })?.id) : visit.proforma?.id
+                                                }
+                                                patientId={patient?.id}
                                                   visitDate={visit.visitDate}
-                                                />
+                                              />
                                               )}
                                             </div>
                                           )}

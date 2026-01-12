@@ -270,7 +270,7 @@ const FollowUpForm = () => {
               <span className="font-semibold">Note:</span> To add prescriptions for this patient, please use the separate{' '}
               <span className="font-medium">"Prescription"</span> button on the patient card after saving this follow-up visit.
             </p>
-          </div>
+            </div>
 
           {/* Save Button */}
           <div className="flex justify-end gap-3 pt-4">

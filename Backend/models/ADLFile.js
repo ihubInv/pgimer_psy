@@ -1,5 +1,29 @@
 const db = require('../config/database');
 
+// Helper function to sanitize date fields - converts empty strings to null
+const sanitizeDate = (value) => {
+  if (value === '' || value === null || value === undefined) {
+    return null;
+  }
+  return value;
+};
+
+// Helper function to sanitize all date fields in adlData
+const sanitizeDateFields = (data) => {
+  const dateFields = [
+    'file_created_date', 'last_accessed_date', 'family_history_father_death_date',
+    'family_history_mother_death_date', 'sexual_marriage_date', 'personal_birth_date'
+  ];
+  
+  const sanitized = { ...data };
+  dateFields.forEach(field => {
+    if (field in sanitized) {
+      sanitized[field] = sanitizeDate(sanitized[field]);
+    }
+  });
+  return sanitized;
+};
+
 class ADLFile {
   constructor(data) {
     this.id = data.id;
@@ -242,6 +266,9 @@ class ADLFile {
 
   // Static method to create ADL file with transaction support
   static async createWithTransaction(client, adlData) {
+    // Sanitize date fields - convert empty strings to null for PostgreSQL date columns
+    const sanitizedData = sanitizeDateFields(adlData);
+    
     const {
       patient_id, adl_no, created_by, clinical_proforma_id,
       file_status = 'created', file_created_date = new Date(), total_visits = 1,
@@ -303,7 +330,7 @@ class ADLFile {
       development_walking, development_neurotic_traits, development_nail_biting,
       development_bedwetting, development_phobias, development_childhood_illness,
       provisional_diagnosis, treatment_plan, consultant_comments
-    } = adlData;
+    } = sanitizedData;
 
     // Convert arrays to JSONB
     const informantsJson = informants ? JSON.stringify(Array.isArray(informants) ? informants : []) : '[]';
@@ -926,6 +953,9 @@ class ADLFile {
   // Static method to create ADL file (without transaction)
   static async create(adlData) {
     try {
+      // Sanitize date fields - convert empty strings to null for PostgreSQL date columns
+      const sanitizedData = sanitizeDateFields(adlData);
+      
       // Verify that required columns exist in the table
       const columnCheck = await db.query(`
       SELECT column_name 
@@ -943,7 +973,7 @@ class ADLFile {
       }
 
       // Check if an ADL file already exists for this patient_id
-      const patientIdInt = adlData.patient_id ? parseInt(adlData.patient_id, 10) : null;
+      const patientIdInt = sanitizedData.patient_id ? parseInt(sanitizedData.patient_id, 10) : null;
       if (patientIdInt) {
         const existingFiles = await ADLFile.findByPatientId(patientIdInt);
         if (existingFiles && existingFiles.length > 0) {
@@ -953,7 +983,7 @@ class ADLFile {
           
           // Update the existing file with new data
           // Exclude patient_id, created_by, and adl_no from update (keep original values)
-          const updateData = { ...adlData };
+          const updateData = { ...sanitizedData };
           delete updateData.patient_id;
           delete updateData.created_by;
           delete updateData.adl_no;
@@ -1028,7 +1058,7 @@ class ADLFile {
         development_walking, development_neurotic_traits, development_nail_biting,
         development_bedwetting, development_phobias, development_childhood_illness,
         provisional_diagnosis, treatment_plan, consultant_comments
-      } = adlData;
+      } = sanitizedData;
 
       // Ensure integer IDs are properly parsed (patientIdInt already defined above)
       const createdByIdInt = created_by ? parseInt(created_by, 10) : null;

@@ -607,7 +607,19 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
+    
+    // Get patientId from multiple sources for robustness
+    const effectivePatientId = patientId || (patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : null);
+    
+    if (!effectivePatientId && !adlFile) {
+      toast.error('Patient ID is required to create an Out Patient Intake Record');
+      console.error('Missing patientId. patientId:', patientId, 'patientIdFromQuery:', patientIdFromQuery);
+      return;
+    }
+    
     try {
       // Convert array fields to JSON strings for storage
       const prepareDataForSubmission = (data) => {
@@ -628,20 +640,23 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
       };
 
       // If no ADL file exists and we have patientId, create new one
-      if (!adlFile && patientId) {
+      if (!adlFile && effectivePatientId) {
+        // IMPORTANT: Spread formData FIRST, then override patient_id and clinical_proforma_id
+        // to prevent formData.patient_id (empty string) from overwriting our values
         const createData = {
-          patient_id: parseInt(patientId),
-          clinical_proforma_id: clinicalProformaId ? parseInt(clinicalProformaId) : null,
-          ...prepareDataForSubmission(formData)
+          ...prepareDataForSubmission(formData),
+          patient_id: parseInt(effectivePatientId, 10),
+          clinical_proforma_id: clinicalProformaId ? parseInt(clinicalProformaId, 10) : null,
         };
+        console.log('Creating ADL file with data:', { patient_id: createData.patient_id, clinical_proforma_id: createData.clinical_proforma_id });
         await createADLFile(createData).unwrap();
         toast.success('Out Patient Intake Record File created successfully!');
         
         // Handle file uploads for new ADL file
-        if (patientId && selectedFiles && selectedFiles.length > 0) {
+        if (effectivePatientId && selectedFiles && selectedFiles.length > 0) {
           try {
             await createPatientFiles({
-              patient_id: patientId,
+              patient_id: effectivePatientId,
               user_id: currentUser?.id,
               files: selectedFiles
             }).unwrap();
@@ -660,8 +675,8 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
           // The parent component will handle refetching
           return;
         }
-        if (patientId) {
-          navigate(`/patients/${patientId}?tab=adl`);
+        if (effectivePatientId) {
+          navigate(`/patients/${effectivePatientId}?tab=adl`);
         } else {
           navigate('/adl-files');
         }
@@ -3459,7 +3474,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
               </div>
               <div>
                 <h2 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                  {readOnly ? 'View Out Patient Intake Record' : 'Edit Out Patient Intake Record'}
+                  {readOnly ? 'View Out Patient Intake Record' : (isNewRoute || (!adlFile && !isUpdateMode)) ? 'Create Out Patient Intake Record' : 'Edit Out Patient Intake Record'}
                 </h2>
                 {patient && (
                   <p className="text-sm text-gray-600 mt-1">
@@ -5588,9 +5603,10 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                 Cancel
               </Button>
               <Button
-                type="submit"
+                type="button"
                 variant="primary"
-                disabled={isUpdating || isCreating || isUploadingFiles}
+                disabled={isUpdating || isCreating || isUploadingFiles || readOnly}
+                onClick={handleSubmit}
                     className="px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center gap-2"
               >
                 <FiSave className="w-4 h-4" />

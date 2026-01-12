@@ -196,7 +196,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         room_no: getValue(propInitialData.room_no),
         assigned_doctor: getValue(propInitialData.assigned_doctor),
         informant_present: propInitialData.informant_present ?? true,
-        informant_who: getValue(propInitialData.informant_who),
         nature_of_information: normalizeArrayField(propInitialData.nature_of_information),
         onset_duration: getValue(propInitialData.onset_duration),
         course: getValue(propInitialData.course),
@@ -270,7 +269,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         room_no: '',
         assigned_doctor: '',
         informant_present: true,
-        informant_who: '',
         nature_of_information: [],
         onset_duration: '',
         course: '',
@@ -2263,6 +2261,27 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   return (
     <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-teal-50">
       <div className="w-full px-6 py-8 space-y-8">
+        {/* Back Button - Always show in standalone mode */}
+        <div className="mb-4">
+          <Button
+            type="button"
+            onClick={() => {
+              if (returnPath) {
+                navigate(returnPath);
+              } else if (returnTab) {
+                navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
+              } else if (patientIdFromUrl) {
+                navigate(`/patients/${patientIdFromUrl}`);
+              } else {
+                navigate(-1);
+              }
+            }}
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:text-gray-900 font-medium shadow-sm transition-all duration-200 px-4 py-2 rounded-lg"
+          >
+            <FiArrowLeft className="w-4 h-4" />
+            Back to {returnTab ? "Today's Patients" : patientIdFromUrl ? "Patient Details" : "Previous Page"}
+          </Button>
+        </div>
         {formContent}
       </div>
     </div>

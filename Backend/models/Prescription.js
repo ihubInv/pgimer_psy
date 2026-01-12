@@ -85,10 +85,10 @@ class Prescription {
       // Delete existing prescription for this clinical_proforma_id (if provided)
       // If no clinical_proforma_id, we don't delete existing - allow multiple prescriptions per patient
       if (clinical_proforma_id) {
-        await db.query(
-          'DELETE FROM prescriptions WHERE clinical_proforma_id = $1',
-          [clinical_proforma_id]
-        );
+      await db.query(
+        'DELETE FROM prescriptions WHERE clinical_proforma_id = $1',
+        [clinical_proforma_id]
+      );
       }
 
       // Insert new prescription with JSONB

@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   FiSearch, FiEye, FiDownload, FiUpload, FiArchive, 
-  FiActivity, FiFileText, FiUsers, FiShield, FiClock, FiTrendingUp,
-  FiMoreVertical,  FiCalendar, FiCheckCircle, FiEdit
+  FiFileText, FiUsers, FiShield, FiClock, FiTrendingUp,
+  FiMoreVertical, FiCalendar, FiCheckCircle, FiEdit
 } from 'react-icons/fi';
 import {
   useGetAllADLFilesQuery,
@@ -21,7 +21,6 @@ const ADLFilesPage = () => {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [showOnlyComplexCases, setShowOnlyComplexCases] = useState(true); // Default: only show complex cases
   const limit = 10;
 
   // Reset page to 1 when search changes
@@ -29,11 +28,11 @@ const ADLFilesPage = () => {
     setPage(1);
   }, [search]);
 
-  // Only fetch complex cases by default (where clinical_proforma_id exists)
+  // Fetch all ADL files (complex case filter removed)
   const { data, isLoading, isFetching, refetch, error } = useGetAllADLFilesQuery({ 
     page, 
     limit,
-    include_all: !showOnlyComplexCases // If showOnlyComplexCases is true, don't include all
+    include_all: true // Always include all ADL files
   }, {
     pollingInterval: 60000, // Increased from 30s to 60s to reduce API calls
     refetchOnFocus: false, // Disable auto-refetch on focus
@@ -70,12 +69,6 @@ const ADLFilesPage = () => {
           </div>
           <div>
             <span className="font-mono font-semibold text-gray-900">{row.adl_no}</span>
-            {/* {row.clinical_proforma_id && (
-              <Badge className="ml-2 bg-gradient-to-r from-red-100 to-rose-100 text-red-800 border-red-200 text-xs">
-                <FiActivity className="w-3 h-3 mr-1" />
-                Complex Case
-              </Badge>
-            )} */}
           </div>
         </div>
       ),
@@ -88,17 +81,6 @@ const ADLFilesPage = () => {
         </div>
       ),
       accessor: 'patient_name',
-      // render: (row) => (
-      //   <div>
-      //     <p className="font-medium text-gray-900">{row.patient_name || 'N/A'}</p>
-      //     {row.clinical_proforma_id && (
-      //       <p className="text-xs text-primary-600 mt-0.5 flex items-center gap-1">
-      //         <FiActivity className="w-3 h-3" />
-      //         Complex Case - Full Details Available
-      //       </p>
-      //     )}
-      //   </div>
-      // ),
     },
     {
       header: (
@@ -251,22 +233,13 @@ const ADLFilesPage = () => {
                   <FiSearch className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                 </div>
                 <Input
-                  placeholder={showOnlyComplexCases 
-                    ? "Search complex case files by ADL number or patient name..."
-                    : "Search by ADL number or patient name..."
-                  }
+                  placeholder="Search by ADL number or patient name..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-12 h-12 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-200 shadow-sm hover:shadow-md"
                 />
               </div>
             </div>
-            {showOnlyComplexCases && (
-              <div className="mt-3 flex items-center gap-2 text-sm text-primary-600 bg-primary-50 rounded-lg p-3 border border-primary-200">
-                <FiActivity className="w-4 h-4 flex-shrink-0" />
-                <span>Showing only complex cases with comprehensive patient details stored in ADL schema</span>
-              </div>
-            )}
           </div>
 
           {(isLoading || isFetching) ? (
@@ -286,17 +259,12 @@ const ADLFilesPage = () => {
                 <FiFileText className="w-12 h-12 text-gray-400" />
               </div>
               <p className="text-xl font-semibold text-gray-700 mb-2">
-                {showOnlyComplexCases 
-                  ? 'No Complex Case ADL Files Found' 
-                  : 'No ADL Files Found'
-                }
+                No Out Patient Intake Records Found
               </p>
               <p className="text-gray-500 text-center max-w-md">
                 {search 
                   ? `No files match your search "${search}". Try a different search term.`
-                  : showOnlyComplexCases
-                    ? 'ADL files will appear here when complex cases are registered in clinical proformas.'
-                    : 'No ADL files have been created yet.'
+                  : 'No Out Patient Intake Records have been created yet.'
                 }
               </p>
             </div>

@@ -22,12 +22,12 @@ const createPrescription = async (req, res) => {
     // clinical_proforma_id is optional - prescriptions can be created without it
     // If provided, verify it exists
     if (data.clinical_proforma_id) {
-      const proforma = await ClinicalProforma.findById(data.clinical_proforma_id);
-      if (!proforma) {
-        return res.status(404).json({
-          success: false,
-          message: "Clinical proforma not found"
-        });
+    const proforma = await ClinicalProforma.findById(data.clinical_proforma_id);
+    if (!proforma) {
+      return res.status(404).json({
+        success: false,
+        message: "Clinical proforma not found"
+      });
       }
     }
 
