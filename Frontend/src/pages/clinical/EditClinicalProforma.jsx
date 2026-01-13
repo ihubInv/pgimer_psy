@@ -520,9 +520,9 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
       console.error('Error loading expanded cards state:', e);
     }
     return {
-      clinicalProforma: true, // Default to expanded
-      adlfile: true,
-      prescription: true,
+    clinicalProforma: true, // Default to expanded
+    adlfile: true,
+    prescription: true,
     };
   };
 
@@ -1322,7 +1322,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
   // Always show form, even if proforma not found - allow editing/creating
   // initialFormData will always have default values now
-  
+
   // Default options for checkbox groups - only used as fallback if database is completely empty
   // These should be seeded into the database, not used directly
   const defaultOptions = {
@@ -1927,11 +1927,11 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                   
                   <CheckboxGroup 
                     label="Nature of information" 
-                    name="nature_of_information" 
+                          name="nature_of_information"
                     value={formData.nature_of_information || []} 
-                    onChange={handleChange} 
+                          onChange={handleChange}
                     options={clinicalOptions.nature_of_information || ['Reliable', 'Unreliable', 'Adequate', 'Inadequate']} 
-                  />
+                        />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-3">
                       <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Onset Duration</h2>
@@ -2169,16 +2169,16 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
 
                   {/* File Upload Component */}
                   {!hideFileUpload && (
-                    <div className="mb-6">
-                      <FileUpload
-                        files={selectedFiles}
-                        onFilesChange={setSelectedFiles}
-                        maxFiles={20}
-                        maxSizeMB={10}
-                        patientId={patientId}
-                        disabled={!patientId}
-                      />
-                    </div>
+                  <div className="mb-6">
+                    <FileUpload
+                      files={selectedFiles}
+                      onFilesChange={setSelectedFiles}
+                      maxFiles={20}
+                      maxSizeMB={10}
+                      patientId={patientId}
+                      disabled={!patientId}
+                    />
+                  </div>
                   )}
 
                   {/* Existing Files Preview */}

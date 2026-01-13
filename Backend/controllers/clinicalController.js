@@ -145,7 +145,7 @@ class ClinicalController {
           const dateFields = [
             'family_history_father_death_date', 'family_history_mother_death_date',
             'past_history_psychiatric_dates', 'history_treatment_dates',
-            'personal_birth_date'
+            'personal_birth_date', 'sexual_marriage_date'
           ];
           complexCaseFields.forEach(field => {
         if (data.hasOwnProperty(field) && data[field] !== undefined && data[field] !== null) {
@@ -829,7 +829,7 @@ class ClinicalController {
       const dateFields = [
         'family_history_father_death_date', 'family_history_mother_death_date',
         'past_history_psychiatric_dates', 'history_treatment_dates',
-        'personal_birth_date'
+        'personal_birth_date', 'sexual_marriage_date'
       ];
       complexCaseFields.forEach(field => {
         if (proformaUpdateData[field] !== undefined) {

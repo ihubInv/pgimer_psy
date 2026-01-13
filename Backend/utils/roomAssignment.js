@@ -140,41 +140,30 @@ async function getTodayRoomDistribution() {
     
     console.log(`[getTodayRoomDistribution] Active rooms from rooms table: ${activeRooms.join(', ')}`);
     
-    // Count patients that are either:
-    // 1. Created today (new patients) - use assigned_room from patient record
-    // 2. Have a visit today (existing patients) - use room_no from visit record OR assigned_room from patient record
-    // Use COALESCE to prefer visit.room_no (most current) over patient.assigned_room
+    // Count ONLY patients created/registered today (not patients with visits today)
+    // This matches the patient list filtering logic - only show patients registered today by MWO
     // Use simple DATE() function which respects database timezone settings
     // Cast room values to text for consistent comparison (handles both numeric and text room values)
     // IMPORTANT: Only count rooms that exist in the rooms table (active rooms)
     const result = await db.query(
       `SELECT 
-         TRIM(COALESCE(pv.room_no::text, rp.assigned_room::text, '')) as room,
+         TRIM(COALESCE(rp.assigned_room::text, '')) as room,
          COUNT(DISTINCT rp.id) as patient_count
        FROM registered_patient rp
-       LEFT JOIN patient_visits pv ON rp.id = pv.patient_id AND DATE(pv.visit_date) = $1
-       WHERE (
-         -- New patients created today with assigned_room
-         (DATE(rp.created_at) = $1 
-          AND rp.assigned_room IS NOT NULL 
-          AND TRIM(COALESCE(rp.assigned_room::text, '')) != '')
-         OR
-         -- Existing patients with visits today (use visit room_no or patient assigned_room)
-         (pv.id IS NOT NULL 
-          AND (TRIM(COALESCE(pv.room_no::text, '')) != '' 
-               OR TRIM(COALESCE(rp.assigned_room::text, '')) != ''))
-       )
+       WHERE DATE(rp.created_at) = $1 
+         AND rp.assigned_room IS NOT NULL 
+         AND TRIM(COALESCE(rp.assigned_room::text, '')) != ''
          -- Only include rooms that exist in the rooms table (active rooms)
          AND (
-           TRIM(COALESCE(pv.room_no::text, rp.assigned_room::text, '')) = ANY($2::text[])
+           TRIM(COALESCE(rp.assigned_room::text, '')) = ANY($2::text[])
            OR EXISTS (
              SELECT 1 FROM rooms r 
              WHERE r.is_active = true 
-               AND r.room_number = TRIM(COALESCE(pv.room_no::text, rp.assigned_room::text, ''))
+               AND r.room_number = TRIM(COALESCE(rp.assigned_room::text, ''))
            )
          )
-       GROUP BY TRIM(COALESCE(pv.room_no::text, rp.assigned_room::text, ''))
-       HAVING TRIM(COALESCE(pv.room_no::text, rp.assigned_room::text, '')) != ''
+       GROUP BY TRIM(COALESCE(rp.assigned_room::text, ''))
+       HAVING TRIM(COALESCE(rp.assigned_room::text, '')) != ''
        ORDER BY room`,
       [today, activeRooms]
     );
@@ -232,21 +221,8 @@ async function getTodayRoomDistribution() {
       console.error('[getTodayRoomDistribution] Debug query error (non-fatal):', debugError.message);
     }
     
-    try {
-      const existingPatientsResult = await db.query(
-        `SELECT rp.id, rp.name, pv.room_no, rp.assigned_room, DATE(rp.created_at) as created_date
-         FROM registered_patient rp
-         INNER JOIN patient_visits pv ON rp.id = pv.patient_id
-         WHERE DATE(pv.visit_date) = $1
-           AND (pv.room_no IS NOT NULL AND TRIM(pv.room_no) != '' OR rp.assigned_room IS NOT NULL AND TRIM(rp.assigned_room) != '')
-           AND DATE(rp.created_at) != $1
-         LIMIT 5`,
-        [today]
-      );
-      console.log(`[getTodayRoomDistribution] Existing patients with visits today:`, existingPatientsResult.rows.length);
-    } catch (debugError) {
-      console.error('[getTodayRoomDistribution] Debug query error (non-fatal):', debugError.message);
-    }
+    // Note: We no longer count existing patients with visits today - only patients registered today
+    // This matches the patient list filtering logic
     
     return distribution;
   } catch (error) {
@@ -265,20 +241,18 @@ async function getTodayRoomDistribution() {
       );
       const activeRoomsFallback = activeRoomsResult.rows.map(row => row.room_number).filter(Boolean);
       
+      // Fallback: Only count patients created today (matching main query logic)
       const fallbackResult = await db.query(
         `SELECT 
-           TRIM(COALESCE(pv.room_no::text, rp.assigned_room::text, '')) as room,
+           TRIM(COALESCE(rp.assigned_room::text, '')) as room,
            COUNT(DISTINCT rp.id) as patient_count
          FROM registered_patient rp
-         LEFT JOIN patient_visits pv ON rp.id = pv.patient_id AND DATE(pv.visit_date) = $1
-         WHERE (
-           (DATE(rp.created_at) = $1 AND rp.assigned_room IS NOT NULL AND TRIM(rp.assigned_room) != '')
-           OR
-           (pv.id IS NOT NULL AND (pv.room_no IS NOT NULL AND TRIM(pv.room_no) != '' OR rp.assigned_room IS NOT NULL AND TRIM(rp.assigned_room) != ''))
-         )
-           AND TRIM(COALESCE(pv.room_no::text, rp.assigned_room::text, '')) = ANY($2::text[])
-         GROUP BY TRIM(COALESCE(pv.room_no::text, rp.assigned_room::text, ''))
-         HAVING TRIM(COALESCE(pv.room_no::text, rp.assigned_room::text, '')) != ''
+         WHERE DATE(rp.created_at) = $1 
+           AND rp.assigned_room IS NOT NULL 
+           AND TRIM(COALESCE(rp.assigned_room::text, '')) != ''
+           AND TRIM(COALESCE(rp.assigned_room::text, '')) = ANY($2::text[])
+         GROUP BY TRIM(COALESCE(rp.assigned_room::text, ''))
+         HAVING TRIM(COALESCE(rp.assigned_room::text, '')) != ''
          ORDER BY room`,
         [today, activeRoomsFallback.length > 0 ? activeRoomsFallback : ['']]
       );

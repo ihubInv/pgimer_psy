@@ -34,12 +34,13 @@ const Textarea = memo(({
         disabled={disabled}
         required={required}
         className={`
-          w-full px-3 py-2 border rounded-lg shadow-sm
-          placeholder-gray-400
-          focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-          disabled:bg-gray-100 disabled:cursor-not-allowed
+          w-full px-3 py-2.5 bg-white border-2 border-gray-300 rounded-lg shadow-sm
+          placeholder-gray-400 text-gray-900
+          focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 focus:bg-white
+          disabled:bg-gray-100 disabled:cursor-not-allowed disabled:border-gray-200
+          transition-all duration-200 hover:border-primary-400
           resize-none
-          ${error ? 'border-red-500' : 'border-gray-300'}
+          ${error ? 'border-red-500 focus:ring-red-500/50 focus:border-red-500' : 'border-gray-300'}
           ${className}
         `}
         {...props}

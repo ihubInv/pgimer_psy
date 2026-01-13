@@ -775,7 +775,7 @@ class Patient {
         where.push(`p.assigned_room = $${idx++}`);
         params.push(filters.assigned_room);
       }
-      
+
       // Filter by registration date (for Today's Patients view)
       // When date filter is provided, show ONLY patients registered/created on that date
       // This ensures the "Today's Patients" tab shows only patients registered today by the MWO

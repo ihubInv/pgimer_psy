@@ -98,7 +98,7 @@ class ADLController {
 
   static async createADLFile(req, res) {
     try {
-      const adlData = req.body;
+      const adlData = { ...req.body };
       const createdBy = req.user.id; // Get user ID from authenticated request
 
       // Validate required fields
@@ -137,17 +137,88 @@ class ADLController {
       const createdByIdInt = createdBy ? parseInt(createdBy, 10) : null;
       const clinicalProformaIdInt = adlData.clinical_proforma_id ? parseInt(adlData.clinical_proforma_id, 10) : null;
 
+      // GLOBAL SANITIZATION: Convert all empty strings ("") to null
+      Object.keys(adlData).forEach((key) => {
+        if (adlData[key] === '') {
+          adlData[key] = null;
+        }
+      });
+
+      // JSONB fields that must always be arrays (never plain strings)
+      const jsonbFields = [
+        'informants',
+        'complaints_patient',
+        'complaints_informant',
+        'family_history_siblings',
+        'premorbid_personality_traits',
+        'occupation_jobs',
+        'sexual_children',
+        'living_residents',
+        'living_inlaws',
+      ];
+
+      // Safe JSON parse helper – ensures we always end up with an array
+      const safeJsonParseArray = (value) => {
+        if (!value) return [];
+        if (Array.isArray(value)) return value;
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (!trimmed) return [];
+          try {
+            const parsed = JSON.parse(trimmed);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        }
+        // Any non-array object → wrap in array
+        if (typeof value === 'object') {
+          return [value];
+        }
+        return [];
+      };
+
+      // Normalize all JSONB fields on the incoming payload
+      jsonbFields.forEach((field) => {
+        if (field in adlData) {
+          adlData[field] = safeJsonParseArray(adlData[field]);
+        }
+      });
+
+      // Helper function to sanitize date fields - converts empty strings to null
+      const sanitizeDate = (value) => {
+        if (value === '' || value === null || value === undefined) {
+          return null;
+        }
+        return value;
+      };
+
+      // List of all DATE type columns in the adl_files table
+      const dateFields = [
+        'file_created_date', 'last_accessed_date', 'history_treatment_dates',
+        'past_history_psychiatric_dates', 'family_history_father_death_date',
+        'family_history_mother_death_date', 'sexual_marriage_date', 'personal_birth_date'
+      ];
+
+      // Sanitize all date fields in the request body
+      const sanitizedData = { ...adlData };
+      dateFields.forEach(field => {
+        if (field in sanitizedData) {
+          sanitizedData[field] = sanitizeDate(sanitizedData[field]);
+        }
+      });
+
       // Prepare ADL data with defaults
       const createData = {
-        ...adlData,
+        ...sanitizedData,
         patient_id: patientIdInt,
         adl_no,
         created_by: createdByIdInt,
         clinical_proforma_id: clinicalProformaIdInt,
-        file_status: adlData.file_status || 'created',
-        file_created_date: adlData.file_created_date || new Date(),
-        total_visits: adlData.total_visits || 1,
-        is_active: adlData.is_active !== undefined ? adlData.is_active : true
+        file_status: sanitizedData.file_status || 'created',
+        file_created_date: sanitizedData.file_created_date || new Date(),
+        total_visits: sanitizedData.total_visits || 1,
+        is_active: sanitizedData.is_active !== undefined ? sanitizedData.is_active : true
       };
 
       // Create the ADL file

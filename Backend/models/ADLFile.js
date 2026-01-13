@@ -10,9 +10,16 @@ const sanitizeDate = (value) => {
 
 // Helper function to sanitize all date fields in adlData
 const sanitizeDateFields = (data) => {
+  // All DATE type columns in the adl_files table
   const dateFields = [
-    'file_created_date', 'last_accessed_date', 'family_history_father_death_date',
-    'family_history_mother_death_date', 'sexual_marriage_date', 'personal_birth_date'
+    'file_created_date', 
+    'last_accessed_date', 
+    'history_treatment_dates',
+    'past_history_psychiatric_dates',
+    'family_history_father_death_date',
+    'family_history_mother_death_date', 
+    'sexual_marriage_date', 
+    'personal_birth_date'
   ];
   
   const sanitized = { ...data };
@@ -22,6 +29,89 @@ const sanitizeDateFields = (data) => {
     }
   });
   return sanitized;
+};
+
+// Helper function to sanitize integer fields - converts empty strings to null
+const sanitizeIntegerFields = (data) => {
+  // All INTEGER type columns in the adl_files table
+  const integerFields = [
+    'family_history_father_age',
+    'family_history_father_death_age',
+    'family_history_mother_age',
+    'family_history_mother_death_age',
+    'sexual_spouse_age'
+  ];
+  
+  const sanitized = { ...data };
+  integerFields.forEach(field => {
+    if (field in sanitized) {
+      const value = sanitized[field];
+      // Convert empty string, null, undefined, or invalid values to null
+      if (value === '' || value === null || value === undefined) {
+        sanitized[field] = null;
+      } else {
+        // Try to parse as integer, if invalid, set to null
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed)) {
+          sanitized[field] = null;
+        } else {
+          sanitized[field] = parsed;
+        }
+      }
+    }
+  });
+  return sanitized;
+};
+
+// Helper: normalize JSON/JSONB array fields (ensures valid JSON arrays)
+// - Empty string/null/undefined -> []
+// - String that parses to an array -> parsed array
+// - String that fails to parse -> []
+// - Non-array objects -> []
+// - Handles stringified JSON, arrays, objects, null, undefined, empty strings
+const normalizeJsonArray = (value) => {
+  // Handle null, undefined, empty string
+  if (value === '' || value === null || value === undefined) {
+    return [];
+  }
+  
+  // Already an array - return as is
+  if (Array.isArray(value)) {
+    return value;
+  }
+  
+  // String input - try to parse as JSON
+  if (typeof value === 'string') {
+    // Trim whitespace
+    const trimmed = value.trim();
+    if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      // Ensure result is an array
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+      // If parsed to an object, wrap in array (shouldn't happen but handle gracefully)
+      if (typeof parsed === 'object' && parsed !== null) {
+        return [parsed];
+      }
+      return [];
+    } catch (e) {
+      // Invalid JSON string - return empty array
+      console.warn(`[normalizeJsonArray] Failed to parse JSON string: ${trimmed.substring(0, 100)}`, e.message);
+      return [];
+    }
+  }
+  
+  // Object input - wrap in array (shouldn't happen but handle gracefully)
+  if (typeof value === 'object' && value !== null) {
+    return [value];
+  }
+  
+  // Any other type (number, boolean, etc.) - return empty array
+  return [];
 };
 
 class ADLFile {
@@ -267,7 +357,22 @@ class ADLFile {
   // Static method to create ADL file with transaction support
   static async createWithTransaction(client, adlData) {
     // Sanitize date fields - convert empty strings to null for PostgreSQL date columns
-    const sanitizedData = sanitizeDateFields(adlData);
+    let sanitizedData = sanitizeDateFields(adlData);
+    // Sanitize integer fields - convert empty strings to null for PostgreSQL integer columns
+    sanitizedData = sanitizeIntegerFields(sanitizedData);
+    // Normalize JSONB array fields to avoid invalid JSON
+    sanitizedData = {
+      ...sanitizedData,
+      informants: normalizeJsonArray(sanitizedData.informants),
+      complaints_patient: normalizeJsonArray(sanitizedData.complaints_patient),
+      complaints_informant: normalizeJsonArray(sanitizedData.complaints_informant),
+      family_history_siblings: normalizeJsonArray(sanitizedData.family_history_siblings),
+      premorbid_personality_traits: normalizeJsonArray(sanitizedData.premorbid_personality_traits),
+      occupation_jobs: normalizeJsonArray(sanitizedData.occupation_jobs),
+      sexual_children: normalizeJsonArray(sanitizedData.sexual_children),
+      living_residents: normalizeJsonArray(sanitizedData.living_residents),
+      living_inlaws: normalizeJsonArray(sanitizedData.living_inlaws),
+    };
     
     const {
       patient_id, adl_no, created_by, clinical_proforma_id,
@@ -332,16 +437,30 @@ class ADLFile {
       provisional_diagnosis, treatment_plan, consultant_comments
     } = sanitizedData;
 
-    // Convert arrays to JSONB
-    const informantsJson = informants ? JSON.stringify(Array.isArray(informants) ? informants : []) : '[]';
-    const complaintsPatientJson = complaints_patient ? JSON.stringify(Array.isArray(complaints_patient) ? complaints_patient : []) : '[]';
-    const complaintsInformantJson = complaints_informant ? JSON.stringify(Array.isArray(complaints_informant) ? complaints_informant : []) : '[]';
-    const familyHistorySiblingsJson = family_history_siblings ? JSON.stringify(Array.isArray(family_history_siblings) ? family_history_siblings : []) : '[]';
-    const premorbidPersonalityTraitsJson = premorbid_personality_traits ? JSON.stringify(Array.isArray(premorbid_personality_traits) ? premorbid_personality_traits : []) : '[]';
-    const occupationJobsJson = occupation_jobs ? JSON.stringify(Array.isArray(occupation_jobs) ? occupation_jobs : []) : '[]';
-    const sexualChildrenJson = sexual_children ? JSON.stringify(Array.isArray(sexual_children) ? sexual_children : []) : '[]';
-    const livingResidentsJson = living_residents ? JSON.stringify(Array.isArray(living_residents) ? living_residents : []) : '[]';
-    const livingInlawsJson = living_inlaws ? JSON.stringify(Array.isArray(living_inlaws) ? living_inlaws : []) : '[]';
+      // Helper function to safely stringify JSON arrays for database insertion
+      const safeJsonStringify = (value) => {
+        try {
+          const normalized = normalizeJsonArray(value);
+          const jsonString = JSON.stringify(normalized);
+          // Validate the JSON string is valid by parsing it back
+          JSON.parse(jsonString);
+          return jsonString;
+        } catch (e) {
+          console.warn(`[safeJsonStringify] Failed to stringify value, using empty array:`, e.message);
+          return '[]';
+        }
+      };
+
+      // Convert arrays to JSONB - ensure valid JSON strings
+      const informantsJson = safeJsonStringify(informants);
+      const complaintsPatientJson = safeJsonStringify(complaints_patient);
+      const complaintsInformantJson = safeJsonStringify(complaints_informant);
+      const familyHistorySiblingsJson = safeJsonStringify(family_history_siblings);
+      const premorbidPersonalityTraitsJson = safeJsonStringify(premorbid_personality_traits);
+      const occupationJobsJson = safeJsonStringify(occupation_jobs);
+      const sexualChildrenJson = safeJsonStringify(sexual_children);
+      const livingResidentsJson = safeJsonStringify(living_residents);
+      const livingInlawsJson = safeJsonStringify(living_inlaws);
 
     // Prepare ADL data for saving
 
@@ -954,7 +1073,22 @@ class ADLFile {
   static async create(adlData) {
     try {
       // Sanitize date fields - convert empty strings to null for PostgreSQL date columns
-      const sanitizedData = sanitizeDateFields(adlData);
+      let sanitizedData = sanitizeDateFields(adlData);
+      // Sanitize integer fields - convert empty strings to null for PostgreSQL integer columns
+      sanitizedData = sanitizeIntegerFields(sanitizedData);
+      // Normalize JSONB array fields to avoid invalid JSON
+      sanitizedData = {
+        ...sanitizedData,
+        informants: normalizeJsonArray(sanitizedData.informants),
+        complaints_patient: normalizeJsonArray(sanitizedData.complaints_patient),
+        complaints_informant: normalizeJsonArray(sanitizedData.complaints_informant),
+        family_history_siblings: normalizeJsonArray(sanitizedData.family_history_siblings),
+        premorbid_personality_traits: normalizeJsonArray(sanitizedData.premorbid_personality_traits),
+        occupation_jobs: normalizeJsonArray(sanitizedData.occupation_jobs),
+        sexual_children: normalizeJsonArray(sanitizedData.sexual_children),
+        living_residents: normalizeJsonArray(sanitizedData.living_residents),
+        living_inlaws: normalizeJsonArray(sanitizedData.living_inlaws),
+      };
       
       // Verify that required columns exist in the table
       const columnCheck = await db.query(`
@@ -1064,16 +1198,30 @@ class ADLFile {
       const createdByIdInt = created_by ? parseInt(created_by, 10) : null;
       const clinicalProformaIdInt = clinical_proforma_id ? parseInt(clinical_proforma_id, 10) : null;
 
-      // Convert arrays to JSONB
-      const informantsJson = informants ? JSON.stringify(Array.isArray(informants) ? informants : []) : '[]';
-      const complaintsPatientJson = complaints_patient ? JSON.stringify(Array.isArray(complaints_patient) ? complaints_patient : []) : '[]';
-      const complaintsInformantJson = complaints_informant ? JSON.stringify(Array.isArray(complaints_informant) ? complaints_informant : []) : '[]';
-      const familyHistorySiblingsJson = family_history_siblings ? JSON.stringify(Array.isArray(family_history_siblings) ? family_history_siblings : []) : '[]';
-      const premorbidPersonalityTraitsJson = premorbid_personality_traits ? JSON.stringify(Array.isArray(premorbid_personality_traits) ? premorbid_personality_traits : []) : '[]';
-      const occupationJobsJson = occupation_jobs ? JSON.stringify(Array.isArray(occupation_jobs) ? occupation_jobs : []) : '[]';
-      const sexualChildrenJson = sexual_children ? JSON.stringify(Array.isArray(sexual_children) ? sexual_children : []) : '[]';
-      const livingResidentsJson = living_residents ? JSON.stringify(Array.isArray(living_residents) ? living_residents : []) : '[]';
-      const livingInlawsJson = living_inlaws ? JSON.stringify(Array.isArray(living_inlaws) ? living_inlaws : []) : '[]';
+      // Helper function to safely stringify JSON arrays for database insertion
+      const safeJsonStringify = (value) => {
+        try {
+          const normalized = normalizeJsonArray(value);
+          const jsonString = JSON.stringify(normalized);
+          // Validate the JSON string is valid by parsing it back
+          JSON.parse(jsonString);
+          return jsonString;
+        } catch (e) {
+          console.warn(`[safeJsonStringify] Failed to stringify value, using empty array:`, e.message);
+          return '[]';
+        }
+      };
+
+      // Convert arrays to JSONB - ensure valid JSON strings
+      const informantsJson = safeJsonStringify(informants);
+      const complaintsPatientJson = safeJsonStringify(complaints_patient);
+      const complaintsInformantJson = safeJsonStringify(complaints_informant);
+      const familyHistorySiblingsJson = safeJsonStringify(family_history_siblings);
+      const premorbidPersonalityTraitsJson = safeJsonStringify(premorbid_personality_traits);
+      const occupationJobsJson = safeJsonStringify(occupation_jobs);
+      const sexualChildrenJson = safeJsonStringify(sexual_children);
+      const livingResidentsJson = safeJsonStringify(living_residents);
+      const livingInlawsJson = safeJsonStringify(living_inlaws);
 
       const result = await db.query(
         `INSERT INTO adl_files (
@@ -1665,6 +1813,15 @@ class ADLFile {
         'sexual_marriage_date', 'personal_birth_date', 'last_accessed_date'
       ];
 
+      // Integer fields that need sanitization (empty strings should become null)
+      const integerFields = [
+        'family_history_father_age',
+        'family_history_father_death_age',
+        'family_history_mother_age',
+        'family_history_mother_death_age',
+        'sexual_spouse_age'
+      ];
+
       // Helper function to sanitize date fields
       const sanitizeDateField = (value) => {
         if (value === null || value === undefined || value === '') {
@@ -1686,27 +1843,53 @@ class ADLFile {
         return value;
       };
 
-      for (const [key, value] of Object.entries(updateData)) {
+      // Helper function to sanitize integer fields
+      const sanitizeIntegerField = (value) => {
+        if (value === '' || value === null || value === undefined) {
+          return null;
+        }
+        // Try to parse as integer, if invalid, return null
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed)) {
+          return null;
+        }
+        return parsed;
+      };
+
+      // Helper function to safely stringify JSON arrays for database insertion
+      const safeJsonStringify = (value) => {
+        try {
+          const normalized = normalizeJsonArray(value);
+          const jsonString = JSON.stringify(normalized);
+          // Validate the JSON string is valid by parsing it back
+          JSON.parse(jsonString);
+          return jsonString;
+        } catch (e) {
+          console.warn(`[safeJsonStringify] Failed to stringify value, using empty array:`, e.message);
+          return '[]';
+        }
+      };
+
+      // Normalize JSONB array fields up-front to avoid invalid JSON strings
+      const normalizedUpdateData = {
+        ...updateData,
+        informants: normalizeJsonArray(updateData.informants),
+        complaints_patient: normalizeJsonArray(updateData.complaints_patient),
+        complaints_informant: normalizeJsonArray(updateData.complaints_informant),
+        family_history_siblings: normalizeJsonArray(updateData.family_history_siblings),
+        premorbid_personality_traits: normalizeJsonArray(updateData.premorbid_personality_traits),
+        occupation_jobs: normalizeJsonArray(updateData.occupation_jobs),
+        sexual_children: normalizeJsonArray(updateData.sexual_children),
+        living_residents: normalizeJsonArray(updateData.living_residents),
+        living_inlaws: normalizeJsonArray(updateData.living_inlaws),
+      };
+
+      for (const [key, value] of Object.entries(normalizedUpdateData)) {
         if (allowedFields.includes(key) && value !== undefined) {
           paramCount++;
           if (jsonbFields.includes(key)) {
-            // Handle JSONB fields - convert arrays/objects to JSON string
-            let jsonValue;
-            if (value === null || value === '') {
-              jsonValue = '[]'; // Default to empty array for JSONB fields
-            } else if (typeof value === 'string') {
-              // If it's already a string, use it (might be JSON string)
-              try {
-                // Validate it's valid JSON
-                JSON.parse(value);
-                jsonValue = value;
-              } catch {
-                // If not valid JSON, stringify it
-                jsonValue = JSON.stringify(value);
-              }
-            } else {
-              jsonValue = JSON.stringify(value);
-            }
+            // Handle JSONB fields - use safe JSON stringify to ensure valid JSON
+            const jsonValue = safeJsonStringify(value);
             updates.push(`${key} = $${paramCount}::jsonb`);
             values.push(jsonValue);
           } else if (dateFields.includes(key)) {
@@ -1714,8 +1897,13 @@ class ADLFile {
             const sanitizedDate = sanitizeDateField(value);
             updates.push(`${key} = $${paramCount}`);
             values.push(sanitizedDate);
+          } else if (integerFields.includes(key)) {
+            // Sanitize integer fields - convert empty strings to null
+            const sanitizedInteger = sanitizeIntegerField(value);
+            updates.push(`${key} = $${paramCount}`);
+            values.push(sanitizedInteger);
           } else {
-            // For non-JSONB, non-date fields, allow null and empty strings
+            // For non-JSONB, non-date, non-integer fields, allow null and empty strings
             let finalValue = value === '' ? null : value;
             updates.push(`${key} = $${paramCount}`);
             values.push(finalValue);
