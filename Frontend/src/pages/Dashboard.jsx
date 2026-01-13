@@ -239,10 +239,16 @@ const Dashboard = () => {
     }
   );
 
+  // Helper: get today's date in IST for backend filtering
+  const getTodayIST = () => {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  };
+
   // Get all assigned patients for Faculty/Resident dashboard
   // Note: Backend caps limit at 100, so we get up to 100 assigned patients
+  // Pass date parameter to filter only patients registered today
   const { data: allAssignedPatients } = useGetAllPatientsQuery(
-    { page: 1, limit: 100 }, // Backend caps at 100
+    { page: 1, limit: 100, date: getTodayIST() }, // Backend caps at 100, filter by today's date
     { 
       skip: !isAuthenticated || !isJrSrUser,
       refetchOnMountOrArgChange: true 
@@ -299,10 +305,20 @@ const Dashboard = () => {
   });
 
   // Get all patients for Admin to calculate state distribution and weekly patients
+  // Note: For analytics, Admin may need all patients, but for "today's patients" we filter by date
   const { data: allPatientsForAdmin } = useGetAllPatientsQuery({ page: 1, limit: 100 }, { 
     skip: !isAdminUser, 
     refetchOnMountOrArgChange: true 
   });
+
+  // Get today's patients for Admin (filtered by date) - for displaying today's patient counts
+  const { data: todayPatientsForAdmin } = useGetAllPatientsQuery(
+    { page: 1, limit: 100, date: getTodayIST() }, 
+    { 
+      skip: !isAdminUser, 
+      refetchOnMountOrArgChange: true 
+    }
+  );
 
   // Get all rooms for Admin to calculate total rooms count
   const { data: allRoomsForAdmin } = useGetAllRoomsQuery({ page: 1, limit: 1000 }, { 

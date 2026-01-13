@@ -445,6 +445,20 @@ const ClinicalTodayPatients = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   
+  // Helper: get YYYY-MM-DD string in IST for any date-like input
+  const toISTDateString = (dateInput) => {
+    try {
+      if (!dateInput) return '';
+      // Handle both string and Date objects
+      const d = new Date(dateInput);
+      // Check if date is valid
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+    } catch (_) {
+      return '';
+    }
+  };
+  
   // Check if user is a doctor (Faculty, Admin, or Resident)
   const isDoctor = currentUser && (isAdmin(currentUser.role) || isSR(currentUser.role) || isJR(currentUser.role));
   
@@ -632,12 +646,16 @@ const ClinicalTodayPatients = () => {
     case_complexity: '',
   });
 
+  // Get today's date in IST for backend filtering
+  const todayIST = toISTDateString(selectedDate || new Date());
+  
   // Fetch patients data - use a high limit (backend caps at 1000) to get all today's patients at once
   // This ensures newly created/assigned patients in any room appear immediately
+  // Pass date parameter to filter on backend - only patients created today OR with visits today
   const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
     page: 1,
     limit: 1000,
-    // Filter for today's patients on backend if possible
+    date: todayIST, // Filter by today's date on backend
     // search: search.trim() || undefined // Only include search if it has a value
   }, {
     pollingInterval: 60000, // Increased from 30s to 60s to reduce API calls
@@ -756,24 +774,6 @@ const ClinicalTodayPatients = () => {
   // - Only when there are no patients in today's list yet
   //   (once patients appear, we hide the room selector to avoid duplicate context)
   const showRoomSelectionCard = isDoctor && !isLoadingRoom && !effectiveRoomData?.data?.current_room;
-  
-
-
- 
-
-  // Helper: get YYYY-MM-DD string in IST for any date-like input
-  const toISTDateString = (dateInput) => {
-    try {
-      if (!dateInput) return '';
-      // Handle both string and Date objects
-      const d = new Date(dateInput);
-      // Check if date is valid
-      if (isNaN(d.getTime())) return '';
-      return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
-    } catch (_) {
-      return '';
-    }
-  };
 
   const filterTodayPatients = (patients) => {
     if (!Array.isArray(patients)) return [];
@@ -783,17 +783,12 @@ const ClinicalTodayPatients = () => {
     return patients.filter((patient) => {
       if (!patient) return false;
 
-      // Show patients who either:
-      // 1. Were registered/created today (new patients), OR
-      // 2. Have a visit record for today (existing patients added via "Existing Patient" flow)
+      // Show ONLY patients who were registered/created today
+      // This ensures only patients registered by MWO today appear in the list
       const patientCreatedDate = patient?.created_at ? toISTDateString(patient.created_at) : '';
       const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
       
-      // Check if patient has a visit today (set by backend when visit is created)
-      const hasVisitToday = patient?.has_visit_today === true;
-
-      // Include patient if they were created today OR have a visit today
-      return createdToday || hasVisitToday;
+      return createdToday;
     });
   };
 

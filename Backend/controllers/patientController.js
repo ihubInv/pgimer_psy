@@ -678,6 +678,16 @@ class PatientController {
       if (req.query.has_adl_file !== undefined) filters.has_adl_file = req.query.has_adl_file === 'true';
       if (req.query.file_status) filters.file_status = req.query.file_status;
       if (req.query.assigned_room) filters.assigned_room = req.query.assigned_room;
+      
+      // Filter by registration date (for Today's Patients view)
+      // When date is provided, filter patients created on that specific date
+      if (req.query.date) {
+        // Validate date format (YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (dateRegex.test(req.query.date)) {
+          filters.date = req.query.date;
+        }
+      }
 
       // Limit the maximum page size to prevent timeouts
       // Increase cap so "Today's Patients" view can see all patients with visits today
