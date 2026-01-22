@@ -1123,6 +1123,122 @@ class UserController {
     }
   }
 
+  // Admin: Change a doctor's room assignment
+  static async changeDoctorRoom(req, res) {
+    try {
+      const doctorId = req.params.id; // Use 'id' to match validateId middleware
+      const { new_room } = req.body;
+
+      if (!doctorId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Doctor ID is required'
+        });
+      }
+
+      if (!new_room || new_room.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: 'New room number is required'
+        });
+      }
+
+      const doctorIdInt = parseInt(doctorId, 10);
+      if (isNaN(doctorIdInt) || doctorIdInt <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid doctor ID format'
+        });
+      }
+
+      // Get the doctor
+      const doctor = await User.findById(doctorIdInt);
+      if (!doctor) {
+        return res.status(404).json({
+          success: false,
+          message: 'Doctor not found'
+        });
+      }
+
+      // Verify the user is a doctor (Faculty, Admin, or Resident)
+      const allowedRoles = [
+        'Faculty',
+        'Admin',
+        'Resident',
+        'JR',
+        'SR',
+        'Faculty Residents (Junior Resident (JR))',
+        'Faculty Residents (Senior Resident (SR))',
+      ];
+
+      if (!allowedRoles.includes(doctor.role)) {
+        return res.status(400).json({
+          success: false,
+          message: 'User is not a doctor (Faculty, Admin, or Resident)'
+        });
+      }
+
+      const newRoomNumber = new_room.trim();
+      const assignmentTime = new Date().toISOString();
+
+      // Check if the new room is already occupied by another doctor
+      const { isRoomOccupied } = require('../utils/roomAssignment');
+      const roomStatus = await isRoomOccupied(newRoomNumber, doctorIdInt);
+      
+      if (roomStatus.occupied) {
+        return res.status(409).json({
+          success: false,
+          message: `Room ${newRoomNumber} is already assigned to Dr. ${roomStatus.doctor.name}. Only one doctor can be assigned to a room.`
+        });
+      }
+
+      // Get the old room before changing
+      const oldRoom = doctor.current_room;
+
+      // Clear old room assignment if different
+      if (oldRoom && oldRoom !== newRoomNumber) {
+        await doctor.clearRoom();
+      }
+
+      // Assign new room to doctor
+      await doctor.assignRoom(newRoomNumber, assignmentTime);
+
+      // Auto-assign all patients in the new room to this doctor
+      const { assignPatientsToDoctor } = require('../utils/roomAssignment');
+      console.log(`[changeDoctorRoom] Calling assignPatientsToDoctor for doctor ${doctorIdInt} in room ${newRoomNumber}`);
+      const assignmentResult = await assignPatientsToDoctor(
+        doctorIdInt,
+        newRoomNumber,
+        assignmentTime
+      );
+      console.log(`[changeDoctorRoom] Assignment result: ${assignmentResult.assigned} patient(s) assigned`);
+
+      res.json({
+        success: true,
+        message: `Doctor's room changed successfully. ${assignmentResult.assigned} patient(s) assigned to Dr. ${doctor.name}.`,
+        data: {
+          doctor: {
+            id: doctor.id,
+            name: doctor.name,
+            role: doctor.role
+          },
+          old_room: oldRoom,
+          new_room: newRoomNumber,
+          assignment_time: assignmentTime,
+          patients_assigned: assignmentResult.assigned,
+          patients: assignmentResult.patients
+        }
+      });
+    } catch (error) {
+      console.error('Change doctor room error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to change doctor room',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
   // Get doctors (JR/SR) - Accessible to all authenticated users
   static async getDoctors(req, res) {
     try {

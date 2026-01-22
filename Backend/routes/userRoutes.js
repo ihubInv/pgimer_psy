@@ -1128,6 +1128,97 @@ router.post('/rooms/select', authenticateToken, UserController.selectRoom);
  */
 router.post('/rooms/clear', authenticateToken, UserController.clearRoom);
 
+/**
+ * @swagger
+ * /api/users/{id}/change-room:
+ *   put:
+ *     summary: Change a doctor's room assignment (Admin only)
+ *     description: |
+ *       Allows Admin to change a doctor's room assignment. When a room is changed,
+ *       all patients in that room will automatically be reassigned to the newly assigned doctor.
+ *     tags: [Admin, Room Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Doctor's user ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - new_room
+ *             properties:
+ *               new_room:
+ *                 type: string
+ *                 description: New room number to assign to the doctor
+ *                 example: "Room 205"
+ *     responses:
+ *       200:
+ *         description: Room changed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Doctor's room changed successfully. 5 patient(s) assigned to Dr. John Doe."
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     doctor:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         name:
+ *                           type: string
+ *                         role:
+ *                           type: string
+ *                     old_room:
+ *                       type: string
+ *                       nullable: true
+ *                     new_room:
+ *                       type: string
+ *                     assignment_time:
+ *                       type: string
+ *                       format: date-time
+ *                     patients_assigned:
+ *                       type: integer
+ *                     patients:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           name:
+ *                             type: string
+ *       400:
+ *         description: Invalid request or user is not a doctor
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin access required
+ *       404:
+ *         description: Doctor not found
+ *       409:
+ *         description: Room is already assigned to another doctor
+ *       500:
+ *         description: Server error
+ */
+router.put('/:id/change-room', authenticateToken, requireAdmin, validateId, UserController.changeDoctorRoom);
+
 // Admin-only routes
 /**
  * @swagger

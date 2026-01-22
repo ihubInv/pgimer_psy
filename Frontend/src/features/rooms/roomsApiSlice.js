@@ -37,6 +37,14 @@ export const roomsApiSlice = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ['MyRoom', 'Rooms'],
     }),
+    changeDoctorRoom: builder.mutation({
+      query: ({ doctorId, new_room }) => ({
+        url: `/users/${doctorId}/change-room`,
+        method: 'PUT',
+        body: { new_room },
+      }),
+      invalidatesTags: ['MyRoom', 'Rooms', 'Patient', 'User'],
+    }),
   }),
 });
 
@@ -98,6 +106,7 @@ export const {
   useGetMyRoomQuery,
   useSelectRoomMutation,
   useClearRoomMutation,
+  useChangeDoctorRoomMutation,
 } = roomsApiSlice;
 
 export const {

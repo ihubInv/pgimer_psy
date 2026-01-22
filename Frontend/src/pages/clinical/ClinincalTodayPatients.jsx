@@ -7,7 +7,8 @@ import {
 } from 'react-icons/fi';
 import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useChangePatientRoomMutation } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
-import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice, useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
+import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice, useGetAllRoomsQuery, useChangeDoctorRoomMutation } from '../../features/rooms/roomsApiSlice';
+import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
 import { useDispatch } from 'react-redux';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
@@ -1040,6 +1041,14 @@ const ClinicalTodayPatients = () => {
 
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-6 py-6">
       
+        {/* Admin: Doctor Room Management Card */}
+        {isAdmin(currentUser?.role) && (
+          <AdminDoctorRoomManager 
+            refetch={refetch}
+            refetchRooms={refetchRooms}
+          />
+        )}
+
         {/* Total Patient Count Card - At the top */}
         <Card className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-200 shadow-lg">
           <div className="p-5">
@@ -1343,6 +1352,219 @@ const ClinicalTodayPatients = () => {
         />
       </div>
     </div>
+  );
+};
+
+// Admin Component: Manage Doctor Room Assignments
+const AdminDoctorRoomManager = ({ refetch, refetchRooms }) => {
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [selectedNewRoom, setSelectedNewRoom] = useState('');
+  const [showChangeModal, setShowChangeModal] = useState(false);
+  
+  const { data: doctorsData, isLoading: isLoadingDoctors, refetch: refetchDoctors } = useGetDoctorsQuery({ page: 1, limit: 100 });
+  const { data: roomsData } = useGetAvailableRoomsQuery(undefined);
+  const { data: allRoomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
+  const [changeDoctorRoom, { isLoading: isChangingRoom }] = useChangeDoctorRoomMutation();
+  
+  const doctors = doctorsData?.data?.users || [];
+  const occupiedRooms = roomsData?.data?.occupied_rooms || {};
+  const availableRooms = (allRoomsData?.data?.rooms || []).filter(room => room.is_active);
+  
+  // Get doctors with their current room assignments
+  const doctorsWithRooms = doctors.map(doctor => {
+    const roomAssignment = Object.entries(occupiedRooms).find(
+      ([room, info]) => info.doctor_id === doctor.id
+    );
+    return {
+      ...doctor,
+      current_room: roomAssignment ? roomAssignment[0] : null,
+      room_info: roomAssignment ? roomAssignment[1] : null,
+    };
+  });
+  
+  const handleChangeRoom = async () => {
+    if (!selectedDoctor || !selectedNewRoom) {
+      toast.warning('Please select a doctor and a new room');
+      return;
+    }
+    
+    if (selectedNewRoom === selectedDoctor.current_room) {
+      toast.warning('Please select a different room');
+      return;
+    }
+    
+    try {
+      const result = await changeDoctorRoom({
+        doctorId: selectedDoctor.id,
+        new_room: selectedNewRoom,
+      }).unwrap();
+      
+      toast.success(result.message || `Room changed successfully. ${result.data.patients_assigned} patient(s) reassigned.`);
+      setShowChangeModal(false);
+      setSelectedDoctor(null);
+      setSelectedNewRoom('');
+      
+      // Refetch data to update the UI
+      refetch();
+      refetchRooms();
+      refetchDoctors();
+    } catch (error) {
+      console.error('Failed to change doctor room:', error);
+      toast.error(error?.data?.message || 'Failed to change doctor room');
+    }
+  };
+  
+  return (
+    <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200 shadow-lg mb-6">
+      <div className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center">
+              <FiShield className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">Doctor Room Management</h3>
+              <p className="text-sm text-gray-600">Change doctor room assignments (Admin only)</p>
+            </div>
+          </div>
+        </div>
+        
+        {isLoadingDoctors ? (
+          <div className="text-center py-4">
+            <div className="inline-block w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-sm text-gray-600 mt-2">Loading doctors...</p>
+          </div>
+        ) : doctorsWithRooms.length === 0 ? (
+          <p className="text-sm text-gray-600 text-center py-4">No doctors found</p>
+        ) : (
+          <div className="space-y-3">
+            {doctorsWithRooms.map((doctor) => (
+              <div
+                key={doctor.id}
+                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-indigo-500 rounded-full flex items-center justify-center text-white font-semibold">
+                      {doctor.name?.charAt(0) || 'D'}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800">{doctor.name}</p>
+                      <p className="text-xs text-gray-500">{doctor.role}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    {doctor.current_room ? (
+                      <>
+                        <p className="text-sm font-medium text-gray-700">Current Room</p>
+                        <p className="text-lg font-bold text-purple-600">{doctor.current_room}</p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-500">No room assigned</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedDoctor(doctor);
+                      setSelectedNewRoom('');
+                      setShowChangeModal(true);
+                    }}
+                    className="bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100"
+                  >
+                    <FiRepeat className="w-4 h-4 mr-1" />
+                    Change Room
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      
+      {/* Change Room Modal */}
+      {showChangeModal && selectedDoctor && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">
+              Change Room for Dr. {selectedDoctor.name}
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Current Room
+                </label>
+                <p className="text-lg font-semibold text-purple-600">
+                  {selectedDoctor.current_room || 'No room assigned'}
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Room <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedNewRoom}
+                  onChange={(e) => setSelectedNewRoom(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  disabled={isChangingRoom}
+                >
+                  <option value="">Select new room...</option>
+                  {availableRooms
+                    .filter(room => room.room_number !== selectedDoctor.current_room)
+                    .map(room => {
+                      const isOccupied = Object.keys(occupiedRooms).includes(room.room_number);
+                      return (
+                        <option
+                          key={room.room_number}
+                          value={room.room_number}
+                          disabled={isOccupied}
+                        >
+                          {room.room_number}
+                          {isOccupied ? ` (Occupied by ${occupiedRooms[room.room_number]?.doctor_name || 'another doctor'})` : ''}
+                        </option>
+                      );
+                    })}
+                </select>
+              </div>
+              
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-xs text-yellow-800">
+                  <strong>⚠️ Important:</strong> When you change a doctor's room, all patients in that room will automatically be reassigned to the newly assigned doctor.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <Button
+                onClick={handleChangeRoom}
+                disabled={!selectedNewRoom || isChangingRoom || selectedNewRoom === selectedDoctor.current_room}
+                loading={isChangingRoom}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                Change Room
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowChangeModal(false);
+                  setSelectedDoctor(null);
+                  setSelectedNewRoom('');
+                }}
+                variant="outline"
+                disabled={isChangingRoom}
+                className="px-4 border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 };
 
