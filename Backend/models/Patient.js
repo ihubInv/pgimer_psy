@@ -845,7 +845,7 @@ class Patient {
         LEFT JOIN adl_files af ON af.patient_id = p.id
         ${whereClause}
         GROUP BY p.id, af.id
-        ORDER BY p.created_at ASC
+        ORDER BY p.created_at DESC
         LIMIT $${idx++} OFFSET $${idx++}
       `;
       params.push(limit, offset);
