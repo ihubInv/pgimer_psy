@@ -237,9 +237,8 @@ class Patient {
         file_status
       } = patientData;
 
-      // Generate CR and PSY numbers if not provided
+      // Generate CR number if not provided
       const final_cr_no = cr_no || Patient.generateCRNo();
-      const final_psy_no = psy_no || Patient.generatePSYNo();
 
       // Build dynamic INSERT query with all provided fields
       const fields = [];
@@ -256,10 +255,6 @@ class Patient {
       fields.push('cr_no');
       placeholders.push(`$${++paramCount}`);
       values.push(final_cr_no);
-
-      fields.push('psy_no');
-      placeholders.push(`$${++paramCount}`);
-      values.push(final_psy_no);
 
       fields.push('name');
       placeholders.push(`$${++paramCount}`);
@@ -297,6 +292,7 @@ class Patient {
         unit_days,
         seen_in_walk_in_on,
         worked_up_on,
+        psy_no,
         special_clinic_no,
         age_group,
         marital_status,
