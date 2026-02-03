@@ -599,7 +599,7 @@ const EditChildClinicalProforma = ({
           
           // Navigate back to Today's Patients page
           // The button will automatically change from "Clinical Proforma" to "Follow-Up"
-          navigate('/clinical/today-patients');
+          navigate('/clinical-today-patients');
         }
       } else {
         toast.error(data.message || 'Failed to save child clinical proforma');

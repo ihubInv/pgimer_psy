@@ -10,7 +10,8 @@ const FileUpload = ({
   maxSizeMB = 10,
   accept = "image/*,application/pdf,.doc,.docx,.txt",
   patientId = null,
-  disabled = false
+  disabled = false,
+  showHelperText = true
 }) => {
   const [previews, setPreviews] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -323,11 +324,13 @@ const FileUpload = ({
       )}
 
       {/* Helper Text */}
-      <div className="text-xs text-gray-500">
-        <p>• Maximum {maxFiles} files, {maxSizeMB}MB per file</p>
-        <p>• Supported: Images (JPEG, PNG, GIF, WebP), PDF, Word documents, Text files</p>
-        <p>• Use "Capture Photo" to take pictures directly with your device camera</p>
-      </div>
+      {showHelperText && (
+        <div className="text-xs text-gray-500">
+          <p>• Maximum {maxFiles} files, {maxSizeMB}MB per file</p>
+          <p>• Supported: Images (JPEG, PNG, GIF, WebP), PDF, Word documents, Text files</p>
+          <p>• Use "Capture Photo" to take pictures directly with your device camera</p>
+        </div>
+      )}
 
       {/* Camera Modal */}
       {showCameraModal && (

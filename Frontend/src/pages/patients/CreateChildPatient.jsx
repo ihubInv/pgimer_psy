@@ -132,7 +132,6 @@ const CreateChildPatient = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [selectedDocuments, setSelectedDocuments] = useState([]);
-  const [selectedPhoto, setSelectedPhoto] = useState([]);
   const [sameAsPresent, setSameAsPresent] = useState(false);
   
   // State for expanded cards (Past History section and Edit mode cards)
@@ -668,15 +667,10 @@ const CreateChildPatient = () => {
         }
       });
 
-      // Add documents
+      // Add documents (use "files" field name as expected by backend)
       selectedDocuments.forEach((file, index) => {
-        formDataToSend.append('documents', file);
+        formDataToSend.append('files', file);
       });
-
-      // Add photo (single file)
-      if (selectedPhoto.length > 0) {
-        formDataToSend.append('photo', selectedPhoto[0]);
-      }
 
       // Use same pattern as apiSlice - VITE_API_URL should already include /api
       const baseUrl = import.meta.env.VITE_API_URL || '/api';
@@ -751,7 +745,6 @@ const CreateChildPatient = () => {
         assigned_room: '',
       });
       setSelectedDocuments([]);
-      setSelectedPhoto([]);
       setErrors({});
 
       // Navigate to patients list or stay on page
@@ -1007,9 +1000,9 @@ const CreateChildPatient = () => {
                 onChange={handleChange}
                 options={CHILD_AGE_GROUP_OPTIONS}
                 placeholder={formData.age ? "Auto-selected from age" : "Select age group"}
-                disabled={isViewMode || (formData.age && formData.age.trim() !== '')}
-                className={formData.age && formData.age.trim() !== '' ? "bg-gray-50 cursor-not-allowed" : ""}
-                title={formData.age && formData.age.trim() !== '' ? "Age group is auto-calculated from age" : ""}
+                disabled={isViewMode || (formData.age && formData.age !== '' && formData.age != null)}
+                className={formData.age && formData.age !== '' && formData.age != null ? "bg-gray-50 cursor-not-allowed" : ""}
+                title={formData.age && formData.age !== '' && formData.age != null ? "Age group is auto-calculated from age" : ""}
               />
               <Select
                 icon={<FiFileText className="w-4 h-4" />}
@@ -1353,28 +1346,6 @@ const CreateChildPatient = () => {
                 placeholder="Select room"
                 disabled={isViewMode}
               />
-              </div>
-            </div>
-
-            {/* Patient Photo */}
-            <div>
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">Patient Photo</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-3">
-                  <FileUpload
-                    files={selectedPhoto}
-                    onFilesChange={setSelectedPhoto}
-                    maxFiles={1}
-                    maxSizeMB={10}
-                    accept="image/*"
-                    disabled={isViewMode}
-                  />
-                  {selectedPhoto.length > 0 && (
-                    <p className="mt-2 text-sm text-gray-600">
-                      Photo selected
-                    </p>
-                  )}
-                </div>
               </div>
             </div>
 

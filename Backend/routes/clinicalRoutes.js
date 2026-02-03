@@ -1120,6 +1120,35 @@ router.get('/decision-stats', authenticateToken, ClinicalController.getCasesByDe
  */
 router.get('/visit-trends', authenticateToken, ClinicalController.getVisitTrends);
 
+// Today's patients route - MUST be before /:id route to avoid route conflicts
+/**
+ * @swagger
+ * /api/clinical-proformas/today-patients:
+ *   get:
+ *     summary: Get today's patients (legacy endpoint - returns empty array)
+ *     description: This endpoint exists for backward compatibility but is not actively used. Today's patients should be fetched via /api/patients endpoint with appropriate filters.
+ *     tags: [Walk-in Clinical Proforma]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Returns empty array (endpoint not actively used)
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.get('/today-patients', authenticateToken, (req, res) => {
+  // This endpoint exists for backward compatibility but is not actively used
+  // Today's patients are fetched via /api/patients endpoint with date filters
+  // Return empty array to prevent errors
+  res.status(200).json({
+    success: true,
+    data: [],
+    message: 'This endpoint is deprecated. Please use /api/patients endpoint with date filters to get today\'s patients.'
+  });
+});
+
 // Dynamic clinical options routes - MUST be before /:id route to avoid route conflicts
 /**
  * @swagger
