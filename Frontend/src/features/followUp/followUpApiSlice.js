@@ -28,6 +28,16 @@ export const followUpApiSlice = apiSlice.injectEndpoints({
         { type: 'Patient', id: patient_id },
       ],
     }),
+    getFollowUpsByChildPatientId: builder.query({
+      query: ({ child_patient_id, page = 1, limit = 100 }) => ({
+        url: `/follow-ups/child-patient/${child_patient_id}`,
+        params: { page, limit },
+      }),
+      providesTags: (result, error, { child_patient_id }) => [
+        { type: 'FollowUp', id: 'LIST' },
+        { type: 'ChildPatient', id: child_patient_id },
+      ],
+    }),
     updateFollowUp: builder.mutation({
       query: ({ id, ...data }) => ({
         url: `/follow-ups/${id}`,
@@ -56,6 +66,7 @@ export const {
   useCreateFollowUpMutation,
   useGetFollowUpByIdQuery,
   useGetFollowUpsByPatientIdQuery,
+  useGetFollowUpsByChildPatientIdQuery,
   useUpdateFollowUpMutation,
   useDeleteFollowUpMutation,
 } = followUpApiSlice;

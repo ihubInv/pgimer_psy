@@ -689,6 +689,82 @@ class PatientController {
         }
       }
 
+      // Also fetch child patients if filtering by room or date
+      let childPatients = [];
+      let childPatientsTotal = 0;
+      if (filters.assigned_room || filters.date) {
+        try {
+          const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+          const childFilters = {};
+          if (filters.assigned_room) {
+            childFilters.assigned_room = filters.assigned_room;
+          }
+          if (filters.date) {
+            childFilters.date = filters.date;
+            console.log(`[getAllPatients] Fetching child patients with date filter: ${filters.date}`);
+          }
+          const childResult = await ChildPatientRegistration.findAll(page, limit, childFilters);
+          childPatients = childResult.child_patients || [];
+          childPatientsTotal = childResult.pagination?.total || 0;
+          console.log(`[getAllPatients] Found ${childPatients.length} child patients (total: ${childPatientsTotal})`);
+          
+          // Get visit status for child patients from follow-up visits
+          const db = require('../config/database');
+          const today = filters.date || new Date().toISOString().slice(0, 10);
+          const childPatientIds = childPatients.map(cp => cp.id);
+          let visitStatusMap = {};
+          
+          if (childPatientIds.length > 0) {
+            try {
+              const visitStatusResult = await db.query(
+                `SELECT child_patient_id, visit_status 
+                 FROM followup_visits 
+                 WHERE child_patient_id = ANY($1::int[])
+                 AND DATE(visit_date) = $2
+                 ORDER BY created_at DESC`,
+                [childPatientIds, today]
+              );
+              
+              // Create a map of child_patient_id -> visit_status (prioritize 'completed' status)
+              visitStatusResult.rows.forEach(row => {
+                if (!visitStatusMap[row.child_patient_id] || row.visit_status === 'completed') {
+                  visitStatusMap[row.child_patient_id] = row.visit_status;
+                }
+              });
+            } catch (err) {
+              console.error('[getAllPatients] Error fetching child patient visit status:', err);
+            }
+          }
+          
+          // Convert child patients to compatible format
+          childPatients = childPatients.map(cp => ({
+            id: cp.id,
+            name: cp.child_name,
+            cr_no: cp.cr_number,
+            psy_no: null,
+            special_clinic_no: cp.cgc_number,
+            assigned_room: cp.assigned_room,
+            assigned_doctor_id: null,
+            assigned_doctor_name: null,
+            assigned_doctor_role: null,
+            has_adl_file: false,
+            case_complexity: 'simple',
+            sex: cp.sex,
+            age: null,
+            age_group: cp.age_group,
+            created_at: cp.created_at,
+            updated_at: cp.updated_at, // CRITICAL: Include updated_at for filtering existing patients added to today's list
+            visit_status: visitStatusMap[cp.id] || null, // Add visit_status from follow-up visits
+            patient_type: 'child',
+            filled_by_name: cp.filled_by_name || null,
+            filled_by_role: cp.filled_by_role || null
+          }));
+        } catch (childError) {
+          console.error('[getAllPatients] Error fetching child patients:', childError);
+          // Continue without child patients if there's an error
+        }
+      }
+
       // Limit the maximum page size to prevent timeouts
       // Increase cap so "Today's Patients" view can see all patients with visits today
       // while still protecting against unbounded queries.
@@ -859,6 +935,21 @@ class PatientController {
         }
       }
 
+      // Merge child patients with adult patients (if any were fetched)
+      if (childPatients.length > 0) {
+        // Combine adult and child patients, sort by created_at DESC
+        const allPatients = [...(result.patients || []), ...childPatients].sort((a, b) => {
+          const dateA = new Date(a.created_at || 0);
+          const dateB = new Date(b.created_at || 0);
+          return dateB - dateA;
+        });
+        
+        // Update pagination to include child patients
+        result.patients = allPatients;
+        result.pagination.total = (result.pagination?.total || 0) + childPatientsTotal;
+        result.pagination.pages = Math.ceil(result.pagination.total / limit);
+      }
+
       // Filter patient data for PWO role
       // NOTE: Express does not bind `this` when calling handlers, so we must reference the class directly
       if (result.patients && Array.isArray(result.patients)) {
@@ -986,34 +1077,150 @@ class PatientController {
     }
   }
 
-  // Get patient by CR number
+  // Get patient by CR number (unified search for both adult and child patients)
   static async getPatientByCRNo(req, res) {
     try {
       const { cr_no } = req.params;
-      const patient = await Patient.findByCRNo(cr_no);
+      
+      if (!cr_no || cr_no.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: 'CR number is required'
+        });
+      }
 
-      if (!patient) {
+      const db = require('../config/database');
+      const crNumber = cr_no.trim();
+
+      // Unified query: Search both adult and child patients in a single query
+      // This ensures CR numbers are globally unique and searchable regardless of patient type
+      const query = `
+        SELECT 
+          'adult' as patient_type,
+          p.id,
+          p.name,
+          p.cr_no,
+          p.psy_no,
+          p.special_clinic_no,
+          p.sex,
+          p.age,
+          NULL::text as age_group,
+          p.assigned_room,
+          p.assigned_doctor_id,
+          p.contact_number,
+          p.created_at,
+          p.updated_at,
+          p.filled_by,
+          (
+            SELECT u.name FROM users u WHERE u.id = p.filled_by LIMIT 1
+          ) AS filled_by_name,
+          (
+            SELECT u.role FROM users u WHERE u.id = p.filled_by LIMIT 1
+          ) AS filled_by_role
+        FROM registered_patient p
+        WHERE TRIM(COALESCE(p.cr_no::text, '')) = $1
+        
+        UNION ALL
+        
+        SELECT 
+          'child' as patient_type,
+          cpr.id,
+          cpr.child_name as name,
+          cpr.cr_number as cr_no,
+          NULL::text as psy_no,
+          cpr.cgc_number as special_clinic_no,
+          cpr.sex,
+          NULL::integer as age,
+          cpr.age_group,
+          cpr.assigned_room,
+          NULL::integer as assigned_doctor_id,
+          NULL::text as contact_number,
+          cpr.created_at,
+          cpr.updated_at,
+          cpr.filled_by,
+          u_filled.name as filled_by_name,
+          u_filled.role as filled_by_role
+        FROM child_patient_registrations cpr
+        LEFT JOIN users u_filled ON u_filled.id = cpr.filled_by
+        WHERE TRIM(COALESCE(cpr.cr_number::text, '')) = $1
+        
+        LIMIT 1
+      `;
+
+      const result = await db.query(query, [crNumber]);
+
+      if (result.rows.length === 0) {
         return res.status(404).json({
           success: false,
           message: 'Patient not found'
         });
       }
 
-      const patientJson = patient.toJSON();
-      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
-      const filteredPatient = PatientController.filterPatientDataForRole(
-        patientJson,
-        req.user?.role
-      );
+      const patientData = result.rows[0];
+      const isChildPatient = patientData.patient_type === 'child';
+
+      // Format response consistently
+      let patientResponse;
+      if (isChildPatient) {
+        // Child patient - fetch full details
+        const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+        const childPatient = await ChildPatientRegistration.findById(patientData.id);
+        if (!childPatient) {
+          return res.status(404).json({
+            success: false,
+            message: 'Patient not found'
+          });
+        }
+        patientResponse = {
+          id: childPatient.id,
+          name: childPatient.child_name,
+          cr_no: childPatient.cr_number,
+          cr_number: childPatient.cr_number, // Alias for consistency
+          psy_no: null,
+          special_clinic_no: childPatient.cgc_number,
+          cgc_number: childPatient.cgc_number, // Alias for consistency
+          sex: childPatient.sex,
+          age: null,
+          age_group: childPatient.age_group,
+          assigned_room: childPatient.assigned_room,
+          assigned_doctor_id: null,
+          contact_number: null,
+          created_at: childPatient.created_at,
+          updated_at: childPatient.updated_at,
+          patient_type: 'child',
+          filled_by: childPatient.filled_by,
+          filled_by_name: patientData.filled_by_name,
+          filled_by_role: patientData.filled_by_role,
+          // Include all child patient fields
+          ...childPatient.toJSON()
+        };
+      } else {
+        // Adult patient
+        const patient = await Patient.findById(patientData.id);
+        if (!patient) {
+          return res.status(404).json({
+            success: false,
+            message: 'Patient not found'
+          });
+        }
+        const patientJson = patient.toJSON();
+        // Use the static helper on the controller class
+        patientResponse = PatientController.filterPatientDataForRole(
+          patientJson,
+          req.user?.role
+        );
+        patientResponse.patient_type = 'adult';
+      }
 
       res.json({
         success: true,
         data: {
-          patient: filteredPatient
+          patient: patientResponse,
+          patient_type: isChildPatient ? 'child' : 'adult'
         }
       });
     } catch (error) {
-      console.error('Get patient by CR number error:', error);
+      console.error('[getPatientByCRNo] Error:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to get patient',
@@ -1697,11 +1904,11 @@ class PatientController {
     }
   }
 
-  // Mark patient visit as completed
+  // Mark patient visit as completed (supports both adult and child patients)
   static async markVisitCompleted(req, res) {
     try {
       const { id } = req.params; // Use 'id' to match validateId middleware
-      const { visit_date } = req.body;
+      const { visit_date, patient_type } = req.body;
 
       if (!id) {
         return res.status(400).json({
@@ -1718,38 +1925,132 @@ class PatientController {
         });
       }
 
-      // Get patient to retrieve assigned_doctor_id and room_no if needed
-      const patient = await Patient.findById(patientIdInt);
-      if (!patient) {
-        return res.status(404).json({
-          success: false,
-          message: 'Patient not found'
-        });
-      }
+      // Check if this is a child patient
+      const isChildPatient = patient_type === 'child';
       
-      // Mark today's visit as completed (will create visit record if it doesn't exist)
-      const visit = await PatientVisit.markPatientVisitCompletedToday(
-        patientIdInt, 
-        visit_date,
-        patient.assigned_doctor_id || null,
-        patient.assigned_room || null
-      );
+      if (isChildPatient) {
+        // Handle child patients - update child_patient_registrations table
+        const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+        const db = require('../config/database');
+        
+        // Check if child patient exists
+        const childPatient = await ChildPatientRegistration.findById(patientIdInt);
+        if (!childPatient) {
+          return res.status(404).json({
+            success: false,
+            message: 'Child patient not found'
+          });
+        }
 
-      if (!visit) {
-        // Visit exists but is already completed
-        return res.status(404).json({
-          success: false,
-          message: 'Visit for today is already marked as completed'
+        // For child patients, we need to track completion status
+        // Since child_patient_registrations doesn't have visit_status, we'll create/update a follow-up visit
+        // This ensures visit_status is available for filtering
+        const today = visit_date || new Date().toISOString().slice(0, 10);
+        
+        // Try to find a follow-up visit for today
+        const followUpCheck = await db.query(
+          `SELECT id, visit_status FROM followup_visits 
+           WHERE child_patient_id = $1 
+           AND DATE(visit_date) = $2
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [patientIdInt, today]
+        );
+        
+        let followUpId;
+        if (followUpCheck.rows.length > 0) {
+          // Mark the existing follow-up visit as completed
+          followUpId = followUpCheck.rows[0].id;
+          if (followUpCheck.rows[0].visit_status !== 'completed') {
+            await db.query(
+              `UPDATE followup_visits 
+               SET visit_status = 'completed', updated_at = CURRENT_TIMESTAMP
+               WHERE id = $1`,
+              [followUpId]
+            );
+            console.log(`[markVisitCompleted] Child patient ${patientIdInt} follow-up visit ${followUpId} marked as completed`);
+          } else {
+            console.log(`[markVisitCompleted] Child patient ${patientIdInt} follow-up visit ${followUpId} already completed`);
+          }
+        } else {
+          // No follow-up visit exists - create one with 'completed' status
+          // This ensures visit_status is available for filtering
+          // Note: filled_by is required, use the current user or system
+          const currentUserId = req.user?.id || null;
+          const createResult = await db.query(
+            `INSERT INTO followup_visits 
+             (child_patient_id, visit_date, visit_status, clinical_assessment, filled_by, created_at, updated_at)
+             VALUES ($1, $2, 'completed', 'Marked as completed', $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             RETURNING id, visit_status`,
+            [patientIdInt, today, currentUserId]
+          );
+          
+          if (createResult.rows.length > 0) {
+            followUpId = createResult.rows[0].id;
+            console.log(`[markVisitCompleted] Created completed follow-up visit ${followUpId} for child patient ${patientIdInt}`);
+          }
+        }
+        
+        // Also update the child patient registration timestamp
+        const updateResult = await db.query(
+          `UPDATE child_patient_registrations 
+           SET updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1
+           RETURNING id, updated_at`,
+          [patientIdInt]
+        );
+
+        if (updateResult.rowCount === 0) {
+          return res.status(404).json({
+            success: false,
+            message: 'Child patient not found'
+          });
+        }
+
+        console.log(`[markVisitCompleted] Child patient ${patientIdInt} marked as completed`);
+
+        res.json({
+          success: true,
+          message: 'Child patient visit marked as completed successfully',
+          data: { 
+            child_patient_id: patientIdInt,
+            completed_at: updateResult.rows[0].updated_at
+          }
+        });
+      } else {
+        // Handle adult patients - use existing PatientVisit logic
+        const patient = await Patient.findById(patientIdInt);
+        if (!patient) {
+          return res.status(404).json({
+            success: false,
+            message: 'Patient not found'
+          });
+        }
+        
+        // Mark today's visit as completed (will create visit record if it doesn't exist)
+        const visit = await PatientVisit.markPatientVisitCompletedToday(
+          patientIdInt, 
+          visit_date,
+          patient.assigned_doctor_id || null,
+          patient.assigned_room || null
+        );
+
+        if (!visit) {
+          // Visit exists but is already completed
+          return res.status(404).json({
+            success: false,
+            message: 'Visit for today is already marked as completed'
+          });
+        }
+
+        res.json({
+          success: true,
+          message: 'Visit marked as completed successfully',
+          data: { visit }
         });
       }
-
-      res.json({
-        success: true,
-        message: 'Visit marked as completed successfully',
-        data: { visit }
-      });
     } catch (error) {
-      console.error('Mark visit completed error:', error);
+      console.error('[markVisitCompleted] Error:', error);
       
       // Check if it's a "not found" error
       if (error.message && error.message.includes('No visit found')) {
@@ -1761,7 +2062,7 @@ class PatientController {
       
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to mark visit as completed',
+        message: 'Failed to mark visit as completed',
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
       });
     }

@@ -23,7 +23,11 @@ const PatientDetails = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const returnTab = searchParams.get('returnTab'); // Get returnTab from URL
+  const patientType = searchParams.get('patient_type'); // Check if it's a child patient
+  const isChildPatient = patientType === 'child';
   const [isEditing, setIsEditing] = useState(false);
+  const [childPatientData, setChildPatientData] = useState(null);
+  const [isLoadingChildPatient, setIsLoadingChildPatient] = useState(false);
 
   // Helper function to validate patient ID (integer only)
   const isValidPatientId = (patientId) => {
@@ -76,16 +80,57 @@ const PatientDetails = () => {
     }
   }, [searchParams, patientId, setSearchParams]);
 
+  // Fetch child patient data if it's a child patient
+  useEffect(() => {
+    const fetchChildPatient = async () => {
+      if (!isChildPatient || !isValidPatientId(patientId)) {
+        setIsLoadingChildPatient(false);
+        return;
+      }
+
+      setIsLoadingChildPatient(true);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL || '/api'}/child-patient/${patientId}`,
+          {
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : '',
+            },
+            credentials: 'include'
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const childPatient = data.data?.childPatient || data.data?.child_patient;
+          setChildPatientData(childPatient);
+        } else {
+          console.error('Failed to fetch child patient');
+          toast.error('Failed to load child patient data');
+        }
+      } catch (error) {
+        console.error('Error fetching child patient:', error);
+        toast.error('Error loading child patient data');
+      } finally {
+        setIsLoadingChildPatient(false);
+      }
+    };
+
+    fetchChildPatient();
+  }, [isChildPatient, patientId]);
+
   // Ensure queries refetch when ID changes by using skip option if id is invalid
+  // Skip adult patient queries if it's a child patient
   const { data: patientData, isLoading: patientLoading } = useGetPatientByIdQuery(patientId, {
-    skip: !isValidPatientId(patientId), // Skip query if id is not available or invalid
+    skip: !isValidPatientId(patientId) || isChildPatient, // Skip query if id is not available or invalid, or if it's a child patient
   });
   const { data: clinicalData, refetch: refetchClinicalData } = useGetClinicalProformaByPatientIdQuery(patientId, {
-    skip: !isValidPatientId(patientId),
+    skip: !isValidPatientId(patientId) || isChildPatient,
     refetchOnMountOrArgChange: true, // Always refetch when component mounts or patientId changes
   });
   const { data: adlData } = useGetADLFileByPatientIdQuery(patientId, {
-    skip: !isValidPatientId(patientId),
+    skip: !isValidPatientId(patientId) || isChildPatient,
   });
   // const clinicalData=[]
   // const adlData=[]
@@ -449,13 +494,39 @@ const PatientDetails = () => {
   }, [patientData, patientId]); // Add patientId as dependency
 
 
-  if (patientLoading) {
+  // For child patients, show loading while fetching child patient data
+  if (isChildPatient && isLoadingChildPatient) {
     return <LoadingSpinner size="lg" className="h-96" />;
   }
 
-  const patient = patientData?.data?.patient;
+  // For child patients, check if we have child patient data
+  if (isChildPatient && !childPatientData && !isLoadingChildPatient) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500">Child patient not found</p>
+        <Button
+          className="mt-4"
+          onClick={() => {
+            if (returnTab) {
+              navigate(`/clinical-today-patients${returnTab === 'existing' ? '?tab=existing' : ''}`);
+            } else {
+              navigate('/clinical-today-patients');
+            }
+          }}
+        >
+          Back to Today's Patients
+        </Button>
+      </div>
+    );
+  }
 
-  if (!patient) {
+  if (patientLoading && !isChildPatient) {
+    return <LoadingSpinner size="lg" className="h-96" />;
+  }
+
+  const patient = isChildPatient ? childPatientData : patientData?.data?.patient;
+
+  if (!patient && !isChildPatient) {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500">Patient not found</p>

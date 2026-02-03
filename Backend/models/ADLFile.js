@@ -118,6 +118,7 @@ class ADLFile {
   constructor(data) {
     this.id = data.id;
     this.patient_id = data.patient_id;
+    this.child_patient_id = data.child_patient_id;
     this.adl_no = data.adl_no;
     this.created_by = data.created_by;
     this.clinical_proforma_id = data.clinical_proforma_id;
@@ -375,7 +376,7 @@ class ADLFile {
     };
     
     const {
-      patient_id, adl_no, created_by, clinical_proforma_id,
+      patient_id, child_patient_id, adl_no, created_by, clinical_proforma_id,
       file_status = 'created', file_created_date = new Date(), total_visits = 1,
       history_narrative, history_specific_enquiry, history_drug_intake,
       history_treatment_place, history_treatment_dates, history_treatment_drugs,
@@ -466,7 +467,7 @@ class ADLFile {
 
     const result = await client.query(
       `INSERT INTO adl_files (
-        patient_id, adl_no, created_by, clinical_proforma_id, file_status, 
+        patient_id, child_patient_id, adl_no, created_by, clinical_proforma_id, file_status, 
         file_created_date, total_visits, history_narrative, history_specific_enquiry, 
         history_drug_intake, history_treatment_place, history_treatment_dates,
         history_treatment_drugs, history_treatment_response, informants, 
@@ -527,9 +528,9 @@ class ADLFile {
         development_bedwetting, development_phobias, development_childhood_illness, 
         provisional_diagnosis, treatment_plan, consultant_comments
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,         $15::jsonb, 
-        $16::jsonb, $17::jsonb, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-        $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43::jsonb,
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,         $16::jsonb, 
+        $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31,
+        $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43::jsonb,
         $44, $45, $46, $47, $48, $49::jsonb, $50, $51::jsonb, $52, $53, $54, $55,
         $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, 
         $69, $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $80, $81, $82, $83, 
@@ -543,10 +544,10 @@ class ADLFile {
         $169, $170, $171, $172, $173, $174, $175, $176, $177::jsonb, $178, $179, 
         $180, $181, $182, $183, $184, $185, $186::jsonb, $187, $188, $189, $190, 
         $191, $192, $193, $194, $195, $196, $197, $198, $199, $200, $201, $202, 
-        $203, $204, $205, $206, $207, $208, $209, $210, $211, $212, $213
+        $203, $204, $205, $206, $207, $208, $209, $210, $211, $212, $213, $214
       ) RETURNING *`,
       [
-        patient_id, adl_no, created_by, clinical_proforma_id, file_status,
+        patient_id, child_patient_id, adl_no, created_by, clinical_proforma_id, file_status,
         file_created_date, total_visits,
         history_narrative,
         history_specific_enquiry || null,
@@ -1499,11 +1500,15 @@ class ADLFile {
   static async findById(id) {
     try {
       const result = await db.query(
-        `SELECT af.*, p.name as patient_name, p.cr_no, p.psy_no, 
+        `SELECT af.*, 
+                COALESCE(p.name, cp.child_name) as patient_name, 
+                COALESCE(p.cr_no, cp.cr_number) as cr_no, 
+                COALESCE(p.psy_no, NULL) as psy_no, 
                 u1.name as created_by_name, u1.role as created_by_role,
                 u2.name as last_accessed_by_name
          FROM adl_files af
          LEFT JOIN registered_patient p ON af.patient_id = p.id
+         LEFT JOIN child_patient_registrations cp ON af.child_patient_id = cp.id
          LEFT JOIN users u1 ON af.created_by = u1.id
          LEFT JOIN users u2 ON af.last_accessed_by = u2.id
          WHERE af.id = $1`,
@@ -1545,7 +1550,7 @@ class ADLFile {
     }
   }
 
-  // Find ADL file by patient ID (integer)
+  // Find ADL file by patient ID (integer) - for adult patients
   static async findByPatientId(patient_id) {
     try {
       // Validate that patient_id is a valid integer
@@ -1580,6 +1585,43 @@ class ADLFile {
       return result.rows.map(row => new ADLFile(row));
     } catch (error) {
       console.error('[ADLFile.findByPatientId] Error:', error);
+      throw error;
+    }
+  }
+
+  // Find ADL file by child patient ID (integer) - for child patients
+  static async findByChildPatientId(child_patient_id) {
+    try {
+      // Validate that child_patient_id is a valid integer
+      const childPatientIdNum = parseInt(child_patient_id, 10);
+      if (isNaN(childPatientIdNum) || childPatientIdNum <= 0) {
+        console.error('[ADLFile.findByChildPatientId] Invalid child_patient_id:', child_patient_id);
+        return [];
+      }
+
+      const query = `
+        SELECT af.*, 
+               cp.child_name as patient_name, cp.cr_number as cr_no, NULL as psy_no, 
+               u1.name as created_by_name, u1.role as created_by_role,
+               u2.name as last_accessed_by_name,
+               NULL as assigned_doctor, NULL as proforma_visit_date,
+               NULL as assigned_doctor_name, NULL as assigned_doctor_role,
+               NULL as clinical_proforma_id
+        FROM adl_files af
+        LEFT JOIN child_patient_registrations cp ON af.child_patient_id = cp.id
+        LEFT JOIN users u1 ON af.created_by = u1.id
+        LEFT JOIN users u2 ON af.last_accessed_by = u2.id
+        WHERE af.child_patient_id = $1
+        ORDER BY af.file_created_date DESC
+      `;
+
+      const result = await db.query(query, [childPatientIdNum]);
+
+      console.log(`[ADLFile.findByChildPatientId] Found ${result.rows.length} ADL files for child_patient_id: ${child_patient_id}`);
+
+      return result.rows.map(row => new ADLFile(row));
+    } catch (error) {
+      console.error('[ADLFile.findByChildPatientId] Error:', error);
       throw error;
     }
   }
@@ -2135,6 +2177,7 @@ class ADLFile {
     return {
       id: this.id,
       patient_id: this.patient_id,
+      child_patient_id: this.child_patient_id,
       adl_no: this.adl_no,
       created_by: this.created_by,
       clinical_proforma_id: this.clinical_proforma_id,

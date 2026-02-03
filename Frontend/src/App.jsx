@@ -21,6 +21,7 @@ import PatientsPage from './pages/patients/PatientsPage';
 import CreatePatient from './pages/patients/CreatePatient';
 import PatientDetails from './pages/patients/PatientDetails';
 import SelectExistingPatient from './pages/patients/SelectExistingPatient';
+import CreateChildPatient from './pages/patients/CreateChildPatient';
 
 
 // Walk-in Clinical Proforma Pages
@@ -28,6 +29,8 @@ import ClinicalProformaPage from './pages/clinical/ClinicalProformaPage';
 import EditClinicalProforma from './pages/clinical/EditClinicalProforma';
 import ClinicalProformaDetails from './pages/clinical/ClinicalProformaDetails';
 import FollowUpForm from './pages/clinical/FollowUpForm';
+import EditChildClinicalProforma from './pages/clinical/EditChildClinicalProforma';
+import ChildFollowUpForm from './pages/clinical/ChildFollowUpForm';
 
 // Prescription Pages
 import PrescriptionEdit from './pages/PrescribeMedication/PrescriptionEdit';
@@ -92,6 +95,9 @@ function App() {
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/patients/new" element={<CreatePatient />} />
               <Route path="/patients/:id" element={<PatientDetails />} />
+              {/* Child Patient Routes */}
+              <Route path="/child-patient/new" element={<CreateChildPatient />} />
+              <Route path="/child-patient/:id" element={<CreateChildPatient />} />
 
 
               {/* Walk-in Clinical Proforma - Faculty, Resident and Admin */}
@@ -102,6 +108,11 @@ function App() {
                 <Route path="/clinical/:id" element={<ClinicalProformaDetails />} />
                 <Route path="/clinical/:id/edit" element={<EditClinicalProforma />} />
                 <Route path="/follow-up/:id" element={<FollowUpForm />} />
+                {/* Child Clinical Proforma Routes */}
+                <Route path="/child-clinical-proformas/new" element={<EditChildClinicalProforma />} />
+                <Route path="/child-clinical-proformas/:id" element={<EditChildClinicalProforma />} />
+                <Route path="/child-clinical-proformas/:id/edit" element={<EditChildClinicalProforma />} />
+                <Route path="/child-follow-up/:id" element={<ChildFollowUpForm />} />
               </Route>
 
               {/* Prescription Routes - Faculty, Resident and Admin */}

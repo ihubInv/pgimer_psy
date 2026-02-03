@@ -5,8 +5,9 @@ import {
   FiUser, FiPhone,  FiClock, FiEye,
   FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus, FiClipboard, FiRepeat
 } from 'react-icons/fi';
-import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useChangePatientRoomMutation } from '../../features/patients/patientsApiSlice';
+import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useChangePatientRoomMutation, patientsApiSlice } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
+import { useGetChildClinicalProformasByChildPatientIdQuery } from '../../features/clinical/childClinicalApiSlice';
 import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice, useGetAllRoomsQuery, useChangeDoctorRoomMutation } from '../../features/rooms/roomsApiSlice';
 import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
 import { useDispatch } from 'react-redux';
@@ -32,13 +33,27 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
   const [selectedNewRoom, setSelectedNewRoom] = useState('');
   const roomDropdownRef = useRef(null);
   
+  // Check if patient is a child patient
+  const isChildPatient = patient?.patient_type === 'child';
+  const childPatientId = isChildPatient ? patientId : null;
+
+  // Fetch adult clinical proformas (skip for child patients)
   const { data: proformaData, isLoading: isLoadingProformas, refetch: refetchProformas } = useGetClinicalProformaByPatientIdQuery(
     patientId, 
     { 
-      skip: !isValidPatient, // Skip API call if patient is invalid
+      skip: !isValidPatient || isChildPatient, // Skip API call if patient is invalid or is a child patient
       refetchOnMountOrArgChange: false,
       refetchOnFocus: false,
       refetchOnReconnect: false,
+    }
+  );
+
+  // Fetch child clinical proformas (only for child patients)
+  const { data: childProformaData, isLoading: isLoadingChildProformas, refetch: refetchChildProformas } = useGetChildClinicalProformasByChildPatientIdQuery(
+    childPatientId,
+    {
+      skip: !childPatientId || !isChildPatient,
+      refetchOnMountOrArgChange: true,
     }
   );
   
@@ -87,7 +102,11 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
   
   const handleMarkCompleted = async () => {
     try {
-      await markCompleted({ patient_id: patient.id }).unwrap();
+      // Include patient_type for child patients so backend knows how to handle it
+      await markCompleted({ 
+        patient_id: patient.id,
+        patient_type: isChildPatient ? 'child' : 'adult'
+      }).unwrap();
       toast.success(`Patient ${patient.name} marked as completed`);
       if (onMarkCompleted) {
         onMarkCompleted();
@@ -125,7 +144,11 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
 
   // Get visit history and proformas - simplified to avoid API calls
   const visitHistory = []; // Disabled to prevent 500 errors
-  const proformas = proformaData?.data?.proformas || [];
+  
+  // Get proformas based on patient type
+  const proformas = isChildPatient 
+    ? (childProformaData?.data?.proformas || [])
+    : (proformaData?.data?.proformas || []);
   
   // Filter out today's visits from history to get only past visits
   const todayDateString = toISTDateString(new Date());
@@ -225,6 +248,11 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
                 }`}>
                   {isNewPatient ? 'New Patient' : 'Existing Patient'}
                 </span>
+                {patient.patient_type === 'child' && (
+                  <span className="px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200 whitespace-nowrap">
+                    Child Patient
+                  </span>
+                )}
                 {patient.age_group && (
                   <span className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${getAgeGroupColor(patient.age_group)}`}>
                     {patient.age_group}
@@ -287,35 +315,90 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
         {/* Action Buttons Section - 2 Column Grid Layout */}
         <div className="lg:w-auto shrink-0">
           <div className="grid grid-cols-2 gap-2 w-full lg:w-auto">
-            {/* View Details Button - Shows only patient registration details */}
+            {/* View Details Button */}
+            {/* For child patients: Show child patient registration form in view mode */}
+            {/* For adult patients: Show patient registration details */}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/patients/${patient.id}?edit=false&mode=view`)}
+              onClick={() => {
+                const isChildPatient = patient.patient_type === 'child';
+                
+                if (isChildPatient) {
+                  // For child patients: Navigate to child patient registration form in view mode
+                  navigate(`/child-patient/${patient.id}?mode=view`);
+                } else {
+                  // For adult patients: Show patient registration details (existing behavior)
+                  navigate(`/patients/${patient.id}?edit=false&mode=view`);
+                }
+              }}
               className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all hover:shadow-sm"
             >
               <FiEye className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">View Details</span>
             </Button>
             
-            {/* Walk-In Clinical Proforma Button - ONLY show for NEW patients without any proforma */}
-            {!hasExistingProforma && (
+            {/* Walk-In Clinical Proforma Button */}
+            {/* 
+              WORKFLOW REQUIREMENT:
+              - For CHILD patients: Always show button (auto-opens Child Clinical Proforma)
+              - For ADULT patients: Only show if no existing proforma (opens Adult Clinical Proforma)
+              - No manual selection required - system automatically routes based on patient type
+            */}
+            {(() => {
+              // For child patients: only show if no existing proforma
+              // For adult patients: only show if no existing proforma
+              const shouldShowButton = !hasExistingProforma;
+              
+              if (!shouldShowButton) return null;
+              
+              return (
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
-                  // Create new proforma for new patient
+                    if (isChildPatient) {
+                      // Auto-open Child Clinical Proforma for child patients
+                      // No manual selection - automatically routes to child proforma
+                      navigate(`/child-clinical-proformas/new?child_patient_id=${patient.id}`);
+                    } else {
+                      // Create new proforma for adult patient
                   navigate(`/clinical/new?patient_id=${patient.id}`);
+                    }
               }}
               className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all hover:shadow-sm"
             >
               <FiFileText className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">Clinical Proforma</span>
             </Button>
-            )}
+              );
+            })()}
             
-            {/* Follow-Up Button - ONLY show for EXISTING patients who already have a proforma */}
-            {hasExistingProforma && (
+            {/* Follow-Up Button - Show for EXISTING patients who already have a proforma */}
+            {/* For adult patients: show if hasExistingProforma */}
+            {/* For child patients: show if hasExistingProforma (child clinical proforma) */}
+            {hasExistingProforma && (() => {
+              const isChildPatient = patient.patient_type === 'child';
+              
+              if (isChildPatient) {
+                // Child patient follow-up
+                return (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Navigate to child follow-up form
+                      navigate(`/child-follow-up/${patient.id}`);
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400 transition-all hover:shadow-sm"
+                  >
+                    <FiRefreshCw className="w-3.5 h-3.5" />
+                    <span className="whitespace-nowrap">Follow-Up</span>
+                  </Button>
+                );
+              } else {
+                // Adult patient follow-up
+                return (
               <Button
                 variant="outline"
                 size="sm"
@@ -328,19 +411,32 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
                 <FiRefreshCw className="w-3.5 h-3.5" />
                 <span className="whitespace-nowrap">Follow-Up</span>
               </Button>
-            )}
+                );
+              }
+            })()}
             
-            {/* Out Patient Intake Record Button - Opens only the Out Patient Intake Record form */}
+            {/* Out Patient Intake Record Button */}
+            {/* For child patients: Show standard ADL (Intake Record) form, linked to child_patient_id */}
+            {/* For adult patients: Show ADL (Out Patient Intake Record) form */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
-                // Navigate to ADL (Out Patient Intake Record) form
+                const isChildPatient = patient.patient_type === 'child';
+                
+                if (isChildPatient) {
+                  // For child patients: Navigate to standard ADL form with child_patient_id
+                  // Check if child patient has existing ADL file
+                  // For now, always create new (we'll add check later if needed)
+                  navigate(`/adl/new?child_patient_id=${patient.id}`);
+                } else {
+                  // For adult patients: Navigate to ADL (Out Patient Intake Record) form
                 // If patient has existing ADL, open for editing, otherwise create new
                 if (patient.has_adl_file) {
                   navigate(`/adl/patient/${patient.id}`);
                 } else {
                   navigate(`/adl/new?patient_id=${patient.id}`);
+                  }
                 }
               }}
               className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100 hover:border-purple-400 transition-all hover:shadow-sm"
@@ -780,17 +876,44 @@ const ClinicalTodayPatients = () => {
     if (!Array.isArray(patients)) return [];
 
     const targetDate = toISTDateString(selectedDate || new Date());
+    console.log(`[filterTodayPatients] Filtering ${patients.length} patients for date: ${targetDate}`);
 
-    return patients.filter((patient) => {
+    const filtered = patients.filter((patient) => {
       if (!patient) return false;
 
-      // Show ONLY patients who were registered/created today
-      // This ensures only patients registered by MWO today appear in the list
+      // Show patients who were either:
+      // 1. Created today (new patients registered by MWO), OR
+      // 2. Updated today with an assigned_room (existing patients added to today's list)
+      // This matches the backend query logic
       const patientCreatedDate = patient?.created_at ? toISTDateString(patient.created_at) : '';
       const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
       
-      return createdToday;
+      // For existing patients added to today's list, check if they were updated today
+      // and have an assigned_room (indicating they were added to today's list)
+      const patientUpdatedDate = patient?.updated_at ? toISTDateString(patient.updated_at) : '';
+      const updatedToday = patientUpdatedDate && patientUpdatedDate === targetDate;
+      const hasAssignedRoom = patient?.assigned_room && patient.assigned_room.trim() !== '';
+      
+      // Include if created today OR (updated today AND has assigned room)
+      const shouldInclude = createdToday || (updatedToday && hasAssignedRoom);
+      
+      if (patient.patient_type === 'child') {
+        console.log(`[filterTodayPatients] Child patient ${patient.id} (${patient.name}):`, {
+          createdDate: patientCreatedDate,
+          updatedDate: patientUpdatedDate,
+          createdToday,
+          updatedToday,
+          hasAssignedRoom,
+          assigned_room: patient?.assigned_room,
+          shouldInclude
+        });
+      }
+      
+      return shouldInclude;
     });
+    
+    console.log(`[filterTodayPatients] Filtered to ${filtered.length} patients`);
+    return filtered;
   };
 
   // Safely derive patients from API (handles both {data:{patients}} and {patients})
@@ -839,13 +962,19 @@ const ClinicalTodayPatients = () => {
 
   // First filter by date (today's patients)
   const todayPatientsByDate = filterTodayPatients(deduplicatedApiPatients);
+  console.log(`[ClinincalTodayPatients] After date filter: ${todayPatientsByDate.length} patients`);
   
   // Filter out completed visits - only show patients with pending visits
   // Patients will only disappear when "Mark as Completed" button is clicked
   const todayPatientsNotCompleted = todayPatientsByDate.filter(patient => {
     // Show patient if visit_status is not 'completed' or if there's no visit_status (new patients)
-    return patient.visit_status !== 'completed';
+    const isCompleted = patient.visit_status === 'completed';
+    if (isCompleted && patient.patient_type === 'child') {
+      console.log(`[ClinincalTodayPatients] Child patient ${patient.id} (${patient.name}) filtered out: visit_status is 'completed'`);
+    }
+    return !isCompleted;
   });
+  console.log(`[ClinincalTodayPatients] After completed filter: ${todayPatientsNotCompleted.length} patients`);
 
   // Then filter by role-based access (using the not-completed list)
   const todayPatients = todayPatientsNotCompleted.filter((p) => {
@@ -890,15 +1019,24 @@ const ClinicalTodayPatients = () => {
 
       // Fallback visibility rule for NEW patients:
       // Show patients created today in the current doctor's room even if not yet assigned to a doctor.
+      // ALSO show existing patients (updated today) in the current doctor's room
       const targetDate = toISTDateString(selectedDate || new Date());
       const patientCreatedDate = p?.created_at ? toISTDateString(p.created_at) : '';
+      const patientUpdatedDate = p?.updated_at ? toISTDateString(p.updated_at) : '';
       const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
+      const updatedToday = patientUpdatedDate && patientUpdatedDate === targetDate;
 
       const doctorRoom = effectiveRoomData?.data?.current_room;
       const inMyRoom = doctorRoom && p.assigned_room && p.assigned_room === doctorRoom;
 
-      if (createdToday && inMyRoom) {
+      // Show if: (created today OR updated today) AND in my room
+      if ((createdToday || updatedToday) && inMyRoom) {
         return true;
+      }
+
+      // Log why child patients are being filtered out
+      if (p.patient_type === 'child' && !inMyRoom) {
+        console.log(`[ClinincalTodayPatients] Child patient ${p.id} (${p.name}) filtered out by role: not in my room. Doctor room: "${doctorRoom}", Patient room: "${p.assigned_room}"`);
       }
 
       // Otherwise, hide for doctors
@@ -1337,16 +1475,41 @@ const ClinicalTodayPatients = () => {
           onClose={() => setIsSearchModalOpen(false)}
           currentRoom={effectiveRoomData?.data?.current_room || ''}
           onSelectPatient={async (patient) => {
-            // Patient is added to today's list via visit record creation
-            // Refetch to show the newly added patient at the top
+            // Patient is added to today's list (either adult via visit or child via room update)
+            // Force refetch to show the newly added patient
+            console.log(`[ClinincalTodayPatients] onSelectPatient called for patient:`, patient);
+            console.log(`[ClinincalTodayPatients] Today's date (IST): ${todayIST}`);
             try {
-              await refetch();
-              // Small delay to ensure data is fresh
-              setTimeout(() => {
-                refetch();
+              // Invalidate all patient-related caches, including date-specific ones
+              const tagsToInvalidate = [
+                'Patient',
+                'ChildPatient',
+                { type: 'Patient', id: 'LIST' },
+                { type: 'ChildPatient', id: 'LIST' },
+                { type: 'Patient', id: `LIST-${todayIST}` }, // Invalidate today's date-specific cache
+              ];
+              console.log(`[ClinincalTodayPatients] Invalidating tags:`, tagsToInvalidate);
+              dispatch(patientsApiSlice.util.invalidateTags(tagsToInvalidate));
+              
+              // Force immediate refetch
+              console.log(`[ClinincalTodayPatients] Refetching patients...`);
+              const refetchResult = await refetch();
+              console.log(`[ClinincalTodayPatients] Refetch result:`, refetchResult);
+              console.log(`[ClinincalTodayPatients] Refetch data:`, refetchResult.data);
+              console.log(`[ClinincalTodayPatients] Patients in response:`, refetchResult.data?.data?.patients || refetchResult.data?.patients);
+              
+              // Small delay and refetch again to ensure data is fresh (backend might need a moment)
+              setTimeout(async () => {
+                console.log(`[ClinincalTodayPatients] Second refetch after 500ms...`);
+                const secondRefetch = await refetch();
+                console.log(`[ClinincalTodayPatients] Second refetch result:`, secondRefetch);
+                console.log(`[ClinincalTodayPatients] Second refetch data:`, secondRefetch.data);
+                console.log(`[ClinincalTodayPatients] Patients in second response:`, secondRefetch.data?.data?.patients || secondRefetch.data?.patients);
               }, 500);
             } catch (error) {
-              console.error('Failed to refetch patients:', error);
+              console.error('[ClinincalTodayPatients] Failed to refetch patients:', error);
+              // Still try to refetch even if there's an error
+              refetch();
             }
           }}
         />

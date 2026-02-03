@@ -560,6 +560,14 @@ const validateId = [
   handleValidationErrors
 ];
 
+// Child patient ID parameter validation (integer only)
+const validateChildPatientId = [
+  param('child_patient_id')
+    .isInt({ min: 1 })
+    .withMessage('Valid integer child patient ID is required'),
+  handleValidationErrors
+];
+
 // Pagination validation
 const validatePagination = [
   query('page')
@@ -582,5 +590,6 @@ module.exports = {
   validateClinicalProforma,
   validateADLFile,
   validateId,
+  validateChildPatientId,
   validatePagination
 };

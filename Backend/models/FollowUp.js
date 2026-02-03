@@ -4,6 +4,7 @@ class FollowUp {
   constructor(data) {
     this.id = data.id;
     this.patient_id = data.patient_id;
+    this.child_patient_id = data.child_patient_id;
     this.visit_id = data.visit_id;
     this.visit_date = data.visit_date;
     this.clinical_assessment = data.clinical_assessment;
@@ -19,6 +20,7 @@ class FollowUp {
     return {
       id: this.id,
       patient_id: this.patient_id,
+      child_patient_id: this.child_patient_id,
       visit_id: this.visit_id,
       visit_date: this.visit_date,
       clinical_assessment: this.clinical_assessment,
@@ -36,6 +38,7 @@ class FollowUp {
     try {
       const {
         patient_id,
+        child_patient_id,
         visit_id,
         visit_date,
         clinical_assessment,
@@ -44,9 +47,9 @@ class FollowUp {
         room_no,
       } = followUpData;
 
-      // Validate required fields
-      if (!patient_id) {
-        throw new Error('patient_id is required');
+      // Validate required fields - either patient_id or child_patient_id must be provided
+      if (!patient_id && !child_patient_id) {
+        throw new Error('Either patient_id or child_patient_id is required');
       }
       if (!visit_date) {
         throw new Error('visit_date is required');
@@ -61,11 +64,12 @@ class FollowUp {
       // Insert follow-up visit
       const result = await db.query(
         `INSERT INTO followup_visits 
-         (patient_id, visit_id, visit_date, clinical_assessment, filled_by, assigned_doctor_id, room_no)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (patient_id, child_patient_id, visit_id, visit_date, clinical_assessment, filled_by, assigned_doctor_id, room_no)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [
-          patient_id,
+          patient_id || null,
+          child_patient_id || null,
           visit_id || null,
           visit_date,
           clinical_assessment.trim(),
@@ -105,7 +109,7 @@ class FollowUp {
     }
   }
 
-  // Find all follow-ups for a patient
+  // Find all follow-ups for a patient (adult or child)
   static async findByPatientId(patient_id, page = 1, limit = 10) {
     try {
       const offset = (page - 1) * limit;
@@ -132,6 +136,37 @@ class FollowUp {
       };
     } catch (error) {
       console.error('[FollowUp.findByPatientId] Error:', error);
+      throw error;
+    }
+  }
+
+  // Find all follow-ups for a child patient
+  static async findByChildPatientId(child_patient_id, page = 1, limit = 10) {
+    try {
+      const offset = (page - 1) * limit;
+
+      const result = await db.query(
+        `SELECT * FROM followup_visits 
+         WHERE child_patient_id = $1 AND is_active = true 
+         ORDER BY visit_date DESC, created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [child_patient_id, limit, offset]
+      );
+
+      const countResult = await db.query(
+        'SELECT COUNT(*) as total FROM followup_visits WHERE child_patient_id = $1 AND is_active = true',
+        [child_patient_id]
+      );
+
+      return {
+        followups: result.rows.map(row => new FollowUp(row)),
+        total: parseInt(countResult.rows[0].total, 10),
+        page,
+        limit,
+        pages: Math.ceil(parseInt(countResult.rows[0].total, 10) / limit),
+      };
+    } catch (error) {
+      console.error('[FollowUp.findByChildPatientId] Error:', error);
       throw error;
     }
   }

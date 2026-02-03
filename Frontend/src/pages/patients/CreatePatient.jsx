@@ -30,6 +30,7 @@ import {
    isSR, isJR, HEAD_RELATIONSHIP_OPTIONS, CATEGORY_OPTIONS, isMWO, INDIA_STATES
 } from '../../utils/constants';
 import { validatePatientRegistration } from '../../utils/patientValidation';
+import CreateChildPatient from './CreateChildPatient';
 
 
 
@@ -65,6 +66,8 @@ const CreatePatient = () => {
   const [sameAsPermanent, setSameAsPermanent] = useState(false);
   const [sameAsPatientName, setSameAsPatientName] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  // Tab state for PWO users (Adult Patient / Child Patient)
+  const [activeTab, setActiveTab] = useState('adult');
   
   // Track which permanent address fields were manually edited by the user
   // This prevents auto-population from overwriting user edits
@@ -633,6 +636,45 @@ const CreatePatient = () => {
 
       <div className="relative w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
+        {/* Tabs for PWO users - Adult Patient / Child Patient */}
+        {isMWO(currentUser?.role) && (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden p-2">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('adult')}
+                className={`flex-1 px-8 py-5 text-center font-semibold transition-all duration-200 rounded-lg ${
+                  activeTab === 'adult'
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md'
+                    : 'text-gray-700 hover:bg-gray-50 bg-white'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-3">
+                  <FiUser className="w-5 h-5" />
+                  <span>Adult Patient</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('child')}
+                className={`flex-1 px-8 py-5 text-center font-semibold transition-all duration-200 rounded-lg ${
+                  activeTab === 'child'
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md'
+                    : 'text-gray-700 hover:bg-gray-50 bg-white'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-3">
+                  <FiUsers className="w-5 h-5" />
+                  <span>Child Patient</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Adult Patient Form - Show for non-PWO users or when PWO selects Adult tab */}
+        {(!isMWO(currentUser?.role) || activeTab === 'adult') && (
+          <>
         {/* Patient Details Card - Collapsible */}
         <Card className="shadow-lg border-0 bg-white">
           <div
@@ -1767,6 +1809,13 @@ const CreatePatient = () => {
             </div>
           )}
         </Card>
+          </>
+        )}
+
+        {/* Child Patient Form - Show when PWO selects Child tab */}
+        {isMWO(currentUser?.role) && activeTab === 'child' && (
+          <CreateChildPatient />
+        )}
       </div>
     </div>
   );

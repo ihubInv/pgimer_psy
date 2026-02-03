@@ -32,6 +32,7 @@ const CustomDatePicker = ({
   min,
   max,
   disabled = false,
+  readOnly = false,
   defaultToday = false,
   dropdownZIndex = 1000000,
   ...props
@@ -229,6 +230,8 @@ const CustomDatePicker = ({
 
   // Handle manual input change
   const handleInputChange = (e) => {
+    if (disabled || readOnly) return; // Prevent changes when disabled or readOnly
+    
     isTypingRef.current = true;
     let newValue = e.target.value;
     
@@ -502,6 +505,7 @@ const CustomDatePicker = ({
 
   // Select date
   const selectDate = (day) => {
+    if (disabled || readOnly) return; // Prevent selection when disabled or readOnly
     const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
     setSelectedDate(newDate);
     
@@ -547,6 +551,7 @@ const CustomDatePicker = ({
 
   // Clear date
   const clearDate = () => {
+    if (disabled || readOnly) return; // Prevent clearing when disabled or readOnly
     setSelectedDate(null);
     setInputValue('');
     setValidationError('');
@@ -691,10 +696,11 @@ const CustomDatePicker = ({
             value={inputValue}
             onChange={handleInputChange}
             onBlur={handleInputBlur}
-            onFocus={() => !disabled && setIsOpen(true)}
-            onClick={() => !disabled && setIsOpen(true)}
+            onFocus={() => !disabled && !readOnly && setIsOpen(true)}
+            onClick={() => !disabled && !readOnly && setIsOpen(true)}
             placeholder={placeholder}
             disabled={disabled}
+            readOnly={readOnly}
             className={`w-full px-4 py-3.5 pl-14 pr-12 bg-white/70 backdrop-blur-xl border-2 rounded-xl shadow-lg transition-all duration-300 font-lato text-sm font-semibold ${
               error || validationError
                 ? 'border-red-400/70 bg-red-50/40 shadow-red-200/50 text-red-900'
@@ -726,7 +732,7 @@ const CustomDatePicker = ({
         )}
 
         {/* Calendar Popup - Rendered via Portal to avoid overflow clipping */}
-        {isOpen && !disabled && createPortal(
+        {isOpen && !disabled && !readOnly && createPortal(
           <div
             ref={pickerRef}
             style={{

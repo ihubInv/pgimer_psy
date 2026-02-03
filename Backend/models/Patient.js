@@ -775,8 +775,9 @@ class Patient {
       // Filter by registration date (for Today's Patients view)
       // When date filter is provided, show ONLY patients registered/created on that date
       // This ensures the "Today's Patients" tab shows only patients registered today by the MWO
+      // Use AT TIME ZONE to convert to IST before comparing dates
       if (filters.date) {
-        where.push(`DATE(p.created_at) = $${idx}::date`);
+        where.push(`DATE((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $${idx}::date`);
         params.push(filters.date);
         idx++;
       }
@@ -1447,9 +1448,22 @@ class Patient {
       // Get patients that are in this room today
       // Logic: Either created today with this room OR have a visit today with this room
       // Use DISTINCT ON to avoid duplicates from multiple ADL files or visits
+      // Also include child patients from child_patient_registrations table
       const query = `
+        WITH adult_patients AS (
         SELECT DISTINCT ON (p.id)
-          p.*,
+            p.id,
+            p.name,
+            p.cr_no,
+            p.psy_no,
+            p.special_clinic_no,
+            NULL::text as adl_no,
+            p.sex,
+            p.age,
+            p.assigned_room,
+            p.assigned_doctor_id,
+            u.name as assigned_doctor_name,
+            u.role as assigned_doctor_role,
           CASE WHEN af.id IS NOT NULL THEN true ELSE COALESCE(p.has_adl_file, false) END as has_adl_file,
           CASE
             WHEN af.id IS NOT NULL THEN 'complex'
@@ -1457,30 +1471,103 @@ class Patient {
             ELSE 'simple'
           END as case_complexity,
           af.id as adl_file_id,
-          af.adl_no,
-          u.name as assigned_doctor_name,
-          u.role as assigned_doctor_role,
           pv.room_no as visit_room_no,
-          pv.visit_date as latest_visit_date
+            pv.visit_date as latest_visit_date,
+            p.created_at,
+            'adult' as patient_type,
+            (
+              SELECT u_filled.name
+              FROM users u_filled
+              WHERE u_filled.id = p.filled_by
+              LIMIT 1
+            ) AS filled_by_name,
+            (
+              SELECT u_filled.role
+              FROM users u_filled
+              WHERE u_filled.id = p.filled_by
+              LIMIT 1
+            ) AS filled_by_role
         FROM registered_patient p
         LEFT JOIN adl_files af ON af.patient_id = p.id
         LEFT JOIN users u ON u.id = p.assigned_doctor_id
         LEFT JOIN patient_visits pv ON pv.patient_id = p.id AND DATE(pv.visit_date) = $2
         WHERE (
-          -- New patients created today with this room
           (DATE(p.created_at) = $2 
            AND TRIM(COALESCE(p.assigned_room::text, '')) = TRIM($1::text))
           OR
-          -- Existing patients with visits today in this room
           (pv.id IS NOT NULL 
            AND TRIM(COALESCE(pv.room_no::text, p.assigned_room::text, '')) = TRIM($1::text))
         )
         ORDER BY p.id, af.id DESC NULLS LAST, pv.visit_date DESC NULLS LAST
+        ),
+        child_patients AS (
+          SELECT 
+            cpr.id,
+            cpr.child_name as name,
+            cpr.cr_number as cr_no,
+            NULL::text as psy_no,
+            cpr.cgc_number as special_clinic_no,
+            NULL::text as adl_no,
+            cpr.sex,
+            NULL::integer as age,
+            cpr.assigned_room,
+            NULL::integer as assigned_doctor_id,
+            NULL::text as assigned_doctor_name,
+            NULL::text as assigned_doctor_role,
+            false as has_adl_file,
+            'simple' as case_complexity,
+            NULL::integer as adl_file_id,
+            NULL::text as visit_room_no,
+            NULL::date as latest_visit_date,
+            cpr.created_at,
+            'child' as patient_type,
+            u_filled.name as filled_by_name,
+            u_filled.role as filled_by_role
+          FROM child_patient_registrations cpr
+          LEFT JOIN users u_filled ON u_filled.id = cpr.filled_by
+          WHERE (
+            DATE(cpr.created_at) = $2 
+            AND TRIM(COALESCE(cpr.assigned_room::text, '')) = TRIM($1::text)
+          )
+        )
+        SELECT * FROM adult_patients
+        UNION ALL
+        SELECT * FROM child_patients
+        ORDER BY created_at DESC
       `;
 
       const result = await db.query(query, [roomNumber.trim(), today]);
       
       return result.rows.map(row => {
+        // Handle child patients differently - they have different structure
+        if (row.patient_type === 'child') {
+          // Return child patient data in a compatible format
+          return {
+            id: row.id,
+            name: row.name,
+            cr_no: row.cr_no,
+            psy_no: row.psy_no,
+            special_clinic_no: row.special_clinic_no,
+            assigned_room: row.assigned_room,
+            assigned_doctor_id: row.assigned_doctor_id,
+            assigned_doctor_name: row.assigned_doctor_name,
+            assigned_doctor_role: row.assigned_doctor_role,
+            has_adl_file: row.has_adl_file,
+            case_complexity: row.case_complexity,
+            adl_file_id: row.adl_file_id,
+            adl_no: row.adl_no,
+            visit_room_no: row.visit_room_no,
+            latest_visit_date: row.latest_visit_date,
+            created_at: row.created_at,
+            patient_type: 'child',
+            sex: row.sex,
+            age: row.age,
+            filled_by_name: row.filled_by_name,
+            filled_by_role: row.filled_by_role
+          };
+        }
+        
+        // Regular adult patients
         const patient = new Patient(row);
         // Ensure assigned_doctor_name is set properly
         const doctorName = row.assigned_doctor_name && row.assigned_doctor_name !== 'Unknown Doctor' 

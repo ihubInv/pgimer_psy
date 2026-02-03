@@ -75,6 +75,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
   
   // Get patient_id from query params (for /adl/new?patient_id=X)
   const patientIdFromQuery = searchParams.get('patient_id');
+  const childPatientIdFromQuery = searchParams.get('child_patient_id');
   const clinicalProformaIdFromQuery = searchParams.get('clinical_proforma_id');
 
   // Use prop id if provided, otherwise use URL param
@@ -126,10 +127,14 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
     (mode !== 'create' && !isNewRoute && id && adlFile) || 
     (isPatientRoute && adlFile);
   
-  // Get patientId and clinicalProformaId - must be declared before useGetPatientFilesQuery
+  // Get patientId, childPatientId and clinicalProformaId - must be declared before useGetPatientFilesQuery
   // Priority: prop > query param > URL id (if patient route) > adlFile
   const patientId = propPatientId || (patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : null) || (isPatientRoute && id ? parseInt(id, 10) : null) || adlFile?.patient_id;
+  const childPatientId = (childPatientIdFromQuery ? parseInt(childPatientIdFromQuery, 10) : null) || adlFile?.child_patient_id;
   const clinicalProformaId = propClinicalProformaId || (clinicalProformaIdFromQuery ? parseInt(clinicalProformaIdFromQuery, 10) : null) || adlFile?.clinical_proforma_id;
+  
+  // Determine if this is a child patient
+  const isChildPatient = Boolean(childPatientId);
 
   // File upload state
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -144,8 +149,87 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
   const existingFiles = patientFilesData?.data?.files || [];
   const canEditFiles = patientFilesData?.data?.can_edit !== false;
   
-  const { data: patientData, isLoading: isLoadingPatient } = useGetPatientByIdQuery(patientId, { skip: !patientId });
-  const patient = patientData?.data?.patient;
+  const { data: patientData, isLoading: isLoadingPatient } = useGetPatientByIdQuery(patientId, { skip: !patientId || isChildPatient });
+  const adultPatient = patientData?.data?.patient;
+  
+  // Fetch child patient data if child_patient_id is provided
+  const [childPatient, setChildPatient] = useState(null);
+  const [isLoadingChildPatient, setIsLoadingChildPatient] = useState(false);
+  
+  useEffect(() => {
+    const fetchChildPatient = async () => {
+      if (!childPatientId || isChildPatient === false) {
+        setIsLoadingChildPatient(false);
+        return;
+      }
+      
+      setIsLoadingChildPatient(true);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL || '/api'}/child-patient/${childPatientId}`,
+          {
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : '',
+            },
+            credentials: 'include'
+          }
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          const childPatientData = data.data?.childPatient || data.data?.child_patient;
+          setChildPatient(childPatientData);
+        }
+      } catch (error) {
+        console.error('Error fetching child patient:', error);
+      } finally {
+        setIsLoadingChildPatient(false);
+      }
+    };
+    
+    fetchChildPatient();
+  }, [childPatientId, isChildPatient]);
+
+  // Helper function to convert age_group to approximate age
+  const getAgeFromAgeGroup = (ageGroup) => {
+    if (!ageGroup) return '';
+    const ageMap = {
+      'Less than 1 year': '0',
+      '1 – 5 years': '3',
+      '5 – 10 years': '7',
+      '10 – 15 years': '12'
+    };
+    return ageMap[ageGroup] || '';
+  };
+
+  // Create merged patient object that works for both adult and child patients
+  const patient = useMemo(() => {
+    if (isChildPatient && childPatient) {
+      // Map child patient fields to ADL form expected fields
+      return {
+        name: childPatient.child_name || '',
+        age: getAgeFromAgeGroup(childPatient.age_group) || '',
+        sex: childPatient.sex || '',
+        psy_no: childPatient.cgc_number || childPatient.cr_number || '',
+        cr_no: childPatient.cr_number || '',
+        date: childPatient.seen_as_walk_in_on || new Date().toISOString().split('T')[0],
+        marital_status: '', // Not applicable for children
+        education_level: childPatient.educational_status || '',
+        occupation: childPatient.occupational_status || '',
+        city: childPatient.city_town_village || '',
+        district: childPatient.district || '',
+        // Combine city and district for "Name of the City/District" field
+        city_district: [childPatient.city_town_village, childPatient.district].filter(Boolean).join(', ') || '',
+        // Additional child patient fields that might be useful
+        religion: childPatient.religion || '',
+        locality: childPatient.locality || '',
+        source_of_referral: childPatient.source_of_referral || '',
+      };
+    }
+    // Return adult patient as-is
+    return adultPatient;
+  }, [isChildPatient, childPatient, adultPatient]);
 
   // Card expand/collapse state
   const [expandedCards, setExpandedCards] = useState({
@@ -635,8 +719,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
     
     // Get patientId from multiple sources for robustness
     const effectivePatientId = patientId || (patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : null);
+    const effectiveChildPatientId = childPatientId || (childPatientIdFromQuery ? parseInt(childPatientIdFromQuery, 10) : null);
     
-    if (!effectivePatientId && !adlFile) {
+    if (!effectivePatientId && !effectiveChildPatientId && !adlFile) {
       toast.error('Patient ID is required to create an Out Patient Intake Record');
       console.error('Missing patientId. patientId:', patientId, 'patientIdFromQuery:', patientIdFromQuery);
       return;
@@ -661,21 +746,26 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
         return prepared;
       };
 
-      // If no ADL file exists and we have patientId, create new one
-      if (!adlFile && effectivePatientId) {
-        // IMPORTANT: Spread formData FIRST, then override patient_id and clinical_proforma_id
+      // If no ADL file exists and we have patientId or childPatientId, create new one
+      if (!adlFile && (effectivePatientId || childPatientId)) {
+        // IMPORTANT: Spread formData FIRST, then override patient_id/child_patient_id and clinical_proforma_id
         // to prevent formData.patient_id (empty string) from overwriting our values
         const createData = {
           ...prepareDataForSubmission(formData),
-          patient_id: parseInt(effectivePatientId, 10),
+          patient_id: effectivePatientId ? parseInt(effectivePatientId, 10) : null,
+          child_patient_id: childPatientId ? parseInt(childPatientId, 10) : null,
           clinical_proforma_id: clinicalProformaId ? parseInt(clinicalProformaId, 10) : null,
         };
-        console.log('Creating ADL file with data:', { patient_id: createData.patient_id, clinical_proforma_id: createData.clinical_proforma_id });
+        console.log('Creating ADL file with data:', { 
+          patient_id: createData.patient_id, 
+          child_patient_id: createData.child_patient_id,
+          clinical_proforma_id: createData.clinical_proforma_id 
+        });
         await createADLFile(createData).unwrap();
         toast.success('Out Patient Intake Record File created successfully!');
         
-        // Handle file uploads for new ADL file
-        if (effectivePatientId && selectedFiles && selectedFiles.length > 0) {
+        // Handle file uploads for new ADL file (for adult patients only - child patients use different file system)
+        if (effectivePatientId && !effectiveChildPatientId && selectedFiles && selectedFiles.length > 0) {
           try {
             await createPatientFiles({
               patient_id: effectivePatientId,
@@ -699,6 +789,8 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
         }
         if (effectivePatientId) {
           navigate(`/patients/${effectivePatientId}?tab=adl`);
+        } else if (effectiveChildPatientId) {
+          navigate(`/clinical-today-patients`);
         } else {
           navigate('/adl-files');
         }
@@ -879,13 +971,13 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                         {readOnly ? (
                           <DisplayField
                             label="Education"
-                            value={patient?.education || patient?.education_level || ''}
+                            value={patient?.education_level || patient?.education || ''}
                           />
                         ) : (
                           <Input
                             label="Education"
                             name="education"
-                            value={patient?.education || patient?.education_level || ''}
+                            value={patient?.education_level || patient?.education || ''}
                             onChange={handleChange}
                             disabled={true}
                             className="disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -909,7 +1001,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                         {readOnly ? (
                           <DisplayField
                             label="Name of the City/District"
-                            value={(() => {
+                            value={patient?.city_district || (() => {
                               const city = patient?.city || patient?.present_city_town_village || '';
                               const district = patient?.district || patient?.present_district || '';
                               if (city && district) {
@@ -922,7 +1014,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                           <Input
                             label="Name of the City/District"
                             name="city_district"
-                            value={(() => {
+                            value={patient?.city_district || (() => {
                               const city = patient?.city || patient?.present_city_town_village || '';
                               const district = patient?.district || patient?.present_district || '';
                               if (city && district) {

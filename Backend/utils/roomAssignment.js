@@ -145,8 +145,14 @@ async function getTodayRoomDistribution() {
     // Use simple DATE() function which respects database timezone settings
     // Cast room values to text for consistent comparison (handles both numeric and text room values)
     // IMPORTANT: Only count rooms that exist in the rooms table (active rooms)
+    // Also include child patients from child_patient_registrations table
     const result = await db.query(
       `SELECT 
+         room,
+         SUM(patient_count) as patient_count
+       FROM (
+         -- Adult patients
+         SELECT 
          TRIM(COALESCE(rp.assigned_room::text, '')) as room,
          COUNT(DISTINCT rp.id) as patient_count
        FROM registered_patient rp
@@ -164,6 +170,30 @@ async function getTodayRoomDistribution() {
          )
        GROUP BY TRIM(COALESCE(rp.assigned_room::text, ''))
        HAVING TRIM(COALESCE(rp.assigned_room::text, '')) != ''
+         
+         UNION ALL
+         
+         -- Child patients
+         SELECT 
+           TRIM(COALESCE(cpr.assigned_room::text, '')) as room,
+           COUNT(DISTINCT cpr.id) as patient_count
+         FROM child_patient_registrations cpr
+         WHERE DATE(cpr.created_at) = $1 
+           AND cpr.assigned_room IS NOT NULL 
+           AND TRIM(COALESCE(cpr.assigned_room::text, '')) != ''
+           -- Only include rooms that exist in the rooms table (active rooms)
+           AND (
+             TRIM(COALESCE(cpr.assigned_room::text, '')) = ANY($2::text[])
+             OR EXISTS (
+               SELECT 1 FROM rooms r 
+               WHERE r.is_active = true 
+                 AND r.room_number = TRIM(COALESCE(cpr.assigned_room::text, ''))
+             )
+           )
+         GROUP BY TRIM(COALESCE(cpr.assigned_room::text, ''))
+         HAVING TRIM(COALESCE(cpr.assigned_room::text, '')) != ''
+       ) combined
+       GROUP BY room
        ORDER BY room`,
       [today, activeRooms]
     );
@@ -407,9 +437,10 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
     // Find patients in this room
     // Handle room format variations - compare as text to handle "205" vs "Room 205" etc.
     // Check both assigned_room from patient record and room_no from today's visit record
+    // Also include child patients from child_patient_registrations
     const patientsResult = await db.query(
       `SELECT DISTINCT rp.id, rp.name, rp.assigned_doctor_id, DATE(rp.created_at) as created_date,
-              rp.assigned_room, pv.room_no
+              rp.assigned_room, pv.room_no, 'adult' as patient_type
        FROM registered_patient rp
        LEFT JOIN patient_visits pv ON rp.id = pv.patient_id AND DATE(pv.visit_date) = $2
        WHERE (
@@ -417,6 +448,23 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
          TRIM(COALESCE(rp.assigned_room::text, '')) = TRIM($1::text)
          -- OR check if today's visit room_no matches
          OR TRIM(COALESCE(pv.room_no::text, '')) = TRIM($1::text)
+       )
+       
+       UNION ALL
+       
+       -- Child patients in this room
+       SELECT DISTINCT 
+         cpr.id, 
+         cpr.child_name as name, 
+         NULL::integer as assigned_doctor_id, 
+         DATE(cpr.created_at) as created_date,
+         cpr.assigned_room, 
+         NULL::text as room_no,
+         'child' as patient_type
+       FROM child_patient_registrations cpr
+       WHERE (
+         DATE(cpr.created_at) = $2
+         AND TRIM(COALESCE(cpr.assigned_room::text, '')) = TRIM($1::text)
        )`,
       [roomNumber, todayDate]
     );
@@ -464,9 +512,12 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
     }
 
     // Update patients to assign them to the doctor
-    const patientIds = patients.map(p => p.id);
+    // Separate adult and child patients - only adult patients can be assigned to doctors
+    const adultPatients = patients.filter(p => p.patient_type !== 'child');
+    const childPatients = patients.filter(p => p.patient_type === 'child');
+    const patientIds = adultPatients.map(p => p.id);
     
-    // Update patients one by one to avoid array parameter issues
+    // Update adult patients one by one to avoid array parameter issues
     // Also handle room format variations - check both assigned_room and visit room_no
     if (patientIds.length > 0) {
       for (const patientId of patientIds) {
@@ -493,8 +544,14 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
       }
     }
 
-    // Create visit records for these patients if they don't have one for today
-    for (const patient of patients) {
+    // Note: Child patients are included in the room but cannot be assigned to doctors
+    // as they are in a separate table (child_patient_registrations)
+    if (childPatients.length > 0) {
+      console.log(`[assignPatientsToDoctor] Found ${childPatients.length} child patient(s) in room ${roomNumber} (not assigned to doctor)`);
+    }
+
+    // Create visit records for adult patients only (child patients don't use patient_visits table)
+    for (const patient of adultPatients) {
       // Check if visit exists
       const visitCheck = await db.query(
         `SELECT id FROM patient_visits 
@@ -540,13 +597,19 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
       }
     }
 
-    console.log(`[assignPatientsToDoctor] ✅ Successfully assigned ${patients.length} patient(s) to doctor ${doctorId} in room ${roomNumber}`);
+    const totalPatients = patients.length;
+    const assignedCount = adultPatients.length; // Only adult patients are assigned to doctors
+    
+    console.log(`[assignPatientsToDoctor] ✅ Found ${totalPatients} patient(s) in room ${roomNumber} (${assignedCount} adult(s) assigned to doctor, ${childPatients.length} child patient(s) in room)`);
     
     return {
-      assigned: patients.length,
+      assigned: assignedCount,
+      total: totalPatients,
       patients: patients.map(p => ({
         id: p.id,
-        name: p.name
+        name: p.name,
+        assigned_room: p.assigned_room,
+        patient_type: p.patient_type || 'adult'
       }))
     };
   } catch (error) {

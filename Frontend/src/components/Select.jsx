@@ -87,7 +87,16 @@ const Select = ({
     }
   }, [isOpen]);
 
+  // Close dropdown when disabled
+  useEffect(() => {
+    if (disabled && isOpen) {
+      setIsOpen(false);
+    }
+  }, [disabled, isOpen]);
+
   const handleSelect = (optionValue) => {
+    if (disabled) return; // Prevent selection when disabled
+    
     const event = {
       target: {
         name,

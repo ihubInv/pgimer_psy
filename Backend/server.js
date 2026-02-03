@@ -13,6 +13,8 @@ require('dotenv').config();
 // Routes
 const userRoutes = require('./routes/userRoutes');
 const patientRoutes = require('./routes/patientRoutes');
+const childPatientRoutes = require('./routes/childPatientRoutes');
+const childClinicalProformaRoutes = require('./routes/childClinicalProformaRoutes');
 const patientFileRoutes = require('./routes/patientFileRoutes');
 const clinicalRoutes = require('./routes/clinicalRoutes');
 const adlRoutes = require('./routes/adlRoutes');
@@ -142,6 +144,8 @@ app.get('/fileupload/*',
 ================================================= */
 app.use('/api/users', userRoutes);
 app.use('/api/patients', patientRoutes);
+app.use('/api/child-patient', childPatientRoutes);
+app.use('/api/child-clinical-proformas', childClinicalProformaRoutes);
 app.use('/api/patient-files', patientFileRoutes);
 app.use('/api/clinical-proformas', clinicalRoutes);
 app.use('/api/adl-files', adlRoutes);

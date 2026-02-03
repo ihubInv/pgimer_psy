@@ -4,26 +4,32 @@ import { toast } from 'react-toastify';
 import Modal from './Modal';
 import Button from './Button';
 import Input from './Input';
-import { useGetPatientByCRNoQuery, useCreatePatientMutation } from '../features/patients/patientsApiSlice';
+import { useGetPatientByCRNoQuery, useCreatePatientMutation, useAddChildPatientToTodayListMutation } from '../features/patients/patientsApiSlice';
 
 const SearchExistingPatientModal = ({ isOpen, onClose, onSelectPatient, currentRoom }) => {
   const [crNo, setCrNo] = useState('');
   const [searchTrigger, setSearchTrigger] = useState(null);
   
+  // Unified search: Single query searches both adult and child patients
   const { data: patientData, isLoading, error } = useGetPatientByCRNoQuery(
     searchTrigger,
     { skip: !searchTrigger }
   );
 
+  // Extract patient data from unified response
   const patient = patientData?.data?.patient;
+  const patientType = patientData?.data?.patient_type;
+  const isChildPatient = patientType === 'child';
+  const foundPatient = patient;
 
   // Prefer the logged-in doctor's current room (passed from parent) for display as well.
   // This ensures the modal shows where the doctor is sitting today, not the patient's old room.
   const displayRoom =
     (currentRoom && currentRoom.trim() !== '')
       ? currentRoom
-      : (patient?.assigned_room || '');
+      : (foundPatient?.assigned_room || '');
   const [createPatient, { isLoading: isCreatingVisit }] = useCreatePatientMutation();
+  const [addChildPatientToTodayList, { isLoading: isAddingChildPatient }] = useAddChildPatientToTodayListMutation();
 
   const handleSearch = () => {
     if (!crNo.trim()) {
@@ -40,10 +46,34 @@ const SearchExistingPatientModal = ({ isOpen, onClose, onSelectPatient, currentR
   };
 
   const handleSelectPatient = async () => {
-    if (!patient) return;
+    if (!foundPatient) return;
 
     try {
-      // Create a visit record for the existing patient
+      if (isChildPatient) {
+        // For child patients, update their assigned_room to add them to today's list
+        const roomToUse =
+          (currentRoom && currentRoom.trim() !== '') 
+            ? currentRoom 
+            : (patient.assigned_room || undefined);
+
+        const result = await addChildPatientToTodayList({
+          child_patient_id: parseInt(patient.id, 10),
+          assigned_room: roomToUse,
+        }).unwrap();
+
+        toast.success('Child patient added to today\'s list successfully!');
+        
+        // Call onSelectPatient callback if provided (for refetching patient list)
+        // Call immediately - cache invalidation happens synchronously
+        if (onSelectPatient) {
+          onSelectPatient(patient);
+        }
+        
+        handleClose();
+        return;
+      }
+
+      // Create a visit record for the existing adult patient
       // This will add them to today's patients list
       // Prefer the logged-in doctor's current room (passed from parent) over stale patient room
       const roomToUse =
@@ -66,13 +96,13 @@ const SearchExistingPatientModal = ({ isOpen, onClose, onSelectPatient, currentR
       
       handleClose();
     } catch (err) {
-      console.error('Failed to create visit record:', err);
-      // Handle case where visit already exists
+      console.error('Failed to add patient to today\'s list:', err);
+      // Handle case where visit already exists or patient is already in list
       if (err?.status === 400 && (err?.data?.message?.includes('already exists') || err?.data?.message?.includes('already has'))) {
         toast.info('Patient is already in today\'s list');
         // Still call onSelectPatient to trigger refetch
         if (onSelectPatient) {
-          onSelectPatient(patient);
+          onSelectPatient(foundPatient);
         }
         handleClose();
       } else {
@@ -138,17 +168,24 @@ const SearchExistingPatientModal = ({ isOpen, onClose, onSelectPatient, currentR
         )}
 
         {/* Patient Card */}
-        {patient && !error && (
+        {foundPatient && !error && (
           <div className="p-4 bg-gradient-to-r from-green-50/30 to-white border-l-4 border-l-green-500 rounded-lg shadow-sm">
             <div className="space-y-3">
               {/* Header */}
               <div className="flex items-center justify-between">
                 <h4 className="text-lg font-bold text-gray-900">
-                  {patient.name}
+                  {patient.name || patient.child_name}
                 </h4>
-                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
-                  Existing Patient
-                </span>
+                <div className="flex items-center gap-2">
+                  {isChildPatient && (
+                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">
+                      Child Patient
+                    </span>
+                  )}
+                  <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                    Existing Patient
+                  </span>
+                </div>
               </div>
 
               {/* Patient Details */}
@@ -156,10 +193,20 @@ const SearchExistingPatientModal = ({ isOpen, onClose, onSelectPatient, currentR
                 <span className="flex items-center gap-1 whitespace-nowrap">
                   <FiUser className="w-3.5 h-3.5 text-gray-400" />
                   <span className="font-medium">{patient.sex}</span>
-                  <span className="text-gray-300">•</span>
-                  <span>{patient.age}y</span>
+                  {!isChildPatient && patient.age && (
+                    <>
+                      <span className="text-gray-300">•</span>
+                      <span>{patient.age}y</span>
+                    </>
+                  )}
+                  {isChildPatient && patient.age_group && (
+                    <>
+                      <span className="text-gray-300">•</span>
+                      <span>{patient.age_group}</span>
+                    </>
+                  )}
                 </span>
-                {patient.contact_number && (
+                {!isChildPatient && patient.contact_number && (
                   <span className="flex items-center gap-1 whitespace-nowrap">
                     <FiPhone className="w-3.5 h-3.5 text-gray-400" />
                     <span>{patient.contact_number}</span>
@@ -171,10 +218,17 @@ const SearchExistingPatientModal = ({ isOpen, onClose, onSelectPatient, currentR
                     <span>{formatTime(patient.created_at)}</span>
                   </span>
                 )}
-                <span className="text-gray-500">CR: <span className="font-medium text-gray-700">{patient.cr_no}</span></span>
-                {patient.psy_no && (
+                <span className="text-gray-500">
+                  CR: <span className="font-medium text-gray-700">{patient.cr_no || patient.cr_number}</span>
+                </span>
+                {!isChildPatient && patient.psy_no && (
                   <span className="text-gray-500">
                     PSY: <span className="font-medium text-gray-700">{patient.psy_no}</span>
+                  </span>
+                )}
+                {isChildPatient && (patient.cgc_number || patient.special_clinic_no) && (
+                  <span className="text-gray-500">
+                    CGC: <span className="font-medium text-gray-700">{patient.cgc_number || patient.special_clinic_no}</span>
                   </span>
                 )}
                 {(displayRoom && displayRoom.trim() !== '') && (
@@ -188,8 +242,8 @@ const SearchExistingPatientModal = ({ isOpen, onClose, onSelectPatient, currentR
               <div className="pt-2 border-t border-gray-100">
                 <Button
                   onClick={handleSelectPatient}
-                  loading={isCreatingVisit}
-                  disabled={isCreatingVisit}
+                  loading={isCreatingVisit || isAddingChildPatient}
+                  disabled={isCreatingVisit || isAddingChildPatient}
                   className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
                 >
                   Add to Today's List

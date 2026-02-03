@@ -69,7 +69,7 @@ class ADLController {
     }
   }
 
-  // Get ADL files by patient ID (integer)
+  // Get ADL files by patient ID (integer) - for adult patients
   static async getADLFilesByPatientId(req, res) {
     try {
       const { patient_id } = req.params;
@@ -94,6 +94,31 @@ class ADLController {
     }
   }
 
+  // Get ADL files by child patient ID (integer) - for child patients
+  static async getADLFilesByChildPatientId(req, res) {
+    try {
+      const { child_patient_id } = req.params;
+      
+      console.log(`[ADLController.getADLFilesByChildPatientId] Fetching ADL files for child_patient_id: ${child_patient_id}`);
+      
+      const adlFiles = await ADLFile.findByChildPatientId(child_patient_id);
+
+      res.json({
+        success: true,
+        data: {
+          adlFiles: adlFiles.map(file => file.toJSON())
+        }
+      });
+    } catch (error) {
+      console.error('Get ADL files by child patient ID error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get ADL files',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
   // Create ADL file
 
   static async createADLFile(req, res) {
@@ -101,11 +126,19 @@ class ADLController {
       const adlData = { ...req.body };
       const createdBy = req.user.id; // Get user ID from authenticated request
 
-      // Validate required fields
-      if (!adlData.patient_id) {
+      // Validate required fields - either patient_id or child_patient_id must be provided
+      if (!adlData.patient_id && !adlData.child_patient_id) {
         return res.status(400).json({
           success: false,
-          message: 'Patient ID is required'
+          message: 'Either Patient ID or Child Patient ID is required'
+        });
+      }
+
+      // Ensure only one is set
+      if (adlData.patient_id && adlData.child_patient_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot set both Patient ID and Child Patient ID'
         });
       }
 

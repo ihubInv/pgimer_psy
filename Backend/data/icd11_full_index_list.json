@@ -1,0 +1,176 @@
+{
+    "Neurodevelopmental_Disorders": [
+      { "code": "6A00", "name": "Disorders of intellectual development" },
+      { "code": "6A01", "name": "Developmental speech and language disorders" },
+      { "code": "6A02", "name": "Autism spectrum disorder" },
+      { "code": "6A03", "name": "Developmental learning disorder" },
+      { "code": "6A04", "name": "Developmental motor coordination disorder" },
+      { "code": "6A05", "name": "Attention deficit hyperactivity disorder" },
+      { "code": "6A06", "name": "Stereotyped movement disorder" },
+      { "code": "6A0Y", "name": "Other specified neurodevelopmental disorder" },
+      { "code": "6A0Z", "name": "Neurodevelopmental disorder, unspecified" }
+    ],
+  
+    "Primary_Tic_Disorders": [
+      { "code": "8A05.0", "name": "Primary tics and tic disorders" },
+      { "code": "8A05.00", "name": "Tourette syndrome" },
+      { "code": "8A05.01", "name": "Chronic motor tic disorder" },
+      { "code": "8A05.02", "name": "Chronic phonic tic disorder" }
+    ],
+  
+    "Schizophrenia_and_Psychotic_Disorders": [
+      { "code": "6A20", "name": "Schizophrenia" },
+      { "code": "6A21", "name": "Schizoaffective disorder" },
+      { "code": "6A22", "name": "Schizotypal disorder" },
+      { "code": "6A23", "name": "Acute and transient psychotic disorder" },
+      { "code": "6A24", "name": "Delusional disorder" },
+      { "code": "6A2Y", "name": "Other specified primary psychotic disorder" },
+      { "code": "6A2Z", "name": "Schizophrenia or other primary psychotic disorder, unspecified" }
+    ],
+  
+    "Catatonia": [
+      { "code": "6A40", "name": "Catatonia associated with another mental disorder" },
+      { "code": "6A41", "name": "Catatonia induced by substances or medications" },
+      { "code": "6E69", "name": "Secondary catatonia syndrome" },
+      { "code": "6A4Z", "name": "Catatonia, unspecified" }
+    ],
+  
+    "Mood_Disorders": [
+      { "code": "6A60", "name": "Bipolar type I disorder" },
+      { "code": "6A61", "name": "Bipolar type II disorder" },
+      { "code": "6A62", "name": "Cyclothymic disorder" },
+      { "code": "6A6Y", "name": "Other specified bipolar or related disorder" },
+      { "code": "6A6Z", "name": "Bipolar or related disorder, unspecified" },
+      { "code": "6A70", "name": "Single episode depressive disorder" },
+      { "code": "6A71", "name": "Recurrent depressive disorder" },
+      { "code": "6A72", "name": "Dysthymic disorder" },
+      { "code": "6A73", "name": "Mixed depressive and anxiety disorder" },
+      { "code": "6A7Y", "name": "Other specified depressive disorder" },
+      { "code": "6A7Z", "name": "Depressive disorder, unspecified" },
+      { "code": "GA34.41", "name": "Premenstrual dysphoric disorder" },
+      { "code": "6A8Y", "name": "Other specified mood disorder" },
+      { "code": "6A8Z", "name": "Mood disorder, unspecified" }
+    ],
+  
+    "Anxiety_and_Fear_Related_Disorders": [
+      { "code": "6B00", "name": "Generalized anxiety disorder" },
+      { "code": "6B01", "name": "Panic disorder" },
+      { "code": "6B02", "name": "Agoraphobia" },
+      { "code": "6B03", "name": "Specific phobia" },
+      { "code": "6B04", "name": "Social anxiety disorder" },
+      { "code": "6B05", "name": "Separation anxiety disorder" },
+      { "code": "6B06", "name": "Selective mutism" },
+      { "code": "6B0Y", "name": "Other specified anxiety or fear-related disorder" },
+      { "code": "6B0Z", "name": "Anxiety or fear-related disorder, unspecified" }
+    ],
+  
+    "Obsessive_Compulsive_and_Related_Disorders": [
+      { "code": "6B20", "name": "Obsessive-compulsive disorder" },
+      { "code": "6B21", "name": "Body dysmorphic disorder" },
+      { "code": "6B22", "name": "Olfactory reference disorder" },
+      { "code": "6B23", "name": "Hypochondriasis" },
+      { "code": "6B24", "name": "Hoarding disorder" },
+      { "code": "6B25", "name": "Body-focused repetitive behaviour disorders" },
+      { "code": "6B2Y", "name": "Other specified obsessive-compulsive or related disorder" },
+      { "code": "6B2Z", "name": "Obsessive-compulsive or related disorder, unspecified" }
+    ],
+  
+    "Stress_Associated_Disorders": [
+      { "code": "6B40", "name": "Post-traumatic stress disorder" },
+      { "code": "6B41", "name": "Complex post-traumatic stress disorder" },
+      { "code": "6B42", "name": "Prolonged grief disorder" },
+      { "code": "6B43", "name": "Adjustment disorder" },
+      { "code": "6B44", "name": "Reactive attachment disorder" },
+      { "code": "6B45", "name": "Disinhibited social engagement disorder" },
+      { "code": "6B4Y", "name": "Other specified disorder specifically associated with stress" },
+      { "code": "6B4Z", "name": "Disorder specifically associated with stress, unspecified" }
+    ],
+  
+    "Dissociative_Disorders": [
+      { "code": "6B60", "name": "Dissociative neurological symptom disorder" },
+      { "code": "6B61", "name": "Dissociative amnesia" },
+      { "code": "6B62", "name": "Trance disorder" },
+      { "code": "6B63", "name": "Possession trance disorder" },
+      { "code": "6B64", "name": "Dissociative identity disorder" },
+      { "code": "6B65", "name": "Partial dissociative identity disorder" },
+      { "code": "6B66", "name": "Depersonalization-derealization disorder" },
+      { "code": "6B6Y", "name": "Other specified dissociative disorder" },
+      { "code": "6B6Z", "name": "Dissociative disorder, unspecified" }
+    ],
+  
+    "Feeding_and_Eating_Disorders": [
+      { "code": "6B80", "name": "Anorexia nervosa" },
+      { "code": "6B81", "name": "Bulimia nervosa" },
+      { "code": "6B82", "name": "Binge-eating disorder" },
+      { "code": "6B83", "name": "Avoidant-restrictive food intake disorder" },
+      { "code": "6B84", "name": "Pica" },
+      { "code": "6B85", "name": "Rumination-regurgitation disorder" },
+      { "code": "6B8Y", "name": "Other specified feeding and eating disorder" },
+      { "code": "6B8Z", "name": "Feeding or eating disorder, unspecified" }
+    ],
+  
+    "Elimination_Disorders": [
+      { "code": "6C00", "name": "Enuresis" },
+      { "code": "6C01", "name": "Encopresis" },
+      { "code": "6C0Z", "name": "Elimination disorder, unspecified" }
+    ],
+  
+    "Substance_Use_Disorders": [
+      { "code": "6C40", "name": "Disorders due to use of alcohol" },
+      { "code": "6C41", "name": "Disorders due to use of cannabis" },
+      { "code": "6C42", "name": "Disorders due to use of synthetic cannabinoids" },
+      { "code": "6C43", "name": "Disorders due to use of opioids" },
+      { "code": "6C44", "name": "Disorders due to use of sedatives, hypnotics or anxiolytics" },
+      { "code": "6C45", "name": "Disorders due to use of cocaine" },
+      { "code": "6C46", "name": "Disorders due to use of stimulants" },
+      { "code": "6C47", "name": "Disorders due to use of synthetic cathinones" },
+      { "code": "6C48", "name": "Disorders due to use of caffeine" },
+      { "code": "6C49", "name": "Disorders due to use of hallucinogens" },
+      { "code": "6C4A", "name": "Disorders due to use of nicotine" },
+      { "code": "6C4B", "name": "Disorders due to use of volatile inhalants" },
+      { "code": "6C4C", "name": "Disorders due to use of MDMA or related drugs" },
+      { "code": "6C4D", "name": "Disorders due to use of dissociative drugs" },
+      { "code": "6C4E", "name": "Disorders due to use of other specified psychoactive substances" },
+      { "code": "6C4F", "name": "Disorders due to use of multiple psychoactive substances" },
+      { "code": "6C4G", "name": "Disorders due to use of unknown psychoactive substances" },
+      { "code": "6C4Z", "name": "Disorders due to substance use, unspecified" }
+    ],
+  
+    "Addictive_Behaviours": [
+      { "code": "6C50", "name": "Gambling disorder" },
+      { "code": "6C51", "name": "Gaming disorder" },
+      { "code": "6C5Y", "name": "Other specified disorder due to addictive behaviours" },
+      { "code": "6C5Z", "name": "Disorder due to addictive behaviours, unspecified" }
+    ],
+  
+    "Impulse_Control_Disorders": [
+      { "code": "6C70", "name": "Pyromania" },
+      { "code": "6C71", "name": "Kleptomania" },
+      { "code": "6C72", "name": "Compulsive sexual behaviour disorder" },
+      { "code": "6C73", "name": "Intermittent explosive disorder" },
+      { "code": "6C7Y", "name": "Other specified impulse control disorder" },
+      { "code": "6C7Z", "name": "Impulse control disorder, unspecified" }
+    ],
+  
+    "Personality_Disorders": [
+      { "code": "6D10.0", "name": "Mild personality disorder" },
+      { "code": "6D10.1", "name": "Moderate personality disorder" },
+      { "code": "6D10.2", "name": "Severe personality disorder" },
+      { "code": "6D10.Z", "name": "Personality disorder, severity unspecified" },
+      { "code": "QE50.7", "name": "Personality difficulty" }
+    ],
+  
+    "Neurocognitive_Disorders": [
+      { "code": "6D70", "name": "Delirium" },
+      { "code": "6D71", "name": "Mild neurocognitive disorder" },
+      { "code": "6D72", "name": "Amnestic disorder" },
+      { "code": "6D80", "name": "Dementia due to Alzheimer disease" },
+      { "code": "6D81", "name": "Dementia due to cerebrovascular disease" },
+      { "code": "6D82", "name": "Dementia due to Lewy body disease" },
+      { "code": "6D83", "name": "Frontotemporal dementia" },
+      { "code": "6D84", "name": "Dementia due to psychoactive substances" },
+      { "code": "6D8Y", "name": "Dementia, other specified cause" },
+      { "code": "6D8Z", "name": "Dementia, unspecified cause" }
+    ]
+  }
+  

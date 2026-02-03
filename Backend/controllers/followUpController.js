@@ -18,17 +18,18 @@ class FollowUpController {
 
       const {
         patient_id,
+        child_patient_id,
         visit_date,
         clinical_assessment,
         assigned_doctor_id,
         room_no,
       } = req.body;
 
-      // Validate required fields
-      if (!patient_id) {
+      // Validate required fields - either patient_id or child_patient_id must be provided
+      if (!patient_id && !child_patient_id) {
         return res.status(400).json({
           success: false,
-          message: 'patient_id is required',
+          message: 'Either patient_id or child_patient_id is required',
         });
       }
 
@@ -42,8 +43,9 @@ class FollowUpController {
       // Use today's date if visit_date not provided
       const dateToUse = visit_date || new Date().toISOString().split('T')[0];
 
-      // Check if visit record exists for this patient and date, create if not
+      // Check if visit record exists for this patient and date, create if not (only for adult patients)
       let visitId = null;
+      if (patient_id) {
       try {
         const visitCheck = await db.query(
           `SELECT id FROM patient_visits 
@@ -74,11 +76,13 @@ class FollowUpController {
       } catch (visitError) {
         console.error('[createFollowUp] Error creating/checking visit:', visitError);
         // Continue even if visit creation fails
+        }
       }
 
       // Create follow-up record
       const followUp = await FollowUp.create({
-        patient_id: parseInt(patient_id, 10),
+        patient_id: patient_id ? parseInt(patient_id, 10) : null,
+        child_patient_id: child_patient_id ? parseInt(child_patient_id, 10) : null,
         visit_id: visitId,
         visit_date: dateToUse,
         clinical_assessment: clinical_assessment.trim(),
@@ -175,6 +179,37 @@ class FollowUpController {
       res.status(500).json({
         success: false,
         message: 'Failed to get follow-up visits',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      });
+    }
+  }
+
+  // Get all follow-ups for a child patient
+  static async getFollowUpsByChildPatientId(req, res) {
+    try {
+      const { child_patient_id } = req.params;
+      const page = parseInt(req.query.page, 10) || 1;
+      const limit = parseInt(req.query.limit, 10) || 10;
+
+      const result = await FollowUp.findByChildPatientId(child_patient_id, page, limit);
+
+      res.json({
+        success: true,
+        data: {
+          followups: result.followups.map(f => f.toJSON()),
+          pagination: {
+            total: result.total,
+            page: result.page,
+            limit: result.limit,
+            pages: result.pages,
+          },
+        },
+      });
+    } catch (error) {
+      console.error('Get child follow-ups error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get child follow-up visits',
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
       });
     }

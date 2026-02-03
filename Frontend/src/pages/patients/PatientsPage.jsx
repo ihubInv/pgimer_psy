@@ -8,7 +8,7 @@ import {
   FiHeart, FiFileText, FiShield, FiTrendingUp, FiX
 } from 'react-icons/fi';
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
-import { useGetAllPatientsQuery, useDeletePatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
+import { useGetAllPatientsQuery, useGetAllChildPatientsQuery, useDeletePatientMutation, useDeleteChildPatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { formatPatientsForExport, exportData } from '../../utils/exportUtils';
 import Card from '../../components/Card';
@@ -29,41 +29,89 @@ const PatientsPage = () => {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [patientType, setPatientType] = useState('adult'); // 'adult' or 'child'
   const limit = 10;
 
-  // Reset page to 1 when search changes
+  // Reset page to 1 when search or patient type changes
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, patientType]);
 
   // Fetch patients - use server-side pagination when not searching, client-side when searching
   const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
   
+  // Fetch adult patients
   const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
     page: search.trim() ? 1 : page, // Use current page when not searching, always page 1 when searching
     limit: fetchLimit,
     search: search.trim() || undefined // Send search to backend if provided
   }, {
     refetchOnMountOrArgChange: true,
+    skip: patientType === 'child', // Skip if showing child patients
   });
 
+  // Fetch child patients
+  const { data: childData, isLoading: isChildLoading, isFetching: isChildFetching, refetch: refetchChild, error: childError } = useGetAllChildPatientsQuery({
+    page: search.trim() ? 1 : page,
+    limit: fetchLimit,
+  }, {
+    refetchOnMountOrArgChange: true,
+    skip: patientType === 'adult', // Skip if showing adult patients
+  });
+
+  // Get current data based on patient type
+  const currentData = patientType === 'adult' ? data : childData;
+  const currentIsLoading = patientType === 'adult' ? isLoading : isChildLoading;
+  const currentIsFetching = patientType === 'adult' ? isFetching : isChildFetching;
+  const currentError = patientType === 'adult' ? error : childError;
+  const currentRefetch = patientType === 'adult' ? refetch : refetchChild;
+
+  // Transform child patients to match adult patient structure
+  const transformedChildPatients = childData?.data?.child_patients?.map(cp => ({
+    id: cp.id,
+    name: cp.child_name,
+    cr_no: cp.cr_number,
+    psy_no: null,
+    adl_no: null,
+    special_clinic_no: cp.cgc_number,
+    assigned_room: cp.assigned_room,
+    assigned_doctor_id: null,
+    assigned_doctor_name: null,
+    assigned_doctor_role: null,
+    has_adl_file: false,
+    case_complexity: 'simple',
+    sex: cp.sex,
+    age: null,
+    age_group: cp.age_group,
+    created_at: cp.created_at,
+    patient_type: 'child',
+    filled_by_name: cp.filled_by_name,
+    filled_by_role: cp.filled_by_role,
+  })) || [];
+
+  // Get patients list based on type
+  const allPatients = patientType === 'adult' 
+    ? (data?.data?.patients || [])
+    : transformedChildPatients;
+
   // Client-side filtering by all fields including doctor name (only when searching)
-  const filteredPatients = data?.data?.patients ? (() => {
+  const filteredPatients = allPatients ? (() => {
     if (!search.trim()) {
       // No search - use server-side paginated results directly
-      return data.data.patients;
+      return allPatients;
     }
 
     // When searching, filter client-side
     const searchLower = search.trim().toLowerCase();
     
     // Filter by all searchable fields including doctor name
-    const filtered = data.data.patients.filter(patient => {
+    const filtered = allPatients.filter(patient => {
       return (
         patient.name?.toLowerCase().includes(searchLower) ||
         patient.cr_no?.toLowerCase().includes(searchLower) ||
         patient.psy_no?.toLowerCase().includes(searchLower) ||
         patient.adl_no?.toLowerCase().includes(searchLower) ||
+        patient.special_clinic_no?.toLowerCase().includes(searchLower) ||
         patient.assigned_doctor_name?.toLowerCase().includes(searchLower) ||
         patient.assigned_doctor_role?.toLowerCase().includes(searchLower)
       );
@@ -76,70 +124,98 @@ const PatientsPage = () => {
 
   // Calculate total pages for filtered results
   const totalFiltered = search.trim() 
-    ? (data?.data?.patients?.filter(patient => {
+    ? (allPatients?.filter(patient => {
         const searchLower = search.trim().toLowerCase();
         return (
           patient.name?.toLowerCase().includes(searchLower) ||
           patient.cr_no?.toLowerCase().includes(searchLower) ||
           patient.psy_no?.toLowerCase().includes(searchLower) ||
           patient.adl_no?.toLowerCase().includes(searchLower) ||
+          patient.special_clinic_no?.toLowerCase().includes(searchLower) ||
           patient.assigned_doctor_name?.toLowerCase().includes(searchLower) ||
           patient.assigned_doctor_role?.toLowerCase().includes(searchLower)
         );
       }).length || 0)
-    : (data?.data?.pagination?.total || 0);
+    : (patientType === 'adult' 
+        ? (data?.data?.pagination?.total || 0)
+        : (childData?.data?.pagination?.total || 0));
   
   const totalPages = search.trim() 
     ? Math.ceil(totalFiltered / limit)
-    : (data?.data?.pagination?.pages || 1);
+    : (patientType === 'adult'
+        ? (data?.data?.pagination?.pages || 1)
+        : (childData?.data?.pagination?.pages || 1));
  
   const [deletePatient] = useDeletePatientMutation();
+  const [deleteChildPatient] = useDeleteChildPatientMutation();
  
 
   // Handle view patient details
   const handleView = (row) => {
-   
-    const patientId = row.id
-    //  getPatientId(row);
+    const patientId = row.id;
     
     if (!patientId) {
       toast.error('Invalid patient ID. Unable to view patient details.');
       return;
     }
 
+    // Navigate based on patient type
+    if (row.patient_type === 'child') {
+      navigate(`/child-patient/${patientId}?mode=view`);
+    } else {
     // Explicitly set edit=false to ensure view mode and clear any persisted edit state
     navigate(`/patients/${patientId}?edit=false`);
+    }
   };
 
   // Handle edit patient
   const handleEdit = (row) => {
-    const patientId = row.id
-    // getPatientId(row.id);
+    const patientId = row.id;
     
     if (!patientId) {
       toast.error('Invalid patient ID. Unable to edit patient.');
       return;
     }
     
+    // Navigate based on patient type
+    if (row.patient_type === 'child') {
+      navigate(`/child-patient/${patientId}?mode=edit`);
+    } else {
     navigate(`/patients/${patientId}?edit=true`);
+    }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, patientTypeParam) => {
     if (!id) {
       toast.error('Invalid patient ID. Cannot delete patient.');
       return;
     }
   
-    // No browser confirm — directly attempt delete
+    console.log('[handleDelete] Attempting to delete:', { id, patientTypeParam, userRole: user?.role });
+  
+    // Confirm deletion
+    const confirmed = window.confirm(
+      `Are you sure you want to delete this ${patientTypeParam === 'child' ? 'child patient' : 'patient'}? This action cannot be undone and will delete all related records (clinical proformas, follow-ups, prescriptions, etc.).`
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+  
     try {
-      await deletePatient(id).unwrap();
-      toast.success('Patient and all related records deleted successfully');
-  
-      // RTK Query will automatically refetch when tags are invalidated
-      // But we can also explicitly refetch to ensure immediate update
-      refetch();
-  
+      if (patientTypeParam === 'child') {
+        console.log('[handleDelete] Deleting child patient:', id);
+        await deleteChildPatient(id).unwrap();
+        toast.success('Child patient and all related records deleted successfully');
+        refetchChild();
+      } else {
+        console.log('[handleDelete] Deleting adult patient:', id);
+        await deletePatient(id).unwrap();
+        toast.success('Patient and all related records deleted successfully');
+        refetch();
+      }
     } catch (err) {
+      console.error('[handleDelete] Error deleting patient:', err);
       toast.error(err?.data?.message || err?.message || 'Failed to delete patient');
     }
   };
@@ -2736,11 +2812,16 @@ const PatientsPage = () => {
               <FiHeart className="w-3 h-3 text-green-600" />
             </div>
             <span className="font-semibold text-gray-900">{row.name}</span>
+            {row.patient_type === 'child' && (
+              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                Child
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <span className="flex items-center gap-1">
               <FiClock className="w-3 h-3" />
-              {row.age} years
+              {row.patient_type === 'child' ? (row.age_group || 'N/A') : `${row.age || 'N/A'} years`}
             </span>
             <span className="px-2 py-1 bg-gray-100 rounded-full text-xs font-medium">
               {row.sex}
@@ -2783,7 +2864,7 @@ const PatientsPage = () => {
       header: (
         <div className="flex items-center gap-2">
           <FiFileText className="w-4 h-4 text-primary-600" />
-          <span className="font-semibold">PSY No</span>
+          <span className="font-semibold">{patientType === 'child' ? 'CGC No' : 'PSY No'}</span>
         </div>
       ),
       accessor: 'psy_no',
@@ -2792,7 +2873,9 @@ const PatientsPage = () => {
           <div className="w-8 h-8 bg-gradient-to-r from-orange-100 to-yellow-100 rounded-lg flex items-center justify-center">
             <FiFileText className="w-4 h-4 text-orange-600" />
           </div>
-          <span className="font-medium text-gray-900">{row.psy_no || 'N/A'}</span>
+          <span className="font-medium text-gray-900">
+            {row.patient_type === 'child' ? (row.special_clinic_no || 'N/A') : (row.psy_no || 'N/A')}
+          </span>
         </div>
       ),
     },
@@ -2882,14 +2965,21 @@ const PatientsPage = () => {
             >
               <BsFileEarmarkExcelFill className="w-4 h-4 text-green-600" />
             </Button>
-            {/* Show Delete button only for Admin, not for MWO */}
-            {(isAdmin(user?.role) && !isMWO(user?.role)) && patientId && (
+            {/* Show Delete button only for Admin - Full authority to delete any patient */}
+            {isAdmin(user?.role) && patientId && (
               <Button 
                 variant="ghost" 
                 size="sm"
                 className="h-9 w-9 p-0 bg-gradient-to-r from-red-50 to-rose-50 hover:from-red-100 hover:to-rose-100 border border-red-200 hover:border-red-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Delete Patient"
-                onClick={() => handleDelete(patientId)}
+                title={`Delete ${row.patient_type === 'child' ? 'Child Patient' : 'Patient'} (Admin Only)`}
+                onClick={() => {
+                  console.log('[PatientsPage] Admin delete button clicked:', { 
+                    patientId, 
+                    patientType: row.patient_type || 'adult',
+                    userRole: user?.role 
+                  });
+                  handleDelete(patientId, row.patient_type || 'adult');
+                }}
               >
                 <FiTrash2 className="w-4 h-4 text-red-600" />
               </Button>
@@ -2906,7 +2996,33 @@ const PatientsPage = () => {
         {/* Header Section */}
         {/* Main Content Card */}
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
-          {error && (
+          {/* Patient Type Tabs */}
+          <div className="mb-6">
+            <div className="flex gap-2 border-b border-gray-200">
+              <button
+                onClick={() => setPatientType('adult')}
+                className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                  patientType === 'adult'
+                    ? 'border-primary-600 text-primary-600 bg-primary-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                Adult Patients
+              </button>
+              <button
+                onClick={() => setPatientType('child')}
+                className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                  patientType === 'child'
+                    ? 'border-primary-600 text-primary-600 bg-primary-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                Child Patients
+              </button>
+            </div>
+          </div>
+
+          {(currentError || error || childError) && (
             <div className="mb-6 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-200 rounded-xl p-5 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="p-2.5 bg-red-100 rounded-lg flex-shrink-0">
@@ -2914,7 +3030,7 @@ const PatientsPage = () => {
                 </div>
                 <div className="flex-1">
                   <p className="text-red-800 font-semibold text-base mb-1">Error Loading Patients</p>
-                  <p className="text-red-600 text-sm">{error?.data?.message || 'Failed to load patients. Please try again.'}</p>
+                  <p className="text-red-600 text-sm">{(currentError || error || childError)?.data?.message || 'Failed to load patients. Please try again.'}</p>
                 </div>
               </div>
             </div>
@@ -2928,7 +3044,7 @@ const PatientsPage = () => {
                   <FiSearch className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                 </div>
                 <Input
-                  placeholder="Search by CR No, Patient Name, PSY No..."
+                  placeholder={patientType === 'child' ? "Search by CR No, Child Name, CGC No..." : "Search by CR No, Patient Name, PSY No..."}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-12 pr-12 h-12 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-200 shadow-sm hover:shadow-md"
@@ -2968,7 +3084,7 @@ const PatientsPage = () => {
             </div>
           </div>
 
-          {(isLoading || isFetching) ? (
+          {(currentIsLoading || currentIsFetching) ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="relative">
                 <div className="w-20 h-20 border-4 border-primary-100 border-t-primary-600 rounded-full animate-spin"></div>
@@ -2987,9 +3103,9 @@ const PatientsPage = () => {
               <p className="text-xl font-semibold text-gray-700 mb-2">No patients found</p>
               <p className="text-gray-500 text-center max-w-md">
                 {search 
-                  ? `No patients match your search "${search}". Try searching by CR No, Patient Name, PSY No, Doctor Name, or Doctor Role.`
-                  : data?.data?.patients?.length === 0
-                    ? 'There are no patients in the system yet. Add your first patient to get started.'
+                  ? `No patients match your search "${search}". Try searching by ${patientType === 'child' ? 'CR No, Child Name, CGC No' : 'CR No, Patient Name, PSY No, Doctor Name, or Doctor Role'}.`
+                  : allPatients?.length === 0
+                    ? `There are no ${patientType} patients in the system yet.`
                     : 'No patients match the current filters. Try adjusting your search criteria.'}
               </p>
               {search && (
@@ -3002,11 +3118,19 @@ const PatientsPage = () => {
                   Clear Search
                 </Button>
               )}
-              {user?.role !== 'MWO' && !search && data?.data?.patients?.length === 0 && (
+              {user?.role !== 'MWO' && !search && allPatients?.length === 0 && patientType === 'adult' && (
                 <Link to="/patients/new" className="mt-6">
                   <Button className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg">
                     <FiPlus className="mr-2" />
                     Add First Patient
+                  </Button>
+                </Link>
+              )}
+              {user?.role !== 'MWO' && !search && allPatients?.length === 0 && patientType === 'child' && (
+                <Link to="/child-patient/new" className="mt-6">
+                  <Button className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg">
+                    <FiPlus className="mr-2" />
+                    Register First Child Patient
                   </Button>
                 </Link>
               )}

@@ -157,6 +157,14 @@ router.get(
   FollowUpController.getFollowUpsByPatientId
 );
 
+// Get all follow-ups for a child patient
+router.get(
+  '/child-patient/:child_patient_id',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident'),
+  FollowUpController.getFollowUpsByChildPatientId
+);
+
 /**
  * @swagger
  * /api/follow-ups/{id}:

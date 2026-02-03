@@ -20,6 +20,16 @@ console.error = (...args) => {
     return;
   }
   
+  // Suppress 404 errors for patient search endpoints (expected when searching for wrong patient type)
+  if (errorString.includes('404') && 
+      (errorString.includes('/patients/cr/') || 
+       errorString.includes('/child-patient/cr/') ||
+       errorString.includes('/api/patients/cr/') ||
+       errorString.includes('/api/child-patient/cr/'))) {
+    // Suppress this expected error - patient search tries both endpoints, one will 404
+    return;
+  }
+  
   // Suppress 401 errors that are being handled by token refresh mechanism
   // These are temporary and will be resolved after token refresh
   if (errorString.includes('401') && errorString.includes('Unauthorized')) {
@@ -42,6 +52,12 @@ console.warn = (...args) => {
   const warnString = String(args[0] || '');
   // Suppress RTK Query warnings about 404s on prescription endpoints
   if (warnString.includes('404') && warnString.includes('prescriptions/by-proforma')) {
+    return;
+  }
+  
+  // Suppress RTK Query warnings about 404s on patient search endpoints
+  if (warnString.includes('404') && 
+      (warnString.includes('/patients/cr/') || warnString.includes('/child-patient/cr/'))) {
     return;
   }
   // Log all other warnings normally
@@ -96,6 +112,24 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
         data: { prescription: null },
         message: 'No prescription found for this clinical proforma'
       },
+      error: undefined,
+      meta: {
+        ...result.meta,
+        request: { ...result.meta?.request, suppressErrorLog: true }
+      }
+    };
+  }
+
+  // Handle 404 for patient search endpoints gracefully
+  // When searching by CR number, we try both adult and child endpoints
+  // One will return 404 (expected), the other will return the patient
+  if (result?.error?.status === 404 && 
+      (argsUrlString.includes('/patients/cr/') || argsUrlString.includes('/child-patient/cr/'))) {
+    // Return null data instead of error for patient search 404s
+    // The SearchExistingPatientModal handles this by checking both queries
+    // This prevents RTK Query from treating it as an error and retrying
+    return {
+      data: null,
       error: undefined,
       meta: {
         ...result.meta,

@@ -6,7 +6,7 @@ import {
   FiCalendar, FiGlobe, FiFileText,  FiClock,
   FiHeart, FiBookOpen, FiTrendingUp, FiShield,
   FiNavigation, FiEdit3, FiSave, FiX, FiLayers, 
-  FiFolder, FiChevronDown, FiChevronUp, FiPackage, FiHash ,  FiPrinter, FiClipboard, FiEye, FiPlus
+  FiFolder, FiChevronDown, FiChevronUp, FiPackage, FiHash ,  FiPrinter, FiClipboard, FiEye, FiPlus, FiRefreshCw
 } from 'react-icons/fi';
 import { useUpdatePatientMutation, useGetPatientVisitHistoryQuery, useGetPatientFilesQuery } from '../../features/patients/patientsApiSlice';
 import { useSelector } from 'react-redux';
@@ -19,12 +19,14 @@ import FileUpload from '../../components/FileUpload';
 import FilePreview from '../../components/FilePreview';
 import { formatDateForDatePicker, formatDate } from '../../utils/formatters';
 import { useGetClinicalProformaByIdQuery } from '../../features/clinical/clinicalApiSlice';
+import { useGetChildClinicalProformasByChildPatientIdQuery } from '../../features/clinical/childClinicalApiSlice';
 import {
   MARITAL_STATUS, FAMILY_TYPE_OPTIONS, LOCALITY_OPTIONS, RELIGION_OPTIONS, SEX_OPTIONS,
   AGE_GROUP_OPTIONS, OCCUPATION_OPTIONS, EDUCATION_OPTIONS,
   MOBILITY_OPTIONS, REFERRED_BY_OPTIONS, UNIT_DAYS_OPTIONS, HEAD_RELATIONSHIP_OPTIONS, CATEGORY_OPTIONS,  isAdmin, isMWO, isJrSr, isSR, isJR
 } from '../../utils/constants';
 import EditClinicalProforma from '../clinical/EditClinicalProforma';
+import EditChildClinicalProforma from '../clinical/EditChildClinicalProforma';
 import EditADL from '../adl/EditADL';
 import PrescriptionEdit from '../PrescribeMedication/PrescriptionEdit';
 import CreatePrescription from '../PrescribeMedication/CreatePrescription';
@@ -2094,6 +2096,24 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   );
   const canViewClinicalProforma = canViewAllSections;
   const canViewPrescriptions = canViewAllSections;
+
+  // Check if patient is a child patient
+  const isChildPatient = patient?.patient_type === 'child';
+  const childPatientId = isChildPatient ? patient?.id : null;
+
+  // Fetch child clinical proformas if patient is a child
+  const { data: childClinicalData, refetch: refetchChildClinicalData } = useGetChildClinicalProformasByChildPatientIdQuery(
+    childPatientId,
+    {
+      skip: !childPatientId || !isChildPatient,
+      refetchOnMountOrArgChange: true,
+    }
+  );
+
+  // Extract child clinical proformas
+  const childClinicalProformas = Array.isArray(childClinicalData?.data?.proformas)
+    ? childClinicalData.data.proformas
+    : [];
 
   // ADL File: Show only if case is complex OR ADL file already exists
   // Handle different possible data structures from API
@@ -5098,6 +5118,149 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
               )}
             </div>
           )}
+        </Card>
+      )}
+
+      {/* Card 1.5: Child Clinical Proforma - Show only for child patients and if current user is Admin, JR, or SR */}
+      {/* This section is ALWAYS VISIBLE (non-collapsible) for child patients */}
+      {isChildPatient && canViewClinicalProforma && (
+        <Card className="shadow-lg border-0 bg-white">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <FiClipboard className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Child Clinical Proforma</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {childClinicalProformas.length > 0
+                    ? `${childClinicalProformas.length} proforma${childClinicalProformas.length > 1 ? 's' : ''} available`
+                    : 'No proformas yet - Create new proforma'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* List of Child Clinical Proformas */}
+            {childClinicalProformas.length > 0 ? (
+              <div className="space-y-4">
+                {childClinicalProformas.map((proforma, index) => (
+                  <div
+                    key={proforma.id || index}
+                    className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50/30 hover:bg-purple-50/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                            Visit {index + 1}
+                          </span>
+                          {proforma.visit_date && (
+                            <span className="text-sm text-gray-600">
+                              {formatDate(proforma.visit_date)}
+                            </span>
+                          )}
+                          {proforma.status && (
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              proforma.status === 'final' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {proforma.status === 'final' ? 'Final' : 'Draft'}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-2 mt-3 text-sm text-gray-600">
+                          {proforma.room_no && (
+                            <div className="flex items-center gap-2">
+                              <FiHome className="w-4 h-4" />
+                              <span><span className="font-medium text-gray-800">Room:</span> {proforma.room_no}</span>
+                            </div>
+                          )}
+                          {proforma.doctor_name && (
+                            <div className="flex items-center gap-2">
+                              <FiUser className="w-4 h-4" />
+                              <span><span className="font-medium text-gray-800">Doctor:</span> {proforma.doctor_name}</span>
+                            </div>
+                          )}
+                          {proforma.remarks_provisional_diagnosis && (
+                            <div className="flex items-start gap-2">
+                              <FiFileText className="w-4 h-4 mt-0.5" />
+                              <span><span className="font-medium text-gray-800">Diagnosis:</span> {proforma.remarks_provisional_diagnosis}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/child-clinical-proformas/${proforma.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                        >
+                          <FiEye className="w-3.5 h-3.5" />
+                          View
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/child-clinical-proformas/${proforma.id}/edit`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                        >
+                          <FiEdit3 className="w-3.5 h-3.5" />
+                          Edit
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 max-w-2xl mx-auto">
+                  <FiClipboard className="h-12 w-12 mx-auto mb-4 text-blue-500" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    No Child Clinical Proforma Found
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Create a new Child Clinical Proforma to document this child patient's visit.
+                  </p>
+                  <Button
+                    onClick={() => navigate(`/child-clinical-proformas/new?child_patient_id=${childPatientId}`)}
+                    className="flex items-center gap-2 mx-auto"
+                  >
+                    <FiPlus className="w-4 h-4" />
+                    Create New Proforma
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Create New Button and Follow-Up Button */}
+            {childClinicalProformas.length > 0 && (
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/child-follow-up/${childPatientId}`)}
+                  className="flex items-center gap-2 bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-100"
+                >
+                  <FiRefreshCw className="w-4 h-4" />
+                  Follow-Up
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/child-clinical-proformas/new?child_patient_id=${childPatientId}`)}
+                  className="flex items-center gap-2"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  Create New Proforma
+                </Button>
+              </div>
+            )}
+          </div>
         </Card>
       )}
 

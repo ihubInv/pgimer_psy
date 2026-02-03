@@ -821,6 +821,162 @@ export const PRESCRIPTION_OPTIONS = {
   ]
 };
 
+// Child Patient Registration Options
+export const CHILD_AGE_GROUP_OPTIONS = [
+  { value: 'Less than 1 year', label: 'Less than 1 year' },
+  { value: '1 – 5 years', label: '1 – 5 years' },
+  { value: '5 – 10 years', label: '5 – 10 years' },
+  { value: '10 – 15 years', label: '10 – 15 years' },
+];
+
+export const CHILD_EDUCATIONAL_STATUS_OPTIONS = [
+  { value: 'Illiterate', label: 'Illiterate' },
+  { value: 'Literate', label: 'Literate' },
+  { value: 'Primary', label: 'Primary' },
+  { value: 'Middle', label: 'Middle' },
+  { value: 'Matric', label: 'Matric' },
+  { value: 'Not Known', label: 'Not Known' },
+];
+
+export const CHILD_OCCUPATIONAL_STATUS_OPTIONS = [
+  { value: 'Dependent', label: 'Dependent' },
+  { value: 'Student', label: 'Student' },
+  { value: 'Household', label: 'Household' },
+  { value: 'Cultivation', label: 'Cultivation' },
+  { value: 'Agricultural / Labourer', label: 'Agricultural / Labourer' },
+  { value: 'Others', label: 'Others' },
+  { value: 'Not Known', label: 'Not Known' },
+];
+
+export const CHILD_RELIGION_OPTIONS = [
+  { value: 'Hindu', label: 'Hindu' },
+  { value: 'Islam', label: 'Islam' },
+  { value: 'Sikh', label: 'Sikh' },
+  { value: 'Christian', label: 'Christian' },
+  { value: 'Others', label: 'Others' },
+  { value: 'Not Known', label: 'Not Known' },
+];
+
+export const CHILD_HEAD_RELATIONSHIP_OPTIONS = [
+  { value: 'Father', label: 'Father' },
+  { value: 'Mother', label: 'Mother' },
+  { value: 'Guardian', label: 'Guardian' },
+  { value: 'Relative', label: 'Relative' },
+  { value: 'Others', label: 'Others' },
+];
+
+export const CHILD_HEAD_EDUCATION_OPTIONS = [
+  { value: 'Illiterate', label: 'Illiterate' },
+  { value: 'Primary', label: 'Primary' },
+  { value: 'Middle', label: 'Middle' },
+  { value: 'Matric', label: 'Matric' },
+  { value: 'Graduate', label: 'Graduate' },
+  { value: 'Post-Graduate', label: 'Post-Graduate' },
+  { value: 'Ph.D', label: 'Ph.D' },
+  { value: 'Others', label: 'Others' },
+];
+
+export const CHILD_HEAD_OCCUPATION_OPTIONS = [
+  { value: 'Service', label: 'Service' },
+  { value: 'Business', label: 'Business' },
+  { value: 'Labourer', label: 'Labourer' },
+  { value: 'Farmer', label: 'Farmer' },
+  { value: 'Household', label: 'Household' },
+  { value: 'Others', label: 'Others' },
+];
+
+export const CHILD_HEAD_MONTHLY_INCOME_OPTIONS = [
+  { value: 'Below ₹5,000', label: 'Below ₹5,000' },
+  { value: '₹5,000 – ₹10,000', label: '₹5,000 – ₹10,000' },
+  { value: '₹10,001 – ₹25,000', label: '₹10,001 – ₹25,000' },
+  { value: 'Above ₹25,000', label: 'Above ₹25,000' },
+  { value: 'Not Known', label: 'Not Known' },
+];
+
+export const CHILD_LOCALITY_OPTIONS = [
+  { value: 'Rural', label: 'Rural' },
+  { value: 'Urban', label: 'Urban' },
+  { value: 'Semi-Urban', label: 'Semi-Urban' },
+  { value: 'Not Known', label: 'Not Known' },
+];
+
+export const CHILD_DISTANCE_TRAVELLED_OPTIONS = [
+  { value: 'Local', label: 'Local' },
+  { value: 'Up to 20 miles', label: 'Up to 20 miles' },
+  { value: '21 – 60 miles', label: '21 – 60 miles' },
+  { value: '61 – 100 miles', label: '61 – 100 miles' },
+  { value: 'Above 100 miles', label: 'Above 100 miles' },
+  { value: 'Not Known', label: 'Not Known' },
+];
+
+export const CHILD_SOURCE_OF_REFERRAL_OPTIONS = [
+  { value: 'Self', label: 'Self' },
+  { value: 'Relatives / Friends', label: 'Relatives / Friends' },
+  { value: 'Other Medical Agencies', label: 'Other Medical Agencies' },
+  { value: 'Non-Medical Institutions', label: 'Non-Medical Institutions' },
+  { value: 'P.G.I.', label: 'P.G.I.' },
+  { value: 'Others', label: 'Others' },
+];
+
+export const CHILD_SEX_OPTIONS = [
+  { value: 'Male', label: 'Male' },
+  { value: 'Female', label: 'Female' },
+  { value: 'Other', label: 'Other' },
+];
+
+// Child Clinical Proforma Options
+export const CHILD_CLINICAL_DURATION_OF_ILLNESS_OPTIONS = [
+  { value: 'Less than a week', label: 'Less than a week' },
+  { value: '1–4 weeks', label: '1–4 weeks' },
+  { value: '2–4 weeks', label: '2–4 weeks' },
+  { value: '3–6 months', label: '3–6 months' },
+  { value: '6–12 months', label: '6–12 months' },
+  { value: '1–4 years', label: '1–4 years' },
+  { value: 'Since birth', label: 'Since birth' },
+  { value: 'Not known', label: 'Not known' },
+];
+
+export const CHILD_CLINICAL_ONSET_OPTIONS = [
+  { value: 'Sudden', label: 'Sudden' },
+  { value: 'Insidious (≈ 1 week)', label: 'Insidious (≈ 1 week)' },
+  { value: 'Sub-acute (1–4 weeks)', label: 'Sub-acute (1–4 weeks)' },
+  { value: 'Gradual (> 4 weeks)', label: 'Gradual (> 4 weeks)' },
+];
+
+export const CHILD_CLINICAL_COURSE_OPTIONS = [
+  { value: 'Worsening', label: 'Worsening' },
+  { value: 'Steady', label: 'Steady' },
+  { value: 'Fluctuating', label: 'Fluctuating' },
+  { value: 'Improving', label: 'Improving' },
+  { value: 'Periodic', label: 'Periodic' },
+  { value: 'Not known', label: 'Not known' },
+];
+
+export const CHILD_CLINICAL_SOURCE_OF_REFERRAL_OPTIONS = [
+  { value: 'Self', label: 'Self' },
+  { value: 'Relatives / Friends', label: 'Relatives / Friends' },
+  { value: 'School', label: 'School' },
+  { value: 'Other Dept (Paed, Neurology)', label: 'Other Dept (Paed, Neurology)' },
+];
+
+export const CHILD_CLINICAL_PHYSICAL_DEVELOPMENT_OPTIONS = [
+  { value: 'Average', label: 'Average' },
+  { value: 'Less than average', label: 'Less than average' },
+];
+
+export const CHILD_CLINICAL_FAMILY_HISTORY_OPTIONS = [
+  { value: 'Epilepsy', label: 'Epilepsy' },
+  { value: 'BPAD', label: 'BPAD' },
+  { value: 'Schizophrenia', label: 'Schizophrenia' },
+  { value: 'Drug abuse', label: 'Drug abuse' },
+  { value: 'Others', label: 'Others' },
+];
+
+export const CHILD_CLINICAL_DISPOSAL_STATUS_OPTIONS = [
+  { value: 'Given', label: 'Given' },
+  { value: 'Managed in Walk-in only', label: 'Managed in Walk-in only' },
+];
+
 export const INDIA_STATES = [
   { label: "Andhra Pradesh", value: "andhra_pradesh" },
   { label: "Arunachal Pradesh", value: "arunachal_pradesh" },

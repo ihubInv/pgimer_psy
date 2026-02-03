@@ -570,7 +570,10 @@ const Login = () => {
             {/* Footer */}
             <div className="mt-4 text-center">
               <p className="text-xs text-gray-500">
-                © {new Date().getFullYear()} Post Graduate Institute of Medical Education & Research, Chandigarh
+                © 2026 PGIMER, Department of Psychiatry. All Rights Reserved.
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Developed by IIT Mandi iHub & HCi Foundation
               </p>
             </div>
           </div>

@@ -7,7 +7,15 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         url: '/patients',
         params: { page, limit, ...filters },
       }),
-      providesTags: ['Patient'],
+      providesTags: (result, error, arg) => {
+        // Provide tags that match what mutations invalidate
+        const tags = ['Patient', { type: 'Patient', id: 'LIST' }];
+        // If filtering by date, also provide a date-specific tag
+        if (arg?.date) {
+          tags.push({ type: 'Patient', id: `LIST-${arg.date}` });
+        }
+        return tags;
+      },
       // Keep unused data for 60 seconds to reduce refetches
       keepUnusedDataFor: 60,
     }),
@@ -19,8 +27,16 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
     }),
     getPatientByCRNo: builder.query({
       query: (cr_no) => `/patients/cr/${cr_no}`,
-      providesTags: (result, error, cr_no) => [{ type: 'Patient', id: result?.data?.patient?.id }],
+      providesTags: (result, error, cr_no) => {
+        // Don't cache 404 errors - they're expected when searching for wrong patient type
+        if (error?.status === 404) {
+          return [];
+        }
+        return [{ type: 'Patient', id: result?.data?.patient?.id }];
+      },
       keepUnusedDataFor: 60,
+      // Don't retry on 404 - it's expected when searching for wrong patient type
+      extraOptions: { maxRetries: 0 },
     }),
     searchPatients: builder.query({
       query: ({ search, page = 1, limit = 10 }) => ({
@@ -197,10 +213,13 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       transformResponse: (resp) => resp?.data?.visitHistory || [],
     }),
     markVisitCompleted: builder.mutation({
-      query: ({ patient_id, visit_date }) => ({
+      query: ({ patient_id, visit_date, patient_type }) => ({
         url: `/patients/${patient_id}/visits/complete`,
         method: 'POST',
-        body: visit_date ? { visit_date } : {},
+        body: { 
+          ...(visit_date ? { visit_date } : {}),
+          ...(patient_type ? { patient_type } : {})
+        },
       }),
       invalidatesTags: (result, error, { patient_id }) => [
         { type: 'Patient', id: patient_id },
@@ -276,6 +295,64 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         'Patient',
       ],
     }),
+    getAllChildPatients: builder.query({
+      query: ({ page = 1, limit = 10, ...filters }) => ({
+        url: '/child-patient',
+        params: { page, limit, ...filters },
+      }),
+      providesTags: ['ChildPatient'],
+      keepUnusedDataFor: 60,
+    }),
+    getChildPatientByCRNo: builder.query({
+      query: (cr_number) => `/child-patient/cr/${cr_number}`,
+      providesTags: (result, error, cr_number) => {
+        // Don't cache 404 errors - they're expected when searching for wrong patient type
+        if (error?.status === 404) {
+          return [];
+        }
+        return [{ type: 'ChildPatient', id: result?.data?.childPatient?.id }];
+      },
+      keepUnusedDataFor: 60,
+      // Don't retry on 404 - it's expected when searching for wrong patient type
+      extraOptions: { maxRetries: 0 },
+    }),
+    addChildPatientToTodayList: builder.mutation({
+      query: (data) => ({
+        url: '/child-patient/add-to-today',
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: (result, error, data) => {
+        // Invalidate all patient-related caches to ensure UI updates
+        // Get today's date to invalidate date-specific queries
+        const today = new Date().toISOString().slice(0, 10);
+        return [
+          'ChildPatient',
+          'Patient',
+          { type: 'Patient', id: 'LIST' },
+          { type: 'ChildPatient', id: 'LIST' },
+          // Invalidate date-specific queries for today
+          { type: 'Patient', id: `LIST-${today}` },
+          // Invalidate all patient queries
+          { type: 'Patient', id: undefined },
+        ];
+      },
+    }),
+    deleteChildPatient: builder.mutation({
+      query: (id) => ({
+        url: `/child-patient/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (result, error, id) => {
+        const today = new Date().toISOString().slice(0, 10);
+        return [
+          { type: 'ChildPatient', id },
+          { type: 'ChildPatient', id: 'LIST' },
+          { type: 'Patient', id: 'LIST' },
+          { type: 'Patient', id: `LIST-${today}` },
+        ];
+      },
+    }),
   }),
 });
 
@@ -303,5 +380,9 @@ export const {
   useUploadPatientFilesMutation,
   useGetPatientFilesQuery,
   useDeletePatientFileMutation,
+  useGetAllChildPatientsQuery,
+  useGetChildPatientByCRNoQuery,
+  useAddChildPatientToTodayListMutation,
+  useDeleteChildPatientMutation,
 } = patientsApiSlice;
 

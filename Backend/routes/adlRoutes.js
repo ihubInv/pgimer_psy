@@ -951,5 +951,6 @@ router.delete('/:id', authenticateToken, validateId, ADLController.deleteADLFile
  *         description: Server error
  */
 router.get('/patient/:patient_id', authenticateToken, ADLController.getADLFilesByPatientId);
+router.get('/child-patient/:child_patient_id', authenticateToken, ADLController.getADLFilesByChildPatientId);
 
 module.exports = router;
