@@ -182,9 +182,9 @@ const SearchExistingPatientModal = ({ isOpen, onClose, onSelectPatient, currentR
                       Child Patient
                     </span>
                   )}
-                  <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
-                    Existing Patient
-                  </span>
+                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                  Existing Patient
+                </span>
                 </div>
               </div>
 
@@ -195,8 +195,8 @@ const SearchExistingPatientModal = ({ isOpen, onClose, onSelectPatient, currentR
                   <span className="font-medium">{patient.sex}</span>
                   {!isChildPatient && patient.age && (
                     <>
-                      <span className="text-gray-300">•</span>
-                      <span>{patient.age}y</span>
+                  <span className="text-gray-300">•</span>
+                  <span>{patient.age}y</span>
                     </>
                   )}
                   {isChildPatient && patient.age_group && (

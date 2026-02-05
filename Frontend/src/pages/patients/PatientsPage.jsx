@@ -210,9 +210,9 @@ const PatientsPage = () => {
         refetchChild();
       } else {
         console.log('[handleDelete] Deleting adult patient:', id);
-        await deletePatient(id).unwrap();
-        toast.success('Patient and all related records deleted successfully');
-        refetch();
+      await deletePatient(id).unwrap();
+      toast.success('Patient and all related records deleted successfully');
+      refetch();
       }
     } catch (err) {
       console.error('[handleDelete] Error deleting patient:', err);

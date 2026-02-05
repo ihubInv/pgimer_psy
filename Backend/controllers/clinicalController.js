@@ -62,9 +62,21 @@ class ClinicalController {
           });
         }
 
-        // CRITICAL: Check if doctor has selected a room for TODAY
-        // Room selection is day-specific - doctor must select room each day
-        if (data.assigned_doctor) {
+        // 🔹 Room assignment logic:
+        // Priority 1: Use patient's existing assigned_room (if available)
+        // Priority 2: Use doctor's selected room for today (if patient has no room)
+        // Priority 3: Use room_no from request body (if provided)
+        let roomToUse = null;
+
+        // First, check if patient has an assigned_room
+        const patient = await Patient.findById(data.patient_id);
+        if (patient && patient.assigned_room && String(patient.assigned_room).trim() !== '') {
+          // Patient has an assigned room - use it (no need for daily room selection)
+          roomToUse = String(patient.assigned_room).trim();
+          console.log(`[createClinicalProforma] Using patient's existing assigned_room: "${roomToUse}"`);
+        } else if (data.assigned_doctor) {
+          // Patient has no assigned room - check if doctor has selected a room for today
+          // This is only required for new patients or patients without assigned rooms
           const { hasRoomToday } = require('../utils/roomAssignment');
           const doctorIdInt = parseInt(data.assigned_doctor, 10);
           if (!isNaN(doctorIdInt)) {
@@ -77,11 +89,21 @@ class ClinicalController {
               });
             }
             
-            // Use doctor's selected room if room_no not provided
-            if (!data.room_no && roomStatus.room) {
-              data.room_no = roomStatus.room;
-            }
+            // Use doctor's selected room
+            roomToUse = roomStatus.room;
+            console.log(`[createClinicalProforma] Using doctor's selected room for today: "${roomToUse}"`);
           }
+        }
+
+        // Use room_no from request body if provided (highest priority)
+        if (data.room_no && String(data.room_no).trim() !== '') {
+          roomToUse = String(data.room_no).trim();
+          console.log(`[createClinicalProforma] Using room_no from request: "${roomToUse}"`);
+        }
+
+        // Set room_no in data if we have a room to use
+        if (roomToUse) {
+          data.room_no = roomToUse;
         }
   
     // 🔹 Complex Case (with ADL) - Transaction-like atomicity

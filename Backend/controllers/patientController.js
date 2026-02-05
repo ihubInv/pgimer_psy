@@ -1203,12 +1203,12 @@ class PatientController {
             message: 'Patient not found'
           });
         }
-        const patientJson = patient.toJSON();
+      const patientJson = patient.toJSON();
         // Use the static helper on the controller class
         patientResponse = PatientController.filterPatientDataForRole(
-          patientJson,
-          req.user?.role
-        );
+        patientJson,
+        req.user?.role
+      );
         patientResponse.patient_type = 'adult';
       }
 
@@ -2019,35 +2019,35 @@ class PatientController {
         });
       } else {
         // Handle adult patients - use existing PatientVisit logic
-        const patient = await Patient.findById(patientIdInt);
-        if (!patient) {
-          return res.status(404).json({
-            success: false,
-            message: 'Patient not found'
-          });
-        }
-        
-        // Mark today's visit as completed (will create visit record if it doesn't exist)
-        const visit = await PatientVisit.markPatientVisitCompletedToday(
-          patientIdInt, 
-          visit_date,
-          patient.assigned_doctor_id || null,
-          patient.assigned_room || null
-        );
-
-        if (!visit) {
-          // Visit exists but is already completed
-          return res.status(404).json({
-            success: false,
-            message: 'Visit for today is already marked as completed'
-          });
-        }
-
-        res.json({
-          success: true,
-          message: 'Visit marked as completed successfully',
-          data: { visit }
+      const patient = await Patient.findById(patientIdInt);
+      if (!patient) {
+        return res.status(404).json({
+          success: false,
+          message: 'Patient not found'
         });
+      }
+      
+      // Mark today's visit as completed (will create visit record if it doesn't exist)
+      const visit = await PatientVisit.markPatientVisitCompletedToday(
+        patientIdInt, 
+        visit_date,
+        patient.assigned_doctor_id || null,
+        patient.assigned_room || null
+      );
+
+      if (!visit) {
+        // Visit exists but is already completed
+        return res.status(404).json({
+          success: false,
+          message: 'Visit for today is already marked as completed'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Visit marked as completed successfully',
+        data: { visit }
+      });
       }
     } catch (error) {
       console.error('[markVisitCompleted] Error:', error);

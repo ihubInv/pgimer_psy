@@ -325,11 +325,11 @@ const FileUpload = ({
 
       {/* Helper Text */}
       {showHelperText && (
-        <div className="text-xs text-gray-500">
-          <p>• Maximum {maxFiles} files, {maxSizeMB}MB per file</p>
-          <p>• Supported: Images (JPEG, PNG, GIF, WebP), PDF, Word documents, Text files</p>
-          <p>• Use "Capture Photo" to take pictures directly with your device camera</p>
-        </div>
+      <div className="text-xs text-gray-500">
+        <p>• Maximum {maxFiles} files, {maxSizeMB}MB per file</p>
+        <p>• Supported: Images (JPEG, PNG, GIF, WebP), PDF, Word documents, Text files</p>
+        <p>• Use "Capture Photo" to take pictures directly with your device camera</p>
+      </div>
       )}
 
       {/* Camera Modal */}
