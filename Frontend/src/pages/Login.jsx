@@ -31,30 +31,48 @@ const Login = () => {
   const pendingNavigationRef = useRef(false);
   
   // Redirect to dashboard if already authenticated
+  // This handles immediate navigation when isAuthenticated becomes true
   useEffect(() => {
-    if (isAuthenticated && pendingNavigationRef.current) {
-      pendingNavigationRef.current = false;
-      // Use setTimeout to ensure navigation happens after state is fully updated
-      setTimeout(() => {
-        navigate('/', { replace: true });
-      }, 0);
+    if (isAuthenticated) {
+      // If authenticated, always redirect (don't wait for pendingNavigationRef)
+      const redirectUrl = '/';
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        navigate(redirectUrl, { replace: true });
+      });
     }
   }, [isAuthenticated, navigate]);
   
-  // Also check localStorage as a fallback
+  // Also check localStorage as a fallback - handles cases where Redux state hasn't updated yet
+  // This is a safety net for race conditions
   useEffect(() => {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user');
-    if (token && user && pendingNavigationRef.current) {
-      // If we have credentials but isAuthenticated is not yet true, wait a bit and navigate
-      setTimeout(() => {
-        if (localStorage.getItem('token') && localStorage.getItem('user')) {
-          pendingNavigationRef.current = false;
-          navigate('/', { replace: true });
+    if (token && user && !isAuthenticated) {
+      // If we have credentials but isAuthenticated is not yet true, wait a bit and check again
+      // This handles race conditions where localStorage is set but Redux state hasn't updated
+      const checkInterval = setInterval(() => {
+        const currentToken = localStorage.getItem('token');
+        const currentUser = localStorage.getItem('user');
+        
+        if (currentToken && currentUser) {
+          // If still on login page after credentials are set, force navigation
+          if (window.location.pathname === '/login') {
+            clearInterval(checkInterval);
+            // Force navigation even if Redux state hasn't updated
+            navigate('/', { replace: true });
+          }
+        } else {
+          clearInterval(checkInterval);
         }
-      }, 50);
+      }, 100);
+      
+      // Clear interval after 2 seconds to prevent infinite checking
+      setTimeout(() => clearInterval(checkInterval), 2000);
+      
+      return () => clearInterval(checkInterval);
     }
-  }, [navigate]);
+  }, [isAuthenticated, navigate]);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -141,6 +159,9 @@ const Login = () => {
       if (token && user) {
         // Direct login - token received from cookie or response (backward compatibility)
         
+        // Set pending navigation flag BEFORE state update
+        pendingNavigationRef.current = true;
+        
         // Use flushSync to ensure state update is synchronous and React re-renders immediately
         flushSync(() => {
           dispatch(setCredentials({
@@ -161,11 +182,20 @@ const Login = () => {
         
         toast.success('Login successful!');
         
-        // Use React Router navigate to preserve network tab history
-        // This does client-side navigation without page reload
-        setTimeout(() => {
+        // Force immediate navigation - use window.location as fallback if navigate doesn't work
+        // This ensures UI updates even if Redux state hasn't fully propagated
+        try {
           navigate(redirectUrl, { replace: true });
-        }, 100);
+          // Fallback: if navigation doesn't happen within 200ms, force page reload
+          setTimeout(() => {
+            if (window.location.pathname === '/login') {
+              window.location.href = redirectUrl;
+            }
+          }, 200);
+        } catch (navError) {
+          console.error('Navigation error:', navError);
+          window.location.href = redirectUrl;
+        }
       } else {
         // OTP required - store login data for OTP verification
         dispatch(setOTPRequired(result.data));
@@ -195,6 +225,10 @@ const Login = () => {
       
       const token = getCookie('accessToken') || result.data.accessToken || result.data.token;
       const user = result.data.user;
+      const redirectUrl = result.data?.redirectUrl || '/';
+      
+      // Set pending navigation flag BEFORE state update
+      pendingNavigationRef.current = true;
       
       // Use flushSync to ensure state update is synchronous and React re-renders immediately
       flushSync(() => {
@@ -217,12 +251,20 @@ const Login = () => {
       
       toast.success('Login successful!');
       
-      // Use React Router navigate to preserve network tab history
-      // This does client-side navigation without page reload
-      const redirectUrl = result.data?.redirectUrl || '/';
-      setTimeout(() => {
+      // Force immediate navigation - use window.location as fallback if navigate doesn't work
+      // This ensures UI updates even if Redux state hasn't fully propagated
+      try {
         navigate(redirectUrl, { replace: true });
-      }, 100);
+        // Fallback: if navigation doesn't happen within 200ms, force page reload
+        setTimeout(() => {
+          if (window.location.pathname === '/login') {
+            window.location.href = redirectUrl;
+          }
+        }, 200);
+      } catch (navError) {
+        console.error('Navigation error:', navError);
+        window.location.href = redirectUrl;
+      }
     } catch (err) {
       // Clear OTP field on error so user can enter a new one
       setFormData(prev => ({ ...prev, otp: '' }));

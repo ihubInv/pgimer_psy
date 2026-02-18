@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import { 
   FiPlus, FiSearch, FiTrash2, FiEye,  FiEdit, FiUsers, 
    FiDownload,  FiClock, FiPrinter,
-  FiHeart, FiFileText, FiShield, FiTrendingUp, FiX
+  FiHeart, FiFileText, FiShield, FiX
 } from 'react-icons/fi';
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
 import { useGetAllPatientsQuery, useGetAllChildPatientsQuery, useDeletePatientMutation, useDeleteChildPatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
@@ -2878,43 +2878,6 @@ const PatientsPage = () => {
           </span>
         </div>
       ),
-    },
-    {
-      header: (
-        <div className="flex items-center gap-2">
-          <FiTrendingUp className="w-4 h-4 text-primary-600" />
-          <span className="font-semibold">Status</span>
-        </div>
-      ),
-      render: (row) => {
-        // If patient has ADL file, status should be "complex"
-        const isComplex = row.has_adl_file || row.case_complexity === 'complex';
-        const statusText = isComplex ? 'complex' : 'simple';
-        
-        return (
-        <div className="space-y-2">
-          <Badge 
-              variant={ row.has_adl_file ? ' success ' : 'warning'}
-            className={`${
-              !row.has_adl_file 
-                ? 'bg-gradient-to-r from-orange-100 to-yellow-100 text-orange-800 border-orange-200 gap-1`' 
-                : 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-200'
-            }`}
-          >
-              {/* {statusText}  */}
-              Out Patient Intake Record
-          </Badge>
-          <div className="flex items-center gap-1">
-            <div className={`w-2 h-2 rounded-full ${
-              row.has_adl_file ? 'bg-green-500' : 'bg-gray-300'
-            }`}></div>
-            <span className="text-xs text-gray-600">
-               {row.has_adl_file ? 'Yes' : 'No'}
-            </span>
-          </div>
-        </div>
-        );
-      },
     },
     {
       header: (

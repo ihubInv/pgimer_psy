@@ -643,28 +643,28 @@ const CreatePatient = () => {
               <button
                 type="button"
                 onClick={() => setActiveTab('adult')}
-                className={`flex-1 px-8 py-5 text-center font-semibold transition-all duration-200 rounded-lg ${
+                className={`flex-1 px-4 py-2 text-center font-semibold text-sm transition-all duration-200 rounded-lg ${
                   activeTab === 'adult'
                     ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md'
                     : 'text-gray-700 hover:bg-gray-50 bg-white'
                 }`}
               >
-                <div className="flex items-center justify-center gap-3">
-                  <FiUser className="w-5 h-5" />
+                <div className="flex items-center justify-center gap-2">
+                  <FiUser className="w-4 h-4" />
                   <span>Adult Patient</span>
                 </div>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('child')}
-                className={`flex-1 px-8 py-5 text-center font-semibold transition-all duration-200 rounded-lg ${
+                className={`flex-1 px-4 py-2 text-center font-semibold text-sm transition-all duration-200 rounded-lg ${
                   activeTab === 'child'
                     ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md'
                     : 'text-gray-700 hover:bg-gray-50 bg-white'
                 }`}
               >
-                <div className="flex items-center justify-center gap-3">
-                  <FiUsers className="w-5 h-5" />
+                <div className="flex items-center justify-center gap-2">
+                  <FiUsers className="w-4 h-4" />
                   <span>Child Patient</span>
                 </div>
               </button>
