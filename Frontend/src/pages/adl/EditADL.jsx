@@ -730,20 +730,8 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
     try {
       // Convert array fields to JSON strings for storage
       const prepareDataForSubmission = (data) => {
-        const prepared = { ...data };
-        const arrayFields = [
-          'informants', 'complaints_patient', 'complaints_informant',
-          'family_history_siblings', 'occupation_jobs', 'sexual_children',
-          'living_residents', 'living_inlaws', 'premorbid_personality_traits'
-        ];
-        
-        arrayFields.forEach(field => {
-          if (Array.isArray(prepared[field])) {
-            prepared[field] = JSON.stringify(prepared[field]);
-          }
-        });
-        
-        return prepared;
+        // Send JSON arrays as native JSON (not pre-stringified). The API normalizes JSONB fields.
+        return { ...data };
       };
 
       // If no ADL file exists and we have patientId or childPatientId, create new one

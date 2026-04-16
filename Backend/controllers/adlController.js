@@ -142,22 +142,17 @@ class ADLController {
         });
       }
 
-      // Generate ADL number if not provided
+      // Generate ADL number if not provided (JS by default — avoids missing DB function + pool error logs)
       let adl_no = adlData.adl_no;
       if (!adl_no) {
-        try {
-          const db = require('../config/database');
-          const adlNoResult = await db.query('SELECT generate_adl_number() as adl_no');
-          adl_no = adlNoResult.rows[0]?.adl_no;
-        } catch (error) {
-          console.warn('Failed to generate ADL number via SQL function, using JavaScript fallback:', error.message);
-          // Fallback: Generate ADL number in JavaScript
-          const year = new Date().getFullYear();
-          const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase();
-          adl_no = `ADL${year}${randomPart}`;
+        if (process.env.USE_SQL_ADL_NUMBER === 'true') {
+          try {
+            const adlNoResult = await db.query('SELECT generate_adl_number() as adl_no');
+            adl_no = adlNoResult.rows[0]?.adl_no;
+          } catch (error) {
+            console.warn('generate_adl_number() failed, using JS fallback:', error.message);
+          }
         }
-        
-        // If still no ADL number, generate one
         if (!adl_no) {
           const year = new Date().getFullYear();
           const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase();
@@ -190,31 +185,10 @@ class ADLController {
         'living_inlaws',
       ];
 
-      // Safe JSON parse helper – ensures we always end up with an array
-      const safeJsonParseArray = (value) => {
-        if (!value) return [];
-        if (Array.isArray(value)) return value;
-        if (typeof value === 'string') {
-          const trimmed = value.trim();
-          if (!trimmed) return [];
-          try {
-            const parsed = JSON.parse(trimmed);
-            return Array.isArray(parsed) ? parsed : [];
-          } catch {
-            return [];
-          }
-        }
-        // Any non-array object → wrap in array
-        if (typeof value === 'object') {
-          return [value];
-        }
-        return [];
-      };
-
-      // Normalize all JSONB fields on the incoming payload
+      // Normalize all JSONB fields on the incoming payload (same rules as ADLFile.create)
       jsonbFields.forEach((field) => {
         if (field in adlData) {
-          adlData[field] = safeJsonParseArray(adlData[field]);
+          adlData[field] = ADLFile.normalizeJsonbArray(adlData[field]);
         }
       });
 
@@ -253,6 +227,11 @@ class ADLController {
         total_visits: sanitizedData.total_visits || 1,
         is_active: sanitizedData.is_active !== undefined ? sanitizedData.is_active : true
       };
+
+      // node-pg rejects `undefined` in parameter arrays — drop missing keys from the payload
+      Object.keys(createData).forEach((k) => {
+        if (createData[k] === undefined) delete createData[k];
+      });
 
       // Create the ADL file
       const adlFile = await ADLFile.create(createData);
@@ -410,6 +389,10 @@ class ADLController {
       console.log('[ADLController.updateADLFile] Update data keys after cleanup:', Object.keys(updateData));
       console.log('[ADLController.updateADLFile] Update data count:', Object.keys(updateData).length);
       
+      Object.keys(updateData).forEach((k) => {
+        if (updateData[k] === undefined) delete updateData[k];
+      });
+
       if (Object.keys(updateData).length === 0) {
         console.warn('[ADLController.updateADLFile] No fields to update after cleanup');
         return res.status(400).json({

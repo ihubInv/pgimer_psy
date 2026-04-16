@@ -1,5 +1,28 @@
 const db = require('../config/database');
 
+/** null = unknown; set after first information_schema check */
+let adlFilesHasChildPatientIdColumn = null;
+
+const getAdlFilesHasChildPatientIdColumn = async () => {
+  if (adlFilesHasChildPatientIdColumn !== null) {
+    return adlFilesHasChildPatientIdColumn;
+  }
+  try {
+    const r = await db.query(
+      `SELECT 1 AS ok
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'adl_files'
+         AND column_name = 'child_patient_id'
+       LIMIT 1`
+    );
+    adlFilesHasChildPatientIdColumn = r.rows.length > 0;
+  } catch {
+    adlFilesHasChildPatientIdColumn = false;
+  }
+  return adlFilesHasChildPatientIdColumn;
+};
+
 // Helper function to sanitize date fields - converts empty strings to null
 const sanitizeDate = (value) => {
   if (value === '' || value === null || value === undefined) {
@@ -63,58 +86,175 @@ const sanitizeIntegerFields = (data) => {
   return sanitized;
 };
 
-// Helper: normalize JSON/JSONB array fields (ensures valid JSON arrays)
+/**
+ * Some clients send JSONB arrays as `[ "{\"name\":\"x\"}" ]` (objects stringified per element)
+ * or double-encode the whole payload. PostgreSQL then receives invalid JSON text for `::jsonb`.
+ * Peel string layers with JSON.parse until the value is no longer a JSON-looking string.
+ */
+const parseJsonStringLayers = (value, maxDepth = 12) => {
+  let current = value;
+  let depth = 0;
+  while (typeof current === 'string' && depth < maxDepth) {
+    const trimmed = current.trim();
+    if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') {
+      return null;
+    }
+    const looksLikeJson =
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'));
+    if (!looksLikeJson) {
+      return current;
+    }
+    try {
+      current = JSON.parse(trimmed);
+      depth += 1;
+    } catch {
+      return value;
+    }
+  }
+  return current;
+};
+
+const stripUndefinedDeep = (v) => {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  if (Array.isArray(v)) {
+    return v
+      .filter((x) => x !== undefined)
+      .map((x) => stripUndefinedDeep(x));
+  }
+  if (typeof v !== 'object') return v;
+  const out = {};
+  for (const [k, val] of Object.entries(v)) {
+    if (val === undefined) continue;
+    out[k] = stripUndefinedDeep(val);
+  }
+  return out;
+};
+
+// Helper: normalize JSON/JSONB array fields (ensures valid JSON arrays for node-pg + PostgreSQL)
 // - Empty string/null/undefined -> []
-// - String that parses to an array -> parsed array
-// - String that fails to parse -> []
-// - Non-array objects -> []
-// - Handles stringified JSON, arrays, objects, null, undefined, empty strings
+// - String that parses to an array -> parsed array (elements unwrapped if stringified JSON)
+// - Non-array objects -> [object]
 const normalizeJsonArray = (value) => {
-  // Handle null, undefined, empty string
   if (value === '' || value === null || value === undefined) {
     return [];
   }
-  
-  // Already an array - return as is
+
+  let items;
   if (Array.isArray(value)) {
-    return value;
-  }
-  
-  // String input - try to parse as JSON
-  if (typeof value === 'string') {
-    // Trim whitespace
-    const trimmed = value.trim();
-    if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') {
+    items = value;
+  } else if (typeof value === 'string') {
+    const parsed = parseJsonStringLayers(value);
+    if (parsed === null || parsed === undefined) return [];
+    if (Array.isArray(parsed)) {
+      items = parsed;
+    } else if (typeof parsed === 'object') {
+      const cleaned = stripUndefinedDeep(parsed);
+      return cleaned === undefined ? [] : [cleaned];
+    } else {
       return [];
     }
+  } else if (typeof value === 'object' && value !== null) {
+    const cleaned = stripUndefinedDeep(value);
+    return cleaned === undefined ? [] : [cleaned];
+  } else {
+    return [];
+  }
+
+  const out = [];
+  const walk = (el) => {
+    const peeled = parseJsonStringLayers(el);
+    if (Array.isArray(peeled)) {
+      peeled.forEach(walk);
+      return;
+    }
+    if (typeof peeled === 'object' && peeled !== null) {
+      const cleaned = stripUndefinedDeep(peeled);
+      if (cleaned !== undefined) out.push(cleaned);
+      return;
+    }
+    if (peeled !== null && peeled !== undefined) {
+      out.push(peeled);
+    }
+  };
+  items.forEach(walk);
+  return out;
+};
+
+/** Unwrap JSON-looking strings nested inside objects (e.g. a field double-encoded as text). */
+const deepRepairJsonStringsInValue = (v) => {
+  if (v === null || v === undefined) return v;
+  if (Array.isArray(v)) return v.map(deepRepairJsonStringsInValue);
+  if (typeof v === 'string') {
+    const layered = parseJsonStringLayers(v);
+    if (layered !== v && typeof layered === 'object') {
+      return deepRepairJsonStringsInValue(layered);
+    }
+    return v;
+  }
+  if (typeof v === 'object') {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) {
+      if (val === undefined) continue;
+      out[k] = deepRepairJsonStringsInValue(val);
+    }
+    return out;
+  }
+  return v;
+};
+
+/**
+ * Validated JSON **text** for `$n::jsonb` parameters.
+ * Passing native arrays through node-pg can still produce invalid JSON for some mixed/double-encoded payloads.
+ */
+const serializeJsonbArrayForSql = (value) => {
+  let arr = normalizeJsonArray(value);
+  arr = deepRepairJsonStringsInValue(arr);
+  try {
+    const text = JSON.stringify(arr);
+    JSON.parse(text);
+    return text;
+  } catch (e) {
+    console.warn('[serializeJsonbArrayForSql]', e.message);
+    return '[]';
+  }
+};
+
+/** node-pg rejects `undefined` in query parameters — map to SQL NULL. */
+const pgParam = (v) => (v === undefined ? null : v);
+
+/**
+ * `family_history` is normally free-text (TEXT). If the column is JSON/JSONB, plain prose
+ * must be stored as a JSON string value. This normalizer always produces a value PostgreSQL accepts.
+ */
+const normalizeFamilyHistoryDb = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'object') {
     try {
-      const parsed = JSON.parse(trimmed);
-      // Ensure result is an array
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-      // If parsed to an object, wrap in array (shouldn't happen but handle gracefully)
-      if (typeof parsed === 'object' && parsed !== null) {
-        return [parsed];
-      }
-      return [];
-    } catch (e) {
-      // Invalid JSON string - return empty array
-      console.warn(`[normalizeJsonArray] Failed to parse JSON string: ${trimmed.substring(0, 100)}`, e.message);
-      return [];
+      return JSON.stringify(value);
+    } catch {
+      return null;
     }
   }
-  
-  // Object input - wrap in array (shouldn't happen but handle gracefully)
-  if (typeof value === 'object' && value !== null) {
-    return [value];
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return JSON.stringify(parsed);
+  } catch {
+    // Free-text narrative (TEXT column). If your DB has this column as JSON/JSONB instead, run:
+    // Backend/database/migrations/adl_files_family_history_to_text.sql
+    return trimmed;
   }
-  
-  // Any other type (number, boolean, etc.) - return empty array
-  return [];
 };
 
 class ADLFile {
+  /** Normalizes JSONB array columns (unwraps double-encoded JSON strings from some clients). */
+  static normalizeJsonbArray(value) {
+    return normalizeJsonArray(value);
+  }
+
   constructor(data) {
     this.id = data.id;
     this.patient_id = data.patient_id;
@@ -373,6 +513,7 @@ class ADLFile {
       sexual_children: normalizeJsonArray(sanitizedData.sexual_children),
       living_residents: normalizeJsonArray(sanitizedData.living_residents),
       living_inlaws: normalizeJsonArray(sanitizedData.living_inlaws),
+      family_history: normalizeFamilyHistoryDb(sanitizedData.family_history),
     };
     
     const {
@@ -437,31 +578,6 @@ class ADLFile {
       development_bedwetting, development_phobias, development_childhood_illness,
       provisional_diagnosis, treatment_plan, consultant_comments
     } = sanitizedData;
-
-      // Helper function to safely stringify JSON arrays for database insertion
-      const safeJsonStringify = (value) => {
-        try {
-          const normalized = normalizeJsonArray(value);
-          const jsonString = JSON.stringify(normalized);
-          // Validate the JSON string is valid by parsing it back
-          JSON.parse(jsonString);
-          return jsonString;
-        } catch (e) {
-          console.warn(`[safeJsonStringify] Failed to stringify value, using empty array:`, e.message);
-          return '[]';
-        }
-      };
-
-      // Convert arrays to JSONB - ensure valid JSON strings
-      const informantsJson = safeJsonStringify(informants);
-      const complaintsPatientJson = safeJsonStringify(complaints_patient);
-      const complaintsInformantJson = safeJsonStringify(complaints_informant);
-      const familyHistorySiblingsJson = safeJsonStringify(family_history_siblings);
-      const premorbidPersonalityTraitsJson = safeJsonStringify(premorbid_personality_traits);
-      const occupationJobsJson = safeJsonStringify(occupation_jobs);
-      const sexualChildrenJson = safeJsonStringify(sexual_children);
-      const livingResidentsJson = safeJsonStringify(living_residents);
-      const livingInlawsJson = safeJsonStringify(living_inlaws);
 
     // Prepare ADL data for saving
 
@@ -556,8 +672,9 @@ class ADLFile {
         history_treatment_dates || null,
         history_treatment_drugs || null,
         history_treatment_response || null,
-        informantsJson,
-        complaintsPatientJson, complaintsInformantJson,
+        serializeJsonbArrayForSql(informants),
+        serializeJsonbArrayForSql(complaints_patient),
+        serializeJsonbArrayForSql(complaints_informant),
         onset_duration || null,
         precipitating_factor || null,
         course || null,
@@ -583,15 +700,15 @@ class ADLFile {
         family_history_mother_death_age || null,
         family_history_mother_death_date || null,
         family_history_mother_death_cause || null,
-        familyHistorySiblingsJson,
-        family_history || null,
+        serializeJsonbArrayForSql(family_history_siblings),
+        family_history,
         diagnostic_formulation_summary || null,
         diagnostic_formulation_features || null,
         diagnostic_formulation_psychodynamic || null,
         premorbid_personality_passive_active || null,
         premorbid_personality_assertive || null,
         premorbid_personality_introvert_extrovert || null,
-        premorbidPersonalityTraitsJson,
+        serializeJsonbArrayForSql(premorbid_personality_traits),
         premorbid_personality_hobbies || null,
         premorbid_personality_habits || null,
         premorbid_personality_alcohol_drugs || null,
@@ -664,7 +781,7 @@ class ADLFile {
         education_hobbies || null,
         education_special_abilities || null,
         education_discontinue_reason || null,
-        occupationJobsJson, sexual_menarche_age || null,
+        serializeJsonbArrayForSql(occupation_jobs), sexual_menarche_age || null,
         sexual_menarche_reaction || null,
         sexual_education || null,
         sexual_masturbation || null,
@@ -674,18 +791,18 @@ class ADLFile {
         sexual_spouse_occupation || null,
         sexual_adjustment_general || null,
         sexual_adjustment_sexual || null,
-        sexualChildrenJson,
+        serializeJsonbArrayForSql(sexual_children),
         sexual_problems || null,
         religion_type || null,
         religion_participation || null,
         religion_changes || null,
-        livingResidentsJson,
+        serializeJsonbArrayForSql(living_residents),
         living_income_sharing || null,
         living_expenses || null,
         living_kitchen || null,
         living_domestic_conflicts || null,
         living_social_class || null,
-        livingInlawsJson,
+        serializeJsonbArrayForSql(living_inlaws),
         home_situation_childhood || null,
         home_situation_parents_relationship || null,
         home_situation_socioeconomic || null,
@@ -706,7 +823,7 @@ class ADLFile {
         provisional_diagnosis || null,
         treatment_plan || null,
         consultant_comments || null
-      ]
+      ].map(pgParam)
     );
 
     return new ADLFile(result.rows[0]);
@@ -1089,6 +1206,7 @@ class ADLFile {
         sexual_children: normalizeJsonArray(sanitizedData.sexual_children),
         living_residents: normalizeJsonArray(sanitizedData.living_residents),
         living_inlaws: normalizeJsonArray(sanitizedData.living_inlaws),
+        family_history: normalizeFamilyHistoryDb(sanitizedData.family_history),
       };
       
       // Verify that required columns exist in the table
@@ -1199,12 +1317,12 @@ class ADLFile {
       const createdByIdInt = created_by ? parseInt(created_by, 10) : null;
       const clinicalProformaIdInt = clinical_proforma_id ? parseInt(clinical_proforma_id, 10) : null;
 
-      // Helper function to safely stringify JSON arrays for database insertion
+      // Pass native arrays/objects for JSONB columns — node-pg serializes them reliably (avoids
+      // malformed JSON text edge cases). Keep safeJsonStringify helper for update() parity.
       const safeJsonStringify = (value) => {
         try {
           const normalized = normalizeJsonArray(value);
           const jsonString = JSON.stringify(normalized);
-          // Validate the JSON string is valid by parsing it back
           JSON.parse(jsonString);
           return jsonString;
         } catch (e) {
@@ -1212,17 +1330,6 @@ class ADLFile {
           return '[]';
         }
       };
-
-      // Convert arrays to JSONB - ensure valid JSON strings
-      const informantsJson = safeJsonStringify(informants);
-      const complaintsPatientJson = safeJsonStringify(complaints_patient);
-      const complaintsInformantJson = safeJsonStringify(complaints_informant);
-      const familyHistorySiblingsJson = safeJsonStringify(family_history_siblings);
-      const premorbidPersonalityTraitsJson = safeJsonStringify(premorbid_personality_traits);
-      const occupationJobsJson = safeJsonStringify(occupation_jobs);
-      const sexualChildrenJson = safeJsonStringify(sexual_children);
-      const livingResidentsJson = safeJsonStringify(living_residents);
-      const livingInlawsJson = safeJsonStringify(living_inlaws);
 
       const result = await db.query(
         `INSERT INTO adl_files (
@@ -1311,9 +1418,9 @@ class ADLFile {
           history_treatment_dates,
           history_treatment_drugs,
           history_treatment_response,
-          informantsJson,
-          complaintsPatientJson,
-          complaintsInformantJson,
+          serializeJsonbArrayForSql(informants),
+          serializeJsonbArrayForSql(complaints_patient),
+          serializeJsonbArrayForSql(complaints_informant),
           onset_duration,
           precipitating_factor,
           course,
@@ -1339,7 +1446,7 @@ class ADLFile {
           family_history_mother_death_age,
           family_history_mother_death_date,
           family_history_mother_death_cause,
-          familyHistorySiblingsJson,
+          serializeJsonbArrayForSql(family_history_siblings),
           family_history,
           diagnostic_formulation_summary,
           diagnostic_formulation_features,
@@ -1347,7 +1454,7 @@ class ADLFile {
           premorbid_personality_passive_active,
           premorbid_personality_assertive,
           premorbid_personality_introvert_extrovert,
-          premorbidPersonalityTraitsJson,
+          serializeJsonbArrayForSql(premorbid_personality_traits),
           premorbid_personality_hobbies,
           premorbid_personality_habits,
           premorbid_personality_alcohol_drugs,
@@ -1423,7 +1530,7 @@ class ADLFile {
           education_hobbies,
           education_special_abilities,
           education_discontinue_reason,
-          occupationJobsJson,
+          serializeJsonbArrayForSql(occupation_jobs),
           sexual_menarche_age,
           sexual_menarche_reaction,
           sexual_education,
@@ -1436,18 +1543,18 @@ class ADLFile {
           sexual_spouse_occupation,
           sexual_adjustment_general,
           sexual_adjustment_sexual,
-          sexualChildrenJson,
+          serializeJsonbArrayForSql(sexual_children),
           sexual_problems,
           religion_type,
           religion_participation,
           religion_changes,
-          livingResidentsJson,
+          serializeJsonbArrayForSql(living_residents),
           living_income_sharing,
           living_expenses,
           living_kitchen,
           living_domestic_conflicts,
           living_social_class,
-          livingInlawsJson,
+          serializeJsonbArrayForSql(living_inlaws),
           home_situation_childhood,
           home_situation_parents_relationship,
           home_situation_socioeconomic,
@@ -1470,7 +1577,7 @@ class ADLFile {
           provisional_diagnosis,
           treatment_plan,
           consultant_comments
-        ]
+        ].map(pgParam)
       );
 
       return new ADLFile(result.rows[0]);
@@ -1499,16 +1606,27 @@ class ADLFile {
   // Find ADL file by ID
   static async findById(id) {
     try {
+      const hasChildPatientCol = await getAdlFilesHasChildPatientIdColumn();
+      const childJoin = hasChildPatientCol
+        ? 'LEFT JOIN child_patient_registrations cpr ON af.child_patient_id = cpr.id'
+        : '';
+      const patientNameSql = hasChildPatientCol
+        ? 'COALESCE(p.name, cpr.child_name) as patient_name'
+        : 'p.name as patient_name';
+      const crNoSql = hasChildPatientCol
+        ? 'COALESCE(p.cr_no, cpr.cr_number) as cr_no'
+        : 'p.cr_no as cr_no';
+
       const result = await db.query(
         `SELECT af.*, 
-                COALESCE(p.name, cp.child_name) as patient_name, 
-                COALESCE(p.cr_no, cp.cr_number) as cr_no, 
+                ${patientNameSql}, 
+                ${crNoSql}, 
                 COALESCE(p.psy_no, NULL) as psy_no, 
                 u1.name as created_by_name, u1.role as created_by_role,
                 u2.name as last_accessed_by_name
          FROM adl_files af
          LEFT JOIN registered_patient p ON af.patient_id = p.id
-         LEFT JOIN child_patient_registrations cp ON af.child_patient_id = cp.id
+         ${childJoin}
          LEFT JOIN users u1 ON af.created_by = u1.id
          LEFT JOIN users u2 ON af.last_accessed_by = u2.id
          WHERE af.id = $1`,
@@ -1599,16 +1717,23 @@ class ADLFile {
         return [];
       }
 
+      if (!(await getAdlFilesHasChildPatientIdColumn())) {
+        console.warn(
+          '[ADLFile.findByChildPatientId] Column adl_files.child_patient_id is missing; run Backend/database/migrations/add_child_patient_id_to_adl_files.sql'
+        );
+        return [];
+      }
+
       const query = `
         SELECT af.*, 
-               cp.child_name as patient_name, cp.cr_number as cr_no, NULL as psy_no, 
+               cpr.child_name as patient_name, cpr.cr_number as cr_no, NULL as psy_no, 
                u1.name as created_by_name, u1.role as created_by_role,
                u2.name as last_accessed_by_name,
                NULL as assigned_doctor, NULL as proforma_visit_date,
                NULL as assigned_doctor_name, NULL as assigned_doctor_role,
                NULL as clinical_proforma_id
         FROM adl_files af
-        LEFT JOIN child_patient_registrations cp ON af.child_patient_id = cp.id
+        LEFT JOIN child_patient_registrations cpr ON af.child_patient_id = cpr.id
         LEFT JOIN users u1 ON af.created_by = u1.id
         LEFT JOIN users u2 ON af.last_accessed_by = u2.id
         WHERE af.child_patient_id = $1
@@ -1794,7 +1919,7 @@ class ADLFile {
         'family_history_mother_education', 'family_history_mother_occupation',
         'family_history_mother_personality', 'family_history_mother_deceased',
         'family_history_mother_death_age', 'family_history_mother_death_date',
-        'family_history_mother_death_cause', 'family_history_siblings',
+        'family_history_mother_death_cause', 'family_history_siblings', 'family_history',
         'diagnostic_formulation_summary', 'diagnostic_formulation_features',
         'diagnostic_formulation_psychodynamic', 'premorbid_personality_passive_active',
         'premorbid_personality_assertive', 'premorbid_personality_introvert_extrovert',
@@ -1930,10 +2055,12 @@ class ADLFile {
         if (allowedFields.includes(key) && value !== undefined) {
           paramCount++;
           if (jsonbFields.includes(key)) {
-            // Handle JSONB fields - use safe JSON stringify to ensure valid JSON
-            const jsonValue = safeJsonStringify(value);
+            const jsonText = serializeJsonbArrayForSql(value);
             updates.push(`${key} = $${paramCount}::jsonb`);
-            values.push(jsonValue);
+            values.push(jsonText);
+          } else if (key === 'family_history') {
+            updates.push(`${key} = $${paramCount}`);
+            values.push(normalizeFamilyHistoryDb(value));
           } else if (dateFields.includes(key)) {
             // Sanitize date fields - convert empty strings to null
             const sanitizedDate = sanitizeDateField(value);
@@ -1990,7 +2117,7 @@ class ADLFile {
       console.log(`[ADLFile.update] Query preview: ${updateQuery.substring(0, 200)}...`);
 
       try {
-        const result = await db.query(updateQuery, values);
+        const result = await db.query(updateQuery, values.map(pgParam));
 
         if (result.rows.length > 0) {
           Object.assign(this, result.rows[0]);
@@ -2234,6 +2361,7 @@ class ADLFile {
       family_history_mother_death_date: this.family_history_mother_death_date,
       family_history_mother_death_cause: this.family_history_mother_death_cause,
       family_history_siblings: this.family_history_siblings,
+      family_history: this.family_history,
       diagnostic_formulation_summary: this.diagnostic_formulation_summary,
       diagnostic_formulation_features: this.diagnostic_formulation_features,
       diagnostic_formulation_psychodynamic: this.diagnostic_formulation_psychodynamic,
