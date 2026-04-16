@@ -27,16 +27,18 @@ import {
   CHILD_SOURCE_OF_REFERRAL_OPTIONS,
   CHILD_SEX_OPTIONS,
   INDIA_STATES,
-  isMWO
+  isMWO,
 } from '../../utils/constants';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
 import { useGetChildClinicalProformasByChildPatientIdQuery } from '../../features/clinical/childClinicalApiSlice';
 import { useGetFollowUpsByChildPatientIdQuery } from '../../features/followUp/followUpApiSlice';
-import { useGetAllPrescriptionQuery } from '../../features/prescriptions/prescriptionApiSlice';
+import { useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 import { formatDate } from '../../utils/formatters';
 import EditChildClinicalProforma from '../clinical/EditChildClinicalProforma';
 import EditADL from '../adl/EditADL';
+import ChildPatientRegistrationViewCards from '../../components/ChildPatientRegistrationViewCards';
+import FilePreview from '../../components/FilePreview';
 
 const CreateChildPatient = () => {
   const navigate = useNavigate();
@@ -47,6 +49,7 @@ const CreateChildPatient = () => {
   const isEditMode = Boolean(id) && !isViewMode;
   const currentUser = useSelector(selectCurrentUser);
   const token = useSelector(selectCurrentToken);
+  const hideChildViewChromeForMWO = isViewMode && isMWO(currentUser?.role);
   const { data: roomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
   
   const [formData, setFormData] = useState({
@@ -126,6 +129,10 @@ const CreateChildPatient = () => {
     
     // Assigned Room
     assigned_room: '',
+
+    // Documents (from API — view mode previews)
+    documents: [],
+    photo_path: '',
   });
 
   const [errors, setErrors] = useState({});
@@ -136,7 +143,7 @@ const CreateChildPatient = () => {
   
   // State for expanded cards (Past History section and Edit mode cards)
   const [expandedCards, setExpandedCards] = useState({
-    pastHistory: false,
+    pastHistory: true, // Expanded by default so MWO and others see history without hunting
     childRegistration: false,
     childPatientRegistration: true, // Default expanded in view mode
     childClinicalProforma: true, // Default expanded in edit mode
@@ -164,9 +171,9 @@ const CreateChildPatient = () => {
     }
   );
   
-  // Fetch all prescriptions (will filter by child_patient_id or clinical_proforma_id later)
-  const { data: prescriptionData, isLoading: isLoadingPrescriptions } = useGetAllPrescriptionQuery(
-    { limit: 100 },
+  // Prescriptions for this patient only (avoids broad list + works for all roles including MWO)
+  const { data: prescriptionData, isLoading: isLoadingPrescriptions } = useGetPrescriptionsByPatientIdQuery(
+    id,
     {
       skip: !id || !isViewMode,
       refetchOnMountOrArgChange: true,
@@ -183,33 +190,17 @@ const CreateChildPatient = () => {
     ? childFollowUpData.data.followups
     : [];
   
-  // Extract prescriptions and filter for this child patient
-  const allPrescriptions = Array.isArray(prescriptionData?.data?.prescriptions)
+  const prescriptions = Array.isArray(prescriptionData?.data?.prescriptions)
     ? prescriptionData.data.prescriptions
     : [];
-  
-  // Filter prescriptions to only those for this child patient
-  const prescriptions = useMemo(() => {
-    if (!id || !allPrescriptions.length) return [];
-    
-    // Get all child clinical proforma IDs for this child patient
-    const childProformaIds = childClinicalProformas.map(p => p.id).filter(Boolean);
-    
-    // Filter prescriptions that are:
-    // 1. Linked to child clinical proformas for this child patient, OR
-    // 2. Have patient_id matching the child patient ID (standalone prescriptions)
-    return allPrescriptions.filter(p => {
-      // Check if prescription is linked to a child clinical proforma for this child patient
-      if (p.clinical_proforma_id && childProformaIds.includes(p.clinical_proforma_id)) {
-        return true;
-      }
-      // Also include prescriptions with patient_id matching child patient ID (for standalone prescriptions)
-      if (p.patient_id && parseInt(p.patient_id) === parseInt(id)) {
-        return true;
-      }
-      return false;
-    });
-  }, [allPrescriptions, childClinicalProformas, id]);
+
+  const childDocumentFilesForPreview = useMemo(() => {
+    const docs = Array.isArray(formData.documents) ? [...formData.documents] : [];
+    if (formData.photo_path && !docs.includes(formData.photo_path)) {
+      return [formData.photo_path, ...docs];
+    }
+    return docs;
+  }, [formData.documents, formData.photo_path]);
   
   // Helper function to toggle card expansion
   const toggleCard = (cardName) => {
@@ -472,6 +463,8 @@ const CreateChildPatient = () => {
               local_country: 'India',
               local_pincode: '',
               assigned_room: childPatient.assigned_room || '',
+              documents: Array.isArray(childPatient.documents) ? childPatient.documents : [],
+              photo_path: childPatient.photo_path || '',
             });
           }
         }
@@ -788,10 +781,11 @@ const CreateChildPatient = () => {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">
-                      Child Patient Registration Details (View Mode)
+                      Child Patient Details
                     </h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      View child patient registration information
+                      {formData.child_name || 'Child Patient'} -{' '}
+                      {formData.cr_number || 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -822,6 +816,7 @@ const CreateChildPatient = () => {
             )}
 
             {(!isViewMode || expandedCards.childPatientRegistration) && (
+              !isViewMode ? (
               <form onSubmit={handleSubmit} className="p-6 space-y-6">
             {/* Visit Details & Identification Details - Single Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1386,23 +1381,14 @@ const CreateChildPatient = () => {
                 {isViewMode ? 'Back' : 'Cancel'}
               </Button>
               {isViewMode ? (
-                <>
-                  <Button
-                    type="button"
-                    onClick={() => navigate(`/child-patient/${id}?mode=edit`)}
-                    className="px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200"
-                  >
-                    <FiEdit className="mr-2" />
-                    Edit
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => navigate('/patients')}
-                    className="px-6 lg:px-8 py-3 bg-gray-500 hover:bg-gray-600 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200"
-                  >
-                    Back to Patients List
-                  </Button>
-                </>
+                <Button
+                  type="button"
+                  onClick={() => navigate(`/child-patient/${id}?mode=edit`)}
+                  className="px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  <FiEdit className="mr-2" />
+                  Edit
+                </Button>
               ) : (
                 <Button
                   type="submit"
@@ -1418,6 +1404,48 @@ const CreateChildPatient = () => {
               )}
             </div>
           </form>
+              ) : (
+                <>
+                  <div className="space-y-6 p-6">
+                    <ChildPatientRegistrationViewCards formData={formData} rooms={rooms} />
+                    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                      <h4 className="mb-4 flex items-center gap-3 text-lg font-semibold text-gray-900">
+                        <div className="rounded-lg bg-indigo-50 p-2">
+                          <FiFileText className="h-5 w-5 text-indigo-600" />
+                        </div>
+                        Patient Documents & Files
+                      </h4>
+                      <FilePreview
+                        files={childDocumentFilesForPreview}
+                        patient_id={id}
+                        canDelete={false}
+                        baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
+                      />
+                    </div>
+                  </div>
+                  {!hideChildViewChromeForMWO && (
+                    <div className="flex flex-col sm:flex-row justify-end gap-4 border-t border-gray-100 bg-white px-6 py-5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCancel}
+                        className="px-6 lg:px-8 py-3"
+                      >
+                        <FiX className="mr-2" />
+                        Back
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => navigate(`/child-patient/${id}?mode=edit`)}
+                        className="px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200"
+                      >
+                        <FiEdit className="mr-2" />
+                        Edit
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )
             )}
         </Card>
         )}
@@ -1513,8 +1541,8 @@ const CreateChildPatient = () => {
           </>
         )}
         
-        {/* Past History Section - Only show when viewing (not editing) existing child patient */}
-        {id && isViewMode && (
+        {/* Past History Section - hidden for Psychiatric Welfare Officer (MWO) */}
+        {id && isViewMode && !isMWO(currentUser?.role) && (
           <Card className="shadow-lg border-0 bg-white mt-6">
             <div
               className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"

@@ -30,6 +30,14 @@ import PGI_Logo from '../assets/PGI_Logo.png';
 // MWO Sidebar Navigation Component
 const MWONavigation = ({ onClose, isMinimized }) => {
   const location = useLocation();
+  const pathname = location.pathname;
+  // Match patient list + adult/child detail (NavLink `end` on /patients would otherwise hide active state)
+  const isTotalPatientsActive =
+    pathname === '/patients' ||
+    (pathname.startsWith('/patients/') &&
+      pathname !== '/patients/new' &&
+      pathname !== '/patients/select') ||
+    (pathname.startsWith('/child-patient/') && pathname !== '/child-patient/new');
 
   return (
     <>
@@ -85,20 +93,20 @@ const MWONavigation = ({ onClose, isMinimized }) => {
         to="/patients"
         end
         onClick={onClose}
-        className={({ isActive }) =>
+        className={() =>
           `group flex items-center ${isMinimized ? 'justify-center px-2' : 'px-4'} py-3.5 text-sm font-medium rounded-xl transition-all duration-200 ${
-            isActive
+            isTotalPatientsActive
               ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30'
               : 'text-gray-700 hover:bg-white/40 hover:text-primary-700 hover:shadow-md'
           }`
         }
         title={isMinimized ? 'Total Patients' : ''}
       >
-        <div className={`p-2 rounded-lg ${isMinimized ? '' : 'mr-3'} transition-colors ${
-          location.pathname === '/patients'
-            ? 'bg-white/20'
-            : 'bg-gray-100 group-hover:bg-primary-100'
-        }`}>
+        <div
+          className={`p-2 rounded-lg ${isMinimized ? '' : 'mr-3'} transition-colors ${
+            isTotalPatientsActive ? 'bg-white/20' : 'bg-gray-100 group-hover:bg-primary-100'
+          }`}
+        >
           <FiUsers className="h-5 w-5" />
         </div>
         {!isMinimized && <span>Total Patients</span>}
@@ -370,13 +378,19 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                     // - On patient detail page with edit=true (without mode=create) - editing patient
                     // - On patient detail page with edit=false (without mode=view) - viewing from All Patients
                     // - On patient detail page without edit params
+                    // - On child patient detail (/child-patient/:id, not /child-patient/new)
                     const isPatientDetailPage = currentLocation.startsWith('/patients/') && currentLocation !== '/patients/new' && currentLocation !== '/patients/select';
                     const isEditMode = editParam === 'true' && modeParam !== 'create';
                     const isViewFromAllPatients = editParam === 'false' && modeParam !== 'view';
                     const hasNoEditParams = !editParam;
-                    
-                    isActive = currentLocation === item.to || 
-                               (isPatientDetailPage && (isEditMode || isViewFromAllPatients || hasNoEditParams));
+                    const isChildPatientDetailPage =
+                      currentLocation.startsWith('/child-patient/') && currentLocation !== '/child-patient/new';
+
+                    isActive =
+                      currentLocation === item.to ||
+                      (isPatientDetailPage &&
+                        (isEditMode || isViewFromAllPatients || hasNoEditParams)) ||
+                      isChildPatientDetailPage;
                   } else {
                     // For other routes, use standard matching
                     isActive = currentLocation === item.to || currentLocation.startsWith(item.to + '/');

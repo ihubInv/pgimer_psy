@@ -161,7 +161,7 @@ router.get(
 router.get(
   '/child-patient/:child_patient_id',
   authenticateToken,
-  authorizeRoles('Admin', 'Faculty', 'Resident'),
+  authorizeRoles('Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'),
   FollowUpController.getFollowUpsByChildPatientId
 );
 

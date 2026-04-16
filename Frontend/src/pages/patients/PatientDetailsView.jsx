@@ -15,11 +15,10 @@ import {
   FiUser, FiUsers, FiBriefcase,  FiHome, FiMapPin, FiPhone,
   FiCalendar, FiGlobe, FiFileText, FiHash, FiClock,
   FiHeart, FiBookOpen, FiTrendingUp, FiShield,
-  FiNavigation,  FiEdit3, FiSave, FiX, FiLayers, 
+  FiNavigation, FiSave, FiX, FiLayers, 
   FiFolder, FiChevronDown, FiChevronUp, FiPackage,  FiDownload, FiPrinter, FiEye
 } from 'react-icons/fi';
 import Button from '../../components/Button';
-import { IconInput } from '../../components/IconInput';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx-js-style';
 
@@ -30,6 +29,12 @@ import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
 import PrescriptionView from '../PrescribeMedication/PrescriptionView';
 import EditClinicalProforma from '../clinical/EditClinicalProforma';
 import FilePreview from '../../components/FilePreview';
+import {
+  PatientDetailField,
+  PatientDetailSectionTitle,
+  PatientDetailFieldGroup,
+  PatientDetailCardShell,
+} from '../../components/PatientDetailReadOnlyCard';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useSelector } from 'react-redux';
 import PGI_Logo from '../../assets/PGI_Logo.png';
@@ -3608,705 +3613,245 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         {expandedCards.patient && (
           <div ref={patientDetailsPrintRef} className="p-6">
             <form>
-              {/* Quick Entry Section with Glassmorphism */}
-              <div className="relative mb-8">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 rounded-3xl blur-xl pointer-events-none"></div>
-                <Card
-                  title={
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-lg">
-                        <FiEdit3 className="w-6 h-6 text-indigo-600" />
-                      </div>
-                      <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">OUT PATIENT CARD</span>
-                    </div>
-                  }
-                  className="relative mb-8 shadow-2xl border border-white/30 bg-white/70 backdrop-blur-xl rounded-3xl overflow-hidden">
-                  <div className="space-y-8">
-                    {/* First Row - Basic Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <IconInput
-                        icon={<FiHash className="w-4 h-4" />}
-                        label="CR No."
-                        name="cr_no"
-                        value={displayData.cr_no || ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                      <IconInput
-                        icon={<FiCalendar className="w-4 h-4" />}
-                        label="Date"
-                        name="date"
-                        value={displayData.date ? formatDate(displayData.date) : ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                      <IconInput
-                        icon={<FiUser className="w-4 h-4" />}
-                        label="Name"
-                        name="name"
-                        value={displayData.name || ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                      <IconInput
-                        icon={<FiPhone className="w-4 h-4" />}
-                        label="Mobile No."
-                        name="contact_number"
-                        value={displayData.contact_number || ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                    </div>
-
-                    {/* Second Row - Age, Sex, Category (if not PWO), Father's Name */}
-                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
-                      <IconInput
-                        icon={<FiClock className="w-4 h-4" />}
-                        label="Age"
-                        name="age"
-                        value={displayData.age || ''}
-                        type="number"
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                          Sex
-                          </label>
-                        <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
-                          {getSexLabel(displayData.sex)}
-                      </div>
-                      </div>
-                      {userRole && !isMWO(userRole) && (
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                          <FiShield className="w-4 h-4 text-primary-600" />
-                          Category
-                        </label>
-                        <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
-                          {displayData.category || 'N/A'}
-                      </div>
-                      </div>
-                      )}
-                      <IconInput
-                        icon={<FiUsers className="w-4 h-4" />}
-                        label="Father's Name"
-                        name="father_name"
-                        value={displayData.father_name || ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                    </div>
-                    {/* Fourth Row - Department, Unit/Consit (if not PWO), Room No. (if not PWO), Serial No. (if not PWO) */}
-                    <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole && !isMWO(userRole) ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6`}>
-                      <IconInput
-                        icon={<FiLayers className="w-4 h-4" />}
-                        label="Department"
-                        name="department"
-                        value={displayData.department || ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                      {userRole && !isMWO(userRole) && (
-                        <>
-                      <IconInput
-                        icon={<FiUsers className="w-4 h-4" />}
-                        label="Unit/Consit"
-                        name="unit_consit"
-                        value={displayData.unit_consit || ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                      <IconInput
-                        icon={<FiHome className="w-4 h-4" />}
-                        label="Room No."
-                        name="room_no"
-                        value={displayData.room_no || ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                      <IconInput
-                        icon={<FiHash className="w-4 h-4" />}
-                        label="Serial No."
-                        name="serial_no"
-                        value={displayData.serial_no || ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                        </>
-                      )}
-                    </div>
-
-                    {/* Fifth Row - File No., Unit Days (if not PWO) */}
-                    <div className={`grid grid-cols-1 ${userRole && !isMWO(userRole) ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-6`}>
-                      <IconInput
-                        icon={<FiFileText className="w-4 h-4" />}
-                        label="File No."
-                        name="file_no"
-                        value={displayData.file_no || ''}
-                        disabled={true}
-                        className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                      />
-                      {userRole && !isMWO(userRole) && (
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-gray-800">Unit Days</label>
-                        <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
-                          {displayData.unit_days || 'N/A'}
-                        </div>
-                      </div>
-                      )}
-                    </div>
-
-                    {/* Address Details */}
-                    <div className="space-y-6 pt-6 border-t border-white/30">
-                      <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                        <div className="p-2.5 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
-                          <FiMapPin className="w-5 h-5 text-blue-600" />
-                        </div>
-                        Address Details
-                      </h4>
-
-                      <div className="space-y-6">
-                        {/* Address Line */}
-                        <IconInput
-                          icon={<FiHome className="w-4 h-4" />}
-                          label="Address Line (House No., Street, Locality)"
-                          name="address_line"
-                          value={displayData.address_line || ''}
-                          disabled={true}
-                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                        />
-
-                        {/* City/Town/Village, District, State, Country, Pin Code */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <IconInput
-                            icon={<FiHome className="w-4 h-4" />}
-                            label="City/Town/Village"
-                            name="city"
-                            value={displayData.city || ''}
-                            disabled={true}
-                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                          />
-                          <IconInput
-                            icon={<FiLayers className="w-4 h-4" />}
-                            label="District"
-                            name="district"
-                            value={displayData.district || ''}
-                            disabled={true}
-                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                          />
-                          <IconInput
-                            icon={<FiMapPin className="w-4 h-4" />}
-                            label="State"
-                            name="state"
-                            value={displayData.state || ''}
-                            disabled={true}
-                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                          />
-                          <IconInput
-                            icon={<FiGlobe className="w-4 h-4" />}
-                            label="Country"
-                            name="country"
-                            value={displayData.country || ''}
-                            disabled={true}
-                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                          />
-                          <IconInput
-                            icon={<FiHash className="w-4 h-4" />}
-                            label="Pin Code"
-                            name="pin_code"
-                            value={displayData.pin_code || ''}
-                            type="number"
-                            disabled={true}
-                            className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-
-              {/* Basic Information with Glassmorphism */}
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 rounded-3xl blur-xl pointer-events-none"></div>
-                <Card
-                  title={
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-lg">
-                        <FiUser className="w-6 h-6 text-emerald-600" />
-                      </div>
-                      <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">OUT-PATIENT RECORD</span>
-                    </div>
-                  }
-                  className="relative mb-8 shadow-2xl border border-white/30 bg-white/70 backdrop-blur-xl rounded-3xl overflow-visible"
-                >
-                  <div className="space-y-8">
-                    {/* Patient Identification */}
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <IconInput
-                          icon={<FiCalendar className="w-4 h-4" />}
-                          label="Seen in Walk-in-on"
-                          name="seen_in_walk_in_on"
-                          value={displayData.seen_in_walk_in_on ? formatDate(displayData.seen_in_walk_in_on) : ''}
-                          disabled={true}
-                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                        />
-                        <IconInput
-                          icon={<FiCalendar className="w-4 h-4" />}
-                          label="Worked up on"
-                          name="worked_up_on"
-                          value={displayData.worked_up_on ? formatDate(displayData.worked_up_on) : ''}
-                          disabled={true}
-                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                        />
-                        <IconInput
-                          icon={<FiHash className="w-4 h-4" />}
-                          label="CR No."
-                          name="cr_no"
-                          value={displayData.cr_no || ''}
-                          disabled={true}
-                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                        />
-                        <IconInput
-                          icon={<FiFileText className="w-4 h-4" />}
-                          label="Psy. No."
-                          name="psy_no"
-                          value={displayData.psy_no || ''}
-                          disabled={true}
-                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                        />
-                        <IconInput
-                          icon={<FiHeart className="w-4 h-4" />}
-                          label="Special Clinic No."
-                          name="special_clinic_no"
-                          value={displayData.special_clinic_no || ''}
-                          disabled={true}
-                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                        />
-                        <IconInput
-                          icon={<FiUser className="w-4 h-4" />}
-                          label="Name"
-                          name="name"
-                          value={displayData.name || ''}
-                          disabled={true}
-                          className="disabled:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-900"
-                        />
-                        <div className="space-y-2">
-                          <label className="text-sm font-semibold text-gray-800">Sex</label>
-                          <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
-                            {getSexLabel(displayData.sex)}
-                        </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-semibold text-gray-800">Age Group</label>
-                          <div className="bg-gray-200 px-4 py-2 rounded-lg text-gray-900 cursor-not-allowed">
-                            {displayData.age_group || 'N/A'}
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Marital Status</label>
-                            <p className="text-base font-medium text-gray-900">{getMaritalStatusLabel(displayData.marital_status)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiCalendar className="w-4 h-4 text-primary-600" />
-                              Year of marriage
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.year_of_marriage || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiUsers className="w-4 h-4 text-primary-600" />
-                              No. of Children: M
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.no_of_children_male || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiUsers className="w-4 h-4 text-primary-600" />
-                              No. of Children: F
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.no_of_children_female || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiBriefcase className="w-4 h-4 text-primary-600" />
-                              Occupation
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{getOccupationLabel(displayData.occupation)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiBookOpen className="w-4 h-4 text-primary-600" />
-                              Education
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{getEducationLabel(displayData.education || displayData.education_level)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiTrendingUp className="w-4 h-4 text-primary-600" />
-                              Family Income (₹)
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.family_income || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiTrendingUp className="w-4 h-4 text-primary-600" />
-                              Patient Income (₹)
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.income || displayData.patient_income || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Religion</label>
-                            <p className="text-base font-medium text-gray-900">{getReligionLabel(displayData.religion)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Family Type</label>
-                            <p className="text-base font-medium text-gray-900">{getFamilyTypeLabel(displayData.family_type)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Locality</label>
-                            <p className="text-base font-medium text-gray-900">{getLocalityLabel(displayData.locality)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiHome className="w-4 h-4 text-primary-600" />
-                              Assigned Room
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.assigned_room || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiUser className="w-4 h-4 text-primary-600" />
-                              Family Head Name
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.head_name || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiClock className="w-4 h-4 text-primary-600" />
-                              Family Head Age
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.head_age || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Relationship With Family Head</label>
-                            <p className="text-base font-medium text-gray-900">{getHeadRelationshipLabel(displayData.head_relationship)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiBookOpen className="w-4 h-4 text-primary-600" />
-                              Family Head Education
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{getHeadEducationLabel(displayData.head_education)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiBriefcase className="w-4 h-4 text-primary-600" />
-                              Family Head Occupation
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{getHeadOccupationLabel(displayData.head_occupation)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiTrendingUp className="w-4 h-4 text-primary-600" />
-                              Family Head Income (₹)
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.head_income || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                              <FiNavigation className="w-4 h-4 text-primary-600" />
-                              Exact distance from hospital
-                            </label>
-                            <p className="text-base font-medium text-gray-900">{displayData.distance_from_hospital || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Mobility of the patient</label>
-                            <p className="text-base font-medium text-gray-900">{getMobilityLabel(displayData.mobility)}</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                          <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Referred by</label>
-                            <p className="text-base font-medium text-gray-900">{getReferredByLabel(displayData.referred_by)}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                         {/* Permanent Address Section */}
-                         <div className="space-y-6 pt-6 border-t border-white/30">
-                           <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                             <div className="p-2.5 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
-                               <FiMapPin className="w-5 h-5 text-blue-600" />
-                             </div>
-                             Permanent Address
-                           </h4>
-
-                           <div className="space-y-6">
-                             <div className="relative">
-                               <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                               <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                   <FiHome className="w-4 h-4 text-primary-600" />
-                                   Address Line (House No., Street, Locality)
-                                 </label>
-                                 <p className="text-base font-medium text-gray-900">{formData.permanent_address_line_1 || 'N/A'}</p>
-                               </div>
-                             </div>
-                             {/* City/Town/Village, District, State, Country, Pin Code */}
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                               <div className="relative">
-                                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                                 <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                     <FiHome className="w-4 h-4 text-primary-600" />
-                                     City/Town/Village
-                                   </label>
-                                   <p className="text-base font-medium text-gray-900">{formData.permanent_city_town_village || 'N/A'}</p>
-                                 </div>
-                               </div>
-                               <div className="relative">
-                                 <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                                 <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                     <FiLayers className="w-4 h-4 text-primary-600" />
-                                     District
-                                   </label>
-                                   <p className="text-base font-medium text-gray-900">{formData.permanent_district || 'N/A'}</p>
-                                 </div>
-                               </div>
-                               <div className="relative">
-                                 <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                                 <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                     <FiMapPin className="w-4 h-4 text-primary-600" />
-                                     State
-                                   </label>
-                                   <p className="text-base font-medium text-gray-900">{formData.permanent_state || 'N/A'}</p>
-                                 </div>
-                               </div>
-                               <div className="relative">
-                                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl"></div>
-                                 <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                     <FiGlobe className="w-4 h-4 text-primary-600" />
-                                     Country
-                                   </label>
-                                   <p className="text-base font-medium text-gray-900">{formData.permanent_country || 'N/A'}</p>
-                                 </div>
-                               </div>
-                               <div className="relative">
-                                 <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-rose-500/5 rounded-xl"></div>
-                                 <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                     <FiHash className="w-4 h-4 text-primary-600" />
-                                     Pin Code
-                                   </label>
-                                   <p className="text-base font-medium text-gray-900">{formData.permanent_pin_code || 'N/A'}</p>
-                                 </div>
-                               </div>
-                             </div>
-                           </div>
-                         </div>
-
-                         {/* Present Address Section */}
-                         <div className="space-y-6 pt-6 border-t border-white/30">
-                           <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                             <div className="p-2.5 bg-gradient-to-br from-orange-500/20 to-amber-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
-                               <FiMapPin className="w-5 h-5 text-orange-600" />
-                             </div>
-                             Present Address
-                           </h4>
-
-                          <div className="space-y-6">
-                            <div className="relative">
-                              <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-amber-500/5 rounded-xl"></div>
-                              <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                  <FiHome className="w-4 h-4 text-primary-600" />
-                                  Address Line (House No., Street, Locality)
-                                </label>
-                                <p className="text-base font-medium text-gray-900">{formData.present_address_line_1 || 'N/A'}</p>
-                              </div>
-                            </div>
-                            {/* City/Town/Village, District, State, Country, Pin Code */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              <div className="relative">
-                                <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-amber-500/5 rounded-xl"></div>
-                                <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                    <FiHome className="w-4 h-4 text-primary-600" />
-                                    City/Town/Village
-                                  </label>
-                                  <p className="text-base font-medium text-gray-900">{formData.present_city_town_village || 'N/A'}</p>
-                                </div>
-                              </div>
-                              <div className="relative">
-                                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-yellow-500/5 rounded-xl"></div>
-                                <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                    <FiLayers className="w-4 h-4 text-primary-600" />
-                                    District
-                                  </label>
-                                  <p className="text-base font-medium text-gray-900">{formData.present_district || 'N/A'}</p>
-                                </div>
-                              </div>
-                              <div className="relative">
-                                <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 rounded-xl"></div>
-                                <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                    <FiMapPin className="w-4 h-4 text-primary-600" />
-                                    State
-                                  </label>
-                                  <p className="text-base font-medium text-gray-900">{formData.present_state || 'N/A'}</p>
-                                </div>
-                              </div>
-                              <div className="relative">
-                                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-yellow-500/5 rounded-xl"></div>
-                                <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                    <FiGlobe className="w-4 h-4 text-primary-600" />
-                                    Country
-                                  </label>
-                                  <p className="text-base font-medium text-gray-900">{formData.present_country || 'N/A'}</p>
-                                </div>
-                              </div>
-                              <div className="relative">
-                                <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-amber-500/5 rounded-xl"></div>
-                                <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                    <FiHash className="w-4 h-4 text-primary-600" />
-                                    Pin Code
-                                  </label>
-                                  <p className="text-base font-medium text-gray-900">{formData.present_pin_code || 'N/A'}</p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Local Address Section */}
-                        <div className="space-y-6 pt-6 border-t border-white/30">
-                          <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                            <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
-                              <FiNavigation className="w-5 h-5 text-purple-600" />
-                            </div>
-                            Local Address
-                          </h4>
-
-                          <div className="space-y-6">
-                            <div className="relative">
-                              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                              <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                  <FiHome className="w-4 h-4 text-primary-600" />
-                                  Local Address
-                                </label>
-                                <p className="text-base font-medium text-gray-900">{formData.local_address || 'N/A'}</p>
-                              </div>
-                            </div>
-                            <div className="relative">
-                              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                              <div className="relative backdrop-blur-sm bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                  <FiHome className="w-4 h-4 text-primary-600" />
-                                  Assigned Room
-                                </label>
-                                <p className="text-base font-medium text-gray-900">{formData.assigned_room || 'N/A'}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="border-t border-white/30 my-6"></div>
-
-                    {/* Patient Documents & Files Section - Image Preview */}
-                    {patient?.id && (
-                      <div className="space-y-6 pt-6 border-t border-white/30">
-                        <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                          <div className="p-2.5 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
-                            <FiFileText className="w-5 h-5 text-indigo-600" />
-                          </div>
-                          Patient Documents & Files
-                        </h4>
-                        <FilePreview
-                          files={existingFiles}
-                          patient_id={patient?.id}
-                          canDelete={false}
-                          baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
-                          refetchFiles={refetchFiles}
-                        />
-                      </div>
+              {/* Out Patient Card — read-only tiles (sidebar / total patients view style) */}
+              <PatientDetailCardShell>
+                <div className="px-5 pt-5">
+                  <PatientDetailSectionTitle>Out Patient Card</PatientDetailSectionTitle>
+                </div>
+                <div className="space-y-4 px-5 pb-5">
+                  <PatientDetailFieldGroup>
+                    <PatientDetailField label="CR No." value={displayData.cr_no} />
+                    <PatientDetailField
+                      label="Date"
+                      value={displayData.date ? formatDate(displayData.date) : ''}
+                    />
+                    <PatientDetailField label="Name" value={displayData.name} />
+                    <PatientDetailField label="Mobile No." value={displayData.contact_number} />
+                    <PatientDetailField label="Age" value={displayData.age} />
+                    <PatientDetailField label="Sex" value={getSexLabel(displayData.sex)} />
+                    {userRole && !isMWO(userRole) && (
+                      <PatientDetailField label="Category" value={displayData.category} />
                     )}
-
+                    <PatientDetailField label="Father's Name" value={displayData.father_name} />
+                    <PatientDetailField label="Department" value={displayData.department} />
+                    {userRole && !isMWO(userRole) && (
+                      <>
+                        <PatientDetailField label="Unit/Consit" value={displayData.unit_consit} />
+                        <PatientDetailField label="Room No." value={displayData.room_no} />
+                        <PatientDetailField label="Serial No." value={displayData.serial_no} />
+                      </>
+                    )}
+                  </PatientDetailFieldGroup>
+                  <PatientDetailFieldGroup>
+                    <PatientDetailField
+                      label="File No."
+                      value={displayData.file_no}
+                      className={userRole && !isMWO(userRole) ? '' : 'md:col-span-1'}
+                    />
+                    {userRole && !isMWO(userRole) && (
+                      <PatientDetailField label="Unit Days" value={displayData.unit_days} />
+                    )}
+                  </PatientDetailFieldGroup>
+                  <div className="space-y-3 border-t border-gray-100 pt-4">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+                      Address details
+                    </p>
+                    <PatientDetailFieldGroup>
+                      <PatientDetailField
+                        label="Address Line (House No., Street, Locality)"
+                        value={displayData.address_line}
+                        className="md:col-span-2"
+                      />
+                      <PatientDetailField label="City/Town/Village" value={displayData.city} />
+                      <PatientDetailField label="District" value={displayData.district} />
+                      <PatientDetailField label="State" value={displayData.state} />
+                      <PatientDetailField label="Country" value={displayData.country} />
+                      <PatientDetailField label="Pin Code" value={displayData.pin_code} />
+                    </PatientDetailFieldGroup>
                   </div>
-                </Card>
-              </div>
+                </div>
+              </PatientDetailCardShell>
+
+              {/* Out-Patient Record — read-only tiles */}
+              <PatientDetailCardShell className="mb-8">
+                <div className="px-5 pt-5">
+                  <PatientDetailSectionTitle>Out-Patient Record</PatientDetailSectionTitle>
+                </div>
+                <div className="space-y-6 px-5 pb-5">
+                  <PatientDetailFieldGroup>
+                    <PatientDetailField
+                      label="Seen in Walk-in-on"
+                      value={
+                        displayData.seen_in_walk_in_on
+                          ? formatDate(displayData.seen_in_walk_in_on)
+                          : ''
+                      }
+                    />
+                    <PatientDetailField
+                      label="Worked up on"
+                      value={
+                        displayData.worked_up_on ? formatDate(displayData.worked_up_on) : ''
+                      }
+                    />
+                    <PatientDetailField label="CR No." value={displayData.cr_no} />
+                    <PatientDetailField label="Psy. No." value={displayData.psy_no} />
+                    <PatientDetailField
+                      label="Special Clinic No."
+                      value={displayData.special_clinic_no}
+                    />
+                    <PatientDetailField label="Name" value={displayData.name} />
+                    <PatientDetailField label="Sex" value={getSexLabel(displayData.sex)} />
+                    <PatientDetailField label="Age Group" value={displayData.age_group} />
+                    <PatientDetailField
+                      label="Marital Status"
+                      value={getMaritalStatusLabel(displayData.marital_status)}
+                    />
+                    <PatientDetailField
+                      label="Year of marriage"
+                      value={displayData.year_of_marriage}
+                    />
+                    <PatientDetailField
+                      label="No. of Children: M"
+                      value={displayData.no_of_children_male}
+                    />
+                    <PatientDetailField
+                      label="No. of Children: F"
+                      value={displayData.no_of_children_female}
+                    />
+                    <PatientDetailField
+                      label="Occupation"
+                      value={getOccupationLabel(displayData.occupation)}
+                    />
+                    <PatientDetailField
+                      label="Education"
+                      value={getEducationLabel(
+                        displayData.education || displayData.education_level
+                      )}
+                    />
+                    <PatientDetailField label="Family Income (₹)" value={displayData.family_income} />
+                    <PatientDetailField
+                      label="Patient Income (₹)"
+                      value={displayData.income || displayData.patient_income}
+                    />
+                    <PatientDetailField
+                      label="Religion"
+                      value={getReligionLabel(displayData.religion)}
+                    />
+                    <PatientDetailField
+                      label="Family Type"
+                      value={getFamilyTypeLabel(displayData.family_type)}
+                    />
+                    <PatientDetailField
+                      label="Locality"
+                      value={getLocalityLabel(displayData.locality)}
+                    />
+                    <PatientDetailField label="Assigned Doctor" value={displayData.assigned_doctor_name} />
+                    <PatientDetailField label="Assigned Room" value={displayData.assigned_room} />
+                    <PatientDetailField label="Family Head Name" value={displayData.head_name} />
+                    <PatientDetailField label="Family Head Age" value={displayData.head_age} />
+                    <PatientDetailField
+                      label="Relationship With Family Head"
+                      value={getHeadRelationshipLabel(displayData.head_relationship)}
+                    />
+                    <PatientDetailField
+                      label="Family Head Education"
+                      value={getHeadEducationLabel(displayData.head_education)}
+                    />
+                    <PatientDetailField
+                      label="Family Head Occupation"
+                      value={getHeadOccupationLabel(displayData.head_occupation)}
+                    />
+                    <PatientDetailField label="Family Head Income (₹)" value={displayData.head_income} />
+                    <PatientDetailField
+                      label="Exact distance from hospital"
+                      value={displayData.distance_from_hospital}
+                    />
+                    <PatientDetailField
+                      label="Mobility of the patient"
+                      value={getMobilityLabel(displayData.mobility)}
+                    />
+                    <PatientDetailField
+                      label="Referred by"
+                      value={getReferredByLabel(displayData.referred_by)}
+                    />
+                  </PatientDetailFieldGroup>
+
+                  <div className="space-y-3 border-t border-gray-100 pt-4">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+                      Permanent Address
+                    </p>
+                    <PatientDetailFieldGroup>
+                      <PatientDetailField
+                        label="Address Line"
+                        value={formData.permanent_address_line_1}
+                        className="md:col-span-2"
+                      />
+                      <PatientDetailField
+                        label="City/Town/Village"
+                        value={formData.permanent_city_town_village}
+                      />
+                      <PatientDetailField label="District" value={formData.permanent_district} />
+                      <PatientDetailField label="State" value={formData.permanent_state} />
+                      <PatientDetailField label="Country" value={formData.permanent_country} />
+                      <PatientDetailField label="Pin Code" value={formData.permanent_pin_code} />
+                    </PatientDetailFieldGroup>
+                  </div>
+
+                  <div className="space-y-3 border-t border-gray-100 pt-4">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+                      Present Address
+                    </p>
+                    <PatientDetailFieldGroup>
+                      <PatientDetailField
+                        label="Address Line"
+                        value={formData.present_address_line_1}
+                        className="md:col-span-2"
+                      />
+                      <PatientDetailField
+                        label="City/Town/Village"
+                        value={formData.present_city_town_village}
+                      />
+                      <PatientDetailField label="District" value={formData.present_district} />
+                      <PatientDetailField label="State" value={formData.present_state} />
+                      <PatientDetailField label="Country" value={formData.present_country} />
+                      <PatientDetailField label="Pin Code" value={formData.present_pin_code} />
+                    </PatientDetailFieldGroup>
+                  </div>
+
+                  <div className="space-y-3 border-t border-gray-100 pt-4">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+                      Local Address
+                    </p>
+                    <PatientDetailFieldGroup>
+                      <PatientDetailField
+                        label="Local Address"
+                        value={formData.local_address}
+                        className="md:col-span-2"
+                      />
+                    </PatientDetailFieldGroup>
+                  </div>
+                </div>
+              </PatientDetailCardShell>
+
+              <div className="my-6 border-t border-gray-200" />
+
+              {patient?.id && (
+                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <h4 className="mb-4 flex items-center gap-3 text-xl font-bold text-gray-900">
+                    <div className="rounded-xl border border-white/30 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 p-2.5 shadow-md backdrop-blur-sm">
+                      <FiFileText className="h-5 w-5 text-indigo-600" />
+                    </div>
+                    Patient Documents & Files
+                  </h4>
+                  <FilePreview
+                    files={existingFiles}
+                    patient_id={patient?.id}
+                    canDelete={false}
+                    baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
+                    refetchFiles={refetchFiles}
+                  />
+                </div>
+              )}
               
             </form>
 
