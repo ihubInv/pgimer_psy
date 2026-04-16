@@ -17,6 +17,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import DatePicker from '../../components/CustomDatePicker';
 import FileUpload from '../../components/FileUpload';
 import FilePreview from '../../components/FilePreview';
+import { parseLivingPersonRows } from '../../utils/adlLivingPersonRows';
 
 // Display Field Component for read-only mode with glassmorphism
 const DisplayField = ({ label, value, icon, className = '', rows }) => {
@@ -477,13 +478,19 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
       religion_participation: adlFile.religion_participation || '',
       religion_changes: adlFile.religion_changes || '',
       // Living Situation
-      living_residents: parseArray(adlFile.living_residents).length > 0 ? parseArray(adlFile.living_residents) : [{ name: '', relationship: '', age: '' }],
+      living_residents: (() => {
+        const rows = parseLivingPersonRows(sourceData.living_residents);
+        return rows.length > 0 ? rows : [{ name: '', relationship: '', age: '' }];
+      })(),
       living_income_sharing: adlFile.living_income_sharing || '',
       living_expenses: adlFile.living_expenses || '',
       living_kitchen: adlFile.living_kitchen || '',
       living_domestic_conflicts: adlFile.living_domestic_conflicts || '',
       living_social_class: adlFile.living_social_class || '',
-      living_inlaws: parseArray(adlFile.living_inlaws).length > 0 ? parseArray(adlFile.living_inlaws) : [{ name: '', relationship: '', age: '' }],
+      living_inlaws: (() => {
+        const rows = parseLivingPersonRows(sourceData.living_inlaws);
+        return rows.length > 0 ? rows : [{ name: '', relationship: '', age: '' }];
+      })(),
       // Home Situation
       home_situation_childhood: adlFile.home_situation_childhood || '',
       home_situation_parents_relationship: adlFile.home_situation_parents_relationship || '',

@@ -15,6 +15,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import FilePreview from '../../components/FilePreview';
 // formatDate removed - not used in view mode
 import { getDoctorDecisionLabel } from '../../utils/enumMappings';
+import { normalizeArrayField } from '../../utils/clinicalMultiSelectArray';
 import { useGetPatientVisitHistoryQuery, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery, useGetAllClinicalOptionsQuery } from '../../features/clinical/clinicalApiSlice';
 import PatientClinicalHistory from '../../components/PatientClinicalHistory';
@@ -71,27 +72,6 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
   // Fetch clinical options for checkbox groups
   const { data: allOptionsData } = useGetAllClinicalOptionsQuery();
   const clinicalOptions = allOptionsData || {};
-
-  // Helper function to normalize array fields (handle comma-separated strings)
-  const normalizeArrayField = (value) => {
-    if (!value) return [];
-    if (Array.isArray(value)) return value;
-    if (typeof value === 'string') {
-      // Try to parse as JSON first
-      try {
-        const parsed = JSON.parse(value);
-        return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
-      } catch {
-        // If not JSON, check if it's a comma-separated string
-        if (value.includes(',')) {
-          return value.split(',').map(item => item.trim()).filter(item => item.length > 0);
-        }
-        // Single value string
-        return value.trim() ? [value.trim()] : [];
-      }
-    }
-    return value ? [value] : [];
-  };
 
   // Fetch patient visit history and clinical proformas to show history
   const { data: visitHistoryData, isLoading: isLoadingVisitHistory } = useGetPatientVisitHistoryQuery(

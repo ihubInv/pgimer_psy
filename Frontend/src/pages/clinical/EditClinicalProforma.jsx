@@ -20,6 +20,7 @@ import { useGetPatientFilesQuery, useUpdatePatientFilesMutation, useCreatePatien
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { CLINICAL_PROFORMA_FORM, VISIT_TYPES, DOCTOR_DECISION, CASE_SEVERITY } from '../../utils/constants';
+import { normalizeArrayField } from '../../utils/clinicalMultiSelectArray';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
@@ -141,27 +142,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   const [createADLFile, { isLoading: isCreatingADLFile }] = useCreateADLFileMutation();
 
   
-
-
-  const normalizeArrayField = (value) => {
-    if (Array.isArray(value)) return value;
-    if (typeof value === 'string') {
-      // First try to parse as JSON
-      try {
-        const parsed = JSON.parse(value);
-        return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
-      } catch {
-        // If not JSON, check if it's a comma-separated string
-        if (value.includes(',')) {
-          // Split by comma and trim each item
-          return value.split(',').map(item => item.trim()).filter(item => item.length > 0);
-        }
-        // Single value string
-        return value.trim() ? [value.trim()] : [];
-      }
-    }
-    return value ? [value] : [];
-  };
 
   // Prepare initial form data - return default values if proforma not found
   const initialFormData = useMemo(() => {

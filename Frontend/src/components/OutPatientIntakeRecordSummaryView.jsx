@@ -9,6 +9,7 @@ import {
 } from './PatientDetailReadOnlyCard';
 import FilePreview from './FilePreview';
 import { FiFileText } from 'react-icons/fi';
+import { parseLivingPersonRows } from '../utils/adlLivingPersonRows';
 
 function parseArray(value) {
   if (!value) return [];
@@ -26,6 +27,10 @@ function hasRecorded(value) {
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === 'object') return Object.keys(value).length > 0;
   return String(value).trim() !== '';
+}
+
+function livingPersonRowHasContent(row) {
+  return hasRecorded(row?.name) || hasRecorded(row?.relationship) || hasRecorded(row?.age);
 }
 
 function formatMaybeDate(raw) {
@@ -80,8 +85,8 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
   const familyHistorySiblings = useMemo(() => parseArray(adlFile?.family_history_siblings), [adlFile?.family_history_siblings]);
   const occupationJobs = useMemo(() => parseArray(adlFile?.occupation_jobs), [adlFile?.occupation_jobs]);
   const sexualChildren = useMemo(() => parseArray(adlFile?.sexual_children), [adlFile?.sexual_children]);
-  const livingResidents = useMemo(() => parseArray(adlFile?.living_residents), [adlFile?.living_residents]);
-  const livingInlaws = useMemo(() => parseArray(adlFile?.living_inlaws), [adlFile?.living_inlaws]);
+  const livingResidents = useMemo(() => parseLivingPersonRows(adlFile?.living_residents), [adlFile?.living_residents]);
+  const livingInlaws = useMemo(() => parseLivingPersonRows(adlFile?.living_inlaws), [adlFile?.living_inlaws]);
   const premorbidPersonalityTraits = useMemo(
     () => parseArray(adlFile?.premorbid_personality_traits),
     [adlFile?.premorbid_personality_traits]
@@ -451,8 +456,8 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
       {(hasRecorded(adlFile.living_type) ||
         hasRecorded(adlFile.living_rooms) ||
         hasRecorded(adlFile.living_relationship) ||
-        livingResidents.length > 0 ||
-        livingInlaws.length > 0) && (
+        livingResidents.some(livingPersonRowHasContent) ||
+        livingInlaws.some(livingPersonRowHasContent)) && (
         <PatientDetailCardShell className="mb-0">
           <div className="px-5 pt-5">
             <PatientDetailSectionTitle>Living situation</PatientDetailSectionTitle>
@@ -463,29 +468,48 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
               <Val label="Number of rooms" value={adlFile.living_rooms} />
               <Val label="Relationship with residents" value={adlFile.living_relationship} className="md:col-span-2" />
             </PatientDetailFieldGroup>
-            {livingResidents.length > 0 && (
+            {livingResidents.some(livingPersonRowHasContent) && (
               <div className="border-t border-gray-100 pt-4">
                 <p className="mb-2 text-sm font-semibold text-gray-800">Residents</p>
-                <PatientDetailFieldGroup>
+                <div className="space-y-4">
                   {livingResidents.map((resident, index) => {
-                    const text =
-                      typeof resident === 'string' ? resident : JSON.stringify(resident);
-                    if (!hasRecorded(text)) return null;
-                    return <Val key={index} label={`Resident ${index + 1}`} value={text} className="md:col-span-2" />;
+                    if (!livingPersonRowHasContent(resident)) return null;
+                    return (
+                      <div key={index} className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700">
+                          Resident {index + 1}
+                        </p>
+                        <PatientDetailFieldGroup>
+                          <Val label="Name" value={resident.name} />
+                          <Val label="Relationship" value={resident.relationship} />
+                          <Val label="Age" value={resident.age} />
+                        </PatientDetailFieldGroup>
+                      </div>
+                    );
                   })}
-                </PatientDetailFieldGroup>
+                </div>
               </div>
             )}
-            {livingInlaws.length > 0 && (
+            {livingInlaws.some(livingPersonRowHasContent) && (
               <div className="border-t border-gray-100 pt-4">
                 <p className="mb-2 text-sm font-semibold text-gray-800">In-laws</p>
-                <PatientDetailFieldGroup>
+                <div className="space-y-4">
                   {livingInlaws.map((inlaw, index) => {
-                    const text = typeof inlaw === 'string' ? inlaw : JSON.stringify(inlaw);
-                    if (!hasRecorded(text)) return null;
-                    return <Val key={index} label={`In-law ${index + 1}`} value={text} className="md:col-span-2" />;
+                    if (!livingPersonRowHasContent(inlaw)) return null;
+                    return (
+                      <div key={index} className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700">
+                          In-law {index + 1}
+                        </p>
+                        <PatientDetailFieldGroup>
+                          <Val label="Name" value={inlaw.name} />
+                          <Val label="Relationship" value={inlaw.relationship} />
+                          <Val label="Age" value={inlaw.age} />
+                        </PatientDetailFieldGroup>
+                      </div>
+                    );
                   })}
-                </PatientDetailFieldGroup>
+                </div>
               </div>
             )}
           </div>

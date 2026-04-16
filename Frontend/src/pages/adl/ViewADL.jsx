@@ -9,6 +9,7 @@ import FilePreview from '../../components/FilePreview';
 import { FiChevronDown, FiChevronUp, FiFileText, FiCalendar, FiUser, FiHome, FiX, FiArrowLeft } from 'react-icons/fi';
 import { formatDate, formatDateTime } from '../../utils/formatters';
 import Button from '../../components/Button';
+import { parseLivingPersonRows } from '../../utils/adlLivingPersonRows';
 
 // Display Field Component with glassmorphism
 const DisplayField = ({ label, value, icon, className = '', rows }) => {
@@ -65,8 +66,8 @@ const ViewADL = ( {adlFiles} ) => {
   const familyHistorySiblings = useMemo(() => parseArray(adlFile?.family_history_siblings), [adlFile?.family_history_siblings]);
   const occupationJobs = useMemo(() => parseArray(adlFile?.occupation_jobs), [adlFile?.occupation_jobs]);
   const sexualChildren = useMemo(() => parseArray(adlFile?.sexual_children), [adlFile?.sexual_children]);
-  const livingResidents = useMemo(() => parseArray(adlFile?.living_residents), [adlFile?.living_residents]);
-  const livingInlaws = useMemo(() => parseArray(adlFile?.living_inlaws), [adlFile?.living_inlaws]);
+  const livingResidents = useMemo(() => parseLivingPersonRows(adlFile?.living_residents), [adlFile?.living_residents]);
+  const livingInlaws = useMemo(() => parseLivingPersonRows(adlFile?.living_inlaws), [adlFile?.living_inlaws]);
   const premorbidPersonalityTraits = useMemo(() => parseArray(adlFile?.premorbid_personality_traits), [adlFile?.premorbid_personality_traits]);
 
   const [expandedCards, setExpandedCards] = useState({
@@ -835,24 +836,40 @@ const ViewADL = ( {adlFiles} ) => {
                 <DisplayField label="Number of rooms" value={adlFile?.living_rooms} />
                 <DisplayField label="Relationship with residents" value={adlFile?.living_relationship} rows={2} className="md:col-span-2" />
               </div>
-              {livingResidents.length > 0 && (
+              {livingResidents.some((r) => r.name || r.relationship || r.age) && (
                 <div className="border-t pt-4">
                   <h4 className="font-semibold text-gray-800 mb-3">Residents</h4>
-                  {livingResidents.map((resident, index) => (
-                    <div key={index} className="mb-2">
-                      <DisplayField label={'Resident ' + (index + 1)} value={typeof resident === 'string' ? resident : JSON.stringify(resident)} />
-                    </div>
-                  ))}
+                  {livingResidents.map((resident, index) => {
+                    if (!resident.name && !resident.relationship && !resident.age) return null;
+                    return (
+                      <div key={index} className="border-b pb-4 mb-4 last:border-b-0">
+                        <h5 className="font-medium text-gray-700 mb-3">Resident {index + 1}</h5>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <DisplayField label="Name" value={resident.name} />
+                          <DisplayField label="Relationship" value={resident.relationship} />
+                          <DisplayField label="Age" value={resident.age} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-              {livingInlaws.length > 0 && (
+              {livingInlaws.some((r) => r.name || r.relationship || r.age) && (
                 <div className="border-t pt-4">
                   <h4 className="font-semibold text-gray-800 mb-3">In-laws</h4>
-                  {livingInlaws.map((inlaw, index) => (
-                    <div key={index} className="mb-2">
-                      <DisplayField label={'In-law ' + (index + 1)} value={typeof inlaw === 'string' ? inlaw : JSON.stringify(inlaw)} />
-                    </div>
-                  ))}
+                  {livingInlaws.map((inlaw, index) => {
+                    if (!inlaw.name && !inlaw.relationship && !inlaw.age) return null;
+                    return (
+                      <div key={index} className="border-b pb-4 mb-4 last:border-b-0">
+                        <h5 className="font-medium text-gray-700 mb-3">In-law {index + 1}</h5>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <DisplayField label="Name" value={inlaw.name} />
+                          <DisplayField label="Relationship" value={inlaw.relationship} />
+                          <DisplayField label="Age" value={inlaw.age} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

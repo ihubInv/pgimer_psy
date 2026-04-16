@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useGetAllClinicalOptionsQuery } from '../features/clinical/clinicalApiSlice';
 import { formatDate } from '../utils/formatters';
 import { getDoctorDecisionLabel } from '../utils/enumMappings';
+import { normalizeArrayField } from '../utils/clinicalMultiSelectArray';
 import {
   PatientDetailCardShell,
   PatientDetailSectionTitle,
@@ -15,23 +16,6 @@ const ONSET_DURATION_LABELS = {
   '>1_month': '3. > 1 month',
   not_known: '4. Not known',
 };
-
-function normalizeArrayField(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
-    } catch {
-      if (value.includes(',')) {
-        return value.split(',').map((item) => item.trim()).filter(Boolean);
-      }
-      return value.trim() ? [value.trim()] : [];
-    }
-  }
-  return value ? [value] : [];
-}
 
 function hasDisplay(value) {
   if (value === undefined || value === null) return false;
