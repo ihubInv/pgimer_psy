@@ -50,6 +50,11 @@ const CreateChildPatient = () => {
   const currentUser = useSelector(selectCurrentUser);
   const token = useSelector(selectCurrentToken);
   const hideChildViewChromeForMWO = isViewMode && isMWO(currentUser?.role);
+  // MWO edits demographics only; clinical proforma / ADL are hidden for this role
+  const showChildRegistrationCard =
+    !isEditMode || (isEditMode && isMWO(currentUser?.role));
+  const showClinicalProformaAndIntakeInEdit =
+    isEditMode && id && !isMWO(currentUser?.role);
   const { data: roomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
   
   const [formData, setFormData] = useState({
@@ -145,7 +150,7 @@ const CreateChildPatient = () => {
   const [expandedCards, setExpandedCards] = useState({
     pastHistory: true, // Expanded by default so MWO and others see history without hunting
     childRegistration: false,
-    childPatientRegistration: true, // Default expanded in view mode
+    childPatientRegistration: true, // Default expanded: view, new registration, edit
     childClinicalProforma: true, // Default expanded in edit mode
     intakeRecord: true, // Default expanded in edit mode
   });
@@ -766,10 +771,10 @@ const CreateChildPatient = () => {
       </div>
 
       <div className="relative w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
-        {/* Child Patient Registration Form - Hide in edit mode */}
-        {!isEditMode && (
+        {/* Registration / view: always. Edit demographics: MWO only (others use proforma+intake below). */}
+        {showChildRegistrationCard && (
           <Card className="shadow-lg border-0 bg-white">
-            {/* Collapsible Header for View Mode */}
+            {/* Collapsible header: view, new registration, or edit (same expand key as body below) */}
             {isViewMode ? (
               <div
                 className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
@@ -798,24 +803,38 @@ const CreateChildPatient = () => {
                 </div>
               </div>
             ) : (
-              <div className="p-6 border-b border-gray-200">
+              <div
+                className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                onClick={() => toggleCard('childPatientRegistration')}
+              >
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg">
                     <FiUsers className="h-6 w-6 text-primary-600" />
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">
-                      Child Guidance Clinic (CGC) - Child Patient Registration
+                      {isEditMode
+                        ? 'Edit Child Patient'
+                        : 'Child Guidance Clinic (CGC) - Child Patient Registration'}
                     </h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      Postgraduate Institute of Medical Education & Research, Chandigarh
+                      {isEditMode
+                        ? 'Update child patient registration details'
+                        : 'Postgraduate Institute of Medical Education & Research, Chandigarh'}
                     </p>
                   </div>
+                </div>
+                <div className="cursor-pointer">
+                  {expandedCards.childPatientRegistration ? (
+                    <FiChevronUp className="h-6 w-6 text-gray-500" />
+                  ) : (
+                    <FiChevronDown className="h-6 w-6 text-gray-500" />
+                  )}
                 </div>
               </div>
             )}
 
-            {(!isViewMode || expandedCards.childPatientRegistration) && (
+            {expandedCards.childPatientRegistration && (
               !isViewMode ? (
               <form onSubmit={handleSubmit} className="p-6 space-y-6">
             {/* Visit Details & Identification Details - Single Row */}
@@ -1450,8 +1469,8 @@ const CreateChildPatient = () => {
         </Card>
         )}
 
-        {/* Edit Mode: Show Child Clinical Proforma and Intake Record in collapsible cards */}
-        {isEditMode && id && (
+        {/* Edit mode (non-MWO): Child Clinical Proforma + Intake Record */}
+        {showClinicalProformaAndIntakeInEdit && (
           <>
             {/* Child Clinical Proforma Card */}
             <Card className="shadow-lg border-0 bg-white">
