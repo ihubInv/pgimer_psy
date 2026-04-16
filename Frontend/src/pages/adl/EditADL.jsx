@@ -67,6 +67,16 @@ const ConditionalTextarea = ({ readOnly, label, value, icon, rows, ...textareaPr
   return <Textarea label={label} value={value} rows={rows} {...textareaProps} />;
 };
 
+/** RTK/Immer can freeze API objects; form state must be mutable. */
+const cloneForFormState = (data) => {
+  if (data == null) return data;
+  try {
+    return structuredClone(data);
+  } catch {
+    return JSON.parse(JSON.stringify(data));
+  }
+};
+
 const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = null, clinicalProformaId: propClinicalProformaId = null, readOnly = false, initialAdlData = null }) => {
   const navigate = useNavigate();
   const { id: urlId } = useParams();
@@ -673,15 +683,15 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
     consultant_comments: '',
   };
 
-  const [formData, setFormData] = useState(defaultFormData);
+  const [formData, setFormData] = useState(() => cloneForFormState(defaultFormData));
 
   // Update formData when ADL file is loaded or initialAdlData is provided
   useEffect(() => {
     if (initialFormData) {
-      setFormData(initialFormData);
+      setFormData(cloneForFormState(initialFormData));
     } else if (!id) {
       // Reset to defaults if no ADL file ID
-      setFormData(defaultFormData);
+      setFormData(cloneForFormState(defaultFormData));
     }
     // Note: If id exists but adlFile is not loaded yet, wait for it to load
   }, [initialFormData, id, adlFile, isLoadingADL, initialAdlData]);
@@ -697,8 +707,7 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
       const formIsEmpty = !formData.history_narrative && !formData.history_specific_enquiry && !formData.history_drug_intake;
       
       if (hasData && formIsEmpty) {
-        
-        setFormData(initialFormData);
+        setFormData(cloneForFormState(initialFormData));
       }
     }
   }, [adlFile, id, formData.history_narrative, formData.history_specific_enquiry, formData.history_drug_intake, initialFormData]);
@@ -1211,8 +1220,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                         value={complaint.duration}
                         onChange={(e) => {
                           if (readOnly) return;
-                          const newComplaints = [...(formData.complaints_patient || [])];
-                          newComplaints[index].duration = e.target.value;
+                          const newComplaints = (formData.complaints_patient || []).map((item, i) =>
+                            i === index ? { ...item, duration: e.target.value } : item
+                          );
                           setFormData(prev => ({ ...prev, complaints_patient: newComplaints }));
                         }}
                         disabled={readOnly}
@@ -1273,8 +1283,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                         value={complaint.complaint}
                         onChange={(e) => {
                           if (readOnly) return;
-                          const newComplaints = [...(formData.complaints_informant || [])];
-                          newComplaints[index].complaint = e.target.value;
+                          const newComplaints = (formData.complaints_informant || []).map((item, i) =>
+                            i === index ? { ...item, complaint: e.target.value } : item
+                          );
                           setFormData(prev => ({ ...prev, complaints_informant: newComplaints }));
                         }}
                         placeholder="Enter complaint"
@@ -1294,8 +1305,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                         value={complaint.duration}
                         onChange={(e) => {
                           if (readOnly) return;
-                          const newComplaints = [...(formData.complaints_informant || [])];
-                          newComplaints[index].duration = e.target.value;
+                          const newComplaints = (formData.complaints_informant || []).map((item, i) =>
+                            i === index ? { ...item, duration: e.target.value } : item
+                          );
                           setFormData(prev => ({ ...prev, complaints_informant: newComplaints }));
                         }}
                         disabled={readOnly}
@@ -2057,8 +2069,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                       value={sibling.age}
                       onChange={(e) => {
                         if (readOnly) return;
-                        const newSiblings = [...(formData.family_history_siblings || [])];
-                        newSiblings[index].age = e.target.value;
+                        const newSiblings = (formData.family_history_siblings || []).map((item, i) =>
+                          i === index ? { ...item, age: e.target.value } : item
+                        );
                         setFormData(prev => ({ ...prev, family_history_siblings: newSiblings }));
                       }}
                       placeholder="Age"
@@ -2069,8 +2082,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                       value={sibling.sex}
                       onChange={(e) => {
                         if (readOnly) return;
-                        const newSiblings = [...(formData.family_history_siblings || [])];
-                        newSiblings[index].sex = e.target.value;
+                        const newSiblings = (formData.family_history_siblings || []).map((item, i) =>
+                          i === index ? { ...item, sex: e.target.value } : item
+                        );
                         setFormData(prev => ({ ...prev, family_history_siblings: newSiblings }));
                       }}
                       options={[{ value: '', label: 'Select' }, { value: 'M', label: 'Male' }, { value: 'F', label: 'Female' }]}
@@ -2081,8 +2095,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                       value={sibling.education}
                       onChange={(e) => {
                         if (readOnly) return;
-                        const newSiblings = [...(formData.family_history_siblings || [])];
-                        newSiblings[index].education = e.target.value;
+                        const newSiblings = (formData.family_history_siblings || []).map((item, i) =>
+                          i === index ? { ...item, education: e.target.value } : item
+                        );
                         setFormData(prev => ({ ...prev, family_history_siblings: newSiblings }));
                       }}
                       placeholder="Education"
@@ -2093,8 +2108,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                       value={sibling.occupation}
                       onChange={(e) => {
                         if (readOnly) return;
-                        const newSiblings = [...(formData.family_history_siblings || [])];
-                        newSiblings[index].occupation = e.target.value;
+                        const newSiblings = (formData.family_history_siblings || []).map((item, i) =>
+                          i === index ? { ...item, occupation: e.target.value } : item
+                        );
                         setFormData(prev => ({ ...prev, family_history_siblings: newSiblings }));
                       }}
                       placeholder="Occupation"
@@ -2105,8 +2121,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                       value={sibling.marital_status}
                       onChange={(e) => {
                         if (readOnly) return;
-                        const newSiblings = [...(formData.family_history_siblings || [])];
-                        newSiblings[index].marital_status = e.target.value;
+                        const newSiblings = (formData.family_history_siblings || []).map((item, i) =>
+                          i === index ? { ...item, marital_status: e.target.value } : item
+                        );
                         setFormData(prev => ({ ...prev, family_history_siblings: newSiblings }));
                       }}
                       options={[{ value: '', label: 'Select' }, { value: 'Single', label: 'Single' }, { value: 'Married', label: 'Married' }, { value: 'Divorced', label: 'Divorced' }, { value: 'Widowed', label: 'Widowed' }]}
@@ -2448,8 +2465,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                     value={job.job}
                     onChange={(e) => {
                       if (readOnly) return;
-                      const newJobs = [...(formData.occupation_jobs || [])];
-                      newJobs[index].job = e.target.value;
+                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
+                        i === index ? { ...item, job: e.target.value } : item
+                      );
                       setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
                     }}
                     disabled={readOnly}
@@ -2459,8 +2477,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                     value={job.dates}
                     onChange={(e) => {
                       if (readOnly) return;
-                      const newJobs = [...(formData.occupation_jobs || [])];
-                      newJobs[index].dates = e.target.value;
+                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
+                        i === index ? { ...item, dates: e.target.value } : item
+                      );
                       setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
                     }}
                     disabled={readOnly}
@@ -2470,8 +2489,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                     value={job.adjustment}
                     onChange={(e) => {
                       if (readOnly) return;
-                      const newJobs = [...(formData.occupation_jobs || [])];
-                      newJobs[index].adjustment = e.target.value;
+                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
+                        i === index ? { ...item, adjustment: e.target.value } : item
+                      );
                       setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
                     }}
                     rows={2}
@@ -2482,8 +2502,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                     value={job.difficulties}
                     onChange={(e) => {
                       if (readOnly) return;
-                      const newJobs = [...(formData.occupation_jobs || [])];
-                      newJobs[index].difficulties = e.target.value;
+                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
+                        i === index ? { ...item, difficulties: e.target.value } : item
+                      );
                       setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
                     }}
                     rows={2}
@@ -2494,8 +2515,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                     value={job.promotions}
                     onChange={(e) => {
                       if (readOnly) return;
-                      const newJobs = [...(formData.occupation_jobs || [])];
-                      newJobs[index].promotions = e.target.value;
+                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
+                        i === index ? { ...item, promotions: e.target.value } : item
+                      );
                       setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
                     }}
                     disabled={readOnly}
@@ -2505,8 +2527,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                     value={job.change_reason}
                     onChange={(e) => {
                       if (readOnly) return;
-                      const newJobs = [...(formData.occupation_jobs || [])];
-                      newJobs[index].change_reason = e.target.value;
+                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
+                        i === index ? { ...item, change_reason: e.target.value } : item
+                      );
                       setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
                     }}
                     rows={2}
@@ -2675,8 +2698,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                       label={`Child ${index + 1} - Age`}
                       value={child.age}
                       onChange={(e) => {
-                        const newChildren = [...(formData.sexual_children || [])];
-                        newChildren[index].age = e.target.value;
+                        const newChildren = (formData.sexual_children || []).map((item, i) =>
+                          i === index ? { ...item, age: e.target.value } : item
+                        );
                         setFormData(prev => ({ ...prev, sexual_children: newChildren }));
                       }}
                     />
@@ -2686,8 +2710,9 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
                       label="Sex"
                       value={child.sex}
                       onChange={(e) => {
-                        const newChildren = [...(formData.sexual_children || [])];
-                        newChildren[index].sex = e.target.value;
+                        const newChildren = (formData.sexual_children || []).map((item, i) =>
+                          i === index ? { ...item, sex: e.target.value } : item
+                        );
                         setFormData(prev => ({ ...prev, sexual_children: newChildren }));
                       }}
                       options={[
