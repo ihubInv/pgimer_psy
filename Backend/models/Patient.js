@@ -773,11 +773,20 @@ class Patient {
       }
 
       // Filter by registration date (for Today's Patients view)
-      // When date filter is provided, show ONLY patients registered/created on that date
-      // This ensures the "Today's Patients" tab shows only patients registered today by the MWO
-      // Use AT TIME ZONE to convert to IST before comparing dates
+      // Include patients who were EITHER:
+      //   1. Registered/created on that date (new patients), OR
+      //   2. Have a visit record for that date (existing patients added via the follow-up flow)
+      // This ensures the "Today's Patients" tab shows both new and returning follow-up patients.
+      // Use AT TIME ZONE to convert to IST before comparing dates for case 1.
       if (filters.date) {
-        where.push(`DATE((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $${idx}::date`);
+        where.push(`(
+          DATE((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $${idx}::date
+          OR EXISTS (
+            SELECT 1 FROM patient_visits pv
+            WHERE pv.patient_id = p.id
+              AND DATE(pv.visit_date) = $${idx}::date
+          )
+        )`);
         params.push(filters.date);
         idx++;
       }

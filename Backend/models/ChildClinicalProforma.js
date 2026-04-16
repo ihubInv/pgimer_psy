@@ -11,27 +11,116 @@ class ChildClinicalProforma {
     this.room_no = data.room_no || null;
     this.assigned_doctor = data.assigned_doctor || null;
     
-    // SECTION A: BASIC INFORMATION
+    // ─────────────────────────────────────────────────
+    // SECTION 1: BASIC INFORMATION
+    // ─────────────────────────────────────────────────
     this.child_name = data.child_name || null;
     this.age = data.age || null;
     this.sex = data.sex || null;
     this.date = data.date || new Date().toISOString().split('T')[0];
-    this.source_of_referral = data.source_of_referral || (Array.isArray(data.source_of_referral) ? data.source_of_referral : []);
-    
-    // SECTION B: DURATION OF ILLNESS
+    this.informant_relationship = data.informant_relationship || null;
+    this.reliability = data.reliability || null;
+    this.family_type = data.family_type || null;
+    this.socioeconomic_status = data.socioeconomic_status || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 2: SCHOOL INFORMATION
+    // ─────────────────────────────────────────────────
+    this.school_name = data.school_name || null;
+    this.school_class = data.school_class || null;
+    this.school_type = data.school_type || null;
+    this.academic_performance = data.academic_performance || null;
+    this.school_refusal = data.school_refusal || null;
+    this.bullying = data.bullying || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 3: PRESENTING COMPLAINTS
+    // ─────────────────────────────────────────────────
+    this.presenting_complaints = data.presenting_complaints || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 4: NEURODEVELOPMENTAL CONCERNS
+    // ─────────────────────────────────────────────────
+    this.neurodevelopmental_concerns = Array.isArray(data.neurodevelopmental_concerns) ? data.neurodevelopmental_concerns : [];
+    this.neurodevelopmental_description = data.neurodevelopmental_description || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 5: BEHAVIORAL CONCERNS
+    // ─────────────────────────────────────────────────
+    this.behavioral_concerns = Array.isArray(data.behavioral_concerns) ? data.behavioral_concerns : [];
+    this.behavioral_description = data.behavioral_description || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 6: EMOTIONAL & PSYCHOLOGICAL SYMPTOMS
+    // ─────────────────────────────────────────────────
+    this.emotional_psychological_symptoms = Array.isArray(data.emotional_psychological_symptoms) ? data.emotional_psychological_symptoms : [];
+    this.emotional_psychological_description = data.emotional_psychological_description || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 7: TRAUMA & PSYCHOSOCIAL STRESSORS
+    // ─────────────────────────────────────────────────
+    this.trauma_psychosocial_stressors = Array.isArray(data.trauma_psychosocial_stressors) ? data.trauma_psychosocial_stressors : [];
+    this.trauma_description = data.trauma_description || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 8: MEDICAL & FAMILY HISTORY
+    // ─────────────────────────────────────────────────
+    this.associated_medical_illness = data.associated_medical_illness || null;
+    this.developmental_history = data.developmental_history || null;
+    this.family_history = Array.isArray(data.family_history) ? data.family_history : [];
+    this.family_history_details = data.family_history_details || null; // legacy
+
+    // ─────────────────────────────────────────────────
+    // SECTION 9: RISK ASSESSMENT
+    // ─────────────────────────────────────────────────
+    this.risk_assessment = Array.isArray(data.risk_assessment) ? data.risk_assessment : [];
+
+    // ─────────────────────────────────────────────────
+    // SECTION 10: MENTAL STATUS EXAMINATION
+    // ─────────────────────────────────────────────────
+    this.mse_appearance_behaviour = data.mse_appearance_behaviour || null;
+    this.mse_rapport = data.mse_rapport || null;
+    this.mse_speech = data.mse_speech || null;
+    this.mse_mood_affect = data.mse_mood_affect || null;
+    this.mse_thought = data.mse_thought || null;
+    this.mse_perception = data.mse_perception || null;
+    this.mse_cognition = data.mse_cognition || null;
+    this.mse_insight_judgment = data.mse_insight_judgment || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 11: DIAGNOSIS & FORMULATION
+    // ─────────────────────────────────────────────────
+    this.provisional_diagnosis = data.provisional_diagnosis || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 12: INVESTIGATIONS REQUIRED
+    // ─────────────────────────────────────────────────
+    this.investigations_required = Array.isArray(data.investigations_required) ? data.investigations_required : [];
+
+    // ─────────────────────────────────────────────────
+    // SECTION 13: TREATMENT PLAN
+    // ─────────────────────────────────────────────────
+    this.pharmacological_treatment = data.pharmacological_treatment || null;
+    this.psychological_treatment = Array.isArray(data.psychological_treatment) ? data.psychological_treatment : [];
+    this.high_risk_management = data.high_risk_management || null;
+
+    // ─────────────────────────────────────────────────
+    // SECTION 14: FOLLOW-UP & DISPOSAL
+    // ─────────────────────────────────────────────────
+    this.follow_up_after = data.follow_up_after || null;
+    this.referred_to = data.referred_to || null;
+
+    // ─────────────────────────────────────────────────
+    // LEGACY FIELDS (Sections A–J, kept for backward compatibility)
+    // ─────────────────────────────────────────────────
+    this.source_of_referral = Array.isArray(data.source_of_referral) ? data.source_of_referral : [];
     this.duration_of_illness = data.duration_of_illness || null;
-    
-    // SECTION C: ONSET
     this.onset = data.onset || null;
-    
-    // SECTION D: COURSE
     this.course = data.course || null;
-    
-    // SECTION E: ASSOCIATED PHYSICAL ILLNESS
     this.has_physical_illness = data.has_physical_illness || false;
     this.physical_illness_specification = data.physical_illness_specification || null;
     
-    // SECTION F: COMPLAINTS
+    // Legacy complaints (Section F)
     this.complaints_obstinacy = data.complaints_obstinacy || false;
     this.complaints_disobedience = data.complaints_disobedience || false;
     this.complaints_aggressiveness = data.complaints_aggressiveness || false;
@@ -64,13 +153,11 @@ class ChildClinicalProforma {
     this.complaints_odd_behaviour = data.complaints_odd_behaviour || false;
     this.complaints_inadequate_personal_care = data.complaints_inadequate_personal_care || false;
     
-    // SECTION G: EXAMINATION
+    // Legacy examination (Section G)
     this.significant_physical_findings = data.significant_physical_findings || null;
     this.physical_development = data.physical_development || null;
-    this.family_history = data.family_history || (Array.isArray(data.family_history) ? data.family_history : []);
-    this.family_history_details = data.family_history_details || null;
     
-    // SECTION H: DIAGNOSIS & INVESTIGATION
+    // Legacy investigation (Section H)
     this.investigation_detailed_medical_workup = data.investigation_detailed_medical_workup || false;
     this.investigation_social_family_assessment = data.investigation_social_family_assessment || false;
     this.investigation_school_related_evaluation = data.investigation_school_related_evaluation || false;
@@ -82,7 +169,7 @@ class ChildClinicalProforma {
     this.investigation_psychological_tests = data.investigation_psychological_tests || false;
     this.remarks_provisional_diagnosis = data.remarks_provisional_diagnosis || null;
     
-    // SECTION I: THERAPY SUGGESTED
+    // Legacy therapy (Section I)
     this.therapy_drugs = data.therapy_drugs || false;
     this.therapy_antiepileptics = data.therapy_antiepileptics || false;
     this.therapy_parental_counselling = data.therapy_parental_counselling || false;
@@ -92,7 +179,7 @@ class ChildClinicalProforma {
     this.therapy_psychological_testing = data.therapy_psychological_testing || false;
     this.therapy_nil_evaluation_only = data.therapy_nil_evaluation_only || false;
     
-    // SECTION J: DISPOSAL
+    // Legacy disposal (Section J)
     this.disposal_status = data.disposal_status || null;
     this.disposal_reason = data.disposal_reason || null;
     this.disposal_date = data.disposal_date || null;
@@ -113,7 +200,9 @@ class ChildClinicalProforma {
     this.doctor_role = data.doctor_role || null;
   }
 
-  // Create a new child clinical proforma
+  // ─────────────────────────────────────────────────────────────────────────
+  // CREATE
+  // ─────────────────────────────────────────────────────────────────────────
   static async create(proformaData) {
     try {
       const {
@@ -122,17 +211,39 @@ class ChildClinicalProforma {
         visit_date,
         room_no,
         assigned_doctor,
-        child_name,
-        age,
-        sex,
-        date,
-        source_of_referral,
-        duration_of_illness,
-        onset,
-        course,
-        has_physical_illness,
-        physical_illness_specification,
-        // Complaints
+        // Section 1
+        child_name, age, sex, date,
+        informant_relationship, reliability, family_type, socioeconomic_status,
+        // Section 2
+        school_name, school_class, school_type, academic_performance, school_refusal, bullying,
+        // Section 3
+        presenting_complaints,
+        // Section 4
+        neurodevelopmental_concerns, neurodevelopmental_description,
+        // Section 5
+        behavioral_concerns, behavioral_description,
+        // Section 6
+        emotional_psychological_symptoms, emotional_psychological_description,
+        // Section 7
+        trauma_psychosocial_stressors, trauma_description,
+        // Section 8
+        associated_medical_illness, developmental_history, family_history, family_history_details,
+        // Section 9
+        risk_assessment,
+        // Section 10
+        mse_appearance_behaviour, mse_rapport, mse_speech, mse_mood_affect,
+        mse_thought, mse_perception, mse_cognition, mse_insight_judgment,
+        // Section 11
+        provisional_diagnosis,
+        // Section 12
+        investigations_required,
+        // Section 13
+        pharmacological_treatment, psychological_treatment, high_risk_management,
+        // Section 14
+        follow_up_after, referred_to,
+        // Legacy fields
+        source_of_referral, duration_of_illness, onset, course,
+        has_physical_illness, physical_illness_specification,
         complaints_obstinacy, complaints_disobedience, complaints_aggressiveness,
         complaints_temper_tantrums, complaints_hyperactivity, complaints_stealing,
         complaints_delinquent_behaviour, complaints_low_intelligence,
@@ -146,28 +257,15 @@ class ChildClinicalProforma {
         complaints_nail_biting, complaints_abnormal_movements,
         complaints_somatic_complaints, complaints_odd_behaviour,
         complaints_inadequate_personal_care,
-        // Examination
-        significant_physical_findings,
-        physical_development,
-        family_history,
-        family_history_details,
-        // Investigation
-        investigation_detailed_medical_workup,
-        investigation_social_family_assessment,
-        investigation_school_related_evaluation,
-        investigation_play_observation,
-        investigation_neurology_consultation,
-        investigation_paediatrics_consultation,
-        investigation_ent_consultation,
-        investigation_iq_testing,
-        investigation_psychological_tests,
-        remarks_provisional_diagnosis,
-        // Therapy
+        significant_physical_findings, physical_development,
+        investigation_detailed_medical_workup, investigation_social_family_assessment,
+        investigation_school_related_evaluation, investigation_play_observation,
+        investigation_neurology_consultation, investigation_paediatrics_consultation,
+        investigation_ent_consultation, investigation_iq_testing,
+        investigation_psychological_tests, remarks_provisional_diagnosis,
         therapy_drugs, therapy_antiepileptics, therapy_parental_counselling,
         therapy_play_therapy, therapy_individual_psychotherapy,
-        therapy_behavioral_therapy, therapy_psychological_testing,
-        therapy_nil_evaluation_only,
-        // Disposal
+        therapy_behavioral_therapy, therapy_psychological_testing, therapy_nil_evaluation_only,
         disposal_status, disposal_reason, disposal_date, disposal_time,
         disposal_distance, disposal_remarks,
         status
@@ -189,34 +287,58 @@ class ChildClinicalProforma {
       const finalChildName = child_name || childPatient.child_name;
       const finalSex = sex || childPatient.sex;
       
-      // Convert source_of_referral and family_history arrays to PostgreSQL arrays
-      const sourceOfReferralArray = Array.isArray(source_of_referral) 
-        ? source_of_referral 
-        : (source_of_referral ? [source_of_referral] : []);
-      const familyHistoryArray = Array.isArray(family_history) 
-        ? family_history 
-        : (family_history ? [family_history] : []);
-
-      // Helper function to sanitize date fields - convert empty strings to null
-      const sanitizeDate = (dateValue) => {
-        if (!dateValue || dateValue === '' || (typeof dateValue === 'string' && dateValue.trim() === '')) {
-          return null;
-        }
-        return dateValue;
+      // Helper: sanitize text (empty string → null)
+      const sanitizeText = (v) => {
+        if (v === undefined || v === null || v === '') return null;
+        return String(v).trim() || null;
+      };
+      
+      // Helper: sanitize boolean
+      const sanitizeBoolean = (v) => {
+        if (v === undefined || v === null || v === '') return false;
+        if (typeof v === 'string') return v.toLowerCase() === 'true' || v === '1';
+        return Boolean(v);
       };
 
-      // Helper function to sanitize time fields - convert empty strings to null
-      const sanitizeTime = (timeValue) => {
-        if (!timeValue || timeValue === '' || (typeof timeValue === 'string' && timeValue.trim() === '')) {
+      // Helper: sanitize date (empty string → null)
+      const sanitizeDate = (v) => {
+        if (!v || v === '' || (typeof v === 'string' && v.trim() === '')) return null;
+        return v;
+      };
+
+      // Helper: sanitize time (empty string → null)
+      const sanitizeTime = (v) => {
+        if (!v || v === '' || (typeof v === 'string' && v.trim() === '')) return null;
+        return v;
+      };
+
+      // Helper: ensure array (null / string → array)
+      const toArray = (v) => {
+        if (Array.isArray(v)) return v.length > 0 ? v : null;
+        if (v) return [v];
           return null;
-        }
-        return timeValue;
       };
 
       const query = `
         INSERT INTO child_clinical_proforma (
           child_patient_id, filled_by, visit_date, room_no, assigned_doctor,
-          child_name, age, sex, date, source_of_referral,
+          child_name, age, sex, date,
+          informant_relationship, reliability, family_type, socioeconomic_status,
+          school_name, school_class, school_type, academic_performance, school_refusal, bullying,
+          presenting_complaints,
+          neurodevelopmental_concerns, neurodevelopmental_description,
+          behavioral_concerns, behavioral_description,
+          emotional_psychological_symptoms, emotional_psychological_description,
+          trauma_psychosocial_stressors, trauma_description,
+          associated_medical_illness, developmental_history, family_history, family_history_details,
+          risk_assessment,
+          mse_appearance_behaviour, mse_rapport, mse_speech, mse_mood_affect,
+          mse_thought, mse_perception, mse_cognition, mse_insight_judgment,
+          provisional_diagnosis,
+          investigations_required,
+          pharmacological_treatment, psychological_treatment, high_risk_management,
+          follow_up_after, referred_to,
+          source_of_referral,
           duration_of_illness, onset, course,
           has_physical_illness, physical_illness_specification,
           complaints_obstinacy, complaints_disobedience, complaints_aggressiveness,
@@ -232,7 +354,7 @@ class ChildClinicalProforma {
           complaints_nail_biting, complaints_abnormal_movements,
           complaints_somatic_complaints, complaints_odd_behaviour,
           complaints_inadequate_personal_care,
-          significant_physical_findings, physical_development, family_history, family_history_details,
+          significant_physical_findings, physical_development,
           investigation_detailed_medical_workup, investigation_social_family_assessment,
           investigation_school_related_evaluation, investigation_play_observation,
           investigation_neurology_consultation, investigation_paediatrics_consultation,
@@ -240,83 +362,192 @@ class ChildClinicalProforma {
           investigation_psychological_tests, remarks_provisional_diagnosis,
           therapy_drugs, therapy_antiepileptics, therapy_parental_counselling,
           therapy_play_therapy, therapy_individual_psychotherapy,
-          therapy_behavioral_therapy, therapy_psychological_testing,
-          therapy_nil_evaluation_only,
+          therapy_behavioral_therapy, therapy_psychological_testing, therapy_nil_evaluation_only,
           disposal_status, disposal_reason, disposal_date, disposal_time,
           disposal_distance, disposal_remarks,
           status
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-          $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31,
-          $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47,
-          $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63,
-          $64, $65, $66, $67, $68, $69, $70, $71, $72, $73, $74, $75
+          $1,   $2,   $3,   $4,   $5,
+          $6,   $7,   $8,   $9,
+          $10,  $11,  $12,  $13,
+          $14,  $15,  $16,  $17,  $18,  $19,
+          $20,
+          $21,  $22,
+          $23,  $24,
+          $25,  $26,
+          $27,  $28,
+          $29,  $30,  $31,  $32,
+          $33,
+          $34,  $35,  $36,  $37,
+          $38,  $39,  $40,  $41,
+          $42,
+          $43,
+          $44,  $45,  $46,
+          $47,  $48,
+          $49,
+          $50,  $51,  $52,
+          $53,  $54,
+          $55,  $56,  $57,  $58,  $59,  $60,
+          $61,  $62,  $63,  $64,  $65,  $66,
+          $67,  $68,  $69,  $70,  $71,
+          $72,  $73,
+          $74,  $75,  $76,  $77,  $78,
+          $79,  $80,  $81,
+          $82,  $83,  $84,  $85,
+          $86,  $87,  $88,  $89,  $90,  $91,
+          $92,  $93,
+          $94,  $95,  $96,  $97,  $98,
+          $99,  $100, $101, $102,
+          $103, $104, $105, $106,
+          $107, $108, $109, $110,
+          $111, $112
         ) RETURNING *
       `;
 
-      // Helper function to sanitize text fields - convert empty strings to null, preserve actual values
-      const sanitizeText = (textValue) => {
-        if (textValue === undefined || textValue === null || textValue === '') {
-          return null;
-        }
-        return String(textValue).trim() || null;
-      };
-
-      // Helper function to ensure boolean values are proper booleans
-      const sanitizeBoolean = (boolValue) => {
-        if (boolValue === undefined || boolValue === null || boolValue === '') {
-          return false;
-        }
-        // Handle string representations
-        if (typeof boolValue === 'string') {
-          return boolValue.toLowerCase() === 'true' || boolValue === '1';
-        }
-        return Boolean(boolValue);
-      };
-
       const result = await db.query(query, [
-        child_patient_id, filled_by, sanitizeDate(visit_date) || new Date().toISOString().split('T')[0], 
-        sanitizeText(room_no), assigned_doctor,
-        sanitizeText(finalChildName), age ? parseInt(age) : null, sanitizeText(finalSex), sanitizeDate(date) || new Date().toISOString().split('T')[0],
-        sourceOfReferralArray.length > 0 ? sourceOfReferralArray : null,
-        sanitizeText(duration_of_illness), sanitizeText(onset), sanitizeText(course),
-        sanitizeBoolean(has_physical_illness), sanitizeText(physical_illness_specification),
-        sanitizeBoolean(complaints_obstinacy), sanitizeBoolean(complaints_disobedience),
-        sanitizeBoolean(complaints_aggressiveness), sanitizeBoolean(complaints_temper_tantrums),
-        sanitizeBoolean(complaints_hyperactivity), sanitizeBoolean(complaints_stealing),
-        sanitizeBoolean(complaints_delinquent_behaviour), sanitizeBoolean(complaints_low_intelligence),
-        sanitizeBoolean(complaints_scholastic_backwardness), sanitizeBoolean(complaints_poor_memory),
-        sanitizeBoolean(complaints_speech_difficulty), sanitizeBoolean(complaints_hearing_difficulty),
-        sanitizeBoolean(complaints_epileptic), sanitizeBoolean(complaints_non_epileptic),
-        sanitizeBoolean(complaints_both), sanitizeBoolean(complaints_unclear),
-        sanitizeBoolean(complaints_abnormal_behaviour), sanitizeBoolean(complaints_irrelevant_talking),
-        sanitizeBoolean(complaints_withdrawnness), sanitizeBoolean(complaints_shyness),
-        sanitizeBoolean(complaints_excessive_clinging), sanitizeBoolean(complaints_anxiety),
-        sanitizeBoolean(complaints_depression), sanitizeBoolean(complaints_feeding_problems),
-        sanitizeBoolean(complaints_neurosis), sanitizeBoolean(complaints_thumb_sucking),
-        sanitizeBoolean(complaints_nail_biting), sanitizeBoolean(complaints_abnormal_movements),
-        sanitizeBoolean(complaints_somatic_complaints), sanitizeBoolean(complaints_odd_behaviour),
-        sanitizeBoolean(complaints_inadequate_personal_care),
-        sanitizeText(significant_physical_findings), sanitizeText(physical_development),
-        familyHistoryArray.length > 0 ? familyHistoryArray : null,
-        sanitizeText(family_history_details),
-        sanitizeBoolean(investigation_detailed_medical_workup),
-        sanitizeBoolean(investigation_social_family_assessment),
-        sanitizeBoolean(investigation_school_related_evaluation),
-        sanitizeBoolean(investigation_play_observation),
-        sanitizeBoolean(investigation_neurology_consultation),
-        sanitizeBoolean(investigation_paediatrics_consultation),
-        sanitizeBoolean(investigation_ent_consultation),
-        sanitizeBoolean(investigation_iq_testing),
-        sanitizeBoolean(investigation_psychological_tests),
-        sanitizeText(remarks_provisional_diagnosis),
-        sanitizeBoolean(therapy_drugs), sanitizeBoolean(therapy_antiepileptics),
-        sanitizeBoolean(therapy_parental_counselling), sanitizeBoolean(therapy_play_therapy),
-        sanitizeBoolean(therapy_individual_psychotherapy), sanitizeBoolean(therapy_behavioral_therapy),
-        sanitizeBoolean(therapy_psychological_testing), sanitizeBoolean(therapy_nil_evaluation_only),
-        sanitizeText(disposal_status), sanitizeText(disposal_reason), sanitizeDate(disposal_date), sanitizeTime(disposal_time),
-        sanitizeText(disposal_distance), sanitizeText(disposal_remarks),
-        sanitizeText(status) || 'draft'
+        /* $1  */ child_patient_id,
+        /* $2  */ filled_by,
+        /* $3  */ sanitizeDate(visit_date) || new Date().toISOString().split('T')[0],
+        /* $4  */ sanitizeText(room_no),
+        /* $5  */ assigned_doctor,
+
+        /* $6  */ sanitizeText(finalChildName),
+        /* $7  */ age ? parseInt(age) : null,
+        /* $8  */ sanitizeText(finalSex),
+        /* $9  */ sanitizeDate(date) || new Date().toISOString().split('T')[0],
+
+        /* $10 */ sanitizeText(informant_relationship),
+        /* $11 */ sanitizeText(reliability),
+        /* $12 */ sanitizeText(family_type),
+        /* $13 */ sanitizeText(socioeconomic_status),
+
+        /* $14 */ sanitizeText(school_name),
+        /* $15 */ sanitizeText(school_class),
+        /* $16 */ sanitizeText(school_type),
+        /* $17 */ sanitizeText(academic_performance),
+        /* $18 */ sanitizeText(school_refusal),
+        /* $19 */ sanitizeText(bullying),
+
+        /* $20 */ sanitizeText(presenting_complaints),
+
+        /* $21 */ toArray(neurodevelopmental_concerns),
+        /* $22 */ sanitizeText(neurodevelopmental_description),
+
+        /* $23 */ toArray(behavioral_concerns),
+        /* $24 */ sanitizeText(behavioral_description),
+
+        /* $25 */ toArray(emotional_psychological_symptoms),
+        /* $26 */ sanitizeText(emotional_psychological_description),
+
+        /* $27 */ toArray(trauma_psychosocial_stressors),
+        /* $28 */ sanitizeText(trauma_description),
+
+        /* $29 */ sanitizeText(associated_medical_illness),
+        /* $30 */ sanitizeText(developmental_history),
+        /* $31 */ toArray(family_history),
+        /* $32 */ sanitizeText(family_history_details),
+
+        /* $33 */ toArray(risk_assessment),
+
+        /* $34 */ sanitizeText(mse_appearance_behaviour),
+        /* $35 */ sanitizeText(mse_rapport),
+        /* $36 */ sanitizeText(mse_speech),
+        /* $37 */ sanitizeText(mse_mood_affect),
+        /* $38 */ sanitizeText(mse_thought),
+        /* $39 */ sanitizeText(mse_perception),
+        /* $40 */ sanitizeText(mse_cognition),
+        /* $41 */ sanitizeText(mse_insight_judgment),
+
+        /* $42 */ sanitizeText(provisional_diagnosis),
+
+        /* $43 */ toArray(investigations_required),
+
+        /* $44 */ sanitizeText(pharmacological_treatment),
+        /* $45 */ toArray(psychological_treatment),
+        /* $46 */ sanitizeText(high_risk_management),
+
+        /* $47 */ sanitizeText(follow_up_after),
+        /* $48 */ sanitizeText(referred_to),
+
+        /* $49 */ toArray(source_of_referral),
+
+        /* $50 */ sanitizeText(duration_of_illness),
+        /* $51 */ sanitizeText(onset),
+        /* $52 */ sanitizeText(course),
+
+        /* $53 */ sanitizeBoolean(has_physical_illness),
+        /* $54 */ sanitizeText(physical_illness_specification),
+
+        /* $55 */ sanitizeBoolean(complaints_obstinacy),
+        /* $56 */ sanitizeBoolean(complaints_disobedience),
+        /* $57 */ sanitizeBoolean(complaints_aggressiveness),
+        /* $58 */ sanitizeBoolean(complaints_temper_tantrums),
+        /* $59 */ sanitizeBoolean(complaints_hyperactivity),
+        /* $60 */ sanitizeBoolean(complaints_stealing),
+
+        /* $61 */ sanitizeBoolean(complaints_delinquent_behaviour),
+        /* $62 */ sanitizeBoolean(complaints_low_intelligence),
+        /* $63 */ sanitizeBoolean(complaints_scholastic_backwardness),
+        /* $64 */ sanitizeBoolean(complaints_poor_memory),
+        /* $65 */ sanitizeBoolean(complaints_speech_difficulty),
+        /* $66 */ sanitizeBoolean(complaints_hearing_difficulty),
+
+        /* $67 */ sanitizeBoolean(complaints_epileptic),
+        /* $68 */ sanitizeBoolean(complaints_non_epileptic),
+        /* $69 */ sanitizeBoolean(complaints_both),
+        /* $70 */ sanitizeBoolean(complaints_unclear),
+        /* $71 */ sanitizeBoolean(complaints_abnormal_behaviour),
+
+        /* $72 */ sanitizeBoolean(complaints_irrelevant_talking),
+        /* $73 */ sanitizeBoolean(complaints_withdrawnness),
+
+        /* $74 */ sanitizeBoolean(complaints_shyness),
+        /* $75 */ sanitizeBoolean(complaints_excessive_clinging),
+        /* $76 */ sanitizeBoolean(complaints_anxiety),
+        /* $77 */ sanitizeBoolean(complaints_depression),
+        /* $78 */ sanitizeBoolean(complaints_feeding_problems),
+
+        /* $79 */ sanitizeBoolean(complaints_neurosis),
+        /* $80 */ sanitizeBoolean(complaints_thumb_sucking),
+        /* $81 */ sanitizeBoolean(complaints_nail_biting),
+
+        /* $82 */ sanitizeBoolean(complaints_abnormal_movements),
+        /* $83 */ sanitizeBoolean(complaints_somatic_complaints),
+        /* $84 */ sanitizeBoolean(complaints_odd_behaviour),
+        /* $85 */ sanitizeBoolean(complaints_inadequate_personal_care),
+
+        /* $86 */ sanitizeText(significant_physical_findings),
+        /* $87 */ sanitizeText(physical_development),
+
+        /* $88 */ sanitizeBoolean(investigation_detailed_medical_workup),
+        /* $89 */ sanitizeBoolean(investigation_social_family_assessment),
+        /* $90 */ sanitizeBoolean(investigation_school_related_evaluation),
+        /* $91 */ sanitizeBoolean(investigation_play_observation),
+        /* $92 */ sanitizeBoolean(investigation_neurology_consultation),
+        /* $93 */ sanitizeBoolean(investigation_paediatrics_consultation),
+
+        /* $94  */ sanitizeBoolean(investigation_ent_consultation),
+        /* $95  */ sanitizeBoolean(investigation_iq_testing),
+        /* $96  */ sanitizeBoolean(investigation_psychological_tests),
+        /* $97  */ sanitizeText(remarks_provisional_diagnosis),
+
+        /* $98  */ sanitizeBoolean(therapy_drugs),
+        /* $99  */ sanitizeBoolean(therapy_antiepileptics),
+        /* $100 */ sanitizeBoolean(therapy_parental_counselling),
+        /* $101 */ sanitizeBoolean(therapy_play_therapy),
+
+        /* $102 */ sanitizeBoolean(therapy_individual_psychotherapy),
+        /* $103 */ sanitizeBoolean(therapy_behavioral_therapy),
+        /* $104 */ sanitizeBoolean(therapy_psychological_testing),
+        /* $105 */ sanitizeBoolean(therapy_nil_evaluation_only),
+
+        /* $106 */ sanitizeText(disposal_status),
+        /* $107 */ sanitizeText(disposal_reason),
+        /* $108 */ sanitizeDate(disposal_date),
+        /* $109 */ sanitizeTime(disposal_time),
+        /* $110 */ sanitizeText(disposal_distance),
+        /* $111 */ sanitizeText(disposal_remarks),
+        /* $112 */ sanitizeText(status) || 'draft',
       ]);
 
       return new ChildClinicalProforma(result.rows[0]);
@@ -326,7 +557,9 @@ class ChildClinicalProforma {
     }
   }
 
-  // Find child clinical proforma by ID
+  // ─────────────────────────────────────────────────────────────────────────
+  // FIND BY ID
+  // ─────────────────────────────────────────────────────────────────────────
   static async findById(id) {
     try {
       const proformaId = parseInt(id, 10);
@@ -358,7 +591,9 @@ class ChildClinicalProforma {
     }
   }
 
-  // Find child clinical proforma by child patient ID
+  // ─────────────────────────────────────────────────────────────────────────
+  // FIND BY CHILD PATIENT ID
+  // ─────────────────────────────────────────────────────────────────────────
   static async findByChildPatientId(child_patient_id) {
     try {
       const childPatientIdNum = parseInt(child_patient_id, 10);
@@ -387,7 +622,9 @@ class ChildClinicalProforma {
     }
   }
 
-  // Get all child clinical proformas with pagination and filters
+  // ─────────────────────────────────────────────────────────────────────────
+  // FIND ALL (paginated)
+  // ─────────────────────────────────────────────────────────────────────────
   static async findAll(page = 1, limit = 10, filters = {}) {
     try {
       const offset = (page - 1) * limit;
@@ -455,13 +692,47 @@ class ChildClinicalProforma {
     }
   }
 
-  // Update child clinical proforma
+  // ─────────────────────────────────────────────────────────────────────────
+  // UPDATE
+  // ─────────────────────────────────────────────────────────────────────────
   async update(updateData) {
     try {
       const allowedFields = [
         'visit_date', 'room_no', 'assigned_doctor',
-        'child_name', 'age', 'sex', 'date', 'source_of_referral',
-        'duration_of_illness', 'onset', 'course',
+        // Section 1
+        'child_name', 'age', 'sex', 'date',
+        'informant_relationship', 'reliability', 'family_type', 'socioeconomic_status',
+        // Section 2
+        'school_name', 'school_class', 'school_type', 'academic_performance',
+        'school_refusal', 'bullying',
+        // Section 3
+        'presenting_complaints',
+        // Section 4
+        'neurodevelopmental_concerns', 'neurodevelopmental_description',
+        // Section 5
+        'behavioral_concerns', 'behavioral_description',
+        // Section 6
+        'emotional_psychological_symptoms', 'emotional_psychological_description',
+        // Section 7
+        'trauma_psychosocial_stressors', 'trauma_description',
+        // Section 8
+        'associated_medical_illness', 'developmental_history',
+        'family_history', 'family_history_details',
+        // Section 9
+        'risk_assessment',
+        // Section 10
+        'mse_appearance_behaviour', 'mse_rapport', 'mse_speech', 'mse_mood_affect',
+        'mse_thought', 'mse_perception', 'mse_cognition', 'mse_insight_judgment',
+        // Section 11
+        'provisional_diagnosis',
+        // Section 12
+        'investigations_required',
+        // Section 13
+        'pharmacological_treatment', 'psychological_treatment', 'high_risk_management',
+        // Section 14
+        'follow_up_after', 'referred_to',
+        // Legacy
+        'source_of_referral', 'duration_of_illness', 'onset', 'course',
         'has_physical_illness', 'physical_illness_specification',
         'complaints_obstinacy', 'complaints_disobedience', 'complaints_aggressiveness',
         'complaints_temper_tantrums', 'complaints_hyperactivity', 'complaints_stealing',
@@ -476,7 +747,7 @@ class ChildClinicalProforma {
         'complaints_nail_biting', 'complaints_abnormal_movements',
         'complaints_somatic_complaints', 'complaints_odd_behaviour',
         'complaints_inadequate_personal_care',
-        'significant_physical_findings', 'physical_development', 'family_history', 'family_history_details',
+        'significant_physical_findings', 'physical_development',
         'investigation_detailed_medical_workup', 'investigation_social_family_assessment',
         'investigation_school_related_evaluation', 'investigation_play_observation',
         'investigation_neurology_consultation', 'investigation_paediatrics_consultation',
@@ -484,24 +755,27 @@ class ChildClinicalProforma {
         'investigation_psychological_tests', 'remarks_provisional_diagnosis',
         'therapy_drugs', 'therapy_antiepileptics', 'therapy_parental_counselling',
         'therapy_play_therapy', 'therapy_individual_psychotherapy',
-        'therapy_behavioral_therapy', 'therapy_psychological_testing',
-        'therapy_nil_evaluation_only',
+        'therapy_behavioral_therapy', 'therapy_psychological_testing', 'therapy_nil_evaluation_only',
         'disposal_status', 'disposal_reason', 'disposal_date', 'disposal_time',
         'disposal_distance', 'disposal_remarks',
         'status'
       ];
 
-      const updates = [];
-      const values = [];
-      let paramCount = 0;
+      // Array fields (TEXT[])
+      const arrayFields = [
+        'source_of_referral', 'family_history',
+        'neurodevelopmental_concerns', 'behavioral_concerns',
+        'emotional_psychological_symptoms', 'trauma_psychosocial_stressors',
+        'risk_assessment', 'investigations_required', 'psychological_treatment',
+      ];
 
-      // Remove fields that should never be updated
-      delete updateData.child_patient_id;
-      delete updateData.id;
-      delete updateData.filled_by;
-      delete updateData.created_at;
+      // Date fields
+      const dateFields = ['date', 'visit_date', 'disposal_date'];
 
-      // Define boolean fields
+      // Time fields
+      const timeFields = ['disposal_time'];
+
+      // Boolean fields
       const booleanFields = [
         'has_physical_illness',
         'complaints_obstinacy', 'complaints_disobedience', 'complaints_aggressiveness',
@@ -524,61 +798,56 @@ class ChildClinicalProforma {
         'investigation_psychological_tests',
         'therapy_drugs', 'therapy_antiepileptics', 'therapy_parental_counselling',
         'therapy_play_therapy', 'therapy_individual_psychotherapy',
-        'therapy_behavioral_therapy', 'therapy_psychological_testing',
-        'therapy_nil_evaluation_only'
+        'therapy_behavioral_therapy', 'therapy_psychological_testing', 'therapy_nil_evaluation_only'
       ];
 
-      // Helper function to sanitize text fields
-      const sanitizeText = (textValue) => {
-        if (textValue === undefined || textValue === null || textValue === '') {
-          return null;
-        }
-        return String(textValue).trim() || null;
+      const sanitizeText = (v) => {
+        if (v === undefined || v === null || v === '') return null;
+        return String(v).trim() || null;
       };
 
-      // Helper function to sanitize boolean fields
-      const sanitizeBoolean = (boolValue) => {
-        if (boolValue === undefined || boolValue === null || boolValue === '') {
-          return false;
-        }
-        if (typeof boolValue === 'string') {
-          return boolValue.toLowerCase() === 'true' || boolValue === '1';
-        }
-        return Boolean(boolValue);
+      const sanitizeBoolean = (v) => {
+        if (v === undefined || v === null || v === '') return false;
+        if (typeof v === 'string') return v.toLowerCase() === 'true' || v === '1';
+        return Boolean(v);
       };
+
+      const updates = [];
+      const values = [];
+      let paramCount = 0;
+
+      // Remove fields that should never be updated
+      delete updateData.child_patient_id;
+      delete updateData.id;
+      delete updateData.filled_by;
+      delete updateData.created_at;
 
       for (const [key, value] of Object.entries(updateData)) {
         if (allowedFields.includes(key) && value !== undefined) {
           paramCount++;
           
-          if (key === 'source_of_referral' || key === 'family_history') {
-            // Handle array fields
+          if (arrayFields.includes(key)) {
             const arrayValue = Array.isArray(value) 
               ? (value.length > 0 ? value : null)
               : (value ? [value] : null);
             updates.push(`${key} = $${paramCount}::text[]`);
             values.push(arrayValue);
-          } else if (key === 'date' || key === 'visit_date' || key === 'disposal_date') {
-            // Handle date fields
-            const sanitizedDate = value === '' || (typeof value === 'string' && value.trim() === '') ? null : value;
+          } else if (dateFields.includes(key)) {
+            const sanitizedDate = (value === '' || (typeof value === 'string' && value.trim() === '')) ? null : value;
             updates.push(`${key} = $${paramCount}`);
             values.push(sanitizedDate);
-          } else if (key === 'disposal_time') {
-            // Handle time fields
-            const sanitizedTime = value === '' || (typeof value === 'string' && value.trim() === '') ? null : value;
+          } else if (timeFields.includes(key)) {
+            const sanitizedTime = (value === '' || (typeof value === 'string' && value.trim() === '')) ? null : value;
             updates.push(`${key} = $${paramCount}`);
             values.push(sanitizedTime);
           } else if (key === 'age') {
-            // Handle age as integer
-            const ageValue = value === '' || value === null || value === undefined ? null : parseInt(value);
+            const ageValue = (value === '' || value === null || value === undefined) ? null : parseInt(value);
             updates.push(`${key} = $${paramCount}`);
             values.push(isNaN(ageValue) ? null : ageValue);
           } else if (booleanFields.includes(key)) {
-            // Handle boolean fields - ensure they are proper booleans
             updates.push(`${key} = $${paramCount}`);
             values.push(sanitizeBoolean(value));
           } else {
-            // Handle text fields - ensure they are strings, not booleans
             updates.push(`${key} = $${paramCount}`);
             values.push(sanitizeText(value));
           }
@@ -611,7 +880,9 @@ class ChildClinicalProforma {
     }
   }
 
-  // Delete child clinical proforma
+  // ─────────────────────────────────────────────────────────────────────────
+  // DELETE
+  // ─────────────────────────────────────────────────────────────────────────
   async delete() {
     try {
       await db.query('DELETE FROM child_clinical_proforma WHERE id = $1', [this.id]);
@@ -622,7 +893,9 @@ class ChildClinicalProforma {
     }
   }
 
-  // Convert to JSON
+  // ─────────────────────────────────────────────────────────────────────────
+  // TO JSON
+  // ─────────────────────────────────────────────────────────────────────────
   toJSON() {
     return {
       id: this.id,
@@ -631,10 +904,79 @@ class ChildClinicalProforma {
       visit_date: this.visit_date,
       room_no: this.room_no,
       assigned_doctor: this.assigned_doctor,
+
+      // Section 1
       child_name: this.child_name,
       age: this.age,
       sex: this.sex,
       date: this.date,
+      informant_relationship: this.informant_relationship,
+      reliability: this.reliability,
+      family_type: this.family_type,
+      socioeconomic_status: this.socioeconomic_status,
+
+      // Section 2
+      school_name: this.school_name,
+      school_class: this.school_class,
+      school_type: this.school_type,
+      academic_performance: this.academic_performance,
+      school_refusal: this.school_refusal,
+      bullying: this.bullying,
+
+      // Section 3
+      presenting_complaints: this.presenting_complaints,
+
+      // Section 4
+      neurodevelopmental_concerns: this.neurodevelopmental_concerns,
+      neurodevelopmental_description: this.neurodevelopmental_description,
+
+      // Section 5
+      behavioral_concerns: this.behavioral_concerns,
+      behavioral_description: this.behavioral_description,
+
+      // Section 6
+      emotional_psychological_symptoms: this.emotional_psychological_symptoms,
+      emotional_psychological_description: this.emotional_psychological_description,
+
+      // Section 7
+      trauma_psychosocial_stressors: this.trauma_psychosocial_stressors,
+      trauma_description: this.trauma_description,
+
+      // Section 8
+      associated_medical_illness: this.associated_medical_illness,
+      developmental_history: this.developmental_history,
+      family_history: this.family_history,
+      family_history_details: this.family_history_details,
+
+      // Section 9
+      risk_assessment: this.risk_assessment,
+
+      // Section 10
+      mse_appearance_behaviour: this.mse_appearance_behaviour,
+      mse_rapport: this.mse_rapport,
+      mse_speech: this.mse_speech,
+      mse_mood_affect: this.mse_mood_affect,
+      mse_thought: this.mse_thought,
+      mse_perception: this.mse_perception,
+      mse_cognition: this.mse_cognition,
+      mse_insight_judgment: this.mse_insight_judgment,
+
+      // Section 11
+      provisional_diagnosis: this.provisional_diagnosis,
+
+      // Section 12
+      investigations_required: this.investigations_required,
+
+      // Section 13
+      pharmacological_treatment: this.pharmacological_treatment,
+      psychological_treatment: this.psychological_treatment,
+      high_risk_management: this.high_risk_management,
+
+      // Section 14
+      follow_up_after: this.follow_up_after,
+      referred_to: this.referred_to,
+
+      // Legacy fields
       source_of_referral: this.source_of_referral,
       duration_of_illness: this.duration_of_illness,
       onset: this.onset,
@@ -674,8 +1016,6 @@ class ChildClinicalProforma {
       complaints_inadequate_personal_care: this.complaints_inadequate_personal_care,
       significant_physical_findings: this.significant_physical_findings,
       physical_development: this.physical_development,
-      family_history: this.family_history,
-      family_history_details: this.family_history_details,
       investigation_detailed_medical_workup: this.investigation_detailed_medical_workup,
       investigation_social_family_assessment: this.investigation_social_family_assessment,
       investigation_school_related_evaluation: this.investigation_school_related_evaluation,
@@ -700,9 +1040,13 @@ class ChildClinicalProforma {
       disposal_time: this.disposal_time,
       disposal_distance: this.disposal_distance,
       disposal_remarks: this.disposal_remarks,
+
+      // Audit
       status: this.status,
       created_at: this.created_at,
       updated_at: this.updated_at,
+
+      // Joined fields
       child_patient_name: this.child_patient_name,
       cr_number: this.cr_number,
       cgc_number: this.cgc_number,

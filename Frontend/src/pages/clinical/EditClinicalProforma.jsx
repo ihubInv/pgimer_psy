@@ -978,7 +978,10 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     try {
       const join = (arr) => Array.isArray(arr) ? arr.join(", ") : arr;
 
-      // CASE 1: Using parent-provided update through props  
+      // CASE 1: Parent-provided callback (propOnUpdate) is set
+      // Sub-cases:
+      //   1a. propInitialData has an id  → call the real update API, then invoke propOnUpdate() as a post-save callback
+      //   1b. propInitialData has no id  → parent is responsible for the actual save (legacy behaviour, e.g. PatientDetailsView read-only wrapper)
       if (propInitialData && propOnUpdate) {
         const updateData = {
           patient_id: currentFormData.patient_id,
@@ -1043,14 +1046,26 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           referred_to: currentFormData.referred_to,
           treatment_prescribed: currentFormData.treatment_prescribed,
           doctor_decision: currentFormData.doctor_decision,
-          // case_severity: currentFormData.case_severity,
         };
 
+        // 1a: We have a real proforma ID → hit the API to persist changes, then notify parent
+        if (propInitialData?.id) {
+          try {
+            await updateProforma({ ...updateData, id: propInitialData.id }).unwrap();
+            toast.success('Clinical proforma updated successfully!');
+            propOnUpdate(); // e.g. close the inline edit panel
+          } catch (err) {
+            toast.error(err?.data?.message || 'Failed to update proforma');
+          }
+          return;
+        }
+
+        // 1b: No ID → parent owns the save logic (original legacy path, e.g. read-only view wrapper)
         try {
           await propOnUpdate(updateData);
-          toast.success("Clinical proforma updated successfully!");
+          toast.success('Clinical proforma updated successfully!');
         } catch (err) {
-          toast.error(err?.data?.message || "Failed to update proforma");
+          toast.error(err?.data?.message || 'Failed to update proforma');
         }
 
         return;

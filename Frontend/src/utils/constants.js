@@ -979,6 +979,136 @@ export const CHILD_CLINICAL_DISPOSAL_STATUS_OPTIONS = [
   { value: 'Managed in Walk-in only', label: 'Managed in Walk-in only' },
 ];
 
+// New Child Clinical Proforma Options (Updated Structure)
+export const CHILD_CLINICAL_RELIABILITY_OPTIONS = [
+  { value: 'Good', label: 'Good' },
+  { value: 'Fair', label: 'Fair' },
+  { value: 'Poor', label: 'Poor' },
+];
+
+export const CHILD_CLINICAL_FAMILY_TYPE_OPTIONS = [
+  { value: 'Nuclear', label: 'Nuclear' },
+  { value: 'Joint', label: 'Joint' },
+  { value: 'Single Parent', label: 'Single Parent' },
+];
+
+export const CHILD_CLINICAL_SCHOOL_TYPE_OPTIONS = [
+  { value: 'Govt', label: 'Govt' },
+  { value: 'Private', label: 'Private' },
+  { value: 'Special', label: 'Special' },
+];
+
+export const CHILD_CLINICAL_ACADEMIC_PERFORMANCE_OPTIONS = [
+  { value: 'Below Avg', label: 'Below Avg' },
+  { value: 'Avg', label: 'Avg' },
+  { value: 'Above Avg', label: 'Above Avg' },
+];
+
+export const CHILD_CLINICAL_BULLYING_OPTIONS = [
+  { value: 'Victim', label: 'Victim' },
+  { value: 'Perpetrator', label: 'Perpetrator' },
+  { value: 'Both', label: 'Both' },
+  { value: 'No', label: 'No' },
+];
+
+export const CHILD_CLINICAL_NEURODEVELOPMENTAL_CONCERNS = [
+  { value: 'speech_delay', label: 'Speech delay' },
+  { value: 'language_delay', label: 'Language delay' },
+  { value: 'poor_eye_contact', label: 'Poor eye contact' },
+  { value: 'social_communication_difficulty', label: 'Social communication difficulty' },
+  { value: 'repetitive_behaviour', label: 'Repetitive behaviour' },
+  { value: 'sensory_issues', label: 'Sensory issues' },
+  { value: 'learning_difficulties', label: 'Learning difficulties' },
+  { value: 'motor_delay', label: 'Motor delay' },
+  { value: 'intellectual_disability_suspected', label: 'Intellectual disability suspected' },
+];
+
+export const CHILD_CLINICAL_BEHAVIORAL_CONCERNS = [
+  { value: 'inattention', label: 'Inattention' },
+  { value: 'hyperactivity', label: 'Hyperactivity' },
+  { value: 'impulsivity', label: 'Impulsivity' },
+  { value: 'oppositional_behaviour', label: 'Oppositional behaviour' },
+  { value: 'conduct_problems', label: 'Conduct problems' },
+  { value: 'aggression_verbal_physical', label: 'Aggression (verbal/physical)' },
+  { value: 'rule_breaking', label: 'Rule breaking' },
+  { value: 'property_destruction', label: 'Property destruction' },
+  { value: 'lying', label: 'Lying' },
+  { value: 'truancy', label: 'Truancy' },
+  { value: 'risk_taking_behaviour', label: 'Risk-taking behaviour' },
+];
+
+export const CHILD_CLINICAL_EMOTIONAL_PSYCHOLOGICAL_SYMPTOMS = [
+  { value: 'irritability', label: 'Irritability' },
+  { value: 'mood_swings', label: 'Mood swings' },
+  { value: 'anxiety', label: 'Anxiety' },
+  { value: 'sadness', label: 'Sadness' },
+  { value: 'suicidal_ideation', label: 'Suicidal ideation' },
+  { value: 'self_harm', label: 'Self-harm' },
+  { value: 'sleep_disturbance', label: 'Sleep disturbance' },
+  { value: 'appetite_disturbance', label: 'Appetite disturbance' },
+  { value: 'obsessions', label: 'Obsessions' },
+  { value: 'compulsions', label: 'Compulsions' },
+  { value: 'body_image_concerns', label: 'Body image concerns' },
+  { value: 'internet_gaming_overuse', label: 'Internet/Gaming overuse' },
+];
+
+export const CHILD_CLINICAL_TRAUMA_PSYCHOSOCIAL_STRESSORS = [
+  { value: 'physical_abuse', label: 'Physical abuse' },
+  { value: 'sexual_abuse', label: 'Sexual abuse' },
+  { value: 'emotional_abuse', label: 'Emotional abuse' },
+  { value: 'neglect', label: 'Neglect' },
+  { value: 'domestic_violence_exposure', label: 'Domestic violence exposure' },
+  { value: 'parental_conflict_separation', label: 'Parental conflict/separation' },
+  { value: 'bereavement', label: 'Bereavement' },
+  { value: 'academic_stress', label: 'Academic stress' },
+  { value: 'bullying', label: 'Bullying' },
+];
+
+export const CHILD_CLINICAL_FAMILY_HISTORY_NEW = [
+  { value: 'Autism', label: 'Autism' },
+  { value: 'ADHD', label: 'ADHD' },
+  { value: 'Intellectual Disability', label: 'Intellectual Disability' },
+  { value: 'Depression', label: 'Depression' },
+  { value: 'Bipolar Disorder', label: 'Bipolar Disorder' },
+  { value: 'Psychosis', label: 'Psychosis' },
+  { value: 'Suicide', label: 'Suicide' },
+  { value: 'Substance Use', label: 'Substance Use' },
+  { value: 'Epilepsy', label: 'Epilepsy' },
+];
+
+export const CHILD_CLINICAL_RISK_ASSESSMENT = [
+  { value: 'suicide_risk', label: 'Suicide risk' },
+  { value: 'self_harm_risk', label: 'Self-harm risk' },
+  { value: 'aggression_risk', label: 'Aggression risk' },
+  { value: 'abuse_risk', label: 'Abuse risk' },
+  { value: 'substance_use_risk', label: 'Substance use risk' },
+  { value: 'online_exploitation_risk', label: 'Online exploitation risk' },
+];
+
+export const CHILD_CLINICAL_INVESTIGATIONS_REQUIRED = [
+  { value: 'CBC', label: 'CBC' },
+  { value: 'Thyroid Profile', label: 'Thyroid Profile' },
+  { value: 'Vitamin B12', label: 'Vitamin B12' },
+  { value: 'EEG', label: 'EEG' },
+  { value: 'MRI Brain', label: 'MRI Brain' },
+  { value: 'Genetic Testing', label: 'Genetic Testing' },
+  { value: 'Hearing Assessment', label: 'Hearing Assessment' },
+  { value: 'Vision Assessment', label: 'Vision Assessment' },
+  { value: 'IQ Testing', label: 'IQ Testing' },
+  { value: 'SLD Battery', label: 'SLD Battery' },
+  { value: 'Autism Tools', label: 'Autism Tools' },
+  { value: 'ADHD Rating Scales', label: 'ADHD Rating Scales' },
+  { value: 'SDQ / CGAS / CGI', label: 'SDQ / CGAS / CGI' },
+];
+
+export const CHILD_CLINICAL_PSYCHOLOGICAL_TREATMENT_OPTIONS = [
+  { value: 'Parent Management Training', label: 'Parent Management Training' },
+  { value: 'Family Therapy', label: 'Family Therapy' },
+  { value: 'CBT', label: 'CBT' },
+  { value: 'Play Therapy', label: 'Play Therapy' },
+  { value: 'Others', label: 'Others' },
+];
+
 export const INDIA_STATES = [
   { label: "Andhra Pradesh", value: "andhra_pradesh" },
   { label: "Arunachal Pradesh", value: "arunachal_pradesh" },

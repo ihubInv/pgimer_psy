@@ -151,6 +151,9 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     patientDetails: false,
   });
 
+  // State to toggle editing the first visit proforma inline
+  const [isEditingFirstVisitProforma, setIsEditingFirstVisitProforma] = useState(false);
+
   // State to track which visit cards are expanded (visit-based structure)
   const [expandedVisitCards, setExpandedVisitCards] = useState({});
   
@@ -4603,12 +4606,43 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                           <FiEye className="w-3.5 h-3.5" />
                           View
                         </Button>
+                        {/* Edit button – visible only in edit mode for Faculty/Resident/Admin */}
+                        {isEdit && (isResident || isFaculty || isAdminUser) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsEditingFirstVisitProforma(prev => !prev)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs ${
+                              isEditingFirstVisitProforma
+                                ? 'bg-amber-50 border-amber-400 text-amber-700 hover:bg-amber-100'
+                                : 'bg-blue-50 border-blue-400 text-blue-700 hover:bg-blue-100'
+                            }`}
+                          >
+                            <FiEdit3 className="w-3.5 h-3.5" />
+                            {isEditingFirstVisitProforma ? 'Cancel Edit' : 'Edit Proforma'}
+                          </Button>
+                        )}
                       </div>
                     </div>
                     
-                    {/* Show full proforma in read-only view mode */}
+                    {/* Show editable form or read-only view based on edit toggle */}
                     <div className="mt-4">
-                      <ClinicalProformaDetails proforma={firstVisitProforma} />
+                      {isEditingFirstVisitProforma ? (
+                        <EditClinicalProforma
+                          key={`edit-first-visit-${firstVisitProforma.id}`}
+                          initialData={{
+                            ...firstVisitProforma,
+                            patient_id: firstVisitProforma.patient_id?.toString() || patient?.id?.toString() || '',
+                            visit_date: firstVisitProforma.visit_date
+                              ? (firstVisitProforma.visit_date.includes('T') ? firstVisitProforma.visit_date.split('T')[0] : firstVisitProforma.visit_date)
+                              : new Date().toISOString().split('T')[0],
+                            assigned_doctor: firstVisitProforma.assigned_doctor?.toString() || patient?.assigned_doctor_id?.toString() || '',
+                          }}
+                          onUpdate={() => setIsEditingFirstVisitProforma(false)}
+                        />
+                      ) : (
+                        <ClinicalProformaDetails proforma={firstVisitProforma} />
+                      )}
                     </div>
                   </div>
                 </div>
@@ -5185,10 +5219,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                               <span><span className="font-medium text-gray-800">Doctor:</span> {proforma.doctor_name}</span>
                             </div>
                           )}
-                          {proforma.remarks_provisional_diagnosis && (
+                          {(proforma.provisional_diagnosis || proforma.remarks_provisional_diagnosis) && (
                             <div className="flex items-start gap-2">
                               <FiFileText className="w-4 h-4 mt-0.5" />
-                              <span><span className="font-medium text-gray-800">Diagnosis:</span> {proforma.remarks_provisional_diagnosis}</span>
+                              <span><span className="font-medium text-gray-800">Diagnosis:</span> {proforma.provisional_diagnosis || proforma.remarks_provisional_diagnosis}</span>
                             </div>
                           )}
                         </div>

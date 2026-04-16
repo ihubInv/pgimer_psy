@@ -50,11 +50,12 @@ class ChildPatientController {
 
       // Handle file uploads (documents and photo)
       const uploadedDocuments = [];
-      const uploadedPhotoPath = null;
+      let childId = null; // Track temp folder name for later rename
 
       // Process uploaded files
-      if (req.files) {
-        const childId = `child_${Date.now()}`; // Temporary ID for folder structure
+      // Note: after handleUpload middleware, req.files is a flat array of file objects
+      if (req.files && req.files.length > 0) {
+        childId = `child_${Date.now()}`; // Temporary ID for folder structure
         const role = uploadConfig.mapRoleToFolder(req.user?.role);
         const uploadDir = path.join(
           uploadConfig.getAbsolutePath(uploadConfig.PATIENT_FILES_PATH),
@@ -66,30 +67,22 @@ class ChildPatientController {
         // Ensure directory exists
         await fs.mkdir(uploadDir, { recursive: true });
 
-        // Process documents (multiple files)
-        if (req.files.documents) {
-          const documents = Array.isArray(req.files.documents) 
-            ? req.files.documents 
-            : [req.files.documents];
-          
-          for (const file of documents) {
+        // Process all uploaded files (req.files is a flat array after handleUpload normalization)
+        for (const file of req.files) {
+          const isPhoto = file.fieldname === 'photo' || file.originalname.match(/^photo_/i);
             const fileName = `${Date.now()}_${file.originalname}`;
-            const filePath = path.join(uploadDir, fileName);
-            await fs.writeFile(filePath, file.buffer);
+          const destPath = path.join(uploadDir, fileName);
+
+          // Copy file from multer's temp location to the target directory
+          await fs.copyFile(file.path, destPath);
             
-            const urlPath = uploadConfig.getUrlPath(filePath);
+          const urlPath = uploadConfig.getUrlPath(destPath);
+
+          if (isPhoto && !childPatientData.photo_path) {
+            childPatientData.photo_path = urlPath;
+          } else {
             uploadedDocuments.push(urlPath);
           }
-        }
-
-        // Process photo (single file)
-        if (req.files.photo) {
-          const photo = Array.isArray(req.files.photo) ? req.files.photo[0] : req.files.photo;
-          const photoName = `photo_${Date.now()}_${photo.originalname}`;
-          const photoPath = path.join(uploadDir, photoName);
-          await fs.writeFile(photoPath, photo.buffer);
-          
-          childPatientData.photo_path = uploadConfig.getUrlPath(photoPath);
         }
       }
 
@@ -101,15 +94,14 @@ class ChildPatientController {
       // Create child patient registration
       const childPatient = await ChildPatientRegistration.create(childPatientData);
 
-      // Update folder name with actual ID if needed
-      if (req.files && childPatient.id) {
-        const oldChildId = `child_${Date.now()}`;
+      // Rename temp folder to actual patient ID now that we have it
+      if (childId && childPatient.id) {
         const role = uploadConfig.mapRoleToFolder(req.user?.role);
         const oldDir = path.join(
           uploadConfig.getAbsolutePath(uploadConfig.PATIENT_FILES_PATH),
           role,
           'Child_Patient_Registration',
-          oldChildId
+          childId
         );
         const newDir = path.join(
           uploadConfig.getAbsolutePath(uploadConfig.PATIENT_FILES_PATH),

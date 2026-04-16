@@ -21,7 +21,86 @@ import {
   CHILD_CLINICAL_PHYSICAL_DEVELOPMENT_OPTIONS,
   CHILD_CLINICAL_FAMILY_HISTORY_OPTIONS,
   CHILD_CLINICAL_DISPOSAL_STATUS_OPTIONS,
+  CHILD_CLINICAL_RELIABILITY_OPTIONS,
+  CHILD_CLINICAL_FAMILY_TYPE_OPTIONS,
+  CHILD_CLINICAL_SCHOOL_TYPE_OPTIONS,
+  CHILD_CLINICAL_ACADEMIC_PERFORMANCE_OPTIONS,
+  CHILD_CLINICAL_BULLYING_OPTIONS,
+  CHILD_CLINICAL_NEURODEVELOPMENTAL_CONCERNS,
+  CHILD_CLINICAL_BEHAVIORAL_CONCERNS,
+  CHILD_CLINICAL_EMOTIONAL_PSYCHOLOGICAL_SYMPTOMS,
+  CHILD_CLINICAL_TRAUMA_PSYCHOSOCIAL_STRESSORS,
+  CHILD_CLINICAL_FAMILY_HISTORY_NEW,
+  CHILD_CLINICAL_RISK_ASSESSMENT,
+  CHILD_CLINICAL_INVESTIGATIONS_REQUIRED,
+  CHILD_CLINICAL_PSYCHOLOGICAL_TREATMENT_OPTIONS,
 } from '../../utils/constants';
+
+// ── Top-level helpers (defined OUTSIDE component to keep stable references) ──
+
+const SectionCard = ({ number, title, accent, headerBg, children }) => (
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className={`flex items-center gap-3 px-5 py-3 ${headerBg} border-b border-gray-100`}>
+      <span className={`flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold shadow-sm ${accent}`}>
+        {number}
+      </span>
+      <h2 className="font-semibold text-gray-800 text-sm tracking-wide uppercase">{title}</h2>
+    </div>
+    <div className={`p-5 border-l-4 ${accent.replace('bg-', 'border-')}`}>
+      {children}
+    </div>
+  </div>
+);
+
+const ChipSelect = ({ options, selectedValues, activeClass, disabled, onToggle }) => (
+  <div className="flex flex-wrap gap-2">
+    {options.map(opt => {
+      const isSelected = (selectedValues || []).includes(opt.value);
+      return (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => !disabled && onToggle(opt.value)}
+          disabled={disabled}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${
+            isSelected
+              ? `${activeClass} text-white border-transparent shadow-sm scale-[1.02]`
+              : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+          } ${disabled ? 'cursor-default' : 'cursor-pointer'}`}
+        >
+          {isSelected && <span className="mr-1 text-xs">✓</span>}
+          {opt.label}
+        </button>
+      );
+    })}
+  </div>
+);
+
+const RadioPill = ({ name, options, value, onChange, activeClass, disabled }) => (
+  <div className="flex flex-wrap gap-2">
+    {options.map(opt => (
+      <label
+        key={opt}
+        className={`flex items-center px-4 py-2 rounded-full border text-sm font-medium transition-all duration-150 ${
+          value === opt
+            ? `${activeClass} text-white border-transparent shadow-sm`
+            : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+        } ${disabled ? 'cursor-default' : 'cursor-pointer'}`}
+      >
+        <input
+          type="radio"
+          name={name}
+          value={opt}
+          checked={value === opt}
+          onChange={onChange}
+          disabled={disabled}
+          className="sr-only"
+        />
+        {opt}
+      </label>
+    ))}
+  </div>
+);
 
 const EditChildClinicalProforma = ({ 
   initialData: propInitialData = null, 
@@ -200,68 +279,88 @@ const EditChildClinicalProforma = ({
     }, 250);
   };
   
-  // Form state
+  // Form state - Updated to match new proforma structure
   const [formData, setFormData] = useState({
-    // SECTION A: BASIC INFORMATION
+    // SECTION 1: BASIC INFORMATION
     child_name: '',
     age: '',
     sex: '',
     date: new Date().toISOString().split('T')[0],
+    informant_relationship: '',
+    reliability: '',
+    family_type: '',
+    socioeconomic_status: '',
+    
+    // SECTION 2: SCHOOL INFORMATION
+    school_name: '',
+    school_class: '',
+    school_type: '',
+    academic_performance: '',
+    school_refusal: '',
+    bullying: '',
+    
+    // SECTION 3: PRESENTING COMPLAINTS
+    presenting_complaints: '',
+    
+    // SECTION 4: NEURODEVELOPMENTAL CONCERNS
+    neurodevelopmental_concerns: [],
+    neurodevelopmental_description: '',
+    
+    // SECTION 5: BEHAVIORAL CONCERNS
+    behavioral_concerns: [],
+    behavioral_description: '',
+    
+    // SECTION 6: EMOTIONAL & PSYCHOLOGICAL SYMPTOMS
+    emotional_psychological_symptoms: [],
+    emotional_psychological_description: '',
+    
+    // SECTION 7: TRAUMA & PSYCHOSOCIAL STRESSORS
+    trauma_psychosocial_stressors: [],
+    trauma_description: '',
+    
+    // SECTION 8: MEDICAL & FAMILY HISTORY
+    associated_medical_illness: '',
+    developmental_history: '',
+    family_history: [],
+    
+    // SECTION 9: RISK ASSESSMENT
+    risk_assessment: [],
+    
+    // SECTION 10: MENTAL STATUS EXAMINATION
+    mse_appearance_behaviour: '',
+    mse_rapport: '',
+    mse_speech: '',
+    mse_mood_affect: '',
+    mse_thought: '',
+    mse_perception: '',
+    mse_cognition: '',
+    mse_insight_judgment: '',
+    
+    // SECTION 11: DIAGNOSIS & FORMULATION
+    provisional_diagnosis: '',
+    
+    // SECTION 12: INVESTIGATIONS REQUIRED
+    investigations_required: [],
+    
+    // SECTION 13: TREATMENT PLAN
+    pharmacological_treatment: '',
+    psychological_treatment: [],
+    high_risk_management: '',
+    
+    // SECTION 14: FOLLOW-UP & DISPOSAL
+    follow_up_after: '',
+    referred_to: '',
+    
+    // Legacy fields (for backward compatibility)
     source_of_referral: '',
-    
-    // SECTION B: DURATION OF ILLNESS
     duration_of_illness: '',
-    
-    // SECTION C: ONSET
     onset: '',
-    
-    // SECTION D: COURSE
     course: '',
-    
-    // SECTION E: ASSOCIATED PHYSICAL ILLNESS
     has_physical_illness: false,
     physical_illness_specification: '',
-    
-    // SECTION F: COMPLAINTS
-    complaints_obstinacy: false,
-    complaints_disobedience: false,
-    complaints_aggressiveness: false,
-    complaints_temper_tantrums: false,
-    complaints_hyperactivity: false,
-    complaints_stealing: false,
-    complaints_delinquent_behaviour: false,
-    complaints_low_intelligence: false,
-    complaints_scholastic_backwardness: false,
-    complaints_poor_memory: false,
-    complaints_speech_difficulty: false,
-    complaints_hearing_difficulty: false,
-    complaints_epileptic: false,
-    complaints_non_epileptic: false,
-    complaints_both: false,
-    complaints_unclear: false,
-    complaints_abnormal_behaviour: false,
-    complaints_irrelevant_talking: false,
-    complaints_withdrawnness: false,
-    complaints_shyness: false,
-    complaints_excessive_clinging: false,
-    complaints_anxiety: false,
-    complaints_depression: false,
-    complaints_feeding_problems: false,
-    complaints_neurosis: false,
-    complaints_thumb_sucking: false,
-    complaints_nail_biting: false,
-    complaints_abnormal_movements: false,
-    complaints_somatic_complaints: false,
-    complaints_odd_behaviour: false,
-    complaints_inadequate_personal_care: false,
-    
-    // SECTION G: EXAMINATION
     significant_physical_findings: '',
     physical_development: '',
-    family_history: [],
     family_history_details: '',
-    
-    // SECTION H: DIAGNOSIS & INVESTIGATION
     investigation_detailed_medical_workup: false,
     investigation_social_family_assessment: false,
     investigation_school_related_evaluation: false,
@@ -272,8 +371,6 @@ const EditChildClinicalProforma = ({
     investigation_iq_testing: false,
     investigation_psychological_tests: false,
     remarks_provisional_diagnosis: '',
-    
-    // SECTION I: THERAPY SUGGESTED
     therapy_drugs: false,
     therapy_antiepileptics: false,
     therapy_parental_counselling: false,
@@ -282,8 +379,6 @@ const EditChildClinicalProforma = ({
     therapy_behavioral_therapy: false,
     therapy_psychological_testing: false,
     therapy_nil_evaluation_only: false,
-    
-    // SECTION J: DISPOSAL
     disposal_status: '',
     disposal_reason: '',
     disposal_date: '',
@@ -364,15 +459,29 @@ const EditChildClinicalProforma = ({
             const data = await response.json();
             const proforma = data.data?.proforma;
             if (proforma) {
+              // Helper to ensure array format
+              const ensureArray = (value) => {
+                if (Array.isArray(value)) return value;
+                if (value) return [value];
+                return [];
+              };
+              
               setFormData(prev => ({
                 ...prev,
                 ...proforma,
+                // Ensure all new array fields are properly formatted
+                neurodevelopmental_concerns: ensureArray(proforma.neurodevelopmental_concerns),
+                behavioral_concerns: ensureArray(proforma.behavioral_concerns),
+                emotional_psychological_symptoms: ensureArray(proforma.emotional_psychological_symptoms),
+                trauma_psychosocial_stressors: ensureArray(proforma.trauma_psychosocial_stressors),
+                risk_assessment: ensureArray(proforma.risk_assessment),
+                investigations_required: ensureArray(proforma.investigations_required),
+                psychological_treatment: ensureArray(proforma.psychological_treatment),
+                // Legacy fields for backward compatibility
                 source_of_referral: Array.isArray(proforma.source_of_referral) 
                   ? (proforma.source_of_referral.length > 0 ? proforma.source_of_referral[0] : '')
                   : (proforma.source_of_referral || ''),
-                family_history: Array.isArray(proforma.family_history) 
-                  ? proforma.family_history 
-                  : (proforma.family_history ? [proforma.family_history] : []),
+                family_history: ensureArray(proforma.family_history),
               }));
             }
           }
@@ -405,15 +514,29 @@ const EditChildClinicalProforma = ({
             // Get the most recent proforma (first one, as they should be sorted by date desc)
             const proforma = proformas.length > 0 ? proformas[0] : null;
             if (proforma) {
+              // Helper to ensure array format
+              const ensureArray = (value) => {
+                if (Array.isArray(value)) return value;
+                if (value) return [value];
+                return [];
+              };
+              
               setFormData(prev => ({
                 ...prev,
                 ...proforma,
+                // Ensure all new array fields are properly formatted
+                neurodevelopmental_concerns: ensureArray(proforma.neurodevelopmental_concerns),
+                behavioral_concerns: ensureArray(proforma.behavioral_concerns),
+                emotional_psychological_symptoms: ensureArray(proforma.emotional_psychological_symptoms),
+                trauma_psychosocial_stressors: ensureArray(proforma.trauma_psychosocial_stressors),
+                risk_assessment: ensureArray(proforma.risk_assessment),
+                investigations_required: ensureArray(proforma.investigations_required),
+                psychological_treatment: ensureArray(proforma.psychological_treatment),
+                // Legacy fields for backward compatibility
                 source_of_referral: Array.isArray(proforma.source_of_referral) 
                   ? (proforma.source_of_referral.length > 0 ? proforma.source_of_referral[0] : '')
                   : (proforma.source_of_referral || ''),
-                family_history: Array.isArray(proforma.family_history) 
-                  ? proforma.family_history 
-                  : (proforma.family_history ? [proforma.family_history] : []),
+                family_history: ensureArray(proforma.family_history),
               }));
             }
           }
@@ -431,15 +554,29 @@ const EditChildClinicalProforma = ({
   // Load from propInitialData if provided
   useEffect(() => {
     if (propInitialData) {
+      // Helper to ensure array format
+      const ensureArray = (value) => {
+        if (Array.isArray(value)) return value;
+        if (value) return [value];
+        return [];
+      };
+      
       setFormData(prev => ({
         ...prev,
         ...propInitialData,
+        // Ensure all new array fields are properly formatted
+        neurodevelopmental_concerns: ensureArray(propInitialData.neurodevelopmental_concerns),
+        behavioral_concerns: ensureArray(propInitialData.behavioral_concerns),
+        emotional_psychological_symptoms: ensureArray(propInitialData.emotional_psychological_symptoms),
+        trauma_psychosocial_stressors: ensureArray(propInitialData.trauma_psychosocial_stressors),
+        risk_assessment: ensureArray(propInitialData.risk_assessment),
+        investigations_required: ensureArray(propInitialData.investigations_required),
+        psychological_treatment: ensureArray(propInitialData.psychological_treatment),
+        // Legacy fields for backward compatibility
         source_of_referral: Array.isArray(propInitialData.source_of_referral) 
           ? (propInitialData.source_of_referral.length > 0 ? propInitialData.source_of_referral[0] : '')
           : (propInitialData.source_of_referral || ''),
-        family_history: Array.isArray(propInitialData.family_history) 
-          ? propInitialData.family_history 
-          : (propInitialData.family_history ? [propInitialData.family_history] : []),
+        family_history: ensureArray(propInitialData.family_history),
       }));
     }
   }, [propInitialData]);
@@ -481,7 +618,8 @@ const EditChildClinicalProforma = ({
   const handleSubmit = async (e, submitStatus = 'draft') => {
     e.preventDefault();
     
-    // Validation
+    // Validation - Updated for new structure
+    // No specific validations required for new structure, but keeping legacy validations for backward compatibility
     if (formData.has_physical_illness && !formData.physical_illness_specification.trim()) {
       toast.error('Please specify the physical illness');
       return;
@@ -517,18 +655,14 @@ const EditChildClinicalProforma = ({
         return timeValue;
       };
 
-      // Ensure family_history is always an array (for multi-select)
-      const familyHistoryArray = Array.isArray(formData.family_history) 
-        ? formData.family_history 
-        : (formData.family_history ? [formData.family_history] : []);
+      // Ensure all multi-select arrays are properly formatted
+      const ensureArray = (value) => {
+        if (Array.isArray(value)) return value;
+        if (value) return [value];
+        return [];
+      };
 
-      // Convert source_of_referral from string to array for backend compatibility
-      // If it's already an array (multi-select), use it; otherwise convert single value to array
-      const sourceOfReferralArray = Array.isArray(formData.source_of_referral)
-        ? formData.source_of_referral
-        : (formData.source_of_referral ? [formData.source_of_referral] : []);
-
-      // Build payload with proper type handling
+      // Build payload with proper type handling - includes both new and legacy fields
       const payload = {
         ...formData,
         child_patient_id: childPatientId || formData.child_patient_id,
@@ -536,9 +670,17 @@ const EditChildClinicalProforma = ({
         visit_date: formData.date || new Date().toISOString().split('T')[0],
         room_no: childPatient?.assigned_room || formData.room_no,
         assigned_doctor: currentUser?.id || formData.assigned_doctor,
-        // Ensure arrays are properly formatted for backend
-        source_of_referral: sourceOfReferralArray,
-        family_history: familyHistoryArray,
+        // Ensure all array fields are properly formatted
+        neurodevelopmental_concerns: ensureArray(formData.neurodevelopmental_concerns),
+        behavioral_concerns: ensureArray(formData.behavioral_concerns),
+        emotional_psychological_symptoms: ensureArray(formData.emotional_psychological_symptoms),
+        trauma_psychosocial_stressors: ensureArray(formData.trauma_psychosocial_stressors),
+        family_history: ensureArray(formData.family_history),
+        risk_assessment: ensureArray(formData.risk_assessment),
+        investigations_required: ensureArray(formData.investigations_required),
+        psychological_treatment: ensureArray(formData.psychological_treatment),
+        // Legacy fields for backward compatibility
+        source_of_referral: ensureArray(formData.source_of_referral),
         // Sanitize date fields - convert empty strings to null
         date: sanitizeDate(formData.date) || new Date().toISOString().split('T')[0],
         disposal_date: sanitizeDate(formData.disposal_date),
@@ -614,105 +756,106 @@ const EditChildClinicalProforma = ({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <LoadingSpinner />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Standalone mode - render with Card wrapper matching Adult version */}
-      <Card className="mb-8 shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-        {/* Collapsible Header */}
-        <div
-          className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
-        >
-          <div 
-            className="flex items-center gap-4 cursor-pointer flex-1"
-            onClick={() => toggleCard('clinicalProforma')}
-          >
-            <div className="p-3 bg-green-100 rounded-lg">
-              <FiClipboard className="h-6 w-6 text-green-600" />
-            </div>
+    <div className="min-h-screen bg-gray-50">
+
+      {/* ── TOP HEADER ─────────────────────────────────────────────────────── */}
+      <div className="bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900 text-white shadow-xl print:hidden">
+        <div className="px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+              >
+                <FiArrowLeft className="w-5 h-5" />
+              </button>
             <div>
-              <h3 className="text-xl font-bold text-gray-900">Child Clinical Proforma</h3>
-              {childPatient && (
-                <p className="text-sm text-gray-500 mt-1">
-                  {childPatient.child_name} - {childPatient.cr_number || 'N/A'}
+                <p className="text-blue-300 text-xs font-semibold uppercase tracking-widest">
+                  PGIMER — Child & Adolescent Psychiatry
                 </p>
-              )}
-              {isViewMode && (
-                <span className="text-xs text-gray-500 mt-1 block">(View Mode)</span>
-              )}
+                <h1 className="text-lg font-bold leading-tight">Walk-In Clinical Proforma</h1>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
+              {isViewMode && (
+                <span className="hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-400/30">
+                  <FiAlertCircle className="w-3 h-3" /> View Mode
+                </span>
+              )}
+              <button
               type="button"
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handlePrintSection('Child Clinical Proforma');
-              }}
-              className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title="Print Child Clinical Proforma"
+                onClick={() => handlePrintSection('Child Clinical Proforma')}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
             >
-              <FiPrinter className="w-4 h-4 text-blue-600" />
-            </Button>
-            <Button
+                <FiPrinter className="w-4 h-4" />
+                <span className="hidden sm:inline">Print</span>
+              </button>
+              {isViewMode && id && (
+                <button
               type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate(-1)}
-              className="h-9 w-9 p-0 bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title="Go Back"
-            >
-              <FiArrowLeft className="w-4 h-4 text-gray-600" />
-            </Button>
-            <div 
-              className="cursor-pointer"
-              onClick={() => toggleCard('clinicalProforma')}
-            >
-              {expandedCards.clinicalProforma ? (
-                <FiChevronUp className="h-6 w-6 text-gray-500" />
-              ) : (
-                <FiChevronDown className="h-6 w-6 text-gray-500" />
+                  onClick={() => navigate(`/child-clinical-proformas/${id}/edit`)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500 hover:bg-green-400 transition-colors text-sm font-semibold shadow-lg shadow-green-900/30"
+                >
+                  <FiEdit3 className="w-4 h-4" /> Edit
+                </button>
               )}
             </div>
           </div>
+
+          {/* Patient Info Strip */}
+          {childPatient && (
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/10 rounded-2xl p-4 border border-white/10">
+              {[
+                { label: 'Patient Name', value: childPatient.child_name || formData.child_name || '—' },
+                { label: 'CR Number',   value: childPatient.cr_number  || '—' },
+                { label: 'CGC Number',  value: childPatient.cgc_number || '—' },
+                { label: 'Age / Sex',   value: `${childPatient.age || formData.age || '—'} yrs / ${childPatient.sex || formData.sex || '—'}` },
+              ].map(item => (
+                <div key={item.label}>
+                  <p className="text-blue-300 text-xs font-semibold uppercase tracking-wide mb-0.5">{item.label}</p>
+                  <p className="text-white font-semibold truncate">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          </div>
         </div>
 
-        {expandedCards.clinicalProforma && (
-          <div ref={printSectionRef} className="p-6 space-y-6">
-            <form onSubmit={(e) => {
-              if (isViewMode) {
-                e.preventDefault();
-                return;
-              }
-              handleSubmit(e, 'draft');
-            }} className="space-y-6">
-            {/* Basic Information Section */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Basic Information</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* ── FORM BODY ──────────────────────────────────────────────────────── */}
+      <div ref={printSectionRef} className="px-4 py-6">
+        <form
+          onSubmit={(e) => { if (isViewMode) { e.preventDefault(); return; } handleSubmit(e, 'draft'); }}
+          className="space-y-4"
+        >
+
+          {/* ── 1. BASIC INFORMATION ─────────────────────────────────────── */}
+          <SectionCard number={1} title="Basic Information" accent="bg-blue-600" headerBg="bg-blue-50">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="col-span-2">
                 <IconInput
                   icon={<FiUser className="w-4 h-4" />}
-                  label="Child Name"
+                  label="Patient Name"
                   name="child_name"
                   value={formData.child_name}
-                  onChange={handleChange}
                   readOnly
                   className="bg-gray-50"
                 />
+              </div>
                 <Input
-                  label="Age"
+                label="Age (years)"
                   name="age"
                   type="number"
                   value={formData.age}
                   onChange={handleChange}
-                  placeholder="Enter age"
+                placeholder="Age"
                   readOnly={isViewMode}
                   className={isViewMode ? "bg-gray-50" : ""}
                 />
@@ -722,436 +865,461 @@ const EditChildClinicalProforma = ({
                   value={formData.sex}
                   onChange={handleChange}
                   options={[
-                    { value: 'Male', label: 'Male' },
+                  { value: 'Male',   label: 'Male'   },
                     { value: 'Female', label: 'Female' },
-                    { value: 'Other', label: 'Other' },
+                  { value: 'Other',  label: 'Other'  },
                   ]}
                   readOnly
                   className="bg-gray-50"
                 />
+              <div className="col-span-2">
                 <DatePicker
-                  label="Date"
+                  label="Date of Visit"
                   name="date"
                   value={formData.date}
                   onChange={(value) => !isViewMode && setFormData(prev => ({ ...prev, date: value }))}
                   disabled={isViewMode}
                 />
-                <div className="md:col-span-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Source of Referral
-                  </label>
-                  <div className="flex flex-wrap gap-3">
-                    {CHILD_CLINICAL_SOURCE_OF_REFERRAL_OPTIONS.map(option => (
-                      <label 
-                        key={option.value} 
-                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${
-                          formData.source_of_referral === option.value 
-                            ? 'border-emerald-300 bg-emerald-50 text-emerald-800' 
-                            : 'border-gray-200 bg-white hover:bg-gray-50'
-                        } ${isViewMode ? 'cursor-not-allowed opacity-75' : ''}`}
-                      >
-                        <input
-                          type="radio"
-                          name="source_of_referral"
-                          value={option.value}
-                          checked={formData.source_of_referral === option.value}
+              </div>
+              <div className="col-span-2">
+                <Input
+                  label="Informant / Relationship to Child"
+                  name="informant_relationship"
+                  value={formData.informant_relationship}
                           onChange={handleChange}
-                          disabled={isViewMode}
-                          className="h-4 w-4 text-primary-600"
+                  placeholder="e.g., Mother, Father, Guardian"
+                  readOnly={isViewMode}
+                  className={isViewMode ? "bg-gray-50" : ""}
                         />
-                        <span className="font-medium">{option.label}</span>
-                      </label>
-                    ))}
                   </div>
+              <div>
+                <Select
+                  label="Reliability of Informant"
+                  name="reliability"
+                  value={formData.reliability}
+                  onChange={handleChange}
+                  options={CHILD_CLINICAL_RELIABILITY_OPTIONS}
+                  readOnly={isViewMode}
+                  className={isViewMode ? "bg-gray-50" : ""}
+                />
                 </div>
+              <div>
+                <Select
+                  label="Family Type"
+                  name="family_type"
+                  value={formData.family_type}
+                  onChange={handleChange}
+                  options={CHILD_CLINICAL_FAMILY_TYPE_OPTIONS}
+                  readOnly={isViewMode}
+                  className={isViewMode ? "bg-gray-50" : ""}
+                />
               </div>
-            </div>
-
-            {/* Duration of Illness Section */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Duration of Illness</h2>
-              <div className="flex flex-wrap gap-3">
-                {CHILD_CLINICAL_DURATION_OF_ILLNESS_OPTIONS.map(option => (
-                  <label 
-                    key={option.value} 
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${
-                      formData.duration_of_illness === option.value 
-                        ? 'border-emerald-300 bg-emerald-50 text-emerald-800' 
-                        : 'border-gray-200 bg-white hover:bg-gray-50'
-                    } ${isViewMode ? 'cursor-not-allowed opacity-75' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="duration_of_illness"
-                      value={option.value}
-                      checked={formData.duration_of_illness === option.value}
+              <div className="col-span-2">
+                <Input
+                  label="Socioeconomic Status"
+                  name="socioeconomic_status"
+                  value={formData.socioeconomic_status}
                       onChange={handleChange}
-                      disabled={isViewMode}
-                      className="h-4 w-4 text-primary-600"
+                  placeholder="e.g., Lower class, Middle class, Upper class"
+                  readOnly={isViewMode}
+                  className={isViewMode ? "bg-gray-50" : ""}
                     />
-                    <span className="font-medium">{option.label}</span>
-                  </label>
-                ))}
               </div>
             </div>
+          </SectionCard>
 
-            {/* Onset Section */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Onset</h2>
-              <div className="flex flex-wrap gap-3">
-                {CHILD_CLINICAL_ONSET_OPTIONS.map(option => (
-                  <label 
-                    key={option.value} 
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${
-                      formData.onset === option.value 
-                        ? 'border-emerald-300 bg-emerald-50 text-emerald-800' 
-                        : 'border-gray-200 bg-white hover:bg-gray-50'
-                    } ${isViewMode ? 'cursor-not-allowed opacity-75' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="onset"
-                      value={option.value}
-                      checked={formData.onset === option.value}
+          {/* ── 2. SCHOOL INFORMATION ────────────────────────────────────── */}
+          <SectionCard number={2} title="School Information" accent="bg-violet-600" headerBg="bg-violet-50">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <Input
+                  label="School Name"
+                  name="school_name"
+                  value={formData.school_name}
                       onChange={handleChange}
-                      disabled={isViewMode}
-                      className="h-4 w-4 text-primary-600"
+                  placeholder="Enter school name"
+                  readOnly={isViewMode}
+                  className={isViewMode ? "bg-gray-50" : ""}
                     />
-                    <span className="font-medium">{option.label}</span>
-                  </label>
-                ))}
               </div>
-            </div>
-
-            {/* Course Section */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Course</h2>
-              <div className="flex flex-wrap gap-3">
-                {CHILD_CLINICAL_COURSE_OPTIONS.map(option => (
-                  <label 
-                    key={option.value} 
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${
-                      formData.course === option.value 
-                        ? 'border-emerald-300 bg-emerald-50 text-emerald-800' 
-                        : 'border-gray-200 bg-white hover:bg-gray-50'
-                    } ${isViewMode ? 'cursor-not-allowed opacity-75' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="course"
-                      value={option.value}
-                      checked={formData.course === option.value}
+              <Input
+                label="Class / Grade"
+                name="school_class"
+                value={formData.school_class}
                       onChange={handleChange}
+                placeholder="e.g., 5th, 8th"
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
+              />
+              <Select
+                label="School Type"
+                name="school_type"
+                value={formData.school_type}
+                onChange={handleChange}
+                options={CHILD_CLINICAL_SCHOOL_TYPE_OPTIONS}
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
+              />
+              <Select
+                label="Academic Performance"
+                name="academic_performance"
+                value={formData.academic_performance}
+                onChange={handleChange}
+                options={CHILD_CLINICAL_ACADEMIC_PERFORMANCE_OPTIONS}
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">School Refusal</label>
+                <RadioPill
+                  name="school_refusal"
+                  options={['Yes', 'No']}
+                  value={formData.school_refusal}
+                  onChange={handleChange}
+                  activeClass="bg-violet-600"
                       disabled={isViewMode}
-                      className="h-4 w-4 text-primary-600"
                     />
-                    <span className="font-medium">{option.label}</span>
-                  </label>
-                ))}
               </div>
+              <div>
+                <Select
+                  label="Bullying"
+                  name="bullying"
+                  value={formData.bullying}
+                  onChange={handleChange}
+                  options={CHILD_CLINICAL_BULLYING_OPTIONS}
+                  readOnly={isViewMode}
+                  className={isViewMode ? "bg-gray-50" : ""}
+                />
             </div>
+            </div>
+          </SectionCard>
 
-            {/* Associated Physical Illness Section */}
+          {/* ── 3. PRESENTING COMPLAINTS ─────────────────────────────────── */}
+          <SectionCard number={3} title="Presenting Complaints" accent="bg-amber-600" headerBg="bg-amber-50">
+            <Textarea
+              label=""
+              name="presenting_complaints"
+              value={formData.presenting_complaints}
+              onChange={handleChange}
+              rows={5}
+              placeholder="Describe the main complaints, their duration, and how they started..."
+              readOnly={isViewMode}
+              className={isViewMode ? "bg-gray-50" : ""}
+            />
+          </SectionCard>
+
+          {/* ── 4. NEURODEVELOPMENTAL CONCERNS ───────────────────────────── */}
+          <SectionCard number={4} title="Neurodevelopmental Concerns" accent="bg-teal-600" headerBg="bg-teal-50">
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Associated Physical Illness</h2>
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-3">
-                  {[
-                    { v: false, t: 'No' },
-                    { v: true, t: 'Yes' },
-                  ].map(({ v, t }) => (
-                    <label 
-                      key={t} 
-                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${
-                        formData.has_physical_illness === v 
-                          ? 'border-emerald-300 bg-emerald-50 text-emerald-800' 
-                          : 'border-gray-200 bg-white hover:bg-gray-50'
-                      } ${isViewMode ? 'cursor-not-allowed opacity-75' : ''}`}
-                    >
-                      <input
-                        type="radio"
-                        name="has_physical_illness"
-                        checked={formData.has_physical_illness === v}
-                        onChange={() => !isViewMode && setFormData(prev => ({ ...prev, has_physical_illness: v, physical_illness_specification: v ? prev.physical_illness_specification : '' }))}
+              <ChipSelect
+                options={CHILD_CLINICAL_NEURODEVELOPMENTAL_CONCERNS}
+                selectedValues={formData.neurodevelopmental_concerns}
+                activeClass="bg-teal-600"
                         disabled={isViewMode}
-                        className="h-4 w-4 text-primary-600"
+                onToggle={(val) => handleMultiSelect('neurodevelopmental_concerns', val)}
                       />
-                      <span className="font-medium">{t}</span>
-                    </label>
-                  ))}
-                </div>
-                {formData.has_physical_illness && (
                   <Textarea
-                    label="Specification (Mandatory if Yes)"
-                    name="physical_illness_specification"
-                    value={formData.physical_illness_specification}
+                label="Additional Description"
+                name="neurodevelopmental_description"
+                value={formData.neurodevelopmental_description}
                     onChange={handleChange}
                     rows={3}
-                    required
+                placeholder="Describe neurodevelopmental concerns in detail..."
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
                   />
-                )}
               </div>
-            </div>
+          </SectionCard>
 
-            {/* Complaints / History of Presenting Illness */}
+          {/* ── 5. BEHAVIORAL CONCERNS ───────────────────────────────────── */}
+          <SectionCard number={5} title="Behavioral Concerns" accent="bg-red-600" headerBg="bg-red-50">
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Complaints / History of Presenting Illness</h2>
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-md font-medium text-gray-800 mb-2">1️⃣ Behavioral Issues</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {[
-                      'obstinacy', 'disobedience', 'aggressiveness', 'temper_tantrums',
-                      'hyperactivity', 'stealing', 'delinquent_behaviour', 'low_intelligence',
-                      'scholastic_backwardness', 'poor_memory', 'speech_difficulty', 'hearing_difficulty',
-                      'epileptic', 'non_epileptic', 'both', 'unclear'
-                    ].map(field => (
-                      <label key={field} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          name={`complaints_${field}`}
-                          checked={formData[`complaints_${field}`]}
-                          onChange={handleChange}
-                          className="rounded border-gray-300"
+              <ChipSelect
+                options={CHILD_CLINICAL_BEHAVIORAL_CONCERNS}
+                selectedValues={formData.behavioral_concerns}
+                activeClass="bg-red-600"
+                disabled={isViewMode}
+                onToggle={(val) => handleMultiSelect('behavioral_concerns', val)}
                         />
-                        <span className="text-sm text-gray-700 capitalize">{field.replace(/_/g, ' ')}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h4 className="text-md font-medium text-gray-800 mb-2">2️⃣ Psychological Symptoms</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {[
-                      'abnormal_behaviour', 'irrelevant_talking', 'withdrawnness', 'shyness',
-                      'excessive_clinging', 'anxiety', 'depression'
-                    ].map(field => (
-                      <label key={field} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          name={`complaints_${field}`}
-                          checked={formData[`complaints_${field}`]}
+              <Textarea
+                label="Additional Description"
+                name="behavioral_description"
+                value={formData.behavioral_description}
                           onChange={handleChange}
-                          className="rounded border-gray-300"
+                rows={3}
+                placeholder="Describe behavioral concerns in detail..."
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
                         />
-                        <span className="text-sm text-gray-700 capitalize">{field.replace(/_/g, ' ')}</span>
-                      </label>
-                    ))}
                   </div>
-                </div>
-                <div>
-                  <h4 className="text-md font-medium text-gray-800 mb-2">3️⃣ Specific Problems</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {[
-                      'feeding_problems', 'neurosis', 'thumb_sucking', 'nail_biting',
-                      'abnormal_movements', 'somatic_complaints', 'odd_behaviour', 'inadequate_personal_care'
-                    ].map(field => (
-                      <label key={field} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          name={`complaints_${field}`}
-                          checked={formData[`complaints_${field}`]}
-                          onChange={handleChange}
-                          className="rounded border-gray-300"
-                        />
-                        <span className="text-sm text-gray-700 capitalize">{field.replace(/_/g, ' ')}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+          </SectionCard>
 
-            {/* Examination Section */}
+          {/* ── 6. EMOTIONAL & PSYCHOLOGICAL SYMPTOMS ────────────────────── */}
+          <SectionCard number={6} title="Emotional & Psychological Symptoms" accent="bg-pink-600" headerBg="bg-pink-50">
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Examination</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <ChipSelect
+                options={CHILD_CLINICAL_EMOTIONAL_PSYCHOLOGICAL_SYMPTOMS}
+                selectedValues={formData.emotional_psychological_symptoms}
+                activeClass="bg-pink-600"
+                disabled={isViewMode}
+                onToggle={(val) => handleMultiSelect('emotional_psychological_symptoms', val)}
+              />
+              <Textarea
+                label="Additional Description"
+                name="emotional_psychological_description"
+                value={formData.emotional_psychological_description}
+                          onChange={handleChange}
+                rows={3}
+                placeholder="Describe emotional and psychological symptoms..."
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
+                        />
+                  </div>
+          </SectionCard>
+
+          {/* ── 7. TRAUMA & PSYCHOSOCIAL STRESSORS ───────────────────────── */}
+          <SectionCard number={7} title="Trauma & Psychosocial Stressors" accent="bg-orange-600" headerBg="bg-orange-50">
+            <div className="space-y-4">
+              <ChipSelect
+                options={CHILD_CLINICAL_TRAUMA_PSYCHOSOCIAL_STRESSORS}
+                selectedValues={formData.trauma_psychosocial_stressors}
+                activeClass="bg-orange-600"
+                disabled={isViewMode}
+                onToggle={(val) => handleMultiSelect('trauma_psychosocial_stressors', val)}
+              />
                 <Textarea
-                  label="Significant Physical Findings"
-                  name="significant_physical_findings"
-                  value={formData.significant_physical_findings}
+                label="Additional Description"
+                name="trauma_description"
+                value={formData.trauma_description}
                   onChange={handleChange}
-                  rows={4}
+                rows={3}
+                placeholder="Describe traumatic events or psychosocial stressors..."
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
                 />
-                <Select
-                  label="Physical Development"
-                  name="physical_development"
-                  value={formData.physical_development}
+            </div>
+          </SectionCard>
+
+          {/* ── 8. MEDICAL & FAMILY HISTORY ──────────────────────────────── */}
+          <SectionCard number={8} title="Medical & Family History" accent="bg-green-700" headerBg="bg-green-50">
+            <div className="space-y-4">
+              <Input
+                label="Associated Medical Illness"
+                name="associated_medical_illness"
+                value={formData.associated_medical_illness}
                   onChange={handleChange}
-                  options={CHILD_CLINICAL_PHYSICAL_DEVELOPMENT_OPTIONS}
-                />
-                <div className="md:col-span-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Family History (Multi-select)
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                    {CHILD_CLINICAL_FAMILY_HISTORY_OPTIONS.map(option => (
-                      <label key={option.value} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.family_history.includes(option.value)}
-                          onChange={() => handleMultiSelect('family_history', option.value)}
-                          className="rounded border-gray-300"
-                        />
-                        <span className="text-sm text-gray-700">{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {formData.family_history.includes('Others') && (
+                placeholder="e.g., Epilepsy, Diabetes, None"
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
+              />
                     <Textarea
-                      label="FH Details (Conditional)"
-                      name="family_history_details"
-                      value={formData.family_history_details}
+                label="Developmental History"
+                name="developmental_history"
+                value={formData.developmental_history}
                       onChange={handleChange}
                       rows={3}
-                      className="mt-2"
+                placeholder="Birth history, developmental milestones (motor, speech, social)..."
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Family History of:</label>
+                <ChipSelect
+                  options={CHILD_CLINICAL_FAMILY_HISTORY_NEW}
+                  selectedValues={formData.family_history}
+                  activeClass="bg-green-700"
+                  disabled={isViewMode}
+                  onToggle={(val) => handleMultiSelect('family_history', val)}
                     />
-                  )}
                 </div>
               </div>
-            </div>
+          </SectionCard>
 
-            {/* Diagnosis & Investigation Section */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Diagnosis & Investigation</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Investigations Required
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {[
-                      'detailed_medical_workup', 'social_family_assessment', 'school_related_evaluation',
-                      'play_observation', 'neurology_consultation', 'paediatrics_consultation',
-                      'ent_consultation', 'iq_testing', 'psychological_tests'
+          {/* ── 9. RISK ASSESSMENT ───────────────────────────────────────── */}
+          <SectionCard number={9} title="Risk Assessment" accent="bg-rose-700" headerBg="bg-rose-50">
+            <div className="space-y-3">
+              <p className="text-xs text-rose-700 font-medium bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                ⚠️ Select all applicable risk factors present
+              </p>
+              <ChipSelect
+                options={CHILD_CLINICAL_RISK_ASSESSMENT}
+                selectedValues={formData.risk_assessment}
+                activeClass="bg-rose-700"
+                disabled={isViewMode}
+                onToggle={(val) => handleMultiSelect('risk_assessment', val)}
+              />
+            </div>
+          </SectionCard>
+
+          {/* ── 10. MENTAL STATUS EXAMINATION ────────────────────────────── */}
+          <SectionCard number={10} title="Mental Status Examination (MSE)" accent="bg-indigo-600" headerBg="bg-indigo-50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { label: 'Appearance & Behaviour', name: 'mse_appearance_behaviour', placeholder: 'e.g., Well groomed, calm, cooperative...' },
+                { label: 'Rapport',                name: 'mse_rapport',              placeholder: 'e.g., Good rapport established...' },
+                { label: 'Speech',                 name: 'mse_speech',               placeholder: 'e.g., Normal rate, rhythm and tone...' },
+                { label: 'Mood & Affect',          name: 'mse_mood_affect',          placeholder: 'e.g., Euthymic, affect congruent...' },
+                { label: 'Thought',                name: 'mse_thought',              placeholder: 'e.g., Normal form and content...' },
+                { label: 'Perception',             name: 'mse_perception',           placeholder: 'e.g., No perceptual abnormalities...' },
+                { label: 'Cognition',              name: 'mse_cognition',            placeholder: 'e.g., Oriented, memory intact...' },
+                { label: 'Insight & Judgment',     name: 'mse_insight_judgment',     placeholder: 'e.g., Good insight, sound judgment...' },
                     ].map(field => (
-                      <label key={field} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          name={`investigation_${field}`}
-                          checked={formData[`investigation_${field}`]}
+                <Textarea
+                  key={field.name}
+                  label={field.label}
+                  name={field.name}
+                  value={formData[field.name]}
                           onChange={handleChange}
-                          className="rounded border-gray-300"
+                  rows={2}
+                  placeholder={field.placeholder}
+                  readOnly={isViewMode}
+                  className={isViewMode ? "bg-gray-50" : ""}
                         />
-                        <span className="text-sm text-gray-700 capitalize">{field.replace(/_/g, ' ')}</span>
-                      </label>
                     ))}
                   </div>
-                </div>
+          </SectionCard>
+
+          {/* ── 11. DIAGNOSIS & FORMULATION ──────────────────────────────── */}
+          <SectionCard number={11} title="Diagnosis & Formulation" accent="bg-blue-700" headerBg="bg-blue-50">
                 <Textarea
-                  label="Remarks / Provisional Diagnosis"
-                  name="remarks_provisional_diagnosis"
-                  value={formData.remarks_provisional_diagnosis}
+              label="Provisional Diagnosis"
+              name="provisional_diagnosis"
+              value={formData.provisional_diagnosis}
                   onChange={handleChange}
                   rows={4}
+              placeholder="Enter provisional diagnosis, formulation and ICD-10/DSM-5 codes if applicable..."
+              readOnly={isViewMode}
+              className={isViewMode ? "bg-gray-50" : ""}
+            />
+          </SectionCard>
+
+          {/* ── 12. INVESTIGATIONS REQUIRED ──────────────────────────────── */}
+          <SectionCard number={12} title="Investigations Required" accent="bg-cyan-600" headerBg="bg-cyan-50">
+            <ChipSelect
+              options={CHILD_CLINICAL_INVESTIGATIONS_REQUIRED}
+              selectedValues={formData.investigations_required}
+              activeClass="bg-cyan-600"
+              disabled={isViewMode}
+              onToggle={(val) => handleMultiSelect('investigations_required', val)}
+            />
+          </SectionCard>
+
+          {/* ── 13. TREATMENT PLAN ───────────────────────────────────────── */}
+          <SectionCard number={13} title="Treatment Plan" accent="bg-emerald-700" headerBg="bg-emerald-50">
+            <div className="space-y-5">
+              <Textarea
+                label="Pharmacological Treatment"
+                name="pharmacological_treatment"
+                value={formData.pharmacological_treatment}
+                onChange={handleChange}
+                rows={3}
+                placeholder="e.g., Tab Risperidone 0.5mg OD, Tab Methylphenidate 5mg BD..."
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Psychological Treatment</label>
+                <ChipSelect
+                  options={CHILD_CLINICAL_PSYCHOLOGICAL_TREATMENT_OPTIONS}
+                  selectedValues={formData.psychological_treatment}
+                  activeClass="bg-emerald-700"
+                  disabled={isViewMode}
+                  onToggle={(val) => handleMultiSelect('psychological_treatment', val)}
                 />
               </div>
-            </div>
-
-            {/* Therapy Suggested Section */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Therapy Suggested</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {[
-                  'drugs', 'antiepileptics', 'parental_counselling', 'play_therapy',
-                  'individual_psychotherapy', 'behavioral_therapy', 'psychological_testing', 'nil_evaluation_only'
-                ].map(field => (
-                  <label key={field} className="flex items-center gap-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  High Risk Management (Mx)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {['Yes', 'No'].map(opt => (
+                    <label
+                      key={opt}
+                      className={`flex items-center gap-2 px-5 py-2 rounded-full border text-sm font-semibold transition-all duration-150 ${
+                        formData.high_risk_management === opt
+                          ? opt === 'Yes'
+                            ? 'bg-red-600 text-white border-transparent shadow-sm'
+                            : 'bg-gray-600 text-white border-transparent shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                      } ${isViewMode ? 'cursor-default' : 'cursor-pointer'}`}
+                    >
                     <input
-                      type="checkbox"
-                      name={`therapy_${field}`}
-                      checked={formData[`therapy_${field}`]}
+                        type="radio"
+                        name="high_risk_management"
+                        value={opt}
+                        checked={formData.high_risk_management === opt}
                       onChange={handleChange}
-                      className="rounded border-gray-300"
+                        disabled={isViewMode}
+                        className="sr-only"
                     />
-                    <span className="text-sm text-gray-700 capitalize">
-                      {field === 'nil_evaluation_only' ? 'Nil (only evaluation done)' : field.replace(/_/g, ' ')}
-                    </span>
+                      {opt === 'Yes' ? '⚠️ Yes — High Risk' : '✓ No — Low Risk'}
                   </label>
                 ))}
               </div>
             </div>
+            </div>
+          </SectionCard>
 
-            {/* Disposal Section */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Disposal</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Select
-                  label="Status"
-                  name="disposal_status"
-                  value={formData.disposal_status}
+          {/* ── 14. FOLLOW-UP & DISPOSAL ─────────────────────────────────── */}
+          <SectionCard number={14} title="Follow-Up & Disposal" accent="bg-slate-600" headerBg="bg-slate-50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                label="Follow-up After"
+                name="follow_up_after"
+                value={formData.follow_up_after}
                   onChange={handleChange}
-                  options={CHILD_CLINICAL_DISPOSAL_STATUS_OPTIONS}
-                />
-                {formData.disposal_status === 'Managed in Walk-in only' && (
-                  <Textarea
-                    label="Reason (Mandatory if Walk-in only)"
-                    name="disposal_reason"
-                    value={formData.disposal_reason}
-                    onChange={handleChange}
-                    rows={3}
-                    required
-                    className="md:col-span-2"
-                  />
-                )}
-                <DatePicker
-                  label="Date"
-                  name="disposal_date"
-                  value={formData.disposal_date}
-                  onChange={(value) => setFormData(prev => ({ ...prev, disposal_date: value }))}
+                placeholder="e.g., 2 weeks, 1 month"
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
                 />
                 <Input
-                  label="Time"
-                  name="disposal_time"
-                  type="time"
-                  value={formData.disposal_time}
+                label="Referred To"
+                name="referred_to"
+                value={formData.referred_to}
                   onChange={handleChange}
-                />
-                <Input
-                  label="Distance"
-                  name="disposal_distance"
-                  value={formData.disposal_distance}
-                  onChange={handleChange}
-                />
-                <Textarea
-                  label="Remarks"
-                  name="disposal_remarks"
-                  value={formData.disposal_remarks}
-                  onChange={handleChange}
-                  rows={3}
-                  className="md:col-span-3"
+                placeholder="e.g., Paediatrics, Neurology, Social Work"
+                readOnly={isViewMode}
+                className={isViewMode ? "bg-gray-50" : ""}
                 />
               </div>
-            </div>
+          </SectionCard>
 
-            {/* Action Buttons */}
-            <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-200">
+          {/* ── ACTION BAR ───────────────────────────────────────────────── */}
+          <div className="sticky bottom-4 z-10 print:hidden">
+            <div className="bg-white/90 backdrop-blur-md border border-gray-200 rounded-2xl shadow-xl px-5 py-4 flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-500 hidden sm:block">
+                {isViewMode
+                  ? '📄 Viewing submitted proforma'
+                  : '📝 Fill all sections carefully before submitting'}
+              </p>
+              <div className="flex items-center gap-3 ml-auto">
               {!isViewMode && (
                 <>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => navigate(-1)}
+                      className="text-gray-600 border-gray-300 hover:bg-gray-50"
                   >
                     Cancel
                   </Button>
                   <Button
-                    type="submit"
-                    variant="outline"
+                      type="button"
                     loading={isSaving}
                     onClick={(e) => handleSubmit(e, 'draft')}
-                    className="bg-gradient-to-r from-gray-500 to-gray-600 text-white shadow-lg shadow-gray-500/30 hover:from-gray-600 hover:to-gray-700 hover:shadow-xl hover:shadow-gray-500/40"
+                      className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white px-5 py-2.5 rounded-xl shadow-sm"
                   >
-                    <FiSave className="w-4 h-4 mr-2" />
-                    Save as Draft
+                      <FiSave className="w-4 h-4" />
+                      Save Draft
                   </Button>
                   <Button
                     type="button"
                     loading={isSaving}
                     onClick={(e) => handleSubmit(e, 'submitted')}
-                    className="bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg shadow-green-500/30 hover:from-green-600 hover:to-green-700 hover:shadow-xl hover:shadow-green-500/40"
+                      className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-green-500/30"
                   >
-                    Submit
+                      <FiClipboard className="w-4 h-4" />
+                      Submit Proforma
                   </Button>
                 </>
               )}
@@ -1161,26 +1329,29 @@ const EditChildClinicalProforma = ({
                     type="button"
                     variant="outline"
                     onClick={() => navigate(-1)}
-                    className="bg-gradient-to-r from-gray-500 to-gray-600 text-white shadow-lg shadow-gray-500/30 hover:from-gray-600 hover:to-gray-700 hover:shadow-xl hover:shadow-gray-500/40"
+                      className="text-gray-600 border-gray-300 hover:bg-gray-50"
                   >
-                    <FiArrowLeft className="w-4 h-4 mr-2" />
+                      <FiArrowLeft className="w-4 h-4 mr-1" />
                     Go Back
                   </Button>
+                    {id && (
                   <Button
                     type="button"
                     onClick={() => navigate(`/child-clinical-proformas/${id}/edit`)}
-                    className="bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg shadow-green-500/30 hover:from-green-600 hover:to-green-700 hover:shadow-xl hover:shadow-green-500/40"
+                        className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-green-500/30"
                   >
-                    <FiEdit3 className="w-4 h-4 mr-2" />
-                    Edit
+                        <FiEdit3 className="w-4 h-4" />
+                        Edit Proforma
                   </Button>
+                    )}
                 </>
               )}
             </div>
+            </div>
+          </div>
+
           </form>
           </div>
-        )}
-      </Card>
     </div>
   );
 };

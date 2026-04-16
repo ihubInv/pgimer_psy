@@ -1802,7 +1802,7 @@ const CreateChildPatient = () => {
                                               <p><strong>Onset:</strong> {visit.proforma.onset}</p>
                                               <p><strong>Course:</strong> {visit.proforma.course}</p>
                                               <p><strong>Physical Illness:</strong> {visit.proforma.has_physical_illness ? `Yes (${visit.proforma.physical_illness_specification})` : 'No'}</p>
-                                              <p><strong>Provisional Diagnosis:</strong> {visit.proforma.remarks_provisional_diagnosis || 'N/A'}</p>
+                                              <p><strong>Provisional Diagnosis:</strong> {visit.proforma.provisional_diagnosis || visit.proforma.remarks_provisional_diagnosis || 'N/A'}</p>
                                               <p><strong>Disposal Status:</strong> {visit.proforma.disposal_status || 'N/A'}</p>
                                             </div>
                                           </div>

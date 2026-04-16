@@ -894,8 +894,12 @@ const ClinicalTodayPatients = () => {
       const updatedToday = patientUpdatedDate && patientUpdatedDate === targetDate;
       const hasAssignedRoom = patient?.assigned_room && patient.assigned_room.trim() !== '';
       
-      // Include if created today OR (updated today AND has assigned room)
-      const shouldInclude = createdToday || (updatedToday && hasAssignedRoom);
+      // Include if:
+      //   1. Created today (new patient registered by MWO), OR
+      //   2. Updated today AND has an assigned room (existing patient added to today's list), OR
+      //   3. has_visit_today flag set by backend (existing patient with a visit record for today)
+      const hasVisitToday = patient?.has_visit_today === true;
+      const shouldInclude = createdToday || (updatedToday && hasAssignedRoom) || hasVisitToday;
       
       if (patient.patient_type === 'child') {
         console.log(`[filterTodayPatients] Child patient ${patient.id} (${patient.name}):`, {
@@ -1060,15 +1064,29 @@ const ClinicalTodayPatients = () => {
   });
 
   // Sort patients: FIRST COME FIRST SERVE (FCFS) order
-  // Patients who registered first appear at the top of the list
+  // Patients who registered/arrived first appear at the top of the list
   const filteredPatients = [...filteredPatientsUnsorted].sort((a, b) => {
-    // Get registration timestamp - use created_at for consistent FCFS ordering
+    const targetDateForSort = toISTDateString(selectedDate || new Date());
+
+    // Get the relevant timestamp for FCFS ordering.
+    // For existing patients added today via the follow-up flow their created_at is from a
+    // previous date, so we use updated_at (set to now when the visit was created) to place
+    // them correctly in today's queue.  For new patients we use created_at as usual.
     const getRegistrationTime = (patient) => {
-      // Primary: Use created_at (registration timestamp) for FCFS
+      const patientCreatedDate = patient?.created_at
+        ? toISTDateString(patient.created_at)
+        : '';
+      const isCreatedToday = patientCreatedDate === targetDateForSort;
+
+      // Existing follow-up patient added today → order by when they were added to today's list
+      if (!isCreatedToday && patient.updated_at) {
+        return new Date(patient.updated_at).getTime();
+      }
+      // New patient registered today → order by registration time
       if (patient.created_at) {
         return new Date(patient.created_at).getTime();
       }
-      // Fallback for existing patients with visit_date
+      // Fallback for patients with only a visit_date
       if (patient.visit_date) {
         return new Date(patient.visit_date).getTime();
       }

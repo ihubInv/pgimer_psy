@@ -10,22 +10,20 @@ class ChildClinicalProformaController {
 
       // Debug: Log incoming data types to verify no coercion
       console.log('[childClinicalProformaController] Incoming request data types:', {
-        'duration_of_illness (type)': typeof data.duration_of_illness,
-        'duration_of_illness (value)': data.duration_of_illness,
-        'onset (type)': typeof data.onset,
-        'onset (value)': data.onset,
-        'course (type)': typeof data.course,
-        'course (value)': data.course,
-        'physical_development (type)': typeof data.physical_development,
-        'physical_development (value)': data.physical_development,
-        'disposal_status (type)': typeof data.disposal_status,
-        'disposal_status (value)': data.disposal_status,
-        'source_of_referral (type)': Array.isArray(data.source_of_referral) ? 'array' : typeof data.source_of_referral,
-        'source_of_referral (value)': data.source_of_referral,
+        // New fields
+        'presenting_complaints': data.presenting_complaints,
+        'neurodevelopmental_concerns (type)': Array.isArray(data.neurodevelopmental_concerns) ? 'array' : typeof data.neurodevelopmental_concerns,
+        'behavioral_concerns (type)': Array.isArray(data.behavioral_concerns) ? 'array' : typeof data.behavioral_concerns,
+        'emotional_psychological_symptoms (type)': Array.isArray(data.emotional_psychological_symptoms) ? 'array' : typeof data.emotional_psychological_symptoms,
+        'risk_assessment (type)': Array.isArray(data.risk_assessment) ? 'array' : typeof data.risk_assessment,
+        'investigations_required (type)': Array.isArray(data.investigations_required) ? 'array' : typeof data.investigations_required,
+        'provisional_diagnosis': data.provisional_diagnosis,
+        'follow_up_after': data.follow_up_after,
+        'referred_to': data.referred_to,
+        // Legacy fields
         'family_history (type)': Array.isArray(data.family_history) ? 'array' : typeof data.family_history,
         'family_history (value)': data.family_history,
-        'complaints_disobedience (type)': typeof data.complaints_disobedience,
-        'complaints_disobedience (value)': data.complaints_disobedience,
+        'disposal_status': data.disposal_status,
       });
 
       // Basic validation
