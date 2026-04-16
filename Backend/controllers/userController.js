@@ -5,6 +5,7 @@ const LoginOTP = require('../models/LoginOTP');
 const RefreshToken = require('../models/RefreshToken');
 const { sendEmail } = require('../config/email');
 const { generateAccessToken, getDeviceInfo, getIpAddress } = require('../utils/tokenUtils');
+const { isMobileAppClient } = require('../utils/mobileClient');
 const db = require('../config/database');
 
 class UserController {
@@ -1819,14 +1820,17 @@ class UserController {
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 
-      // SECURITY: Store access token in cookie instead of response body to hide it from network tab
-      // Non-HttpOnly so frontend can read it for API calls, but not visible in response body
-      res.cookie('accessToken', accessToken, {
-        httpOnly: false, // Allow frontend to read it
-        secure: false, // Set to false for HTTP
-        sameSite: 'lax',
-        maxAge: 10 * 60 * 1000 // 10 minutes (same as token expiry)
-      });
+      const mobile = isMobileAppClient(req);
+
+      // Web / browser: non-HttpOnly access cookie; mobile: omit cookie and return tokens in JSON
+      if (!mobile) {
+        res.cookie('accessToken', accessToken, {
+          httpOnly: false,
+          secure: false,
+          sameSite: 'lax',
+          maxAge: 10 * 60 * 1000
+        });
+      }
 
       // Update last login
       await user.updateLastLogin();
@@ -1841,28 +1845,30 @@ class UserController {
         redirectUrl = '/patients';
       }
 
-      // SECURITY FIX #3: Role is included in response for frontend navigation
-      // Role is also in JWT token for authorization, but we include it here for UI purposes
-      // All authorization is still validated server-side from database
-      // SECURITY: Access token removed from response body - stored in cookie instead
       const userResponse = user.toJSON();
-      
+
+      const data = {
+        user: {
+          id: userResponse.id,
+          name: userResponse.name,
+          email: userResponse.email,
+          role: userResponse.role,
+          two_factor_enabled: userResponse.two_factor_enabled,
+          created_at: userResponse.created_at
+        },
+        expiresIn: 600,
+        redirectUrl
+      };
+
+      if (mobile) {
+        data.accessToken = accessToken;
+        data.refreshToken = refreshTokenRecord.token;
+      }
+
       res.json({
         success: true,
         message: 'Login successful',
-        data: {
-          user: {
-            id: userResponse.id,
-            name: userResponse.name,
-            email: userResponse.email,
-            role: userResponse.role, // Include role for frontend navigation
-            two_factor_enabled: userResponse.two_factor_enabled,
-            created_at: userResponse.created_at
-          },
-          // accessToken removed - now stored in cookie
-          expiresIn: 600, // 10 minutes in seconds (consistent with session timeout)
-          redirectUrl: redirectUrl // Add redirect URL for frontend
-        }
+        data
       });
     } catch (error) {
       console.error('Complete login error:', error);

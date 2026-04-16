@@ -442,6 +442,7 @@
 const RefreshToken = require('../models/RefreshToken');
 const User = require('../models/User');
 const { generateAccessToken } = require('../utils/tokenUtils');
+const { isMobileAppClient, getRefreshTokenFromRequest } = require('../utils/mobileClient');
 
 class SessionController {
 
@@ -451,7 +452,7 @@ class SessionController {
    */
   static async refreshToken(req, res) {
     try {
-      const refreshToken = req.cookies?.refreshToken;
+      const refreshToken = getRefreshTokenFromRequest(req);
 
       if (!refreshToken) {
         return res.status(401).json({
@@ -509,21 +510,25 @@ class SessionController {
         role: user.role
       });
 
-      // SECURITY: Store access token in cookie instead of response body to hide it from network tab
-      const isHTTPS = false; // Using HTTP, not HTTPS
-      res.cookie('accessToken', accessToken, {
-        httpOnly: false, // Allow frontend to read it
-        secure: false, // Set to false for HTTP
-        sameSite: 'lax',
-        maxAge: 10 * 60 * 1000 // 10 minutes (same as token expiry)
-      });
+      const mobile = isMobileAppClient(req);
+
+      if (!mobile) {
+        res.cookie('accessToken', accessToken, {
+          httpOnly: false,
+          secure: false,
+          sameSite: 'lax',
+          maxAge: 10 * 60 * 1000
+        });
+      }
+
+      const data = { expiresIn: 600 };
+      if (mobile) {
+        data.accessToken = accessToken;
+      }
 
       return res.json({
         success: true,
-        data: {
-          // accessToken removed - now stored in cookie
-          expiresIn: 600 // 10 minutes
-        }
+        data
       });
 
     } catch (error) {
@@ -541,7 +546,7 @@ class SessionController {
    */
   static async logout(req, res) {
     try {
-      const refreshToken = req.cookies?.refreshToken;
+      const refreshToken = getRefreshTokenFromRequest(req);
 
       if (refreshToken) {
         const tokenRecord = await RefreshToken.findByToken(refreshToken);
@@ -574,7 +579,7 @@ class SessionController {
    */
   static async updateActivity(req, res) {
     try {
-      const refreshToken = req.cookies?.refreshToken;
+      const refreshToken = getRefreshTokenFromRequest(req);
 
       if (!refreshToken) {
         return res.status(401).json({
@@ -614,7 +619,7 @@ class SessionController {
    */
   static async getSessionInfo(req, res) {
     try {
-      const refreshToken = req.cookies?.refreshToken;
+      const refreshToken = getRefreshTokenFromRequest(req);
 
       if (!refreshToken) {
         return res.status(401).json({
