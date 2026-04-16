@@ -2204,14 +2204,9 @@ class PatientController {
         });
       }
 
-      // Use the new PatientFileController to get files from patient_files table
       const PatientFileController = require('./patientFileController');
-      const fileReq = {
-        params: { patient_id: patientIdInt },
-        user: req.user
-      };
-      
-      // Call PatientFileController.getPatientFiles
+      await PatientFileController.migratePatientDetailsTempPathsForPatient(patientIdInt);
+
       const PatientFile = require('../models/PatientFile');
       const patientFile = await PatientFile.findByPatientId(patientIdInt);
       

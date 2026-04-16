@@ -24,10 +24,10 @@ import * as XLSX from 'xlsx-js-style';
 
 import { useGetPrescriptionByIdQuery, useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 import { useGetPatientVisitHistoryQuery, useGetPatientFilesQuery } from '../../features/patients/patientsApiSlice';
-import ViewADL from '../adl/ViewADL';
+import OutPatientIntakeRecordSummaryView from '../../components/OutPatientIntakeRecordSummaryView';
 import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
 import PrescriptionView from '../PrescribeMedication/PrescriptionView';
-import EditClinicalProforma from '../clinical/EditClinicalProforma';
+import WalkInClinicalProformaSummaryView from '../../components/WalkInClinicalProformaSummaryView';
 import FilePreview from '../../components/FilePreview';
 import {
   PatientDetailField,
@@ -685,143 +685,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   const pastHistoryPatientDetailsPrintRef = useRef(null);
   // Visit-based print refs (using Map to store refs for each visit)
   const visitPrintRefs = useRef(new Map());
-
-  // Hide submit buttons, Add buttons, and disable checkboxes in embedded clinical proforma view
-  useEffect(() => {
-    // Check if component is still mounted and ref exists
-    if (!expandedCards.clinical || !clinicalProformaPrintRef.current) {
-      return;
-    }
-
-    // Use a flag to track if component is still mounted
-    let isMounted = true;
-
-    // Use requestAnimationFrame to ensure DOM is ready
-    const timeoutId = setTimeout(() => {
-      if (!isMounted || !clinicalProformaPrintRef.current) {
-        return;
-      }
-
-      try {
-        const form = clinicalProformaPrintRef.current.querySelector('form');
-        if (form && isMounted) {
-          // Hide submit button section (last div with flex justify-end)
-          const allDivs = form.querySelectorAll('div.flex.justify-end');
-          allDivs.forEach(div => {
-            if (!isMounted) return;
-            const hasSubmitButton = div.querySelector('button[type="submit"]');
-            if (hasSubmitButton) {
-              div.style.display = 'none';
-            }
-          });
-          // Also hide any submit buttons directly
-          const submitButtons = form.querySelectorAll('button[type="submit"]');
-          submitButtons.forEach(btn => {
-            if (isMounted) {
-              btn.style.display = 'none';
-            }
-          });
-          // Hide cancel buttons, Add buttons, and cross (X) buttons
-          const allButtons = form.querySelectorAll('button');
-          allButtons.forEach(btn => {
-            if (!isMounted) return;
-          const text = btn.textContent?.trim() || '';
-          // Check for buttons with X icon or cross symbol
-          const svg = btn.querySelector('svg');
-          let hasXIcon = false;
-          if (svg) {
-            const svgPaths = svg.querySelectorAll('path');
-            svgPaths.forEach(path => {
-              const d = path.getAttribute('d') || '';
-              // Common X icon path patterns
-              if (d.includes('M18 6L6 18') || 
-                  d.includes('M6 6l12 12') || 
-                  d.includes('M6 18L18 6') ||
-                  d.includes('M6 6 L18 18') ||
-                  d.includes('M18 6 L6 18')) {
-                hasXIcon = true;
-              }
-            });
-            const svgClass = svg.className?.toString().toLowerCase() || '';
-            if (svgClass.includes('x') || svgClass.includes('close') || svgClass.includes('times')) {
-              hasXIcon = true;
-            }
-          }
-          const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-          const title = (btn.getAttribute('title') || '').toLowerCase();
-          const className = (btn.className || '').toLowerCase();
-          const isCloseButton = ariaLabel.includes('close') || 
-                               ariaLabel.includes('remove') || 
-                               ariaLabel.includes('delete') ||
-                               ariaLabel.includes('clear') ||
-                               title.includes('close') ||
-                               title.includes('remove') ||
-                               title.includes('delete') ||
-                               title.includes('clear') ||
-                               className.includes('close') ||
-                               className.includes('remove') ||
-                               className.includes('delete') ||
-                               className.includes('clear') ||
-                               className.includes('times');
-          
-          // Hide buttons that match any of these criteria
-          if (text === 'Cancel' || 
-              text.includes('Create') || 
-              text.includes('Update') || 
-              text.includes('Saving') || 
-              text.includes('Add') || 
-              text === '+ Add' || 
-              text === '×' || 
-              text === '✕' ||
-              text === 'X' ||
-              hasXIcon ||
-              isCloseButton) {
-            if (isMounted) {
-              btn.style.display = 'none';
-            }
-          }
-        });
-        // Disable all checkboxes
-        if (isMounted) {
-          const checkboxes = form.querySelectorAll('input[type="checkbox"]');
-          checkboxes.forEach(checkbox => {
-            if (isMounted) {
-              checkbox.disabled = true;
-              checkbox.style.cursor = 'not-allowed';
-            }
-          });
-          // Disable all radio buttons
-          const radioButtons = form.querySelectorAll('input[type="radio"]');
-          radioButtons.forEach(radio => {
-            if (isMounted) {
-              radio.disabled = true;
-              radio.style.cursor = 'not-allowed';
-            }
-          });
-          // Disable all text inputs and textareas
-          const textInputs = form.querySelectorAll('input[type="text"], input[type="number"], textarea, select');
-          textInputs.forEach(input => {
-            if (isMounted) {
-              input.disabled = true;
-              input.style.cursor = 'not-allowed';
-            }
-          });
-        }
-      }
-      } catch (error) {
-        // Silently handle errors if DOM node is not available (component unmounted)
-        if (isMounted) {
-          console.warn('[PatientDetailsView] DOM manipulation error:', error);
-        }
-      }
-    }, 0);
-
-    // Cleanup function to prevent accessing DOM after unmount
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, [expandedCards.clinical, lastVisitProforma]);
 
   // Print functionality for Patient Details section
   const handlePrintPatientDetails = async () => {
@@ -3921,55 +3784,9 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                   </span>
                   </h4>
                   
-                  {/* Show clinical proforma form with all fields */}
-                  <div ref={clinicalProformaPrintRef} className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50/30 clinical-proforma-view">
-                    <EditClinicalProforma
-                      key={`view-proforma-${lastVisitProforma?.id || Date.now()}`}
-                      initialData={{
-                        ...lastVisitProforma,
-                        patient_id: lastVisitProforma.patient_id?.toString() || patient?.id?.toString() || '',
-                        visit_date: lastVisitProforma.visit_date ? (lastVisitProforma.visit_date.includes('T') ? lastVisitProforma.visit_date.split('T')[0] : lastVisitProforma.visit_date) : new Date().toISOString().split('T')[0],
-                        assigned_doctor: lastVisitProforma.assigned_doctor?.toString() || patient?.assigned_doctor_id?.toString() || '',
-                        onset_duration: lastVisitProforma.onset_duration || '',
-                        course: lastVisitProforma.course || '',
-                        precipitating_factor: lastVisitProforma.precipitating_factor || '',
-                        illness_duration: lastVisitProforma.illness_duration || '',
-                        current_episode_since: lastVisitProforma.current_episode_since || '',
-                        past_history: lastVisitProforma.past_history || '',
-                        family_history: lastVisitProforma.family_history || '',
-                        gpe: lastVisitProforma.gpe || '',
-                        diagnosis: lastVisitProforma.diagnosis || '',
-                        icd_code: lastVisitProforma.icd_code || '',
-                        disposal: lastVisitProforma.disposal || '',
-                        workup_appointment: lastVisitProforma.workup_appointment || '',
-                        referred_to: lastVisitProforma.referred_to || '',
-                        treatment_prescribed: lastVisitProforma.treatment_prescribed || '',
-                        mse_delusions: lastVisitProforma.mse_delusions || '',
-                        adl_reasoning: lastVisitProforma.adl_reasoning || '',
-                        mood: lastVisitProforma.mood || [],
-                        behaviour: lastVisitProforma.behaviour || [],
-                        speech: lastVisitProforma.speech || [],
-                        thought: lastVisitProforma.thought || [],
-                        perception: lastVisitProforma.perception || [],
-                        somatic: lastVisitProforma.somatic || [],
-                        bio_functions: lastVisitProforma.bio_functions || [],
-                        adjustment: lastVisitProforma.adjustment || [],
-                        cognitive_function: lastVisitProforma.cognitive_function || [],
-                        fits: lastVisitProforma.fits || [],
-                        sexual_problem: lastVisitProforma.sexual_problem || [],
-                        substance_use: lastVisitProforma.substance_use || [],
-                        associated_medical_surgical: lastVisitProforma.associated_medical_surgical || [],
-                        mse_behaviour: lastVisitProforma.mse_behaviour || [],
-                        mse_affect: lastVisitProforma.mse_affect || [],
-                        mse_thought: lastVisitProforma.mse_thought || [],
-                        mse_perception: lastVisitProforma.mse_perception || [],
-                        mse_cognitive_function: lastVisitProforma.mse_cognitive_function || [],
-                        informant_present: lastVisitProforma.informant_present ?? true,
-                        nature_of_information: lastVisitProforma.nature_of_information || '',
-                      }}
-                      onUpdate={() => {}}
-                      hideFileUpload={true}
-                    />
+                  {/* Read-only summary: same tile layout as Patient Details; only recorded fields */}
+                  <div ref={clinicalProformaPrintRef} className="clinical-proforma-view">
+                    <WalkInClinicalProformaSummaryView proforma={lastVisitProforma} patient={patient} />
                   </div>
                 </div>
               ) : (
@@ -4021,9 +3838,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           {expandedCards.adl && (
             <div className="p-6">
               {patientAdlFiles.length > 0 ? (
-              
-                <ViewADL adlFiles={patientAdlFiles[0]}/>
-               
+                <OutPatientIntakeRecordSummaryView adlFile={patientAdlFiles[0]} patient={patient} />
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <FiFolder className="h-12 w-12 mx-auto mb-3 text-gray-300" />
@@ -4396,7 +4211,10 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                           </div>
                                           {isVisitSectionExpanded(visit.visitId, 'adl') && (
                                             <div className="mt-3">
-                                              <ViewADL adlFiles={visit.adlFile} />
+                                              <OutPatientIntakeRecordSummaryView
+                                                adlFile={visit.adlFile}
+                                                patient={patient}
+                                              />
                                             </div>
                                           )}
                                         </div>

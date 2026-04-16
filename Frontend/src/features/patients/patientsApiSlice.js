@@ -77,9 +77,13 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         // If files are present, use FormData; otherwise use JSON
         if (files && files.length > 0 || (files_to_remove && files_to_remove.length > 0)) {
           const formData = new FormData();
-          
-          // Append patient data
+
+          // Ensure patient id is first in multipart body so multer never falls back to "temp"
+          formData.append('patient_id', String(id));
+
+          // Append patient data (skip patient_id — already set above for multer)
           Object.keys(data).forEach(key => {
+            if (key === 'patient_id') return;
             if (data[key] !== undefined && data[key] !== null) {
               if (typeof data[key] === 'object' && !(data[key] instanceof File)) {
                 formData.append(key, JSON.stringify(data[key]));

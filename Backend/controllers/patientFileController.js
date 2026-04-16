@@ -183,7 +183,91 @@ const deleteFileFromDisk = (filePath, options = {}) => {
   };
 };
 
+/**
+ * Rewrites .../Patient_Details/temp/... paths to .../Patient_Details/{patientId}/... and moves files on disk.
+ * Fixes uploads where multipart file parts arrived before patient_id (multer used "temp" folder).
+ */
+async function migratePatientDetailsTempPathsForPatient(patientIdInt) {
+  if (!patientIdInt || patientIdInt <= 0) return;
+
+  const normalizePathStr = (p) => {
+    if (p == null) return '';
+    if (typeof p === 'object' && p !== null) {
+      p = p.path || p.url || p.filePath || '';
+    }
+    return String(p).replace(/\\/g, '/');
+  };
+
+  // Match .../fileupload/<role>/Patient_Details/temp/<file> (absolute paths use .../Backend/fileupload/...)
+  const parseTempPath = (norm) => {
+    const m = norm.match(/\/fileupload\/([^/]+)\/(Patient_Details)\/temp\/(.+)$/i);
+    if (!m) return null;
+    return { roleFolder: m[1], docType: m[2], filename: m[3] };
+  };
+
+  const migrateOneRawPath = (rawPath) => {
+    const norm = normalizePathStr(rawPath);
+    const parsed = parseTempPath(norm);
+    if (!parsed) return rawPath;
+
+    const newWebPath = `/fileupload/${parsed.roleFolder}/${parsed.docType}/${patientIdInt}/${parsed.filename}`;
+    const oldTail = `/fileupload/${parsed.roleFolder}/${parsed.docType}/temp/${parsed.filename}`;
+    const oldAbs = uploadConfig.urlPathToAbsolutePath(oldTail);
+    const newAbs = uploadConfig.urlPathToAbsolutePath(newWebPath);
+
+    try {
+      if (!fs.existsSync(oldAbs)) {
+        if (fs.existsSync(newAbs)) {
+          return newWebPath;
+        }
+        console.warn('[migratePatientDetailsTempPaths] Source file missing, keeping DB path as-is:', oldAbs);
+        return rawPath;
+      }
+      fs.mkdirSync(path.dirname(newAbs), { recursive: true });
+      if (fs.existsSync(newAbs)) {
+        fs.unlinkSync(newAbs);
+      }
+      fs.renameSync(oldAbs, newAbs);
+      console.log('[migratePatientDetailsTempPaths] Moved file for patient', patientIdInt, oldAbs, '->', newAbs);
+      return newWebPath;
+    } catch (err) {
+      console.error('[migratePatientDetailsTempPaths] Failed to move file:', err.message);
+      return rawPath;
+    }
+  };
+
+  const pf = await PatientFile.findByPatientId(patientIdInt);
+  if (pf && Array.isArray(pf.attachment) && pf.attachment.length > 0) {
+    const next = pf.attachment.map(migrateOneRawPath);
+    const changed = next.some((v, i) => v !== pf.attachment[i]);
+    if (changed) {
+      await PatientFile.update(pf.id, { attachment: next });
+      console.log('[migratePatientDetailsTempPaths] Updated patient_files row', pf.id, 'for patient', patientIdInt);
+    }
+  }
+
+  const patient = await Patient.findById(patientIdInt);
+  let legacy = patient?.patient_files;
+  if (typeof legacy === 'string') {
+    try {
+      legacy = JSON.parse(legacy);
+    } catch {
+      legacy = [];
+    }
+  }
+  if (patient && Array.isArray(legacy) && legacy.length > 0) {
+    const next = legacy.map(migrateOneRawPath);
+    const changed = next.some((v, i) => v !== legacy[i]);
+    if (changed) {
+      await Patient.updateFiles(patientIdInt, next);
+      console.log('[migratePatientDetailsTempPaths] Updated legacy patient_files on registered_patient', patientIdInt);
+    }
+  }
+}
+
 class PatientFileController {
+  static migratePatientDetailsTempPathsForPatient = migratePatientDetailsTempPathsForPatient;
+
   // Get patient files
   static async getPatientFiles(req, res) {
     try {
@@ -205,6 +289,8 @@ class PatientFileController {
           message: 'Patient not found'
         });
       }
+
+      await migratePatientDetailsTempPathsForPatient(patientIdInt);
 
       // Get patient files
       const patientFile = await PatientFile.findByPatientId(patientIdInt);

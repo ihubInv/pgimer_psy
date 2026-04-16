@@ -15,8 +15,15 @@ if (!fs.existsSync(baseUploadsDir)) {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     try {
-      // Get patient ID from params or body
-      const patientId = req.params.patient_id || req.params.id || req.body.patient_id || 'temp';
+      // Get patient ID from params, query (reliable before multipart body fields), or body.
+      // Note: FormData often sends file parts before text fields, so req.body.patient_id may be
+      // undefined when multer runs — prefer URL params or ?patient_id= on POST /patient-files/create.
+      const patientId =
+        req.params.patient_id ||
+        req.params.id ||
+        req.query.patient_id ||
+        req.body.patient_id ||
+        'temp';
       
       // Get user role from authenticated user or default to 'Admin'
       const userRole = req.user?.role?.trim() || req.body.role || 'Admin';

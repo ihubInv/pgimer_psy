@@ -15,23 +15,24 @@ export const patientFilesApiSlice = apiSlice.injectEndpoints({
     createPatientFiles: builder.mutation({
       queryFn: async ({ patient_id, user_id, files }, _queryApi, _extraOptions, fetchWithBQ) => {
         const formData = new FormData();
-        
-        // Append files with 'attachments[]' field name
+
+        // CRITICAL: Append patient_id (and user_id) BEFORE file parts so multer's destination()
+        // sees a real id. If files come first in the multipart stream, body fields are not parsed yet → temp folder.
+        formData.append('patient_id', String(patient_id));
+        if (user_id) {
+          formData.append('user_id', String(user_id));
+        }
+
         files.forEach((file) => {
           formData.append('attachments[]', file);
         });
-        
-        // Append patient_id and user_id
-        formData.append('patient_id', patient_id);
-        if (user_id) {
-          formData.append('user_id', user_id);
-        }
 
         const baseUrl = import.meta.env.VITE_API_URL || '/api';
         const token = JSON.parse(localStorage.getItem('user'))?.token || localStorage.getItem('token');
+        const query = new URLSearchParams({ patient_id: String(patient_id) });
 
         try {
-          const response = await fetch(`${baseUrl}/patient-files/create`, {
+          const response = await fetch(`${baseUrl}/patient-files/create?${query.toString()}`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -66,18 +67,17 @@ export const patientFilesApiSlice = apiSlice.injectEndpoints({
     updatePatientFiles: builder.mutation({
       queryFn: async ({ patient_id, files, files_to_remove }, _queryApi, _extraOptions, fetchWithBQ) => {
         const formData = new FormData();
-        
-        // Append new files with 'attachments[]' field name
-        if (files && files.length > 0) {
-          files.forEach((file) => {
-            formData.append('attachments[]', file);
-          });
-        }
-        
-        // Append files to remove
+
+        // Remove markers first so multer still has params.patient_id from URL for any new files
         if (files_to_remove && files_to_remove.length > 0) {
           files_to_remove.forEach((filePath) => {
             formData.append('files_to_remove[]', filePath);
+          });
+        }
+
+        if (files && files.length > 0) {
+          files.forEach((file) => {
+            formData.append('attachments[]', file);
           });
         }
 
