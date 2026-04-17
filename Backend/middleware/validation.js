@@ -114,10 +114,7 @@ const validatePatient = [
     .optional()
     .isInt({ min: 0, max: 150 })
     .withMessage('Age must be between 0 and 150'),
-  body('assigned_room')
-    .optional()
-    .isLength({ max: 10 })
-    .withMessage('Room number must not exceed 10 characters'),
+  body('assigned_room').optional(),
   body('cr_no')
     .optional()
     .isLength({ min: 1, max: 50 })
@@ -148,10 +145,7 @@ const validatePatientRegistration = [
     .optional()
     .isInt({ min: 0, max: 150 })
     .withMessage('Age must be between 0 and 150'),
-  body('assigned_room')
-    .optional()
-    .isLength({ max: 10 })
-    .withMessage('Room number must not exceed 10 characters'),
+  body('assigned_room').optional(),
   body('cr_no')
     .optional()
     .isLength({ min: 1, max: 50 })
@@ -500,10 +494,7 @@ const validateClinicalProforma = [
     .optional()
     .isIn(['first_visit', 'follow_up'])
     .withMessage('Visit type must be first_visit or follow_up'),
-  body('room_no')
-    .optional()
-    .isLength({ max: 10 })
-    .withMessage('Room number must not exceed 10 characters'),
+  body('room_no').optional(),
   body('doctor_decision')
     .optional()
     .isIn(['simple_case', 'complex_case'])
