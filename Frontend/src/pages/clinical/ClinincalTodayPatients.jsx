@@ -1278,7 +1278,17 @@ const ClinicalTodayPatients = () => {
                   </p>
                   {effectiveRoomData.data.room_assignment_time && (
                     <p className="text-xs text-gray-500 mt-1">
-                      Assigned at: {new Date(effectiveRoomData.data.room_assignment_time).toLocaleString()}
+                      Assigned at:{' '}
+                      {new Date(effectiveRoomData.data.room_assignment_time).toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: 'numeric',
+                        month: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: true,
+                      })}
                     </p>
                   )}
                 </div>

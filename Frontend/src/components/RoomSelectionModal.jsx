@@ -225,7 +225,18 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
                 <strong>Current Room:</strong> {myRoomData.data.current_room}
                 {myRoomData.data.room_assignment_time && (
                   <span className="ml-2 text-blue-600">
-                    (Assigned at: {new Date(myRoomData.data.room_assignment_time).toLocaleString()})
+                    (Assigned at:{' '}
+                    {new Date(myRoomData.data.room_assignment_time).toLocaleString('en-IN', {
+                      timeZone: 'Asia/Kolkata',
+                      day: 'numeric',
+                      month: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: true,
+                    })}
+                    )
                   </span>
                 )}
               </p>
