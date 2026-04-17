@@ -3889,10 +3889,11 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           {expandedCards.prescriptions && (
             <div className="p-6">
               {allPrescriptions.length > 0 ? (
-
-                
-                <PrescriptionView prescription={allPrescriptions[0]} clinicalProformaId={proformaIds[0]} patientId={patient?.id}/>
-              
+                <PrescriptionView
+                  prescription={allPrescriptions}
+                  clinicalProformaId={allPrescriptions[0]?.proforma_id ?? proformaIds[0]}
+                  patientId={patient?.id}
+                />
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <FiPackage className="h-12 w-12 mx-auto mb-3 text-gray-300" />
