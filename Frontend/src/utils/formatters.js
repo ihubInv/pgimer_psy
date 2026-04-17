@@ -14,6 +14,20 @@ export const formatDateTime = (date) => {
   return formatDate(date, 'PPP p');
 };
 
+/** ADL / Out Patient Intake: prefer file_created_date, else DB created_at (with time). */
+export const formatAdlRecordCreated = (adlFile) => {
+  if (!adlFile) return '';
+  if (adlFile.file_created_date) {
+    const s = formatDate(adlFile.file_created_date);
+    return s === '-' ? '' : s;
+  }
+  if (adlFile.created_at) {
+    const s = formatDateTime(adlFile.created_at);
+    return s === '-' ? '' : s;
+  }
+  return '';
+};
+
 export const formatCurrency = (amount) => {
   if (!amount && amount !== 0) return '-';
   return new Intl.NumberFormat('en-IN', {

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, memo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../../components/Card';
-import { formatDate, formatDateForDatePicker } from '../../utils/formatters';
+import { formatDate, formatDateForDatePicker, formatAdlRecordCreated } from '../../utils/formatters';
 import {
   getFileStatusLabel, getCaseSeverityLabel,formatDateTime
 } from '../../utils/enumMappings';
@@ -25,7 +25,6 @@ import * as XLSX from 'xlsx-js-style';
 import { useGetPrescriptionByIdQuery, useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 import { useGetPatientVisitHistoryQuery, useGetPatientFilesQuery } from '../../features/patients/patientsApiSlice';
 import OutPatientIntakeRecordSummaryView from '../../components/OutPatientIntakeRecordSummaryView';
-import ClinicalProformaDetails from '../clinical/ClinicalProformaDetails';
 import PrescriptionView from '../PrescribeMedication/PrescriptionView';
 import WalkInClinicalProformaSummaryView from '../../components/WalkInClinicalProformaSummaryView';
 import FilePreview from '../../components/FilePreview';
@@ -146,6 +145,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   // State for past history cards
   const [expandedPastHistoryCards, setExpandedPastHistoryCards] = useState({
     patientDetails: false,
+    intakeRecord: false,
   });
 
   // State to track which visit cards are expanded (visit-based structure)
@@ -256,7 +256,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   const canViewClinicalProforma = canViewAllSections;
   const canViewADLFile = canViewAllSections;
   const canViewPrescriptions = canViewAllSections;
-  const patientAdlFiles = adlData?.data?.adlFiles || [];
+  const patientAdlFiles = adlData?.data?.adlFiles || adlData?.data?.files || [];
 
   // Fetch patient files for image preview (available for all roles including MWO)
   const { data: patientFilesData, refetch: refetchFiles } = useGetPatientFilesQuery(patient?.id, {
@@ -525,6 +525,21 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     // Track which prescription records have been associated with visits
     const usedPrescriptionRecordIds = new Set();
 
+    const findAdlForVisit = (visitProforma, visitId, isFollowUpVisit) => {
+      if (isFollowUpVisit || !patientAdlFiles.length) return null;
+      const byClinical = patientAdlFiles.find(
+        (adl) =>
+          adl.clinical_proforma_id != null &&
+          String(adl.clinical_proforma_id) === String(visitId)
+      );
+      if (byClinical) return byClinical;
+      const linkedAdlId = visitProforma?.adl_file_id;
+      if (linkedAdlId != null && linkedAdlId !== '' && linkedAdlId !== 0) {
+        return patientAdlFiles.find((adl) => String(adl.id) === String(linkedAdlId)) || null;
+      }
+      return null;
+    };
+
     // Create visit objects with all associated forms
     const proformaVisits = sortedProformas.map((proforma) => {
       // Handle follow-up visits (record_type === 'followup_visit')
@@ -533,7 +548,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       const visitDate = proforma.visit_date || proforma.created_at;
       
       // Find associated ADL file (only for regular clinical proformas, not follow-ups)
-      const adlFile = !isFollowUp ? patientAdlFiles.find(adl => adl.clinical_proforma_id === visitId) : null;
+      const adlFile = !isFollowUp ? findAdlForVisit(proforma, visitId, isFollowUp) : null;
       
       // Find associated prescription
       // For follow-ups, we need to find prescription by clinical_proforma_id if it exists
@@ -664,9 +679,31 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         isStandalonePrescription: true, // Flag to identify standalone prescription visits
       };
     });
+
+    // When ADL is not linked by clinical_proforma_id / proforma.adl_file_id, attach by same
+    // calendar day as the walk-in visit (IST). Each ADL attaches to at most one visit.
+    const assignedAdlIds = new Set(
+      proformaVisits
+        .map((v) => v.adlFile?.id)
+        .filter((id) => id != null && id !== '')
+        .map((id) => String(id))
+    );
+    const proformaVisitsWithDateAdl = proformaVisits.map((visit) => {
+      if (visit.isFollowUp || visit.adlFile || !visit.proforma) return visit;
+      const visitDay = toISTDateString(visit.visitDate);
+      if (!visitDay) return visit;
+      const adl = patientAdlFiles.find((a) => {
+        if (assignedAdlIds.has(String(a.id))) return false;
+        const adlDay = toISTDateString(a.file_created_date || a.created_at);
+        return adlDay && adlDay === visitDay;
+      });
+      if (!adl) return visit;
+      assignedAdlIds.add(String(adl.id));
+      return { ...visit, adlFile: adl, hasAdl: true };
+    });
     
     // Combine proforma visits and standalone prescription visits, sort by date (newest first)
-    const allVisits = [...proformaVisits, ...standalonePrescriptionVisits].sort((a, b) => {
+    const allVisits = [...proformaVisitsWithDateAdl, ...standalonePrescriptionVisits].sort((a, b) => {
       const dateA = new Date(a.visitDate || 0);
       const dateB = new Date(b.visitDate || 0);
       return dateB - dateA;
@@ -674,6 +711,17 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     
     return allVisits;
   }, [trulyPastProformas, patientAdlFiles, prescriptionResults, proformaIds, patientProformas, allPrescriptions]);
+
+  /** ADL files not shown under any visit row (no FK / same-day visit to attach to). */
+  const orphanPastHistoryAdlFiles = useMemo(() => {
+    const attachedIds = new Set(
+      unifiedVisits
+        .map((v) => v.adlFile?.id)
+        .filter((id) => id != null && id !== '')
+        .map((id) => String(id))
+    );
+    return patientAdlFiles.filter((f) => !attachedIds.has(String(f.id)));
+  }, [unifiedVisits, patientAdlFiles]);
 
   // Print functionality refs
   const patientDetailsPrintRef = useRef(null);
@@ -683,6 +731,9 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   
   // Past History print refs
   const pastHistoryPatientDetailsPrintRef = useRef(null);
+  const pastHistoryClinicalProformaPrintRef = useRef(null);
+  const pastHistoryADLPrintRef = useRef(null);
+  const pastHistoryPrescriptionPrintRef = useRef(null);
   // Visit-based print refs (using Map to store refs for each visit)
   const visitPrintRefs = useRef(new Map());
 
@@ -2708,12 +2759,15 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       visitPrintRef = visitPrintRefs.current.get(visitId);
       if (visitPrintRef) {
         // Check for actual content - look for specific elements that indicate content is rendered
-        const hasClinicalContent = visitPrintRef.querySelector('div.mt-3') && 
-          (visitPrintRef.textContent.includes('Visit Type') || 
-           visitPrintRef.textContent.includes('Room No') ||
-           visitPrintRef.querySelector('[class*="ClinicalProforma"]') ||
-           visitPrintRef.querySelector('table') ||
-           visitPrintRef.querySelector('div[class*="grid"]'));
+        const hasClinicalContent =
+          visitPrintRef.querySelector('.walk-in-clinical-proforma-summary') ||
+          (visitPrintRef.querySelector('div.mt-3') &&
+            (visitPrintRef.textContent.includes('Visit date') ||
+              visitPrintRef.textContent.includes('Visit Type') ||
+              visitPrintRef.textContent.includes('Room No') ||
+              visitPrintRef.querySelector('[class*="ClinicalProforma"]') ||
+              visitPrintRef.querySelector('table') ||
+              visitPrintRef.querySelector('div[class*="grid"]')));
         
         if (hasClinicalContent) {
           console.log('Content found after', retries, 'retries');
@@ -2761,7 +2815,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       const clonedElement = visitPrintRef.cloneNode(true);
       
       // IMPORTANT: First, ensure all content divs with mt-3 class are visible
-      // These contain the actual form content (ClinicalProformaDetails, ViewADL, etc.)
+      // These contain the actual form content (WalkInClinicalProformaSummaryView, ViewADL, etc.)
       const contentDivs = clonedElement.querySelectorAll('div.mt-3');
       contentDivs.forEach(div => {
         div.style.display = '';
@@ -3907,7 +3961,9 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       )}
 
       {/* Card 5: Past History - View-only display organized by card type */}
-      {(canViewPrescriptions || canViewClinicalProforma) && (
+      {(canViewPrescriptions ||
+        canViewClinicalProforma ||
+        (canViewADLFile && patientAdlFiles.length > 0)) && (
         <Card className="shadow-lg border-0 bg-white">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
@@ -3922,9 +3978,11 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Past History</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  {unifiedVisits.length > 0 
+                  {unifiedVisits.length > 0
                     ? `${unifiedVisits.length} past visit${unifiedVisits.length > 1 ? 's' : ''} - View only`
-                    : 'No past visits - View only'}
+                    : patientAdlFiles.length > 0
+                      ? 'Out Patient Intake Record on file — View only'
+                      : 'No past visits - View only'}
                 </p>
               </div>
             </div>
@@ -4045,11 +4103,87 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                           )}
                         </Card>
 
+                        {/* Out Patient Intake Record — top-level Past History card (all ADL files for patient) */}
+                        {canViewADLFile && orphanPastHistoryAdlFiles.length > 0 && (
+                          <Card className="shadow-md border-2 border-orange-200">
+                            <div className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-orange-50/40 transition-colors">
+                              <div
+                                className="flex items-center gap-3 cursor-pointer flex-1"
+                                onClick={() => togglePastHistoryCard('intakeRecord')}
+                              >
+                                <div className="p-2 bg-orange-100 rounded-lg">
+                                  <FiFolder className="h-5 w-5 text-orange-600" />
+                                </div>
+                                <div>
+                                  <h4 className="text-lg font-bold text-gray-900">Out Patient Intake Record</h4>
+                                  <p className="text-sm text-gray-500 mt-0.5">
+                                    {orphanPastHistoryAdlFiles.length} file
+                                    {orphanPastHistoryAdlFiles.length > 1 ? 's' : ''} not linked to a visit date
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePrintPastHistoryADL();
+                                  }}
+                                  className="h-8 w-8 p-0 bg-gradient-to-r from-orange-50 to-amber-50 hover:from-orange-100 hover:to-amber-100 border border-orange-200 hover:border-orange-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                                  title="Print Out Patient Intake Record - Past History"
+                                >
+                                  <FiPrinter className="w-3.5 h-3.5 text-orange-600" />
+                                </Button>
+                                <div
+                                  className="cursor-pointer"
+                                  onClick={() => togglePastHistoryCard('intakeRecord')}
+                                >
+                                  {expandedPastHistoryCards.intakeRecord ? (
+                                    <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                  ) : (
+                                    <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {expandedPastHistoryCards.intakeRecord && (
+                              <div ref={pastHistoryADLPrintRef} className="p-6 space-y-8">
+                                {orphanPastHistoryAdlFiles.map((adl) => {
+                                  const intakeCreated = formatAdlRecordCreated(adl);
+                                  return (
+                                  <div key={adl.id} className="rounded-lg border border-orange-100 bg-orange-50/20 p-2">
+                                    {((orphanPastHistoryAdlFiles.length > 1 && adl.adl_no) || intakeCreated) && (
+                                      <p className="text-xs font-semibold text-orange-800 mb-2 px-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                        {orphanPastHistoryAdlFiles.length > 1 && adl.adl_no && (
+                                          <span>ADL {adl.adl_no}</span>
+                                        )}
+                                        {intakeCreated && (
+                                          <span className="font-normal text-gray-600">
+                                            Created {intakeCreated}
+                                          </span>
+                                        )}
+                                      </p>
+                                    )}
+                                    <OutPatientIntakeRecordSummaryView adlFile={adl} patient={patient} />
+                                  </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </Card>
+                        )}
+
                         {/* Unified Visit Cards - Each visit shows all forms completed during that visit */}
                         {unifiedVisits.length > 0 ? (
                           <div className="space-y-6">
                             {unifiedVisits.map((visit) => {
                               const visitDate = formatDate(visit.visitDate);
+                              const adlCreatedLabel =
+                                visit.hasAdl && visit.adlFile
+                                  ? formatAdlRecordCreated(visit.adlFile)
+                                  : '';
                               const isExpanded = isVisitCardExpanded(visit.visitId);
                               
                               return (
@@ -4097,6 +4231,11 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                             </span>
                                           )}
                                         </div>
+                                        {adlCreatedLabel && (
+                                            <p className="text-xs text-gray-600 mt-2">
+                                              Out Patient Intake Record created {adlCreatedLabel}
+                                            </p>
+                                          )}
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -4164,29 +4303,54 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                                           )}
                                         </div>
                                       ) : (
-                                      <div className="border-l-4 border-green-500 pl-4">
-                                        <div className="flex items-center justify-between mb-3">
-                                          <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                                            <FiFileText className="h-5 w-5 text-green-600" />
-                                            Walk-in Clinical Proforma
-                                          </h5>
-                                          {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') ? (
-                                            <FiChevronUp 
-                                              className="h-5 w-5 text-gray-500 cursor-pointer"
-                                              onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
-                                            />
-                                          ) : (
-                                            <FiChevronDown 
-                                              className="h-5 w-5 text-gray-500 cursor-pointer"
-                                              onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
-                                            />
-                                          )}
-                                        </div>
-                                        {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') && (
-                                          <div className="mt-3">
-                                            <ClinicalProformaDetails proforma={visit.proforma} />
+                                      <div className="space-y-5 rounded-xl border border-gray-100 bg-gray-50/50 p-5 shadow-sm">
+                                        <div className="flex items-start gap-4 border-b border-gray-200 pb-4">
+                                          <div className="p-3 bg-green-100 rounded-lg shrink-0">
+                                            <FiFileText className="h-6 w-6 text-green-600" />
                                           </div>
-                                        )}
+                                          <div className="min-w-0 flex-1">
+                                            <h5 className="text-lg font-bold text-gray-900">
+                                              Walk-in Clinical Proforma
+                                            </h5>
+                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                              <p className="text-sm text-gray-500">
+                                                {visit.proforma?.visit_type === 'first_visit'
+                                                  ? `First visit: ${formatDate(visit.proforma.visit_date || visit.proforma.created_at)}`
+                                                  : `Visit: ${formatDate(visit.proforma.visit_date || visit.proforma.created_at)}`}
+                                              </p>
+                                              {visit.proforma?.visit_type === 'first_visit' && (
+                                                <>
+                                                  <span className="text-gray-400">•</span>
+                                                  <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                                    First Visit
+                                                  </span>
+                                                </>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="space-y-4">
+                                          <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2 flex-wrap">
+                                            {visit.proforma?.visit_type === 'first_visit' ? (
+                                              <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+                                                First Visit
+                                              </span>
+                                            ) : (
+                                              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
+                                                Walk-in visit
+                                              </span>
+                                            )}
+                                            <span className="text-sm text-gray-500 font-normal">
+                                              {formatDate(visit.proforma.visit_date || visit.proforma.created_at)}
+                                            </span>
+                                          </h4>
+                                          <div className="rounded-lg border border-gray-100 bg-white p-3 sm:p-4">
+                                            <WalkInClinicalProformaSummaryView
+                                              proforma={visit.proforma}
+                                              patient={patient}
+                                            />
+                                          </div>
+                                        </div>
                                       </div>
                                       )}
 
@@ -4307,7 +4471,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                               );
                             })}
                           </div>
-                        ) : (
+                        ) : unifiedVisits.length === 0 && patientAdlFiles.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 max-w-2xl mx-auto">
                     <FiClock className="h-12 w-12 mx-auto mb-4 text-purple-500" />
@@ -4319,7 +4483,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                     </p>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
         </Card>

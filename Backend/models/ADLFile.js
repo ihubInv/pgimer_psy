@@ -1678,14 +1678,15 @@ class ADLFile {
         return [];
       }
 
+      // Note: do not alias cp.id as clinical_proforma_id — af.* already includes
+      // adl_files.clinical_proforma_id; a duplicate name can overwrite it with NULL when the JOIN misses.
       const query = `
         SELECT af.*, 
                p.name as patient_name, p.cr_no, p.psy_no, 
                u1.name as created_by_name, u1.role as created_by_role,
                u2.name as last_accessed_by_name,
                cp.assigned_doctor, cp.visit_date as proforma_visit_date,
-               u3.name as assigned_doctor_name, u3.role as assigned_doctor_role,
-               cp.id as clinical_proforma_id
+               u3.name as assigned_doctor_name, u3.role as assigned_doctor_role
         FROM adl_files af
         LEFT JOIN registered_patient p ON af.patient_id = p.id
         LEFT JOIN users u1 ON af.created_by = u1.id
@@ -1787,7 +1788,6 @@ class ADLFile {
                 u2.name as last_accessed_by_name,
                 cp.assigned_doctor, cp.visit_date as proforma_visit_date,
                 u3.name as assigned_doctor_name, u3.role as assigned_doctor_role,
-                cp.id as clinical_proforma_id,
                 cp.doctor_decision
         FROM adl_files af
         LEFT JOIN registered_patient p ON af.patient_id = p.id

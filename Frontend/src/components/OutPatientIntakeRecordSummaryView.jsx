@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useGetPatientFilesQuery } from '../features/patients/patientFilesApiSlice';
-import { formatDate } from '../utils/formatters';
+import { formatDate, formatAdlRecordCreated } from '../utils/formatters';
 import {
   PatientDetailCardShell,
   PatientDetailSectionTitle,
@@ -111,8 +111,11 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
   const patientDate =
     patient?.date && String(patient.date).includes('T') ? patient.date.split('T')[0] : patient?.date;
 
+  const intakeRecordCreated = formatAdlRecordCreated(adlFile);
+
   const showIdentifiers =
     hasRecorded(adlFile.adl_no) ||
+    hasRecorded(intakeRecordCreated) ||
     hasRecorded(patientDate) ||
     hasRecorded(patient?.name) ||
     hasRecorded(patient?.age) ||
@@ -133,6 +136,7 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
           <div className="space-y-4 px-5 pb-5">
             <PatientDetailFieldGroup>
               <Val label="Out Patient Intake Record No." value={adlFile.adl_no} />
+              <Val label="Intake record created" value={intakeRecordCreated} />
               <Val label="Date" value={patientDate ? formatMaybeDate(patientDate) : ''} />
               <Val label="Patient name" value={patient?.name} />
               <Val label="Age" value={patient?.age} />
