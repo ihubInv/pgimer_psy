@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { sanitizeAdlRequestBody, tryDdMmYyyyToYyyyMmDd } = require('../utils/adlPayloadSanitize');
 
 /** null = unknown; set after first information_schema check */
 let adlFilesHasChildPatientIdColumn = null;
@@ -23,10 +24,13 @@ const getAdlFilesHasChildPatientIdColumn = async () => {
   return adlFilesHasChildPatientIdColumn;
 };
 
-// Helper function to sanitize date fields - converts empty strings to null
+// Helper function to sanitize date fields - converts empty strings to null; DD/MM/YYYY → YYYY-MM-DD
 const sanitizeDate = (value) => {
   if (value === '' || value === null || value === undefined) {
     return null;
+  }
+  if (typeof value === 'string') {
+    return tryDdMmYyyyToYyyyMmDd(value.trim());
   }
   return value;
 };
@@ -206,19 +210,44 @@ const deepRepairJsonStringsInValue = (v) => {
 
 /**
  * Validated JSON **text** for `$n::jsonb` parameters.
- * Passing native arrays through node-pg can still produce invalid JSON for some mixed/double-encoded payloads.
+ *
+ * ROOT CAUSE of PostgreSQL "invalid input syntax for type json" (22P02) on `::jsonb` casts:
+ *   node-pg encodes raw JavaScript arrays using the PostgreSQL *array literal* format
+ *   (e.g. `{"{\"name\":\"x\"}"}`), NOT JSON. When this text is then cast with `::jsonb`,
+ *   PostgreSQL's JSON parser fails with:
+ *     detail: 'Expected ":", but found "}".'
+ *     where:  JSON data, line 1: ...reliability\":\"Reliable\"}"}
+ *   Reproducible: `await pool.query('SELECT $1::jsonb', [[{a:1}]])` fails every time
+ *   on pg >= 8.x. The fix is to serialize JSON ourselves and pass a **string**.
+ *
+ * This helper always returns a valid JSON text string (never a JS array/object), so
+ * node-pg sends it as plain text to `$n::jsonb` where PostgreSQL parses it correctly.
  */
 const serializeJsonbArrayForSql = (value) => {
   let arr = normalizeJsonArray(value);
   arr = deepRepairJsonStringsInValue(arr);
   try {
     const text = JSON.stringify(arr);
-    JSON.parse(text);
+    JSON.parse(text); // sanity check: throws if text is somehow not valid JSON
     return text;
   } catch (e) {
-    console.warn('[serializeJsonbArrayForSql]', e.message);
+    console.warn('[serializeJsonbArrayForSql] falling back to []:', e.message);
     return '[]';
   }
+};
+
+/**
+ * Safe bind for `$n::jsonb` parameters. ALWAYS returns a `string`.
+ * Defensive guard: even if a future caller somehow passes a non-array through,
+ * we never hand node-pg a raw JS array/object for a jsonb column.
+ */
+const jsonbArrayParam = (value) => {
+  const text = serializeJsonbArrayForSql(value);
+  if (typeof text !== 'string') {
+    // Should be impossible, but guarantee the invariant
+    return '[]';
+  }
+  return text;
 };
 
 /** node-pg rejects `undefined` in query parameters — map to SQL NULL. */
@@ -644,22 +673,22 @@ class ADLFile {
         development_bedwetting, development_phobias, development_childhood_illness, 
         provisional_diagnosis, treatment_plan, consultant_comments
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,         $16::jsonb, 
-        $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31,
-        $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43::jsonb,
-        $44, $45, $46, $47, $48, $49::jsonb, $50, $51::jsonb, $52, $53, $54, $55,
-        $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, 
-        $69, $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $80, $81, $82, $83, 
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31,
+        $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43,
+        $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55,
+        $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68,
+        $69, $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $80, $81, $82, $83,
         $84, $85, $86, $87, $88, $89, $90, $91, $92, $93, $94, $95, $96, $97, $98,
         $99, $100, $101, $102, $103, $104, $105, $106, $107, $108, $109, $110,
-        $111, $112, $113, $114, $115, $116, $117, $118, $119, $120, $121, 
-        $122, $123, $124, $125, $126, $127::jsonb, $128, $129, $130, $131, $132, $133, 
-        $134, $135, $136, $137, $138, $139, $140, $141, $142, $143, $144, $145, 
-        $146, $147, $148, $149, $150, $151, $152, $153, $154, $155, $156, $157, 
-        $158, $159, $160::jsonb, $161, $162, $163, $164, $165, $166, $167, $168,
-        $169, $170, $171, $172, $173, $174, $175, $176, $177::jsonb, $178, $179, 
-        $180, $181, $182, $183, $184, $185, $186::jsonb, $187, $188, $189, $190, 
-        $191, $192, $193, $194, $195, $196, $197, $198, $199, $200, $201, $202, 
+        $111, $112, $113, $114, $115, $116, $117, $118, $119, $120, $121,
+        $122, $123, $124, $125, $126, $127, $128, $129, $130, $131, $132, $133,
+        $134, $135, $136, $137, $138, $139, $140, $141, $142, $143, $144, $145,
+        $146, $147, $148, $149, $150, $151, $152, $153, $154, $155, $156, $157,
+        $158, $159, $160, $161, $162, $163, $164, $165, $166, $167, $168,
+        $169, $170, $171, $172, $173, $174, $175, $176, $177, $178, $179,
+        $180, $181, $182, $183, $184, $185, $186, $187, $188, $189, $190,
+        $191, $192, $193, $194, $195, $196, $197, $198, $199, $200, $201, $202,
         $203, $204, $205, $206, $207, $208, $209, $210, $211, $212, $213, $214
       ) RETURNING *`,
       [
@@ -672,9 +701,9 @@ class ADLFile {
         history_treatment_dates || null,
         history_treatment_drugs || null,
         history_treatment_response || null,
-        serializeJsonbArrayForSql(informants),
-        serializeJsonbArrayForSql(complaints_patient),
-        serializeJsonbArrayForSql(complaints_informant),
+        jsonbArrayParam(informants),
+        jsonbArrayParam(complaints_patient),
+        jsonbArrayParam(complaints_informant),
         onset_duration || null,
         precipitating_factor || null,
         course || null,
@@ -700,7 +729,7 @@ class ADLFile {
         family_history_mother_death_age || null,
         family_history_mother_death_date || null,
         family_history_mother_death_cause || null,
-        serializeJsonbArrayForSql(family_history_siblings),
+        jsonbArrayParam(family_history_siblings),
         family_history,
         diagnostic_formulation_summary || null,
         diagnostic_formulation_features || null,
@@ -708,7 +737,7 @@ class ADLFile {
         premorbid_personality_passive_active || null,
         premorbid_personality_assertive || null,
         premorbid_personality_introvert_extrovert || null,
-        serializeJsonbArrayForSql(premorbid_personality_traits),
+        jsonbArrayParam(premorbid_personality_traits),
         premorbid_personality_hobbies || null,
         premorbid_personality_habits || null,
         premorbid_personality_alcohol_drugs || null,
@@ -781,7 +810,7 @@ class ADLFile {
         education_hobbies || null,
         education_special_abilities || null,
         education_discontinue_reason || null,
-        serializeJsonbArrayForSql(occupation_jobs), sexual_menarche_age || null,
+        jsonbArrayParam(occupation_jobs), sexual_menarche_age || null,
         sexual_menarche_reaction || null,
         sexual_education || null,
         sexual_masturbation || null,
@@ -791,18 +820,18 @@ class ADLFile {
         sexual_spouse_occupation || null,
         sexual_adjustment_general || null,
         sexual_adjustment_sexual || null,
-        serializeJsonbArrayForSql(sexual_children),
+        jsonbArrayParam(sexual_children),
         sexual_problems || null,
         religion_type || null,
         religion_participation || null,
         religion_changes || null,
-        serializeJsonbArrayForSql(living_residents),
+        jsonbArrayParam(living_residents),
         living_income_sharing || null,
         living_expenses || null,
         living_kitchen || null,
         living_domestic_conflicts || null,
         living_social_class || null,
-        serializeJsonbArrayForSql(living_inlaws),
+        jsonbArrayParam(living_inlaws),
         home_situation_childhood || null,
         home_situation_parents_relationship || null,
         home_situation_socioeconomic || null,
@@ -1188,8 +1217,9 @@ class ADLFile {
 
 
   // Static method to create ADL file (without transaction)
-  static async create(adlData) {
+  static async create(adlDataInput) {
     try {
+      const adlData = sanitizeAdlRequestBody(adlDataInput);
       // Sanitize date fields - convert empty strings to null for PostgreSQL date columns
       let sanitizedData = sanitizeDateFields(adlData);
       // Sanitize integer fields - convert empty strings to null for PostgreSQL integer columns
@@ -1393,19 +1423,19 @@ class ADLFile {
         development_bedwetting, development_phobias, development_childhood_illness, 
         provisional_diagnosis, treatment_plan, consultant_comments
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, 
-        $16::jsonb, $17::jsonb, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, 
-        $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, 
-        $42, $43::jsonb, $44, $45, $46, $47, $48, $49, $50::jsonb, $51, $52, $53, 
-        $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, 
-        $69, $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $80, $81, $82, $83, 
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
+        $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41,
+        $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53,
+        $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68,
+        $69, $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $80, $81, $82, $83,
         $84, $85, $86, $87, $88, $89, $90, $91, $92, $93, $94, $95, $96, $97, $98,
         $99, $100, $101, $102, $103, $104, $105, $106, $107, $108, $109, $110,
-        $111, $112, $113, $114, $115, $116, $117, $118, $119, $120, $121::jsonb, 
-        $122, $123, $124, $125, $126, $127, $128, $129, $130, $131, $132, $133, 
-        $134, $135, $136, $137, $138, $139, $140, $141, $142, $143, $144, $145, 
-        $146, $147, $148, $149, $150, $151, $152, $153, $154, $155, $156, $157, 
-        $158, $159, $160, $161, $162, $163, $164, $165, $166, $167, $168, 
+        $111, $112, $113, $114, $115, $116, $117, $118, $119, $120, $121,
+        $122, $123, $124, $125, $126, $127, $128, $129, $130, $131, $132, $133,
+        $134, $135, $136, $137, $138, $139, $140, $141, $142, $143, $144, $145,
+        $146, $147, $148, $149, $150, $151, $152, $153, $154, $155, $156, $157,
+        $158, $159, $160, $161, $162, $163, $164, $165, $166, $167, $168,
         $169, $170, $171, $172, $173
       ) RETURNING *`,
         [
@@ -1418,9 +1448,9 @@ class ADLFile {
           history_treatment_dates,
           history_treatment_drugs,
           history_treatment_response,
-          serializeJsonbArrayForSql(informants),
-          serializeJsonbArrayForSql(complaints_patient),
-          serializeJsonbArrayForSql(complaints_informant),
+          jsonbArrayParam(informants),
+          jsonbArrayParam(complaints_patient),
+          jsonbArrayParam(complaints_informant),
           onset_duration,
           precipitating_factor,
           course,
@@ -1446,7 +1476,7 @@ class ADLFile {
           family_history_mother_death_age,
           family_history_mother_death_date,
           family_history_mother_death_cause,
-          serializeJsonbArrayForSql(family_history_siblings),
+          jsonbArrayParam(family_history_siblings),
           family_history,
           diagnostic_formulation_summary,
           diagnostic_formulation_features,
@@ -1454,7 +1484,7 @@ class ADLFile {
           premorbid_personality_passive_active,
           premorbid_personality_assertive,
           premorbid_personality_introvert_extrovert,
-          serializeJsonbArrayForSql(premorbid_personality_traits),
+          jsonbArrayParam(premorbid_personality_traits),
           premorbid_personality_hobbies,
           premorbid_personality_habits,
           premorbid_personality_alcohol_drugs,
@@ -1530,7 +1560,7 @@ class ADLFile {
           education_hobbies,
           education_special_abilities,
           education_discontinue_reason,
-          serializeJsonbArrayForSql(occupation_jobs),
+          jsonbArrayParam(occupation_jobs),
           sexual_menarche_age,
           sexual_menarche_reaction,
           sexual_education,
@@ -1543,18 +1573,18 @@ class ADLFile {
           sexual_spouse_occupation,
           sexual_adjustment_general,
           sexual_adjustment_sexual,
-          serializeJsonbArrayForSql(sexual_children),
+          jsonbArrayParam(sexual_children),
           sexual_problems,
           religion_type,
           religion_participation,
           religion_changes,
-          serializeJsonbArrayForSql(living_residents),
+          jsonbArrayParam(living_residents),
           living_income_sharing,
           living_expenses,
           living_kitchen,
           living_domestic_conflicts,
           living_social_class,
-          serializeJsonbArrayForSql(living_inlaws),
+          jsonbArrayParam(living_inlaws),
           home_situation_childhood,
           home_situation_parents_relationship,
           home_situation_socioeconomic,
@@ -1900,8 +1930,9 @@ class ADLFile {
   }
 
   // Update ADL file (including all complex case fields)
-  async update(updateData) {
+  async update(updateDataInput) {
     try {
+      const updateData = sanitizeAdlRequestBody(updateDataInput);
       const allowedFields = [
         'file_status', 'physical_file_location', 'last_accessed_date',
         'last_accessed_by', 'total_visits', 'is_active', 'notes', 'clinical_proforma_id',
@@ -1998,13 +2029,13 @@ class ADLFile {
         if (value instanceof Date) {
           return value.toISOString().split('T')[0];
         }
-        // If it's a string, validate it's a valid date format (YYYY-MM-DD)
+        // If it's a string, coerce DD/MM/YYYY then validate YYYY-MM-DD
         if (typeof value === 'string') {
+          const coerced = tryDdMmYyyyToYyyyMmDd(value.trim());
           const dateRegex = /^\d{4}-\d{2}-\d{2}/;
-          if (dateRegex.test(value)) {
-            return value.split('T')[0]; // Extract date part if it includes time
+          if (dateRegex.test(coerced)) {
+            return coerced.split('T')[0];
           }
-          // If it's not a valid date format, return null
           return null;
         }
         return value;
@@ -2055,7 +2086,7 @@ class ADLFile {
         if (allowedFields.includes(key) && value !== undefined) {
           paramCount++;
           if (jsonbFields.includes(key)) {
-            const jsonText = serializeJsonbArrayForSql(value);
+            const jsonText = jsonbArrayParam(value);
             updates.push(`${key} = $${paramCount}::jsonb`);
             values.push(jsonText);
           } else if (key === 'family_history') {

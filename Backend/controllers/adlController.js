@@ -1,6 +1,7 @@
 const ADLFile = require('../models/ADLFile');
 const Patient = require('../models/Patient');
 const db = require('../config/database');
+const { sanitizeAdlRequestBody } = require('../utils/adlPayloadSanitize');
 class ADLController {
   // Get all ADL files with pagination and filters
   // By default, only returns ADL files associated with complex cases
@@ -123,7 +124,7 @@ class ADLController {
 
   static async createADLFile(req, res) {
     try {
-      const adlData = { ...req.body };
+      const adlData = sanitizeAdlRequestBody({ ...req.body });
       const createdBy = req.user.id; // Get user ID from authenticated request
 
       // Validate required fields - either patient_id or child_patient_id must be provided
@@ -230,6 +231,7 @@ class ADLController {
 
       // node-pg rejects `undefined` in parameter arrays — drop missing keys from the payload
       Object.keys(createData).forEach((k) => {
+        if (String(k).trim() === '') delete createData[k];
         if (createData[k] === undefined) delete createData[k];
       });
 
@@ -378,7 +380,7 @@ class ADLController {
       console.log('[ADLController.updateADLFile] ADL file found, current ID:', adlFile.id);
       
       // Remove id from updateData if present (should not be updated)
-      const updateData = { ...req.body };
+      const updateData = sanitizeAdlRequestBody({ ...req.body });
       delete updateData.id;
       delete updateData.patient_id; // Should not be updated
       delete updateData.clinical_proforma_id; // Should not be updated
@@ -390,6 +392,7 @@ class ADLController {
       console.log('[ADLController.updateADLFile] Update data count:', Object.keys(updateData).length);
       
       Object.keys(updateData).forEach((k) => {
+        if (String(k).trim() === '') delete updateData[k];
         if (updateData[k] === undefined) delete updateData[k];
       });
 
