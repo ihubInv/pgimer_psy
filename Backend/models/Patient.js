@@ -1428,7 +1428,8 @@ class Patient {
           rp.room_no,
           rp.created_at,
           u.name as assigned_doctor_name,
-          u.role as assigned_doctor_role
+          u.role as assigned_doctor_role,
+          'adult'::text as patient_type
         FROM registered_patient rp
         LEFT JOIN users u ON rp.assigned_doctor_id = u.id
         WHERE DATE(rp.created_at AT TIME ZONE 'Asia/Kolkata') = $1
@@ -1595,7 +1596,8 @@ class Patient {
   // toJSON: return all fields for comprehensive export
   toJSON() {
     return {
-    
+      patient_type: 'adult',
+
       id : this.id ,
       cr_no : this.cr_no ,
       psy_no : this.psy_no ,

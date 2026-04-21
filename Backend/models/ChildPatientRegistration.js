@@ -94,6 +94,7 @@ class ChildPatientRegistration {
   // Convert to JSON
   toJSON() {
     return {
+      patient_type: 'child',
       id: this.id,
       seen_as_walk_in_on: this.seen_as_walk_in_on,
       cr_number: this.cr_number,
