@@ -232,10 +232,13 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       ],
     }),
     changePatientRoom: builder.mutation({
-      query: ({ patient_id, new_room }) => ({
+      query: ({ patient_id, new_room, patient_type }) => ({
         url: `/patients/${patient_id}/change-room`,
         method: 'POST',
-        body: { new_room },
+        body: {
+          new_room,
+          ...(patient_type ? { patient_type } : {}),
+        },
       }),
       // Invalidate patient cache to trigger real-time updates across all doctor views
       invalidatesTags: (result, error, { patient_id }) => [

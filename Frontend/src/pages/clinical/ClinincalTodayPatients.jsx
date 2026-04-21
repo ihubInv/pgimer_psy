@@ -76,9 +76,10 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
     }
     
     try {
-      const result = await changeRoom({ 
-        patient_id: patient.id, 
-        new_room: selectedNewRoom 
+      const result = await changeRoom({
+        patient_id: patient.id,
+        new_room: selectedNewRoom,
+        patient_type: isChildPatient ? 'child' : 'adult',
       }).unwrap();
       
       toast.success(result.message || `Patient moved to ${selectedNewRoom}`);

@@ -424,35 +424,35 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
 
     const doctor = doctorResult.rows[0];
 
-    // Find patients assigned to this room.
-    // We look at:
-    //  - registered_patient.assigned_room
-    //  - patient_visits.room_no for visits today
-    // and then create a visit for today for any patient that doesn't have one yet.
-    // This way, all patients physically in the room become "today's patients".
-    // Use CURRENT_DATE from database to ensure consistency with IST timezone.
+    // Find patients for TODAY in this room only. Do not pull adults who merely have a stale
+    // assigned_room from a previous day (fixes "yesterday's patient" appearing when selecting a room).
+    // Adults: today's visit with this room_no OR registered today in this room OR updated today in this room (IST).
+    // Children: same idea as ChildPatientRegistration date filter — created today OR updated today with room.
     const todayResult = await db.query('SELECT CURRENT_DATE as today');
     const todayDate = todayResult.rows[0]?.today || today;
     
-    // Find patients in this room
-    // Handle room format variations - compare as text to handle "205" vs "Room 205" etc.
-    // Check both assigned_room from patient record and room_no from today's visit record
-    // Also include child patients from child_patient_registrations
     const patientsResult = await db.query(
       `SELECT DISTINCT rp.id, rp.name, rp.assigned_doctor_id, DATE(rp.created_at) as created_date,
               rp.assigned_room, pv.room_no, 'adult' as patient_type
        FROM registered_patient rp
-       LEFT JOIN patient_visits pv ON rp.id = pv.patient_id AND DATE(pv.visit_date) = $2
+       LEFT JOIN patient_visits pv ON rp.id = pv.patient_id AND DATE(pv.visit_date) = $2::date
        WHERE (
-         -- Check if patient's assigned_room matches (as text to handle format variations)
-         TRIM(COALESCE(rp.assigned_room::text, '')) = TRIM($1::text)
-         -- OR check if today's visit room_no matches
-         OR TRIM(COALESCE(pv.room_no::text, '')) = TRIM($1::text)
+         (
+           pv.id IS NOT NULL
+           AND TRIM(COALESCE(pv.room_no::text, '')) = TRIM($1::text)
+         )
+         OR (
+           TRIM(COALESCE(rp.assigned_room::text, '')) = TRIM($1::text)
+           AND DATE((rp.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date
+         )
+         OR (
+           TRIM(COALESCE(rp.assigned_room::text, '')) = TRIM($1::text)
+           AND DATE((rp.updated_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date
+         )
        )
        
        UNION ALL
        
-       -- Child patients in this room
        SELECT DISTINCT 
          cpr.id, 
          cpr.child_name as name, 
@@ -462,10 +462,14 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
          NULL::text as room_no,
          'child' as patient_type
        FROM child_patient_registrations cpr
-       WHERE (
-         DATE(cpr.created_at) = $2
-         AND TRIM(COALESCE(cpr.assigned_room::text, '')) = TRIM($1::text)
-       )`,
+       WHERE TRIM(COALESCE(cpr.assigned_room::text, '')) = TRIM($1::text)
+         AND (
+           DATE((cpr.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date
+           OR (
+             DATE((cpr.updated_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date
+             AND TRIM(COALESCE(cpr.assigned_room::text, '')) != ''
+           )
+         )`,
       [roomNumber, todayDate]
     );
 
@@ -482,24 +486,21 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
         current_doctor_id: p.assigned_doctor_id
       })));
     } else {
-      // Debug: Check if there are any patients with this room at all
       const debugResult = await db.query(
-        `SELECT rp.id, rp.name, rp.assigned_room, pv.room_no, DATE(rp.created_at) as created_date
+        `SELECT rp.id, rp.name, rp.assigned_room, pv.room_no,
+                DATE((rp.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') as created_ist
          FROM registered_patient rp
-         LEFT JOIN patient_visits pv ON rp.id = pv.patient_id AND DATE(pv.visit_date) = $2
-         WHERE (
-           TRIM(COALESCE(rp.assigned_room::text, '')) = TRIM($1::text)
-           OR TRIM(COALESCE(pv.room_no::text, '')) = TRIM($1::text)
-         )
+         LEFT JOIN patient_visits pv ON rp.id = pv.patient_id AND DATE(pv.visit_date) = $2::date
+         WHERE TRIM(COALESCE(rp.assigned_room::text, '')) = TRIM($1::text)
          LIMIT 10`,
         [roomNumber, todayDate]
       );
-      console.log(`[assignPatientsToDoctor] DEBUG: Found ${debugResult.rows.length} patient(s) with room ${roomNumber} (any date):`, debugResult.rows.map(r => ({
+      console.log(`[assignPatientsToDoctor] DEBUG: Adults with stale assigned_room ${roomNumber} (sample, not necessarily today):`, debugResult.rows.map(r => ({
         id: r.id,
         name: r.name,
         assigned_room: r.assigned_room,
         visit_room_no: r.room_no,
-        created_date: r.created_date
+        created_ist: r.created_ist
       })));
     }
     
@@ -555,8 +556,8 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
       // Check if visit exists
       const visitCheck = await db.query(
         `SELECT id FROM patient_visits 
-         WHERE patient_id = $1 AND visit_date = $2`,
-        [patient.id, today]
+         WHERE patient_id = $1 AND DATE(visit_date) = $2::date`,
+        [patient.id, todayDate]
       );
 
       if (visitCheck.rows.length === 0) {

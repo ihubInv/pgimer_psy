@@ -714,6 +714,7 @@ class PatientController {
           const childPatientIds = childPatients.map(cp => cp.id);
           let visitStatusMap = {};
           
+          let childDoctorFromFollowup = {};
           if (childPatientIds.length > 0) {
             try {
               const visitStatusResult = await db.query(
@@ -731,6 +732,37 @@ class PatientController {
                   visitStatusMap[row.child_patient_id] = row.visit_status;
                 }
               });
+
+              const doctorRowResult = await db.query(
+                `SELECT DISTINCT ON (child_patient_id) child_patient_id, assigned_doctor_id
+                 FROM followup_visits
+                 WHERE child_patient_id = ANY($1::int[])
+                   AND DATE(visit_date) = $2::date
+                 ORDER BY child_patient_id, created_at DESC`,
+                [childPatientIds, today]
+              );
+              const doctorIds = [...new Set(doctorRowResult.rows.map(r => r.assigned_doctor_id).filter(Boolean))];
+              let doctorsById = {};
+              if (doctorIds.length > 0) {
+                const dr = await db.query(
+                  `SELECT id, name, role FROM users WHERE id = ANY($1::int[])`,
+                  [doctorIds]
+                );
+                doctorsById = dr.rows.reduce((acc, u) => {
+                  acc[u.id] = u;
+                  return acc;
+                }, {});
+              }
+              doctorRowResult.rows.forEach((row) => {
+                if (row.assigned_doctor_id && doctorsById[row.assigned_doctor_id]) {
+                  const u = doctorsById[row.assigned_doctor_id];
+                  childDoctorFromFollowup[row.child_patient_id] = {
+                    assigned_doctor_id: row.assigned_doctor_id,
+                    assigned_doctor_name: u.name,
+                    assigned_doctor_role: u.role
+                  };
+                }
+              });
             } catch (err) {
               console.error('[getAllPatients] Error fetching child patient visit status:', err);
             }
@@ -744,9 +776,9 @@ class PatientController {
             psy_no: null,
             special_clinic_no: cp.cgc_number,
             assigned_room: cp.assigned_room,
-            assigned_doctor_id: null,
-            assigned_doctor_name: null,
-            assigned_doctor_role: null,
+            assigned_doctor_id: childDoctorFromFollowup[cp.id]?.assigned_doctor_id ?? null,
+            assigned_doctor_name: childDoctorFromFollowup[cp.id]?.assigned_doctor_name ?? null,
+            assigned_doctor_role: childDoctorFromFollowup[cp.id]?.assigned_doctor_role ?? null,
             has_adl_file: false,
             case_complexity: 'simple',
             sex: cp.sex,
@@ -2333,6 +2365,122 @@ class PatientController {
 
       const newRoomTrimmed = String(new_room).trim();
 
+      const patientType =
+        req.body && String(req.body.patient_type || '').toLowerCase() === 'child'
+          ? 'child'
+          : 'adult';
+
+      // Child patients live in child_patient_registrations — adult change-room must not run for them
+      if (patientType === 'child') {
+        const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+        const child = await ChildPatientRegistration.findById(patientIdInt);
+        if (!child) {
+          return res.status(404).json({
+            success: false,
+            message: 'Child patient not found'
+          });
+        }
+
+        const oldRoom = child.assigned_room;
+        const db = require('../config/database');
+        const todayResult = await db.query('SELECT CURRENT_DATE as today');
+        const todayDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+
+        if (String(oldRoom || '').trim() === newRoomTrimmed) {
+          return res.status(200).json({
+            success: true,
+            message: 'Patient is already in this room',
+            data: {
+              patient_type: 'child',
+              room_changed: false,
+              old_room: oldRoom,
+              new_room: newRoomTrimmed,
+              patient: {
+                id: child.id,
+                name: child.child_name,
+                assigned_room: child.assigned_room,
+                patient_type: 'child',
+                updated_at: child.updated_at,
+                created_at: child.created_at
+              }
+            }
+          });
+        }
+
+        const newRoomDoctorResult = await db.query(
+          `SELECT id, name, role 
+           FROM users 
+           WHERE current_room = $1 
+             AND DATE(room_assignment_time) = $2
+           LIMIT 1`,
+          [newRoomTrimmed, todayDate]
+        );
+
+        let newDoctorId = null;
+        let newDoctorName = null;
+        let newDoctorRole = null;
+        if (newRoomDoctorResult.rows.length > 0) {
+          const newDoctor = newRoomDoctorResult.rows[0];
+          newDoctorId = newDoctor.id;
+          newDoctorName = newDoctor.name;
+          newDoctorRole = newDoctor.role;
+        }
+
+        await db.query(
+          `UPDATE child_patient_registrations
+           SET assigned_room = $1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = $2`,
+          [newRoomTrimmed, patientIdInt]
+        );
+
+        const fuUpdate = await db.query(
+          `UPDATE followup_visits
+           SET room_no = $1,
+               assigned_doctor_id = $2,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE child_patient_id = $3 AND DATE(visit_date) = $4::date
+           RETURNING id`,
+          [newRoomTrimmed, newDoctorId, patientIdInt, todayDate]
+        );
+        if (fuUpdate.rows.length > 0) {
+          console.log(`[changePatientRoom] Updated ${fuUpdate.rows.length} follow-up row(s) for child ${patientIdInt}`);
+        }
+
+        const updatedChild = await ChildPatientRegistration.findById(patientIdInt);
+
+        const patientPayload = {
+          id: updatedChild.id,
+          name: updatedChild.child_name,
+          assigned_room: updatedChild.assigned_room,
+          assigned_doctor_id: newDoctorId,
+          assigned_doctor_name: newDoctorName,
+          assigned_doctor_role: newDoctorRole,
+          patient_type: 'child',
+          updated_at: updatedChild.updated_at,
+          created_at: updatedChild.created_at
+        };
+
+        console.log(
+          `[changePatientRoom] Child ${patientIdInt} room "${oldRoom}" -> "${newRoomTrimmed}", doctor ${newDoctorId}`
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: `Patient room changed from "${oldRoom || 'None'}" to "${newRoomTrimmed}"${newDoctorName ? `. Now assigned to Dr. ${newDoctorName}` : ''}`,
+          data: {
+            patient: patientPayload,
+            patient_type: 'child',
+            room_changed: true,
+            old_room: oldRoom,
+            new_room: newRoomTrimmed,
+            new_doctor_id: newDoctorId,
+            new_doctor_name: newDoctorName,
+            new_doctor_role: newDoctorRole
+          }
+        });
+      }
+
+      // --- Adult registered patients ---
       // Find the patient
       const patient = await Patient.findById(patientIdInt);
       if (!patient) {
