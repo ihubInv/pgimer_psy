@@ -153,16 +153,16 @@ const CreateChildPatient = () => {
   const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [sameAsPresent, setSameAsPresent] = useState(false);
   
-  // State for expanded cards (Past History section and Edit mode cards)
+  // State for expanded cards — all collapsed on first load (user expands as needed)
   const [expandedCards, setExpandedCards] = useState({
-    pastHistory: true, // Expanded by default so MWO and others see history without hunting
-    childPatientRegistration: true, // Default expanded: view, new registration, edit
-    childClinicalProforma: true, // Default expanded in edit mode
-    prescription: true, // Match adult edit: Prescription card expanded
-    intakeRecord: true, // Default expanded in edit mode
-    viewChildClinical: true,
-    viewIntake: true,
-    viewPrescription: true,
+    pastHistory: false,
+    childPatientRegistration: false,
+    childClinicalProforma: false,
+    prescription: false,
+    intakeRecord: false,
+    viewChildClinical: false,
+    viewIntake: false,
+    viewPrescription: false,
   });
   
   // State for expanded visit cards
@@ -1629,20 +1629,11 @@ const CreateChildPatient = () => {
                         .map((p, idx) => (
                           <div key={p.id}>
                             {idx > 0 && <div className="mb-10 border-t border-gray-200" />}
-                            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                            <div className="mb-4">
                               <p className="text-sm text-gray-600">
                                 <span className="font-semibold text-gray-800">Record</span>{' '}
                                 {formatDate(p.visit_date || p.created_at)}
                               </p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => navigate(`/child-clinical-proformas/${p.id}`)}
-                              >
-                                <FiEye className="mr-1 inline" />
-                                Open full proforma
-                              </Button>
                             </div>
                             <ChildClinicalProformaSummaryView proforma={p} hideTitleBlock />
                           </div>
@@ -1831,6 +1822,47 @@ const CreateChildPatient = () => {
               >
                 <div
                   className="flex items-center gap-4 cursor-pointer flex-1"
+                  onClick={() => toggleCard('intakeRecord')}
+                >
+                  <div className="p-3 bg-purple-100 rounded-lg">
+                    <FiFolder className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Out Patient Intake Record</h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Out-patient intake record (ADL) for this patient
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className="cursor-pointer"
+                  onClick={() => toggleCard('intakeRecord')}
+                >
+                  {expandedCards.intakeRecord ? (
+                    <FiChevronUp className="h-6 w-6 text-gray-500" />
+                  ) : (
+                    <FiChevronDown className="h-6 w-6 text-gray-500" />
+                  )}
+                </div>
+              </div>
+
+              {expandedCards.intakeRecord && (
+                <div className="p-6">
+                  <EditADL
+                    isEmbedded={true}
+                    childPatientId={id}
+                    patientId={null}
+                  />
+                </div>
+              )}
+            </Card>
+
+            <Card className="shadow-lg border-0 bg-white">
+              <div
+                className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                <div
+                  className="flex items-center gap-4 cursor-pointer flex-1"
                   onClick={() => toggleCard('prescription')}
                 >
                   <div className="p-3 bg-amber-100 rounded-lg">
@@ -1888,47 +1920,6 @@ const CreateChildPatient = () => {
                       ))}
                     </ul>
                   )}
-                </div>
-              )}
-            </Card>
-
-            <Card className="shadow-lg border-0 bg-white">
-              <div
-                className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
-              >
-                <div
-                  className="flex items-center gap-4 cursor-pointer flex-1"
-                  onClick={() => toggleCard('intakeRecord')}
-                >
-                  <div className="p-3 bg-purple-100 rounded-lg">
-                    <FiFolder className="h-6 w-6 text-purple-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">Out Patient Intake Record</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Out-patient intake record (ADL) for this patient
-                    </p>
-                  </div>
-                </div>
-                <div
-                  className="cursor-pointer"
-                  onClick={() => toggleCard('intakeRecord')}
-                >
-                  {expandedCards.intakeRecord ? (
-                    <FiChevronUp className="h-6 w-6 text-gray-500" />
-                  ) : (
-                    <FiChevronDown className="h-6 w-6 text-gray-500" />
-                  )}
-                </div>
-              </div>
-
-              {expandedCards.intakeRecord && (
-                <div className="p-6">
-                  <EditADL
-                    isEmbedded={true}
-                    childPatientId={id}
-                    patientId={null}
-                  />
                 </div>
               )}
             </Card>
