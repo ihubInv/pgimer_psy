@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import {
   FiUser, FiUsers, FiHome, FiMapPin, FiCalendar, FiGlobe,
   FiFileText, FiHash, FiSave, FiX, FiCamera, FiUpload, FiEdit,
-  FiClock, FiChevronDown, FiChevronUp, FiEye, FiClipboard, FiPackage,
+  FiClock, FiChevronDown, FiChevronUp, FiEye, FiEdit3, FiClipboard, FiPackage,
   FiFolder,
 } from 'react-icons/fi';
 import { IconInput } from '../../components/IconInput';
@@ -29,6 +29,9 @@ import {
   CHILD_SEX_OPTIONS,
   INDIA_STATES,
   isMWO,
+  isAdmin,
+  isJR,
+  isSR,
 } from '../../utils/constants';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
@@ -52,6 +55,10 @@ const CreateChildPatient = () => {
   const isEditMode = Boolean(id) && !isViewMode;
   const currentUser = useSelector(selectCurrentUser);
   const token = useSelector(selectCurrentToken);
+  const isAdminUser = isAdmin(currentUser?.role);
+  const isResident = isJR(currentUser?.role);
+  const isFaculty = isSR(currentUser?.role);
+  const canEditChildWalkInProforma = isResident || isFaculty || isAdminUser;
   const hideChildViewChromeForMWO = isViewMode && isMWO(currentUser?.role);
   // Same as adult edit: everyone sees Patient Details; MWO does not see clinical / ADL / prescription stack
   const showChildRegistrationCard = true;
@@ -204,6 +211,31 @@ const CreateChildPatient = () => {
   const childClinicalProformas = Array.isArray(childClinicalData?.data?.proformas)
     ? childClinicalData.data.proformas
     : [];
+
+  const firstChildWalkInProforma = useMemo(() => {
+    if (!childClinicalProformas.length) return null;
+    const sortedOldestFirst = [...childClinicalProformas].sort(
+      (a, b) =>
+        new Date(a.visit_date || a.created_at || 0) - new Date(b.visit_date || b.created_at || 0)
+    );
+    return sortedOldestFirst[0] || null;
+  }, [childClinicalProformas]);
+
+  /** Walk-in child proforma: start in read-only summary when a record exists (like adult PatientDetailsEdit). */
+  const [isEditingChildWalkInProforma, setIsEditingChildWalkInProforma] = useState(false);
+  const childWalkInProformaUxInitRef = useRef(false);
+
+  useEffect(() => {
+    childWalkInProformaUxInitRef.current = false;
+  }, [id]);
+
+  useEffect(() => {
+    if (!showClinicalProformaAndIntakeInEdit || !id) return;
+    if (isLoadingChildProformas) return;
+    if (childWalkInProformaUxInitRef.current) return;
+    childWalkInProformaUxInitRef.current = true;
+    setIsEditingChildWalkInProforma(childClinicalProformas.length === 0);
+  }, [showClinicalProformaAndIntakeInEdit, id, isLoadingChildProformas, childClinicalProformas.length]);
   
   // Extract child follow-ups
   const childFollowUps = Array.isArray(childFollowUpData?.data?.followups)
@@ -226,16 +258,13 @@ const CreateChildPatient = () => {
 
   // Match PatientDetailsEdit Walk-in Clinical Proforma subtitle pattern
   const walkInClinicalProformaSubtitle = useMemo(() => {
-    if (!childClinicalProformas.length) {
+    if (!firstChildWalkInProforma) {
       return "Today's Patient - First visit";
     }
-    const sortedOldestFirst = [...childClinicalProformas].sort(
-      (a, b) =>
-        new Date(a.visit_date || a.created_at || 0) - new Date(b.visit_date || b.created_at || 0)
-    );
-    const first = sortedOldestFirst[0];
-    return `First visit: ${formatDate(first.visit_date || first.created_at)}`;
-  }, [childClinicalProformas]);
+    return `First visit: ${formatDate(
+      firstChildWalkInProforma.visit_date || firstChildWalkInProforma.created_at
+    )}`;
+  }, [firstChildWalkInProforma]);
 
   const prescriptionCardSubtitle =
     prescriptions.length > 0
@@ -1665,12 +1694,122 @@ const CreateChildPatient = () => {
 
               {expandedCards.childClinicalProforma && (
                 <div className="p-6">
-                  <EditChildClinicalProforma
-                    childPatientId={id}
-                    onUpdate={(proforma) => {
-                      console.log('Child clinical proforma updated:', proforma);
-                    }}
-                  />
+                  {isLoadingChildProformas ? (
+                    <p className="text-sm text-gray-500">Loading…</p>
+                  ) : isEditingChildWalkInProforma || !firstChildWalkInProforma ? (
+                    <div className="space-y-4">
+                      {firstChildWalkInProforma && isEditingChildWalkInProforma && (
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsEditingChildWalkInProforma(false)}
+                            className="flex items-center gap-1.5 bg-amber-50 border-amber-400 text-amber-800 hover:bg-amber-100"
+                          >
+                            <FiX className="w-3.5 h-3.5" />
+                            Cancel Edit
+                          </Button>
+                        </div>
+                      )}
+                      <EditChildClinicalProforma
+                        childPatientId={id}
+                        onUpdate={() => setIsEditingChildWalkInProforma(false)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-4 border-t border-gray-200 pt-6">
+                      <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                        <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+                          First Visit
+                        </span>
+                        <span className="text-sm text-gray-500 font-normal">
+                          {formatDate(
+                            firstChildWalkInProforma.visit_date ||
+                              firstChildWalkInProforma.created_at
+                          )}
+                        </span>
+                      </h4>
+
+                      <div className="border-2 border-purple-300 rounded-lg p-4 bg-purple-50/30">
+                        <div className="flex items-start justify-between mb-4 gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-3 mb-2 flex-wrap">
+                              <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                First Visit
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 mt-3">
+                              {firstChildWalkInProforma.doctor_name && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <FiUser className="w-4 h-4 shrink-0" />
+                                  <span>
+                                    <span className="font-medium text-gray-800">Doctor:</span>{' '}
+                                    {firstChildWalkInProforma.doctor_name}
+                                  </span>
+                                </div>
+                              )}
+                              {firstChildWalkInProforma.room_no && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <FiHome className="w-4 h-4 shrink-0" />
+                                  <span>
+                                    <span className="font-medium text-gray-800">Room:</span>{' '}
+                                    {firstChildWalkInProforma.room_no}
+                                  </span>
+                                </div>
+                              )}
+                              {(firstChildWalkInProforma.provisional_diagnosis ||
+                                firstChildWalkInProforma.diagnosis) && (
+                                <div className="flex items-start gap-2 text-sm text-gray-600">
+                                  <FiFileText className="w-4 h-4 mt-0.5 shrink-0" />
+                                  <span>
+                                    <span className="font-medium text-gray-800">Diagnosis:</span>{' '}
+                                    {firstChildWalkInProforma.provisional_diagnosis ||
+                                      firstChildWalkInProforma.diagnosis}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              type="button"
+                              onClick={() =>
+                                navigate(`/child-clinical-proformas/${firstChildWalkInProforma.id}`)
+                              }
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                            >
+                              <FiEye className="w-3.5 h-3.5" />
+                              View
+                            </Button>
+                            {isEditMode &&
+                              canEditChildWalkInProforma && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  type="button"
+                                  onClick={() => setIsEditingChildWalkInProforma(true)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-50 border-blue-400 text-blue-700 hover:bg-blue-100"
+                                >
+                                  <FiEdit3 className="w-3.5 h-3.5" />
+                                  Edit Proforma
+                                </Button>
+                              )}
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <ChildClinicalProformaSummaryView
+                            proforma={firstChildWalkInProforma}
+                            hideTitleBlock
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>
