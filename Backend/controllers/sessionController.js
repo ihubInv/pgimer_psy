@@ -441,7 +441,7 @@
 
 const RefreshToken = require('../models/RefreshToken');
 const User = require('../models/User');
-const { generateAccessToken } = require('../utils/tokenUtils');
+const { generateAccessToken, getAccessTokenExpiresInSeconds } = require('../utils/tokenUtils');
 const { isMobileAppClient, getRefreshTokenFromRequest } = require('../utils/mobileClient');
 
 class SessionController {
@@ -503,7 +503,7 @@ class SessionController {
       // Update activity
       await tokenRecord.updateActivity();
 
-      // Generate new access token (expires in 600 sec = 10 minutes)
+      // New access token (TTL from JWT_ACCESS_EXPIRES_IN, default 10m)
       const accessToken = generateAccessToken({
         userId: user.id,
         email: user.email,
@@ -511,17 +511,18 @@ class SessionController {
       });
 
       const mobile = isMobileAppClient(req);
+      const accessTtlSec = getAccessTokenExpiresInSeconds();
 
       if (!mobile) {
         res.cookie('accessToken', accessToken, {
           httpOnly: false,
           secure: false,
           sameSite: 'lax',
-          maxAge: 10 * 60 * 1000
+          maxAge: accessTtlSec * 1000,
         });
       }
 
-      const data = { expiresIn: 600 };
+      const data = { expiresIn: accessTtlSec };
       if (mobile) {
         data.accessToken = accessToken;
       }

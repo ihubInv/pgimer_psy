@@ -4,7 +4,12 @@ const PasswordSetupToken = require('../models/PasswordSetupToken');
 const LoginOTP = require('../models/LoginOTP');
 const RefreshToken = require('../models/RefreshToken');
 const { sendEmail } = require('../config/email');
-const { generateAccessToken, getDeviceInfo, getIpAddress } = require('../utils/tokenUtils');
+const {
+  generateAccessToken,
+  getAccessTokenExpiresInSeconds,
+  getDeviceInfo,
+  getIpAddress,
+} = require('../utils/tokenUtils');
 const { isMobileAppClient } = require('../utils/mobileClient');
 const db = require('../config/database');
 
@@ -1797,7 +1802,7 @@ class UserController {
   // Helper method to complete login with access and refresh tokens
   static async completeLogin(user, req, res) {
     try {
-      // Generate access token (10 minutes - consistent with session timeout)
+      // Access token TTL: JWT_ACCESS_EXPIRES_IN (default 10m); see tokenUtils
       const accessToken = generateAccessToken({
         userId: user.id,
         email: user.email,
@@ -1828,7 +1833,7 @@ class UserController {
           httpOnly: false,
           secure: false,
           sameSite: 'lax',
-          maxAge: 10 * 60 * 1000
+          maxAge: getAccessTokenExpiresInSeconds() * 1000,
         });
       }
 
@@ -1856,7 +1861,7 @@ class UserController {
           two_factor_enabled: userResponse.two_factor_enabled,
           created_at: userResponse.created_at
         },
-        expiresIn: 600,
+        expiresIn: getAccessTokenExpiresInSeconds(),
         redirectUrl
       };
 

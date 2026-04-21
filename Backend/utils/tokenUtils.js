@@ -1,9 +1,60 @@
 const jwt = require('jsonwebtoken');
 
+/** Default access TTL if env unset (matches previous behaviour). */
+const DEFAULT_ACCESS_EXPIRES = '10m';
+
 /**
- * Generate a short-lived access token (10 minutes)
- * @param {Object} payload - Token payload (userId, email, role)
- * @returns {string} JWT access token
+ * Parse values like `10m`, `1h`, `2d`, `30s` into seconds (for cookies / API `expiresIn`).
+ * Pure digits mean seconds (same as `jsonwebtoken` `expiresIn` number form).
+ */
+function parseAccessExpiresToSeconds(span) {
+  const s = String(span).trim();
+  if (!s) return 600;
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10);
+    return n > 0 ? n : 600;
+  }
+  const m = s.match(/^(\d+)\s*([smhd])$/i);
+  if (!m) {
+    console.warn(
+      '[tokenUtils] JWT_ACCESS_EXPIRES_IN must be digits (seconds) or N[s|m|h|d]; using 10m:',
+      s
+    );
+    return 600;
+  }
+  const n = parseInt(m[1], 10);
+  const u = m[2].toLowerCase();
+  const mult = { s: 1, m: 60, h: 3600, d: 86400 };
+  return n * mult[u];
+}
+
+function readAccessExpiresConfig() {
+  const raw = process.env.JWT_ACCESS_EXPIRES_IN;
+  const trimmed =
+    raw == null || String(raw).trim() === '' ? DEFAULT_ACCESS_EXPIRES : String(raw).trim();
+  if (/^\d+$/.test(trimmed)) {
+    const sec = parseInt(trimmed, 10);
+    const safe = sec > 0 ? sec : 600;
+    return { jwtExpiresIn: safe, seconds: safe };
+  }
+  return { jwtExpiresIn: trimmed, seconds: parseAccessExpiresToSeconds(trimmed) };
+}
+
+const accessExpiresConfig = readAccessExpiresConfig();
+
+/** Second argument to `jwt.sign` `expiresIn` (number = seconds, or string span). */
+function getAccessTokenJwtExpiresIn() {
+  return accessExpiresConfig.jwtExpiresIn;
+}
+
+/** TTL in seconds for login/refresh JSON `expiresIn` and access-token cookies. */
+function getAccessTokenExpiresInSeconds() {
+  return accessExpiresConfig.seconds;
+}
+
+/**
+ * Generate a short-lived access token.
+ * TTL: `JWT_ACCESS_EXPIRES_IN` (default `10m`). Examples: `900`, `15m`, `1h`, `2d`.
  */
 function generateAccessToken(payload) {
   return jwt.sign(
@@ -14,7 +65,7 @@ function generateAccessToken(payload) {
       type: 'access'
     },
     process.env.JWT_SECRET,
-    { expiresIn: '10m' } // 10 minutes TTL (consistent with session timeout)
+    { expiresIn: getAccessTokenJwtExpiresIn() }
   );
 }
 
@@ -90,6 +141,8 @@ module.exports = {
   verifyAccessToken,
   verifyRefreshTokenJWT,
   getDeviceInfo,
-  getIpAddress
+  getIpAddress,
+  getAccessTokenExpiresInSeconds,
+  getAccessTokenJwtExpiresIn,
 };
 
