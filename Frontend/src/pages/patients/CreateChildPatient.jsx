@@ -5,7 +5,8 @@ import { toast } from 'react-toastify';
 import {
   FiUser, FiUsers, FiHome, FiMapPin, FiCalendar, FiGlobe,
   FiFileText, FiHash, FiSave, FiX, FiCamera, FiUpload, FiEdit,
-  FiClock, FiChevronDown, FiChevronUp, FiEye, FiEdit3, FiClipboard, FiPackage
+  FiClock, FiChevronDown, FiChevronUp, FiEye, FiEdit3, FiClipboard, FiPackage,
+  FiFolder,
 } from 'react-icons/fi';
 import { IconInput } from '../../components/IconInput';
 import Card from '../../components/Card';
@@ -50,11 +51,12 @@ const CreateChildPatient = () => {
   const currentUser = useSelector(selectCurrentUser);
   const token = useSelector(selectCurrentToken);
   const hideChildViewChromeForMWO = isViewMode && isMWO(currentUser?.role);
-  // MWO edits demographics only; clinical proforma / ADL are hidden for this role
-  const showChildRegistrationCard =
-    !isEditMode || (isEditMode && isMWO(currentUser?.role));
+  // Same as adult edit: everyone sees Patient Details; MWO does not see clinical / ADL / prescription stack
+  const showChildRegistrationCard = true;
   const showClinicalProformaAndIntakeInEdit =
     isEditMode && id && !isMWO(currentUser?.role);
+  // Match adult PatientDetails edit: clean shell + page title (not the CGC marketing gradient)
+  const useAdultEditShell = Boolean(id) && isEditMode && !isViewMode;
   const { data: roomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
   
   const [formData, setFormData] = useState({
@@ -152,6 +154,7 @@ const CreateChildPatient = () => {
     childRegistration: false,
     childPatientRegistration: true, // Default expanded: view, new registration, edit
     childClinicalProforma: true, // Default expanded in edit mode
+    prescription: true, // Match adult edit: Prescription card expanded
     intakeRecord: true, // Default expanded in edit mode
   });
   
@@ -180,7 +183,7 @@ const CreateChildPatient = () => {
   const { data: prescriptionData, isLoading: isLoadingPrescriptions } = useGetPrescriptionsByPatientIdQuery(
     id,
     {
-      skip: !id || !isViewMode,
+      skip: !id || (!isViewMode && !isEditMode),
       refetchOnMountOrArgChange: true,
     }
   );
@@ -206,6 +209,24 @@ const CreateChildPatient = () => {
     }
     return docs;
   }, [formData.documents, formData.photo_path]);
+
+  // Match PatientDetailsEdit Walk-in Clinical Proforma subtitle pattern
+  const walkInClinicalProformaSubtitle = useMemo(() => {
+    if (!childClinicalProformas.length) {
+      return "Today's Patient - First visit";
+    }
+    const sortedOldestFirst = [...childClinicalProformas].sort(
+      (a, b) =>
+        new Date(a.visit_date || a.created_at || 0) - new Date(b.visit_date || b.created_at || 0)
+    );
+    const first = sortedOldestFirst[0];
+    return `First visit: ${formatDate(first.visit_date || first.created_at)}`;
+  }, [childClinicalProformas]);
+
+  const prescriptionCardSubtitle =
+    prescriptions.length > 0
+      ? `View prescriptions for ${prescriptions.length} visit${prescriptions.length > 1 ? 's' : ''}`
+      : 'No prescriptions found';
   
   // Helper function to toggle card expansion
   const toggleCard = (cardName) => {
@@ -762,15 +783,40 @@ const CreateChildPatient = () => {
   const rooms = roomsData?.data?.rooms || [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50/30 to-indigo-100/40 relative overflow-hidden">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-400/20 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-400/20 rounded-full blur-3xl"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl"></div>
-      </div>
+    <div
+      className={
+        useAdultEditShell
+          ? 'space-y-6'
+          : 'min-h-screen bg-gradient-to-br from-slate-100 via-blue-50/30 to-indigo-100/40 relative overflow-hidden'
+      }
+    >
+      {!useAdultEditShell && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-400/20 rounded-full blur-3xl" />
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-400/20 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl" />
+        </div>
+      )}
 
-      <div className="relative w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+      <div
+        className={
+          useAdultEditShell
+            ? 'relative w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6'
+            : 'relative w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8'
+        }
+      >
+        {useAdultEditShell && (
+          <div className="flex items-center gap-4 w-full">
+            <div>
+              <h1 className="text-3xl font-bold text-blue-800 drop-shadow-sm tracking-wide transition-colors hover:text-cyan-700">
+                Edit Patient Details
+              </h1>
+              <p className="text-gray-600 mt-2 text-base tracking-normal">
+                Update patient information
+              </p>
+            </div>
+          </div>
+        )}
         {/* Registration / view: always. Edit demographics: MWO only (others use proforma+intake below). */}
         {showChildRegistrationCard && (
           <Card className="shadow-lg border-0 bg-white">
@@ -808,19 +854,33 @@ const CreateChildPatient = () => {
                 onClick={() => toggleCard('childPatientRegistration')}
               >
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg">
-                    <FiUsers className="h-6 w-6 text-primary-600" />
+                  <div
+                    className={
+                      useAdultEditShell
+                        ? 'p-3 bg-blue-100 rounded-lg'
+                        : 'p-3 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg'
+                    }
+                  >
+                    {useAdultEditShell ? (
+                      <FiUser className="h-6 w-6 text-blue-600" />
+                    ) : (
+                      <FiUsers className="h-6 w-6 text-primary-600" />
+                    )}
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">
-                      {isEditMode
-                        ? 'Edit Child Patient'
-                        : 'Child Guidance Clinic (CGC) - Child Patient Registration'}
+                      {useAdultEditShell
+                        ? 'Patient Details'
+                        : isEditMode
+                          ? 'Edit Child Patient'
+                          : 'Child Guidance Clinic (CGC) - Child Patient Registration'}
                     </h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      {isEditMode
-                        ? 'Update child patient registration details'
-                        : 'Postgraduate Institute of Medical Education & Research, Chandigarh'}
+                      {useAdultEditShell
+                        ? `${formData.child_name || 'Patient'} - ${formData.cr_number || 'N/A'}`
+                        : isEditMode
+                          ? 'Update child patient registration details'
+                          : 'Postgraduate Institute of Medical Education & Research, Chandigarh'}
                     </p>
                   </div>
                 </div>
@@ -1413,12 +1473,22 @@ const CreateChildPatient = () => {
                   type="submit"
                   loading={isLoading}
                   disabled={isLoading || isLoadingData}
-                  className="px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200"
+                  className={
+                    useAdultEditShell
+                      ? 'px-6 lg:px-8 py-3 bg-gradient-to-r from-primary-600 via-indigo-600 to-blue-600 hover:from-primary-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105'
+                      : 'px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200'
+                  }
                 >
                   <FiSave className="mr-2" />
-                  {isLoading 
-                    ? (isEditMode ? 'Updating...' : 'Registering...')
-                    : (isEditMode ? 'Update Child Patient' : 'Register Child Patient')}
+                  {isLoading
+                    ? isEditMode
+                      ? 'Updating...'
+                      : 'Registering...'
+                    : isEditMode
+                      ? useAdultEditShell
+                        ? 'Update Patient'
+                        : 'Update Child Patient'
+                      : 'Register Child Patient'}
                 </Button>
               )}
             </div>
@@ -1469,29 +1539,26 @@ const CreateChildPatient = () => {
         </Card>
         )}
 
-        {/* Edit mode (non-MWO): Child Clinical Proforma + Intake Record */}
+        {/* Edit mode (non-MWO): same card order & chrome as adult PatientDetailsEdit */}
         {showClinicalProformaAndIntakeInEdit && (
           <>
-            {/* Child Clinical Proforma Card */}
             <Card className="shadow-lg border-0 bg-white">
               <div
                 className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
               >
-                <div 
+                <div
                   className="flex items-center gap-4 cursor-pointer flex-1"
                   onClick={() => toggleCard('childClinicalProforma')}
                 >
-                  <div className="p-3 bg-blue-100 rounded-lg">
-                    <FiClipboard className="h-6 w-6 text-blue-600" />
+                  <div className="p-3 bg-green-100 rounded-lg">
+                    <FiClipboard className="h-6 w-6 text-green-600" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">Child Clinical Proforma</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Create or edit child clinical proforma
-                    </p>
+                    <h3 className="text-xl font-bold text-gray-900">Walk-in Clinical Proforma</h3>
+                    <p className="text-sm text-gray-500 mt-1">{walkInClinicalProformaSubtitle}</p>
                   </div>
                 </div>
-                <div 
+                <div
                   className="cursor-pointer"
                   onClick={() => toggleCard('childClinicalProforma')}
                 >
@@ -1508,7 +1575,6 @@ const CreateChildPatient = () => {
                   <EditChildClinicalProforma
                     childPatientId={id}
                     onUpdate={(proforma) => {
-                      // Optionally handle update
                       console.log('Child clinical proforma updated:', proforma);
                     }}
                   />
@@ -1516,26 +1582,92 @@ const CreateChildPatient = () => {
               )}
             </Card>
 
-            {/* Intake Record (ADL) Card */}
             <Card className="shadow-lg border-0 bg-white">
               <div
                 className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
               >
-                <div 
+                <div
+                  className="flex items-center gap-4 cursor-pointer flex-1"
+                  onClick={() => toggleCard('prescription')}
+                >
+                  <div className="p-3 bg-amber-100 rounded-lg">
+                    <FiPackage className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Prescription</h3>
+                    <p className="text-sm text-gray-500 mt-1">{prescriptionCardSubtitle}</p>
+                  </div>
+                </div>
+                <div
+                  className="cursor-pointer"
+                  onClick={() => toggleCard('prescription')}
+                >
+                  {expandedCards.prescription ? (
+                    <FiChevronUp className="h-6 w-6 text-gray-500" />
+                  ) : (
+                    <FiChevronDown className="h-6 w-6 text-gray-500" />
+                  )}
+                </div>
+              </div>
+
+              {expandedCards.prescription && (
+                <div className="p-6">
+                  {isLoadingPrescriptions ? (
+                    <p className="text-sm text-gray-500">Loading prescriptions…</p>
+                  ) : prescriptions.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 max-w-2xl mx-auto">
+                        <FiPackage className="h-12 w-12 mx-auto mb-4 text-amber-500" />
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">No prescriptions found</h3>
+                        <p className="text-sm text-gray-600">
+                          Prescriptions created for this patient will appear here after the walk-in clinical
+                          proforma is saved.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <ul className="space-y-3">
+                      {prescriptions.map((rec) => (
+                        <li
+                          key={rec.id || rec.prescription_record_id || JSON.stringify(rec.created_at)}
+                          className="rounded-lg border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-800"
+                        >
+                          <span className="font-medium text-gray-900">
+                            {formatDate(rec.visit_date || rec.created_at || rec.prescription_date)}
+                          </span>
+                          {Array.isArray(rec.prescription) && rec.prescription.length > 0 && (
+                            <span className="text-gray-600">
+                              {' '}
+                              · {rec.prescription.length} medicine{rec.prescription.length > 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </Card>
+
+            <Card className="shadow-lg border-0 bg-white">
+              <div
+                className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                <div
                   className="flex items-center gap-4 cursor-pointer flex-1"
                   onClick={() => toggleCard('intakeRecord')}
                 >
                   <div className="p-3 bg-purple-100 rounded-lg">
-                    <FiFileText className="h-6 w-6 text-purple-600" />
+                    <FiFolder className="h-6 w-6 text-purple-600" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">Intake Record</h3>
+                    <h3 className="text-xl font-bold text-gray-900">Out Patient Intake Record</h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      Out Patient Intake Record form
+                      Out-patient intake record (ADL) for this patient
                     </p>
                   </div>
                 </div>
-                <div 
+                <div
                   className="cursor-pointer"
                   onClick={() => toggleCard('intakeRecord')}
                 >

@@ -38,15 +38,16 @@ import {
 
 // ── Top-level helpers (defined OUTSIDE component to keep stable references) ──
 
-const SectionCard = ({ number, title, accent, headerBg, children }) => (
-  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-    <div className={`flex items-center gap-3 px-5 py-3 ${headerBg} border-b border-gray-100`}>
-      <span className={`flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold shadow-sm ${accent}`}>
+// Neutral sections — aligned with adult Walk-in Clinical Proforma (light gray / emerald accent, no blue banners)
+const SectionCard = ({ number, title, children }) => (
+  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-200">
+      <span className="flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-white border border-gray-200 text-gray-700">
         {number}
       </span>
-      <h2 className="font-semibold text-gray-800 text-sm tracking-wide uppercase">{title}</h2>
+      <h2 className="text-base font-semibold text-gray-900">{title}</h2>
     </div>
-    <div className={`p-5 border-l-4 ${accent.replace('bg-', 'border-')}`}>
+    <div className="p-4 sm:p-5 border-l-4 border-emerald-500/35">
       {children}
     </div>
   </div>
@@ -119,7 +120,8 @@ const EditChildClinicalProforma = ({
   
   const childPatientIdFromQuery = searchParams.get('child_patient_id');
   const childPatientId = propChildPatientId || childPatientIdFromQuery || null;
-  
+  const isEmbedded = Boolean(propChildPatientId);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [childPatient, setChildPatient] = useState(null);
@@ -633,11 +635,13 @@ const EditChildClinicalProforma = ({
     setIsSaving(true);
     try {
       const token = localStorage.getItem('token');
-      const url = id 
-        ? `${import.meta.env.VITE_API_URL || '/api'}/child-clinical-proformas/${id}`
+      // Match adult flow: update when we have a proforma id (URL or loaded record, e.g. embedded edit)
+      const proformaRecordId = id || formData?.id || null;
+      const url = proformaRecordId
+        ? `${import.meta.env.VITE_API_URL || '/api'}/child-clinical-proformas/${proformaRecordId}`
         : `${import.meta.env.VITE_API_URL || '/api'}/child-clinical-proformas`;
-      
-      const method = id ? 'PUT' : 'POST';
+
+      const method = proformaRecordId ? 'PUT' : 'POST';
       
       // Helper function to sanitize date fields - convert empty strings to null
       const sanitizeDate = (dateValue) => {
@@ -721,14 +725,19 @@ const EditChildClinicalProforma = ({
       const data = await response.json();
       
       if (response.ok) {
-        toast.success(submitStatus === 'submitted' 
-          ? 'Child clinical proforma submitted successfully' 
-          : 'Child clinical proforma saved as draft');
-        
+        const createdOrUpdated = data.data?.proforma;
+        toast.success(
+          submitStatus === 'submitted'
+            ? proformaRecordId
+              ? 'Clinical proforma updated successfully'
+              : 'Clinical proforma created successfully'
+            : 'Child clinical proforma saved as draft'
+        );
+
         if (propOnUpdate) {
-          propOnUpdate(data.data?.proforma);
-        } else if (!id) {
-          // After creating a new proforma, invalidate cache to trigger refetch in Today's Patients
+          propOnUpdate(createdOrUpdated);
+        } else if (!proformaRecordId) {
+          // After creating a new proforma (no existing id), invalidate cache and optionally navigate
           const childPatientIdToInvalidate = childPatientId || formData.child_patient_id;
           if (childPatientIdToInvalidate) {
             dispatch(
@@ -738,10 +747,19 @@ const EditChildClinicalProforma = ({
               ])
             );
           }
-          
-          // Navigate back to Today's Patients page
-          // The button will automatically change from "Clinical Proforma" to "Follow-Up"
+
           navigate('/clinical-today-patients');
+        } else {
+          // Update path: refresh RTK cache so embedded lists reflect changes
+          const childPatientIdToInvalidate = childPatientId || formData.child_patient_id;
+          if (childPatientIdToInvalidate) {
+            dispatch(
+              childClinicalApiSlice.util.invalidateTags([
+                { type: 'ChildClinical', id: `child-patient-${childPatientIdToInvalidate}` },
+                'ChildClinical'
+              ])
+            );
+          }
         }
       } else {
         toast.error(data.message || 'Failed to save child clinical proforma');
@@ -762,82 +780,111 @@ const EditChildClinicalProforma = ({
     );
   }
 
+  const patientDemographicsFields = childPatient
+    ? [
+        { label: 'Patient Name', value: childPatient.child_name || formData.child_name || '—' },
+        { label: 'CR Number', value: childPatient.cr_number || '—' },
+        { label: 'CGC Number', value: childPatient.cgc_number || '—' },
+        {
+          label: 'Age / Sex',
+          value: `${childPatient.age || formData.age || '—'} yrs / ${childPatient.sex || formData.sex || '—'}`,
+        },
+      ]
+    : [];
+
+  const proformaRecordId = id || formData?.id || null;
+  const isUpdateMode = Boolean(proformaRecordId);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-
-      {/* ── TOP HEADER ─────────────────────────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900 text-white shadow-xl print:hidden">
-        <div className="px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => navigate(-1)}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
-              >
-                <FiArrowLeft className="w-5 h-5" />
-              </button>
-            <div>
-                <p className="text-blue-300 text-xs font-semibold uppercase tracking-widest">
-                  PGIMER — Child & Adolescent Psychiatry
-                </p>
-                <h1 className="text-lg font-bold leading-tight">Walk-In Clinical Proforma</h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-              {isViewMode && (
-                <span className="hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-400/30">
-                  <FiAlertCircle className="w-3 h-3" /> View Mode
-                </span>
-              )}
-              <button
-              type="button"
-                onClick={() => handlePrintSection('Child Clinical Proforma')}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
-            >
-                <FiPrinter className="w-4 h-4" />
-                <span className="hidden sm:inline">Print</span>
-              </button>
-              {isViewMode && id && (
-                <button
-              type="button"
-                  onClick={() => navigate(`/child-clinical-proformas/${id}/edit`)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500 hover:bg-green-400 transition-colors text-sm font-semibold shadow-lg shadow-green-900/30"
-                >
-                  <FiEdit3 className="w-4 h-4" /> Edit
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Patient Info Strip */}
-          {childPatient && (
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/10 rounded-2xl p-4 border border-white/10">
-              {[
-                { label: 'Patient Name', value: childPatient.child_name || formData.child_name || '—' },
-                { label: 'CR Number',   value: childPatient.cr_number  || '—' },
-                { label: 'CGC Number',  value: childPatient.cgc_number || '—' },
-                { label: 'Age / Sex',   value: `${childPatient.age || formData.age || '—'} yrs / ${childPatient.sex || formData.sex || '—'}` },
-              ].map(item => (
+    <div className={isEmbedded ? '' : 'min-h-screen bg-gray-50'}>
+      {/* Light header — matches adult Walk-in Clinical Proforma (no blue gradient) */}
+      {isEmbedded ? (
+        childPatient && (
+          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4 print:hidden">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {patientDemographicsFields.map((item) => (
                 <div key={item.label}>
-                  <p className="text-blue-300 text-xs font-semibold uppercase tracking-wide mb-0.5">{item.label}</p>
-                  <p className="text-white font-semibold truncate">{item.value}</p>
+                  <p className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-0.5">{item.label}</p>
+                  <p className="text-gray-900 font-medium truncate">{item.value}</p>
                 </div>
               ))}
             </div>
-          )}
+          </div>
+        )
+      ) : (
+        <div className="bg-white border-b border-gray-200 shadow-sm print:hidden">
+          <div className="px-4 py-4 max-w-6xl mx-auto w-full">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  className="p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 transition-colors shrink-0"
+                  aria-label="Go back"
+                >
+                  <FiArrowLeft className="w-5 h-5" />
+                </button>
+                <div className="min-w-0">
+                  <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">
+                    PRIME — Child & Adolescent Psychiatry / Walk-in Clinical Proforma
+                  </p>
+                  <h1 className="text-lg font-bold text-gray-900 leading-tight">Walk-in Clinical Proforma</h1>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isViewMode && (
+                  <span className="hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-semibold border border-amber-200">
+                    <FiAlertCircle className="w-3 h-3" /> View Mode
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handlePrintSection('Child Clinical Proforma')}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm"
+                >
+                  <FiPrinter className="w-4 h-4" />
+                  <span className="hidden sm:inline">Print</span>
+                </button>
+                {isViewMode && id && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/child-clinical-proformas/${id}/edit`)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-sm"
+                  >
+                    <FiEdit3 className="w-4 h-4" /> Edit
+                  </button>
+                )}
+              </div>
+            </div>
+            {childPatient && (
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                {patientDemographicsFields.map((item) => (
+                  <div key={item.label}>
+                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-0.5">{item.label}</p>
+                    <p className="text-gray-900 font-medium truncate">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+      )}
 
       {/* ── FORM BODY ──────────────────────────────────────────────────────── */}
-      <div ref={printSectionRef} className="px-4 py-6">
+      <div ref={printSectionRef} className={isEmbedded ? 'px-0 py-0' : 'px-4 py-6 max-w-6xl mx-auto w-full'}>
         <form
-          onSubmit={(e) => { if (isViewMode) { e.preventDefault(); return; } handleSubmit(e, 'draft'); }}
+          onSubmit={(e) => {
+            if (isViewMode) {
+              e.preventDefault();
+              return;
+            }
+            handleSubmit(e, 'submitted');
+          }}
           className="space-y-4"
         >
 
           {/* ── 1. BASIC INFORMATION ─────────────────────────────────────── */}
-          <SectionCard number={1} title="Basic Information" accent="bg-blue-600" headerBg="bg-blue-50">
+          <SectionCard number={1} title="Basic Information">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="col-span-2">
                 <IconInput
@@ -929,7 +976,7 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 2. SCHOOL INFORMATION ────────────────────────────────────── */}
-          <SectionCard number={2} title="School Information" accent="bg-violet-600" headerBg="bg-violet-50">
+          <SectionCard number={2} title="School Information">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div className="col-span-2">
                 <Input
@@ -976,7 +1023,7 @@ const EditChildClinicalProforma = ({
                   options={['Yes', 'No']}
                   value={formData.school_refusal}
                   onChange={handleChange}
-                  activeClass="bg-violet-600"
+                  activeClass="bg-emerald-600"
                       disabled={isViewMode}
                     />
               </div>
@@ -995,7 +1042,7 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 3. PRESENTING COMPLAINTS ─────────────────────────────────── */}
-          <SectionCard number={3} title="Presenting Complaints" accent="bg-amber-600" headerBg="bg-amber-50">
+          <SectionCard number={3} title="Presenting Complaints">
             <Textarea
               label=""
               name="presenting_complaints"
@@ -1009,12 +1056,12 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 4. NEURODEVELOPMENTAL CONCERNS ───────────────────────────── */}
-          <SectionCard number={4} title="Neurodevelopmental Concerns" accent="bg-teal-600" headerBg="bg-teal-50">
+          <SectionCard number={4} title="Neurodevelopmental Concerns">
             <div className="space-y-4">
               <ChipSelect
                 options={CHILD_CLINICAL_NEURODEVELOPMENTAL_CONCERNS}
                 selectedValues={formData.neurodevelopmental_concerns}
-                activeClass="bg-teal-600"
+                activeClass="bg-emerald-600"
                         disabled={isViewMode}
                 onToggle={(val) => handleMultiSelect('neurodevelopmental_concerns', val)}
                       />
@@ -1032,12 +1079,12 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 5. BEHAVIORAL CONCERNS ───────────────────────────────────── */}
-          <SectionCard number={5} title="Behavioral Concerns" accent="bg-red-600" headerBg="bg-red-50">
+          <SectionCard number={5} title="Behavioral Concerns">
             <div className="space-y-4">
               <ChipSelect
                 options={CHILD_CLINICAL_BEHAVIORAL_CONCERNS}
                 selectedValues={formData.behavioral_concerns}
-                activeClass="bg-red-600"
+                activeClass="bg-emerald-600"
                 disabled={isViewMode}
                 onToggle={(val) => handleMultiSelect('behavioral_concerns', val)}
                         />
@@ -1055,12 +1102,12 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 6. EMOTIONAL & PSYCHOLOGICAL SYMPTOMS ────────────────────── */}
-          <SectionCard number={6} title="Emotional & Psychological Symptoms" accent="bg-pink-600" headerBg="bg-pink-50">
+          <SectionCard number={6} title="Emotional & Psychological Symptoms">
             <div className="space-y-4">
               <ChipSelect
                 options={CHILD_CLINICAL_EMOTIONAL_PSYCHOLOGICAL_SYMPTOMS}
                 selectedValues={formData.emotional_psychological_symptoms}
-                activeClass="bg-pink-600"
+                activeClass="bg-emerald-600"
                 disabled={isViewMode}
                 onToggle={(val) => handleMultiSelect('emotional_psychological_symptoms', val)}
               />
@@ -1078,12 +1125,12 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 7. TRAUMA & PSYCHOSOCIAL STRESSORS ───────────────────────── */}
-          <SectionCard number={7} title="Trauma & Psychosocial Stressors" accent="bg-orange-600" headerBg="bg-orange-50">
+          <SectionCard number={7} title="Trauma & Psychosocial Stressors">
             <div className="space-y-4">
               <ChipSelect
                 options={CHILD_CLINICAL_TRAUMA_PSYCHOSOCIAL_STRESSORS}
                 selectedValues={formData.trauma_psychosocial_stressors}
-                activeClass="bg-orange-600"
+                activeClass="bg-emerald-600"
                 disabled={isViewMode}
                 onToggle={(val) => handleMultiSelect('trauma_psychosocial_stressors', val)}
               />
@@ -1101,7 +1148,7 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 8. MEDICAL & FAMILY HISTORY ──────────────────────────────── */}
-          <SectionCard number={8} title="Medical & Family History" accent="bg-green-700" headerBg="bg-green-50">
+          <SectionCard number={8} title="Medical & Family History">
             <div className="space-y-4">
               <Input
                 label="Associated Medical Illness"
@@ -1127,7 +1174,7 @@ const EditChildClinicalProforma = ({
                 <ChipSelect
                   options={CHILD_CLINICAL_FAMILY_HISTORY_NEW}
                   selectedValues={formData.family_history}
-                  activeClass="bg-green-700"
+                  activeClass="bg-emerald-600"
                   disabled={isViewMode}
                   onToggle={(val) => handleMultiSelect('family_history', val)}
                     />
@@ -1136,7 +1183,7 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 9. RISK ASSESSMENT ───────────────────────────────────────── */}
-          <SectionCard number={9} title="Risk Assessment" accent="bg-rose-700" headerBg="bg-rose-50">
+          <SectionCard number={9} title="Risk Assessment">
             <div className="space-y-3">
               <p className="text-xs text-rose-700 font-medium bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
                 ⚠️ Select all applicable risk factors present
@@ -1144,7 +1191,7 @@ const EditChildClinicalProforma = ({
               <ChipSelect
                 options={CHILD_CLINICAL_RISK_ASSESSMENT}
                 selectedValues={formData.risk_assessment}
-                activeClass="bg-rose-700"
+                activeClass="bg-emerald-600"
                 disabled={isViewMode}
                 onToggle={(val) => handleMultiSelect('risk_assessment', val)}
               />
@@ -1152,7 +1199,7 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 10. MENTAL STATUS EXAMINATION ────────────────────────────── */}
-          <SectionCard number={10} title="Mental Status Examination (MSE)" accent="bg-indigo-600" headerBg="bg-indigo-50">
+          <SectionCard number={10} title="Mental Status Examination (MSE)">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[
                 { label: 'Appearance & Behaviour', name: 'mse_appearance_behaviour', placeholder: 'e.g., Well groomed, calm, cooperative...' },
@@ -1180,7 +1227,7 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 11. DIAGNOSIS & FORMULATION ──────────────────────────────── */}
-          <SectionCard number={11} title="Diagnosis & Formulation" accent="bg-blue-700" headerBg="bg-blue-50">
+          <SectionCard number={11} title="Diagnosis & Formulation">
                 <Textarea
               label="Provisional Diagnosis"
               name="provisional_diagnosis"
@@ -1194,18 +1241,18 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 12. INVESTIGATIONS REQUIRED ──────────────────────────────── */}
-          <SectionCard number={12} title="Investigations Required" accent="bg-cyan-600" headerBg="bg-cyan-50">
+          <SectionCard number={12} title="Investigations Required">
             <ChipSelect
               options={CHILD_CLINICAL_INVESTIGATIONS_REQUIRED}
               selectedValues={formData.investigations_required}
-              activeClass="bg-cyan-600"
+              activeClass="bg-emerald-600"
               disabled={isViewMode}
               onToggle={(val) => handleMultiSelect('investigations_required', val)}
             />
           </SectionCard>
 
           {/* ── 13. TREATMENT PLAN ───────────────────────────────────────── */}
-          <SectionCard number={13} title="Treatment Plan" accent="bg-emerald-700" headerBg="bg-emerald-50">
+          <SectionCard number={13} title="Treatment Plan">
             <div className="space-y-5">
               <Textarea
                 label="Pharmacological Treatment"
@@ -1222,7 +1269,7 @@ const EditChildClinicalProforma = ({
                 <ChipSelect
                   options={CHILD_CLINICAL_PSYCHOLOGICAL_TREATMENT_OPTIONS}
                   selectedValues={formData.psychological_treatment}
-                  activeClass="bg-emerald-700"
+                  activeClass="bg-emerald-600"
                   disabled={isViewMode}
                   onToggle={(val) => handleMultiSelect('psychological_treatment', val)}
                 />
@@ -1261,7 +1308,7 @@ const EditChildClinicalProforma = ({
           </SectionCard>
 
           {/* ── 14. FOLLOW-UP & DISPOSAL ─────────────────────────────────── */}
-          <SectionCard number={14} title="Follow-Up & Disposal" accent="bg-slate-600" headerBg="bg-slate-50">
+          <SectionCard number={14} title="Follow-Up & Disposal">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                 label="Follow-up After"
@@ -1284,7 +1331,7 @@ const EditChildClinicalProforma = ({
               </div>
           </SectionCard>
 
-          {/* ── ACTION BAR ───────────────────────────────────────────────── */}
+          {/* ── ACTION BAR (aligned with adult Walk-in Clinical Proforma: single primary save) ─ */}
           <div className="sticky bottom-4 z-10 print:hidden">
             <div className="bg-white/90 backdrop-blur-md border border-gray-200 rounded-2xl shadow-xl px-5 py-4 flex items-center justify-between gap-3">
               <p className="text-xs text-gray-500 hidden sm:block">
@@ -1294,34 +1341,15 @@ const EditChildClinicalProforma = ({
               </p>
               <div className="flex items-center gap-3 ml-auto">
               {!isViewMode && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => navigate(-1)}
-                      className="text-gray-600 border-gray-300 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                      type="button"
-                    loading={isSaving}
-                    onClick={(e) => handleSubmit(e, 'draft')}
-                      className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white px-5 py-2.5 rounded-xl shadow-sm"
-                  >
-                      <FiSave className="w-4 h-4" />
-                      Save Draft
-                  </Button>
-                  <Button
-                    type="button"
-                    loading={isSaving}
-                    onClick={(e) => handleSubmit(e, 'submitted')}
-                      className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-green-500/30"
-                  >
-                      <FiClipboard className="w-4 h-4" />
-                      Submit Proforma
-                  </Button>
-                </>
+                <Button
+                  type="submit"
+                  loading={isSaving}
+                  disabled={isSaving}
+                  className="flex items-center gap-2 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-lg shadow-primary-500/30 px-5 py-2.5 rounded-md"
+                >
+                  <FiSave className="w-4 h-4" />
+                  {isUpdateMode ? 'Update Clinical Proforma' : 'Create Clinical Proforma'}
+                </Button>
               )}
               {isViewMode && (
                 <>
