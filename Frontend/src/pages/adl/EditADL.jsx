@@ -78,7 +78,15 @@ const cloneForFormState = (data) => {
   }
 };
 
-const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = null, clinicalProformaId: propClinicalProformaId = null, readOnly = false, initialAdlData = null }) => {
+const EditADL = ({
+  adlFileId,
+  isEmbedded = false,
+  patientId: propPatientId = null,
+  childPatientId: propChildPatientId = null,
+  clinicalProformaId: propClinicalProformaId = null,
+  readOnly = false,
+  initialAdlData = null,
+}) => {
   const navigate = useNavigate();
   const { id: urlId } = useParams();
   const [searchParams] = useSearchParams();
@@ -141,7 +149,12 @@ const EditADL = ({ adlFileId, isEmbedded = false, patientId: propPatientId = nul
   // Get patientId, childPatientId and clinicalProformaId - must be declared before useGetPatientFilesQuery
   // Priority: prop > query param > URL id (if patient route) > adlFile
   const patientId = propPatientId || (patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : null) || (isPatientRoute && id ? parseInt(id, 10) : null) || adlFile?.patient_id;
-  const childPatientId = (childPatientIdFromQuery ? parseInt(childPatientIdFromQuery, 10) : null) || adlFile?.child_patient_id;
+  const childPatientId =
+    (propChildPatientId != null && propChildPatientId !== ''
+      ? parseInt(propChildPatientId, 10)
+      : null) ||
+    (childPatientIdFromQuery ? parseInt(childPatientIdFromQuery, 10) : null) ||
+    adlFile?.child_patient_id;
   const clinicalProformaId = propClinicalProformaId || (clinicalProformaIdFromQuery ? parseInt(clinicalProformaIdFromQuery, 10) : null) || adlFile?.clinical_proforma_id;
   
   // Determine if this is a child patient

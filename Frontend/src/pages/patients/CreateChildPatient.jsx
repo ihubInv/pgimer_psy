@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import {
   FiUser, FiUsers, FiHome, FiMapPin, FiCalendar, FiGlobe,
   FiFileText, FiHash, FiSave, FiX, FiCamera, FiUpload, FiEdit,
-  FiClock, FiChevronDown, FiChevronUp, FiEye, FiEdit3, FiClipboard, FiPackage,
+  FiClock, FiChevronDown, FiChevronUp, FiEye, FiClipboard, FiPackage,
   FiFolder,
 } from 'react-icons/fi';
 import { IconInput } from '../../components/IconInput';
@@ -35,10 +35,12 @@ import { useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
 import { useGetChildClinicalProformasByChildPatientIdQuery } from '../../features/clinical/childClinicalApiSlice';
 import { useGetFollowUpsByChildPatientIdQuery } from '../../features/followUp/followUpApiSlice';
 import { useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
+import { useGetADLFilesByChildPatientIdQuery } from '../../features/adl/adlApiSlice';
 import { formatDate } from '../../utils/formatters';
 import EditChildClinicalProforma from '../clinical/EditChildClinicalProforma';
 import EditADL from '../adl/EditADL';
 import ChildPatientRegistrationViewCards from '../../components/ChildPatientRegistrationViewCards';
+import ChildClinicalProformaSummaryView from '../../components/ChildClinicalProformaSummaryView';
 import FilePreview from '../../components/FilePreview';
 
 const CreateChildPatient = () => {
@@ -55,6 +57,9 @@ const CreateChildPatient = () => {
   const showChildRegistrationCard = true;
   const showClinicalProformaAndIntakeInEdit =
     isEditMode && id && !isMWO(currentUser?.role);
+  /** Today's / view flow: show clinical + intake + prescription cards (same idea as edit), read-only summaries */
+  const showChildClinicalSummaryInView =
+    isViewMode && Boolean(id) && !isMWO(currentUser?.role);
   // Match adult PatientDetails edit: clean shell + page title (not the CGC marketing gradient)
   const useAdultEditShell = Boolean(id) && isEditMode && !isViewMode;
   const { data: roomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
@@ -151,11 +156,13 @@ const CreateChildPatient = () => {
   // State for expanded cards (Past History section and Edit mode cards)
   const [expandedCards, setExpandedCards] = useState({
     pastHistory: true, // Expanded by default so MWO and others see history without hunting
-    childRegistration: false,
     childPatientRegistration: true, // Default expanded: view, new registration, edit
     childClinicalProforma: true, // Default expanded in edit mode
     prescription: true, // Match adult edit: Prescription card expanded
     intakeRecord: true, // Default expanded in edit mode
+    viewChildClinical: true,
+    viewIntake: true,
+    viewPrescription: true,
   });
   
   // State for expanded visit cards
@@ -187,6 +194,11 @@ const CreateChildPatient = () => {
       refetchOnMountOrArgChange: true,
     }
   );
+
+  const { data: childAdlData, isLoading: isLoadingChildAdl } = useGetADLFilesByChildPatientIdQuery(id, {
+    skip: !id || !isViewMode,
+    refetchOnMountOrArgChange: true,
+  });
   
   // Extract child clinical proformas
   const childClinicalProformas = Array.isArray(childClinicalData?.data?.proformas)
@@ -201,6 +213,23 @@ const CreateChildPatient = () => {
   const prescriptions = Array.isArray(prescriptionData?.data?.prescriptions)
     ? prescriptionData.data.prescriptions
     : [];
+
+  const childAdlFiles = Array.isArray(childAdlData?.data?.adlFiles) ? childAdlData.data.adlFiles : [];
+
+  const firstChildProformaMeta = useMemo(() => {
+    if (!childClinicalProformas.length) return { dateLabel: null, id: null };
+    const sorted = [...childClinicalProformas].sort(
+      (a, b) =>
+        new Date(a.visit_date || a.created_at || a.date || 0) -
+        new Date(b.visit_date || b.created_at || b.date || 0)
+    );
+    const first = sorted[0];
+    const raw = first?.visit_date || first?.created_at || first?.date;
+    return {
+      id: first?.id ?? null,
+      dateLabel: raw ? formatDate(String(raw).includes('T') ? String(raw).split('T')[0] : raw) : null,
+    };
+  }, [childClinicalProformas]);
 
   const childDocumentFilesForPreview = useMemo(() => {
     const docs = Array.isArray(formData.documents) ? [...formData.documents] : [];
@@ -308,6 +337,23 @@ const CreateChildPatient = () => {
       });
     });
     
+    // Out-patient intake (ADL) files for this child — same calendar day as other records
+    childAdlFiles.forEach((file) => {
+      if (!file?.id) return;
+      const visitDate = file.created_at || file.file_created_date || file.updated_at;
+      if (!visitDate) return;
+      allVisits.push({
+        visitId: `adl-${file.id}`,
+        visitDate,
+        type: 'adl_intake',
+        isFollowUp: false,
+        proforma: null,
+        followUp: null,
+        prescription: null,
+        adlFile: file,
+      });
+    });
+
     // Add standalone prescriptions as visits (prescriptions not linked to any proforma or follow-up)
     const usedPrescriptionIds = new Set();
     prescriptions.forEach(prescription => {
@@ -390,7 +436,7 @@ const CreateChildPatient = () => {
       });
     
     return sortedVisits;
-  }, [childClinicalProformas, childFollowUps, prescriptions, id, isViewMode, todayDateString]);
+  }, [childClinicalProformas, childFollowUps, childAdlFiles, prescriptions, id, isViewMode, todayDateString]);
   
   // Filter past proformas (exclude today's) - for backward compatibility
   const pastProformas = useMemo(() => {
@@ -1539,6 +1585,203 @@ const CreateChildPatient = () => {
         </Card>
         )}
 
+        {/* View mode (non-MWO): clinical stack for Today's Patients / view — mirrors edit cards, read-only */}
+        {showChildClinicalSummaryInView && (
+          <>
+            <Card className="shadow-lg border-0 bg-white">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                <div
+                  className="flex cursor-pointer items-center gap-4 flex-1"
+                  onClick={() => toggleCard('viewChildClinical')}
+                >
+                  <div className="rounded-lg bg-green-100 p-3">
+                    <FiClipboard className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Child Clinical Proforma</h3>
+                    <p className="mt-1 text-sm text-gray-500">{walkInClinicalProformaSubtitle}</p>
+                  </div>
+                </div>
+                <div className="cursor-pointer" onClick={() => toggleCard('viewChildClinical')}>
+                  {expandedCards.viewChildClinical ? (
+                    <FiChevronUp className="h-6 w-6 text-gray-500" />
+                  ) : (
+                    <FiChevronDown className="h-6 w-6 text-gray-500" />
+                  )}
+                </div>
+              </div>
+              {expandedCards.viewChildClinical && (
+                <div className="p-6">
+                  {isLoadingChildProformas ? (
+                    <p className="text-sm text-gray-500">Loading…</p>
+                  ) : childClinicalProformas.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-4 py-8 text-center">
+                      <p className="text-sm font-medium text-gray-500">Not created yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-10">
+                      {[...childClinicalProformas]
+                        .sort(
+                          (a, b) =>
+                            new Date(b.visit_date || b.created_at || 0) -
+                            new Date(a.visit_date || a.created_at || 0)
+                        )
+                        .map((p, idx) => (
+                          <div key={p.id}>
+                            {idx > 0 && <div className="mb-10 border-t border-gray-200" />}
+                            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm text-gray-600">
+                                <span className="font-semibold text-gray-800">Record</span>{' '}
+                                {formatDate(p.visit_date || p.created_at)}
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate(`/child-clinical-proformas/${p.id}`)}
+                              >
+                                <FiEye className="mr-1 inline" />
+                                Open full proforma
+                              </Button>
+                            </div>
+                            <ChildClinicalProformaSummaryView proforma={p} hideTitleBlock />
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+
+            <Card className="shadow-lg border-0 bg-white">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                <div
+                  className="flex cursor-pointer items-center gap-4 flex-1"
+                  onClick={() => toggleCard('viewIntake')}
+                >
+                  <div className="rounded-lg bg-purple-100 p-3">
+                    <FiFolder className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Out Patient Intake Record</h3>
+                    <p className="mt-1 text-sm text-gray-500">ADL / intake files for this child patient</p>
+                  </div>
+                </div>
+                <div className="cursor-pointer" onClick={() => toggleCard('viewIntake')}>
+                  {expandedCards.viewIntake ? (
+                    <FiChevronUp className="h-6 w-6 text-gray-500" />
+                  ) : (
+                    <FiChevronDown className="h-6 w-6 text-gray-500" />
+                  )}
+                </div>
+              </div>
+              {expandedCards.viewIntake && (
+                <div className="p-6">
+                  {isLoadingChildAdl ? (
+                    <p className="text-sm text-gray-500">Loading…</p>
+                  ) : childAdlFiles.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-4 py-8 text-center">
+                      <p className="text-sm font-medium text-gray-500">Not created yet</p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {childAdlFiles.map((file) => (
+                        <li
+                          key={file.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm"
+                        >
+                          <span className="text-gray-800">
+                            {file.adl_no ? `ADL ${file.adl_no}` : `Intake record #${file.id}`}
+                            {file.created_at && (
+                              <span className="text-gray-500"> · {formatDate(file.created_at)}</span>
+                            )}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate(`/adl-files/${file.id}/view`)}
+                          >
+                            <FiEye className="mr-1 inline" />
+                            View
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </Card>
+
+            <Card className="shadow-lg border-0 bg-white">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                <div
+                  className="flex cursor-pointer items-center gap-4 flex-1"
+                  onClick={() => toggleCard('viewPrescription')}
+                >
+                  <div className="rounded-lg bg-amber-100 p-3">
+                    <FiPackage className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Prescription</h3>
+                    <p className="mt-1 text-sm text-gray-500">{prescriptionCardSubtitle}</p>
+                  </div>
+                </div>
+                <div className="cursor-pointer" onClick={() => toggleCard('viewPrescription')}>
+                  {expandedCards.viewPrescription ? (
+                    <FiChevronUp className="h-6 w-6 text-gray-500" />
+                  ) : (
+                    <FiChevronDown className="h-6 w-6 text-gray-500" />
+                  )}
+                </div>
+              </div>
+              {expandedCards.viewPrescription && (
+                <div className="p-6">
+                  {isLoadingPrescriptions ? (
+                    <p className="text-sm text-gray-500">Loading…</p>
+                  ) : prescriptions.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-4 py-8 text-center">
+                      <p className="text-sm font-medium text-gray-500">Not created yet</p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {prescriptions.map((rec) => (
+                        <li
+                          key={rec.id || rec.prescription_record_id || JSON.stringify(rec.created_at)}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-800"
+                        >
+                          <span className="font-medium text-gray-900">
+                            {formatDate(rec.visit_date || rec.created_at || rec.prescription_date)}
+                            {Array.isArray(rec.prescription) && rec.prescription.length > 0 && (
+                              <span className="font-normal text-gray-600">
+                                {' '}
+                                · {rec.prescription.length} medicine{rec.prescription.length > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </span>
+                          {(rec.id || rec.prescription_record_id) && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                navigate(`/prescriptions/edit/${rec.id || rec.prescription_record_id}`)
+                              }
+                            >
+                              <FiEye className="mr-1 inline" />
+                              View
+                            </Button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </Card>
+          </>
+        )}
+
         {/* Edit mode (non-MWO): same card order & chrome as adult PatientDetailsEdit */}
         {showClinicalProformaAndIntakeInEdit && (
           <>
@@ -1708,9 +1951,9 @@ const CreateChildPatient = () => {
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">Past History</h3>
                   <p className="text-sm text-gray-500 mt-1">
-                    {unifiedVisits.length > 0 
-                      ? `${unifiedVisits.length} visit${unifiedVisits.length > 1 ? 's' : ''} - View only`
-                      : 'No past visits - View only'}
+                    {unifiedVisits.length > 0
+                      ? `${unifiedVisits.length} past visit day${unifiedVisits.length > 1 ? 's' : ''} — view only`
+                      : 'No past visits — view only'}
                   </p>
                 </div>
               </div>
@@ -1728,88 +1971,6 @@ const CreateChildPatient = () => {
 
             {expandedCards.pastHistory && (
               <div className="p-6 space-y-4">
-                {/* Child Registration Details Card */}
-                <Card className="shadow-md border-2 border-blue-200">
-                  <div
-                    className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => toggleCard('childRegistration')}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <FiUser className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <h4 className="text-lg font-bold text-gray-900">Child Registration Details</h4>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {expandedCards.childRegistration ? (
-                        <FiChevronUp className="h-5 w-5 text-gray-500" />
-                      ) : (
-                        <FiChevronDown className="h-5 w-5 text-gray-500" />
-                      )}
-                    </div>
-                  </div>
-                  {expandedCards.childRegistration && (
-                    <div className="p-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div>
-                          <label className="text-xs font-medium text-gray-500">Child Name</label>
-                          <input
-                            type="text"
-                            value={formData.child_name || ''}
-                            disabled
-                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-gray-500">CGC No</label>
-                          <input
-                            type="text"
-                            value={formData.cgc_number || ''}
-                            disabled
-                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-gray-500">CR No</label>
-                          <input
-                            type="text"
-                            value={formData.cr_number || ''}
-                            disabled
-                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-gray-500">Age Group</label>
-                          <input
-                            type="text"
-                            value={formData.age_group || ''}
-                            disabled
-                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-gray-500">Sex</label>
-                          <input
-                            type="text"
-                            value={formData.sex || ''}
-                            disabled
-                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-gray-500">Assigned Room</label>
-                          <input
-                            type="text"
-                            value={formData.assigned_room || ''}
-                            disabled
-                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-
                 {/* Unified Visit Records - Grouped by Date */}
                 {unifiedVisits.length > 0 ? (
                   <div className="space-y-6">
@@ -1819,9 +1980,12 @@ const CreateChildPatient = () => {
                       const isDateExpanded = isVisitCardExpanded(`date-${dateKey}`);
                       
                       // Count visit types for this date
-                      const hasProforma = visitGroup.visits.some(v => v.proforma);
-                      const hasFollowUp = visitGroup.visits.some(v => v.followUp);
-                      const hasPrescription = visitGroup.visits.some(v => v.prescription || v.type === 'prescription');
+                      const hasProforma = visitGroup.visits.some((v) => v.proforma);
+                      const hasFollowUp = visitGroup.visits.some((v) => v.followUp);
+                      const hasPrescription = visitGroup.visits.some(
+                        (v) => v.prescription || v.type === 'prescription'
+                      );
+                      const hasIntake = visitGroup.visits.some((v) => v.type === 'adl_intake');
                       const visitCount = visitGroup.visits.length;
                       
                       return (
@@ -1855,6 +2019,11 @@ const CreateChildPatient = () => {
                                       <FiPackage className="w-3 h-3" /> Prescription
                                     </span>
                                   )}
+                                  {hasIntake && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-medium">
+                                      <FiFolder className="w-3 h-3" /> Out Patient Intake
+                                    </span>
+                                  )}
                                   <span className="text-xs text-gray-500">
                                     {visitCount} {visitCount === 1 ? 'record' : 'records'}
                                   </span>
@@ -1873,10 +2042,88 @@ const CreateChildPatient = () => {
                             </div>
                           </div>
                           
-                          {/* All Visit Types for This Date */}
+                          {/* All Visit Types for This Date — order: registration, proforma, intake, prescription, follow-up */}
                           {isDateExpanded && (
                             <div className="p-6 space-y-4">
-                              {visitGroup.visits.map((visit) => {
+                              <div className="mb-1 overflow-hidden rounded-lg border border-blue-200 bg-white shadow-sm">
+                                <div className="flex items-center gap-3 border-b border-gray-100 bg-blue-50/60 px-4 py-3">
+                                  <div className="rounded-lg bg-blue-100 p-2">
+                                    <FiUser className="h-5 w-5 text-blue-600" />
+                                  </div>
+                                  <h4 className="text-base font-bold text-gray-900">Child Registration Details</h4>
+                                </div>
+                                <div className="p-4">
+                                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                                    <div>
+                                      <label className="text-xs font-medium text-gray-500">Child Name</label>
+                                      <input
+                                        type="text"
+                                        value={formData.child_name || ''}
+                                        disabled
+                                        className="mt-1 w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs font-medium text-gray-500">CGC No</label>
+                                      <input
+                                        type="text"
+                                        value={formData.cgc_number || ''}
+                                        disabled
+                                        className="mt-1 w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs font-medium text-gray-500">CR No</label>
+                                      <input
+                                        type="text"
+                                        value={formData.cr_number || ''}
+                                        disabled
+                                        className="mt-1 w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs font-medium text-gray-500">Age Group</label>
+                                      <input
+                                        type="text"
+                                        value={formData.age_group || ''}
+                                        disabled
+                                        className="mt-1 w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs font-medium text-gray-500">Sex</label>
+                                      <input
+                                        type="text"
+                                        value={formData.sex || ''}
+                                        disabled
+                                        className="mt-1 w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs font-medium text-gray-500">Assigned Room</label>
+                                      <input
+                                        type="text"
+                                        value={formData.assigned_room || ''}
+                                        disabled
+                                        className="mt-1 w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {[...visitGroup.visits]
+                                .sort((a, b) => {
+                                  const rank = (v) => {
+                                    if (v.type === 'child_clinical_proforma') return 1;
+                                    if (v.type === 'adl_intake') return 2;
+                                    if (v.type === 'prescription') return 3;
+                                    if (v.type === 'follow_up' || v.isFollowUp) return 4;
+                                    return 99;
+                                  };
+                                  return rank(a) - rank(b);
+                                })
+                                .map((visit) => {
                                 const visitId = visit.visitId;
                                 const isVisitExpanded = isVisitCardExpanded(visitId);
                                 
@@ -1890,6 +2137,8 @@ const CreateChildPatient = () => {
                                       <div className="flex items-center gap-3">
                                         {visit.type === 'prescription' ? (
                                           <FiPackage className="h-5 w-5 text-amber-600" />
+                                        ) : visit.type === 'adl_intake' ? (
+                                          <FiFolder className="h-5 w-5 text-orange-600" />
                                         ) : visit.isFollowUp ? (
                                           <FiFileText className="h-5 w-5 text-blue-600" />
                                         ) : (
@@ -1897,65 +2146,41 @@ const CreateChildPatient = () => {
                                         )}
                                         <div>
                                           <h5 className="font-semibold text-gray-900">
-                                            {visit.type === 'prescription' 
-                                              ? 'Prescription' 
-                                              : visit.isFollowUp 
-                                                ? 'Follow-Up Visit' 
-                                                : 'Child Clinical Proforma'}
+                                            {visit.type === 'prescription'
+                                              ? 'Prescription'
+                                              : visit.type === 'adl_intake'
+                                                ? 'Out Patient Intake Record'
+                                                : visit.isFollowUp
+                                                  ? 'Follow-Up Visit'
+                                                  : 'Child Clinical Proforma'}
                                           </h5>
+                                          {visit.type === 'child_clinical_proforma' &&
+                                            visit.proforma?.id === firstChildProformaMeta.id &&
+                                            firstChildProformaMeta.dateLabel && (
+                                              <p className="mt-0.5 text-xs text-gray-500">
+                                                First visit: {firstChildProformaMeta.dateLabel}
+                                              </p>
+                                            )}
+                                          {visit.type === 'adl_intake' && visit.adlFile?.created_at && (
+                                            <p className="mt-0.5 text-xs text-gray-500">
+                                              Out Patient Intake Record created{' '}
+                                              {formatDate(visit.adlFile.created_at)}
+                                            </p>
+                                          )}
                                           {visit.prescription && visit.type !== 'prescription' && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium mt-1">
+                                            <span className="mt-1 inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-100">
                                               <FiPackage className="w-2.5 h-2.5" /> Has Prescription
                                             </span>
                                           )}
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        {visit.proforma && (
-                                          <>
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigate(`/child-clinical-proformas/${visit.proforma.id}`);
-                                              }}
-                                              className="flex items-center gap-1.5 px-2 py-1 text-xs"
-                                            >
-                                              <FiEye className="w-3 h-3" />
-                                              View
-                                            </Button>
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigate(`/child-clinical-proformas/${visit.proforma.id}/edit`);
-                                              }}
-                                              className="flex items-center gap-1.5 px-2 py-1 text-xs"
-                                            >
-                                              <FiEdit3 className="w-3 h-3" />
-                                              Edit
-                                            </Button>
-                                          </>
-                                        )}
-                                        {visit.followUp && (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              toggleVisitCard(visitId);
-                                            }}
-                                            className="flex items-center gap-1.5 px-2 py-1 text-xs"
-                                          >
-                                            <FiEye className="w-3 h-3" />
-                                            {isVisitExpanded ? "Hide" : "View"}
-                                          </Button>
-                                        )}
                                         <div
-                                          className="cursor-pointer"
-                                          onClick={() => toggleVisitCard(visitId)}
+                                          className="cursor-pointer p-1"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleVisitCard(visitId);
+                                          }}
                                         >
                                           {isVisitExpanded ? (
                                             <FiChevronUp className="h-5 w-5 text-gray-500" />
@@ -1968,21 +2193,49 @@ const CreateChildPatient = () => {
                                     
                                     {/* Visit Details */}
                                     {isVisitExpanded && (
-                                      <div className="p-4 space-y-4 border-t border-gray-200">
-                                        {/* Child Clinical Proforma Details */}
-                                        {visit.proforma && (
-                                          <div className="border-l-4 border-green-500 pl-4">
-                                            <h6 className="text-base font-semibold text-gray-800 mb-2">Child Clinical Proforma</h6>
-                                            <div className="text-sm text-gray-700 space-y-1">
-                                              <p><strong>Age:</strong> {visit.proforma.age}</p>
-                                              <p><strong>Sex:</strong> {visit.proforma.sex}</p>
-                                              <p><strong>Source of Referral:</strong> {Array.isArray(visit.proforma.source_of_referral) ? visit.proforma.source_of_referral.join(', ') : visit.proforma.source_of_referral}</p>
-                                              <p><strong>Duration of Illness:</strong> {visit.proforma.duration_of_illness}</p>
-                                              <p><strong>Onset:</strong> {visit.proforma.onset}</p>
-                                              <p><strong>Course:</strong> {visit.proforma.course}</p>
-                                              <p><strong>Physical Illness:</strong> {visit.proforma.has_physical_illness ? `Yes (${visit.proforma.physical_illness_specification})` : 'No'}</p>
-                                              <p><strong>Provisional Diagnosis:</strong> {visit.proforma.provisional_diagnosis || visit.proforma.remarks_provisional_diagnosis || 'N/A'}</p>
-                                              <p><strong>Disposal Status:</strong> {visit.proforma.disposal_status || 'N/A'}</p>
+                                      <div className="rounded-b-lg bg-gray-50/80 p-4 space-y-4 border-t border-gray-200">
+                                        {visit.type === 'child_clinical_proforma' && visit.proforma && (
+                                          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                                            <ChildClinicalProformaSummaryView
+                                              proforma={visit.proforma}
+                                              hideTitleBlock
+                                            />
+                                          </div>
+                                        )}
+
+                                        {visit.type === 'adl_intake' && visit.adlFile && (
+                                          <div className="rounded-lg border border-orange-200 bg-white p-4 shadow-sm">
+                                            <h6 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+                                              <FiFolder className="h-4 w-4 text-orange-600" />
+                                              Out Patient Intake Record
+                                            </h6>
+                                            <div className="grid grid-cols-1 gap-3 text-sm text-gray-800 md:grid-cols-2">
+                                              {visit.adlFile.adl_no != null && visit.adlFile.adl_no !== '' && (
+                                                <div>
+                                                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                    ADL number
+                                                  </p>
+                                                  <p className="mt-1 font-medium">{visit.adlFile.adl_no}</p>
+                                                </div>
+                                              )}
+                                              {visit.adlFile.file_status && (
+                                                <div>
+                                                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                    File status
+                                                  </p>
+                                                  <p className="mt-1 font-medium">{visit.adlFile.file_status}</p>
+                                                </div>
+                                              )}
+                                              {visit.adlFile.created_at && (
+                                                <div className="md:col-span-2">
+                                                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                    Created
+                                                  </p>
+                                                  <p className="mt-1 font-medium">
+                                                    {formatDate(visit.adlFile.created_at)}
+                                                  </p>
+                                                </div>
+                                              )}
                                             </div>
                                           </div>
                                         )}
