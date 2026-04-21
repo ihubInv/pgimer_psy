@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, memo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../../components/Card';
-import { formatDate, formatDateForDatePicker, formatAdlRecordCreated } from '../../utils/formatters';
+import { formatDate, formatDateForDatePicker } from '../../utils/formatters';
 import {
   getFileStatusLabel, getCaseSeverityLabel,formatDateTime
 } from '../../utils/enumMappings';
@@ -132,11 +132,11 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   const getReferredByLabel = (value) => getLabelFromOptions(value, REFERRED_BY_OPTIONS);
 
   const [expandedCards, setExpandedCards] = useState({
-    patient: true,
+    patient: false,
     clinical: false,
     adl: false,
     prescriptions: false,
-    pastHistory: false
+    pastHistory: false,
   });
 
   // State to track which individual visits are expanded within each card
@@ -712,16 +712,37 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     return allVisits;
   }, [trulyPastProformas, patientAdlFiles, prescriptionResults, proformaIds, patientProformas, allPrescriptions]);
 
-  /** ADL files not shown under any visit row (no FK / same-day visit to attach to). */
-  const orphanPastHistoryAdlFiles = useMemo(() => {
-    const attachedIds = new Set(
-      unifiedVisits
-        .map((v) => v.adlFile?.id)
-        .filter((id) => id != null && id !== '')
-        .map((id) => String(id))
-    );
-    return patientAdlFiles.filter((f) => !attachedIds.has(String(f.id)));
-  }, [unifiedVisits, patientAdlFiles]);
+  /** Past History (view): follow-up visits only, grouped by IST calendar date */
+  const pastHistoryFollowUpDays = useMemo(() => {
+    const byDate = {};
+    trulyPastProformas.forEach((row) => {
+      if (row.record_type !== 'followup_visit') return;
+      const visitDate = row.visit_date || row.created_at;
+      if (!visitDate) return;
+      const dateKey = toISTDateString(visitDate);
+      if (!dateKey) return;
+      if (!byDate[dateKey]) byDate[dateKey] = [];
+      const fid = row.followup_id ?? row.id;
+      byDate[dateKey].push({
+        visitId: `followup-${fid}`,
+        visitDate,
+        followUp: row,
+      });
+    });
+    return Object.entries(byDate)
+      .map(([date, visits]) => ({
+        visitDate: date,
+        visits: [...visits].sort(
+          (a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime()
+        ),
+      }))
+      .sort((a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime());
+  }, [trulyPastProformas]);
+
+  const pastHistoryFollowUpCount = useMemo(
+    () => trulyPastProformas.filter((p) => p.record_type === 'followup_visit').length,
+    [trulyPastProformas]
+  );
 
   // Print functionality refs
   const patientDetailsPrintRef = useRef(null);
@@ -3960,36 +3981,27 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         </Card>
       )}
 
-      {/* Card 5: Past History - View-only display organized by card type */}
-      {(canViewPrescriptions ||
-        canViewClinicalProforma ||
-        (canViewADLFile && patientAdlFiles.length > 0)) && (
+      {/* Card 5: Past History — follow-up visits and notes only (grouped by date) */}
+      {canViewClinicalProforma && (
         <Card className="shadow-lg border-0 bg-white">
-          <div
-            className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            <div 
-              className="flex items-center gap-4 cursor-pointer flex-1"
+          <div className="flex items-center justify-between border-b border-gray-200 p-6 transition-colors hover:bg-gray-50">
+            <div
+              className="flex flex-1 cursor-pointer items-center gap-4"
               onClick={() => toggleCard('pastHistory')}
             >
-              <div className="p-3 bg-purple-100 rounded-lg">
+              <div className="rounded-lg bg-purple-100 p-3">
                 <FiClock className="h-6 w-6 text-purple-600" />
               </div>
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Past History</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  {unifiedVisits.length > 0
-                    ? `${unifiedVisits.length} past visit${unifiedVisits.length > 1 ? 's' : ''} - View only`
-                    : patientAdlFiles.length > 0
-                      ? 'Out Patient Intake Record on file — View only'
-                      : 'No past visits - View only'}
+                <p className="mt-1 text-sm text-gray-500">
+                  {pastHistoryFollowUpCount > 0
+                    ? `${pastHistoryFollowUpCount} follow-up visit${pastHistoryFollowUpCount !== 1 ? 's' : ''} on ${pastHistoryFollowUpDays.length} day${pastHistoryFollowUpDays.length !== 1 ? 's' : ''} — view only`
+                    : 'No follow-up visits — view only'}
                 </p>
               </div>
             </div>
-            <div 
-              className="cursor-pointer"
-              onClick={() => toggleCard('pastHistory')}
-            >
+            <div className="cursor-pointer" onClick={() => toggleCard('pastHistory')}>
               {expandedCards.pastHistory ? (
                 <FiChevronUp className="h-6 w-6 text-gray-500" />
               ) : (
@@ -3999,491 +4011,110 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           </div>
 
           {expandedCards.pastHistory && (
-            <div className="p-6 space-y-4">
-              {/* Patient Details Card - Show once only, expandable/collapsible */}
-              <Card className="shadow-md border-2 border-blue-200">
-                          <div
-                            className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                          >
-                            <div 
-                              className="flex items-center gap-3 cursor-pointer flex-1"
-                              onClick={() => togglePastHistoryCard('patientDetails')}
-                            >
-                              <div className="p-2 bg-blue-100 rounded-lg">
-                                <FiUser className="h-5 w-5 text-blue-600" />
-                              </div>
-                              <h4 className="text-lg font-bold text-gray-900">Patient Details</h4>
+            <div className="space-y-4 p-6">
+              {pastHistoryFollowUpDays.length > 0 ? (
+                <div className="space-y-6">
+                  {pastHistoryFollowUpDays.map((visitGroup) => {
+                    const visitDate = formatDate(visitGroup.visitDate);
+                    const dateKey = visitGroup.visitDate;
+                    const dateToggleId = `past-ph-date-${dateKey}`;
+                    const isDateExpanded = isVisitCardExpanded(dateToggleId);
+                    const n = visitGroup.visits.length;
+
+                    return (
+                      <Card key={dateToggleId} className="border-2 border-purple-200 shadow-lg">
+                        <div
+                          className="flex cursor-pointer items-center justify-between border-b border-gray-200 p-5 transition-colors hover:bg-purple-50"
+                          onClick={() => toggleVisitCard(dateToggleId)}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="rounded-lg bg-purple-100 p-3">
+                              <FiCalendar className="h-6 w-6 text-purple-600" />
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handlePrintPastHistoryPatientDetails();
-                                }}
-                                className="h-8 w-8 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                                title="Print Patient Details - Past History"
-                              >
-                                <FiPrinter className="w-3.5 h-3.5 text-blue-600" />
-                              </Button>
-                              <div 
-                                className="cursor-pointer"
-                                onClick={() => togglePastHistoryCard('patientDetails')}
-                              >
-                                {expandedPastHistoryCards.patientDetails ? (
-                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
-                                ) : (
-                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
-                                )}
-                              </div>
+                            <div>
+                              <h4 className="text-xl font-bold text-gray-900">{visitDate}</h4>
+                              <p className="mt-1 text-sm text-gray-500">
+                                {n === 1 ? '1 follow-up visit' : `${n} follow-up visits`}
+                              </p>
                             </div>
                           </div>
-                          {expandedPastHistoryCards.patientDetails && (
-            <div ref={pastHistoryPatientDetailsPrintRef} className="p-6">
-                              {/* View-only fields */}
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <div>
-                                  <label className="text-xs font-medium text-gray-500">Patient Name</label>
-                                  <input
-                                    type="text"
-                                    value={patient?.name || ''}
-                                    disabled
-                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-xs font-medium text-gray-500">CR No</label>
-                                  <input
-                                    type="text"
-                                    value={patient?.cr_no || ''}
-                                    disabled
-                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-xs font-medium text-gray-500">PSY No</label>
-                                  <input
-                                    type="text"
-                                    value={patient?.psy_no || ''}
-                                    disabled
-                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-xs font-medium text-gray-500">Age</label>
-                                  <input
-                                    type="text"
-                                    value={patient?.age || ''}
-                                    disabled
-                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-xs font-medium text-gray-500">Sex</label>
-                                  <input
-                                    type="text"
-                                    value={patient?.sex || ''}
-                                    disabled
-                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-xs font-medium text-gray-500">Assigned Room</label>
-                                  <input
-                                    type="text"
-                                    value={patient?.assigned_room || ''}
-                                    disabled
-                                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </Card>
-
-                        {/* Out Patient Intake Record — top-level Past History card (all ADL files for patient) */}
-                        {canViewADLFile && orphanPastHistoryAdlFiles.length > 0 && (
-                          <Card className="shadow-md border-2 border-orange-200">
-                            <div className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-orange-50/40 transition-colors">
-                              <div
-                                className="flex items-center gap-3 cursor-pointer flex-1"
-                                onClick={() => togglePastHistoryCard('intakeRecord')}
-                              >
-                                <div className="p-2 bg-orange-100 rounded-lg">
-                                  <FiFolder className="h-5 w-5 text-orange-600" />
-                                </div>
-                                <div>
-                                  <h4 className="text-lg font-bold text-gray-900">Out Patient Intake Record</h4>
-                                  <p className="text-sm text-gray-500 mt-0.5">
-                                    {orphanPastHistoryAdlFiles.length} file
-                                    {orphanPastHistoryAdlFiles.length > 1 ? 's' : ''} not linked to a visit date
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handlePrintPastHistoryADL();
-                                  }}
-                                  className="h-8 w-8 p-0 bg-gradient-to-r from-orange-50 to-amber-50 hover:from-orange-100 hover:to-amber-100 border border-orange-200 hover:border-orange-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                                  title="Print Out Patient Intake Record - Past History"
-                                >
-                                  <FiPrinter className="w-3.5 h-3.5 text-orange-600" />
-                                </Button>
-                                <div
-                                  className="cursor-pointer"
-                                  onClick={() => togglePastHistoryCard('intakeRecord')}
-                                >
-                                  {expandedPastHistoryCards.intakeRecord ? (
-                                    <FiChevronUp className="h-5 w-5 text-gray-500" />
-                                  ) : (
-                                    <FiChevronDown className="h-5 w-5 text-gray-500" />
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            {expandedPastHistoryCards.intakeRecord && (
-                              <div ref={pastHistoryADLPrintRef} className="p-6 space-y-8">
-                                {orphanPastHistoryAdlFiles.map((adl) => {
-                                  const intakeCreated = formatAdlRecordCreated(adl);
-                                  return (
-                                  <div key={adl.id} className="rounded-lg border border-orange-100 bg-orange-50/20 p-2">
-                                    {((orphanPastHistoryAdlFiles.length > 1 && adl.adl_no) || intakeCreated) && (
-                                      <p className="text-xs font-semibold text-orange-800 mb-2 px-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                        {orphanPastHistoryAdlFiles.length > 1 && adl.adl_no && (
-                                          <span>ADL {adl.adl_no}</span>
-                                        )}
-                                        {intakeCreated && (
-                                          <span className="font-normal text-gray-600">
-                                            Created {intakeCreated}
-                                          </span>
-                                        )}
-                                      </p>
-                                    )}
-                                    <OutPatientIntakeRecordSummaryView adlFile={adl} patient={patient} />
-                                  </div>
-                                  );
-                                })}
-                              </div>
+                          <div className="cursor-pointer" onClick={() => toggleVisitCard(dateToggleId)}>
+                            {isDateExpanded ? (
+                              <FiChevronUp className="h-6 w-6 text-gray-500" />
+                            ) : (
+                              <FiChevronDown className="h-6 w-6 text-gray-500" />
                             )}
-                          </Card>
-                        )}
+                          </div>
+                        </div>
 
-                        {/* Unified Visit Cards - Each visit shows all forms completed during that visit */}
-                        {unifiedVisits.length > 0 ? (
-                          <div className="space-y-6">
-                            {unifiedVisits.map((visit) => {
-                              const visitDate = formatDate(visit.visitDate);
-                              const adlCreatedLabel =
-                                visit.hasAdl && visit.adlFile
-                                  ? formatAdlRecordCreated(visit.adlFile)
-                                  : '';
-                              const isExpanded = isVisitCardExpanded(visit.visitId);
-                              
+                        {isDateExpanded && (
+                          <div className="space-y-4 p-6">
+                            {visitGroup.visits.map(({ visitId, followUp }) => {
+                              const notes =
+                                followUp.clinical_assessment ||
+                                followUp.clinicalAssessment ||
+                                '';
                               return (
-                                <Card key={visit.visitId} className="shadow-lg border-2 border-purple-200">
-                                  {/* Visit Header */}
-                                  <div
-                                    className="flex items-center justify-between p-5 border-b border-gray-200 hover:bg-purple-50 transition-colors cursor-pointer"
-                                    onClick={() => toggleVisitCard(visit.visitId)}
-                                  >
-                                    <div className="flex items-center gap-4">
-                                      <div className="p-3 bg-purple-100 rounded-lg">
-                                        <FiClock className="h-6 w-6 text-purple-600" />
-                                      </div>
+                                <div
+                                  key={visitId}
+                                  className="rounded-lg border-l-4 border-blue-500 bg-blue-50/80 p-4"
+                                >
+                                  <h5 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+                                    <FiFileText className="h-4 w-4 text-blue-600" />
+                                    Follow-up visit
+                                  </h5>
+                                  <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                                    <div>
+                                      <p className="mb-1 text-gray-500">Visit date</p>
+                                      <p className="font-medium text-gray-900">
+                                        {formatDate(followUp.visit_date || followUp.created_at)}
+                                      </p>
+                                    </div>
+                                    {followUp.room_no && (
                                       <div>
-                                        <h4 className="text-xl font-bold text-gray-900">
-                                          {visitDate}
-                                        </h4>
-                                        <div className="flex items-center gap-3 mt-2">
-                                          {visit.isStandalonePrescription ? (
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-medium">
-                                              <FiPackage className="w-3 h-3" />
-                                              Prescription Only
-                                            </span>
-                                          ) : visit.isFollowUp ? (
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                                              <FiFileText className="w-3 h-3" />
-                                              Follow-Up Visit
-                                            </span>
-                                          ) : (
-                                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
-                                            <FiFileText className="w-3 h-3" />
-                                            Clinical Proforma
-                                          </span>
-                                          )}
-                                          {visit.hasAdl && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                                              <FiFolder className="w-3 h-3" />
-                                              ADL Record
-                                            </span>
-                                          )}
-                                          {visit.hasPrescription && !visit.isStandalonePrescription && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-medium">
-                                              <FiPackage className="w-3 h-3" />
-                                              Prescription
-                                            </span>
-                                          )}
-                                        </div>
-                                        {adlCreatedLabel && (
-                                            <p className="text-xs text-gray-600 mt-2">
-                                              Out Patient Intake Record created {adlCreatedLabel}
-                                            </p>
-                                          )}
+                                        <p className="mb-1 text-gray-500">Room</p>
+                                        <p className="font-medium text-gray-900">{followUp.room_no}</p>
                                       </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handlePrintVisit(visit.visitId, visitDate);
-                                        }}
-                                        className="h-8 w-8 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                                        title={`Print Visit - ${visitDate}`}
-                                      >
-                                        <FiPrinter className="w-3.5 h-3.5 text-purple-600" />
-                                      </Button>
-                                      {isExpanded ? (
-                                        <FiChevronUp className="h-6 w-6 text-gray-500" />
-                                      ) : (
-                                        <FiChevronDown className="h-6 w-6 text-gray-500" />
-                                      )}
-                                    </div>
+                                    )}
+                                    {(followUp.assigned_doctor_name || followUp.doctor_name) && (
+                                      <div>
+                                        <p className="mb-1 text-gray-500">Assigned doctor</p>
+                                        <p className="font-medium text-gray-900">
+                                          {followUp.assigned_doctor_name || followUp.doctor_name}
+                                        </p>
+                                      </div>
+                                    )}
                                   </div>
-
-                                  {/* Visit Content - All forms for this visit */}
-                                  {isExpanded && (
-                                    <div ref={(el) => {
-                                      if (el) visitPrintRefs.current.set(visit.visitId, el);
-                                      else visitPrintRefs.current.delete(visit.visitId);
-                                    }} className="p-6 space-y-6">
-                                      {/* 1. Clinical Proforma / Follow-Up Assessment Section - Skip for standalone prescriptions */}
-                                      {visit.isStandalonePrescription ? (
-                                        /* Standalone prescription - no proforma section */
-                                        null
-                                      ) : visit.isFollowUp ? (
-                                        <div className="border-l-4 border-blue-500 pl-4">
-                                          <div className="flex items-center justify-between mb-3">
-                                            <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                                              <FiFileText className="h-5 w-5 text-blue-600" />
-                                              Follow-Up Clinical Assessment
-                                            </h5>
-                                            {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') ? (
-                                              <FiChevronUp 
-                                                className="h-5 w-5 text-gray-500 cursor-pointer"
-                                                onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
-                                              />
-                                            ) : (
-                                              <FiChevronDown 
-                                                className="h-5 w-5 text-gray-500 cursor-pointer"
-                                                onClick={() => toggleVisitSection(visit.visitId, 'clinicalProforma')}
-                                              />
-                                            )}
-                                          </div>
-                                          {isVisitSectionExpanded(visit.visitId, 'clinicalProforma') && (
-                                            <div className="mt-3">
-                                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                  Follow-Up Clinical Assessment
-                                                </label>
-                                                <div className="bg-white border border-gray-300 rounded-lg p-4 min-h-[100px] whitespace-pre-wrap text-gray-900">
-                                                  {visit.clinicalAssessment || visit.proforma?.clinical_assessment || 'No assessment recorded'}
-                                                </div>
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      ) : (
-                                      <div className="space-y-5 rounded-xl border border-gray-100 bg-gray-50/50 p-5 shadow-sm">
-                                        <div className="flex items-start gap-4 border-b border-gray-200 pb-4">
-                                          <div className="p-3 bg-green-100 rounded-lg shrink-0">
-                                            <FiFileText className="h-6 w-6 text-green-600" />
-                                          </div>
-                                          <div className="min-w-0 flex-1">
-                                            <h5 className="text-lg font-bold text-gray-900">
-                                              Walk-in Clinical Proforma
-                                            </h5>
-                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                              <p className="text-sm text-gray-500">
-                                                {visit.proforma?.visit_type === 'first_visit'
-                                                  ? `First visit: ${formatDate(visit.proforma.visit_date || visit.proforma.created_at)}`
-                                                  : `Visit: ${formatDate(visit.proforma.visit_date || visit.proforma.created_at)}`}
-                                              </p>
-                                              {visit.proforma?.visit_type === 'first_visit' && (
-                                                <>
-                                                  <span className="text-gray-400">•</span>
-                                                  <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                                                    First Visit
-                                                  </span>
-                                                </>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-                                        <div className="space-y-4">
-                                          <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2 flex-wrap">
-                                            {visit.proforma?.visit_type === 'first_visit' ? (
-                                              <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
-                                                First Visit
-                                              </span>
-                                            ) : (
-                                              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
-                                                Walk-in visit
-                                              </span>
-                                            )}
-                                            <span className="text-sm text-gray-500 font-normal">
-                                              {formatDate(visit.proforma.visit_date || visit.proforma.created_at)}
-                                            </span>
-                                          </h4>
-                                          <div className="rounded-lg border border-gray-100 bg-white p-3 sm:p-4">
-                                            <WalkInClinicalProformaSummaryView
-                                              proforma={visit.proforma}
-                                              patient={patient}
-                                            />
-                                          </div>
-                                        </div>
+                                  {notes ? (
+                                    <div className="mt-3">
+                                      <p className="mb-2 text-sm font-medium text-gray-500">Notes</p>
+                                      <div className="min-h-[60px] whitespace-pre-wrap rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-900">
+                                        {notes}
                                       </div>
-                                      )}
-
-                                      {/* 2. ADL File Section (if exists) */}
-                                      {visit.hasAdl && (
-                                        <div className="border-l-4 border-orange-500 pl-4">
-                                          <div className="flex items-center justify-between mb-3">
-                                            <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                                              <FiFolder className="h-5 w-5 text-orange-600" />
-                                              Out Patient Intake Record (ADL)
-                                            </h5>
-                                            {isVisitSectionExpanded(visit.visitId, 'adl') ? (
-                                              <FiChevronUp 
-                                                className="h-5 w-5 text-gray-500 cursor-pointer"
-                                                onClick={() => toggleVisitSection(visit.visitId, 'adl')}
-                                              />
-                                            ) : (
-                                              <FiChevronDown 
-                                                className="h-5 w-5 text-gray-500 cursor-pointer"
-                                                onClick={() => toggleVisitSection(visit.visitId, 'adl')}
-                                              />
-                                            )}
-                                          </div>
-                                          {isVisitSectionExpanded(visit.visitId, 'adl') && (
-                                            <div className="mt-3">
-                                              <OutPatientIntakeRecordSummaryView
-                                                adlFile={visit.adlFile}
-                                                patient={patient}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* 3. Prescription Section (if exists) */}
-                                      {visit.hasPrescription && (
-                                        <div className="border-l-4 border-amber-500 pl-4">
-                                          <div className="flex items-center justify-between mb-3">
-                                            <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                                              <FiPackage className="h-5 w-5 text-amber-600" />
-                                              Prescription
-                                            </h5>
-                                            {isVisitSectionExpanded(visit.visitId, 'prescription') ? (
-                                              <FiChevronUp 
-                                                className="h-5 w-5 text-gray-500 cursor-pointer"
-                                                onClick={() => toggleVisitSection(visit.visitId, 'prescription')}
-                                              />
-                                            ) : (
-                                              <FiChevronDown 
-                                                className="h-5 w-5 text-gray-500 cursor-pointer"
-                                                onClick={() => toggleVisitSection(visit.visitId, 'prescription')}
-                                              />
-                                            )}
-                                          </div>
-                                          {isVisitSectionExpanded(visit.visitId, 'prescription') && (
-                                            <div className="mt-3">
-                                              {/* For standalone prescriptions, render prescription data directly */}
-                                              {visit.isStandalonePrescription && Array.isArray(visit.prescription) ? (
-                                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                                                  <div className="overflow-x-auto">
-                                                    <table className="min-w-full divide-y divide-gray-200">
-                                                      <thead className="bg-amber-100">
-                                                        <tr>
-                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">#</th>
-                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Medicine</th>
-                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Dosage</th>
-                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">When</th>
-                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Frequency</th>
-                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Duration</th>
-                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Qty</th>
-                                                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Notes</th>
-                                                        </tr>
-                                                      </thead>
-                                                      <tbody className="bg-white divide-y divide-gray-200">
-                                                        {visit.prescription.map((item, idx) => (
-                                                          <tr key={item.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{idx + 1}</td>
-                                                            <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{item.medicine || '-'}</td>
-                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.dosage || '-'}</td>
-                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.when_to_take || item.when || '-'}</td>
-                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.frequency || '-'}</td>
-                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.duration || '-'}</td>
-                                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{item.quantity || item.qty || '-'}</td>
-                                                            <td className="px-3 py-2 text-sm text-gray-600">{item.notes || item.details || '-'}</td>
-                                                          </tr>
-                                                        ))}
-                                                      </tbody>
-                                                    </table>
-                                                  </div>
-                                                </div>
-                                              ) : (
-                                              <PrescriptionView 
-                                                clinicalProformaId={visit.isFollowUp ? 
-                                                  (visit.minimalProformaId || 
-                                                   patientProformas.find(p => {
-                                                     if (p.record_type === 'followup_visit') return false; // Skip the follow-up visit record itself
-                                                     const proformaDate = toISTDateString(p.visit_date || p.created_at);
-                                                     const followUpDate = toISTDateString(visit.visitDate);
-                                                     return proformaDate === followUpDate && 
-                                                            p.visit_type === 'follow_up' &&
-                                                            p.record_type === 'clinical_proforma' &&
-                                                            (p.treatment_prescribed?.includes('Follow-up visit') || 
-                                                             p.treatment_prescribed?.includes('followup_visits') ||
-                                                             p.treatment_prescribed?.includes('see followup_visits'));
-                                                   })?.id) : visit.proforma?.id
-                                                }
-                                                patientId={patient?.id}
-                                                  visitDate={visit.visitDate}
-                                              />
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
                                     </div>
+                                  ) : (
+                                    <p className="mt-3 text-sm italic text-gray-500">No notes recorded.</p>
                                   )}
-                                </Card>
+                                </div>
                               );
                             })}
                           </div>
-                        ) : unifiedVisits.length === 0 && patientAdlFiles.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 max-w-2xl mx-auto">
-                    <FiClock className="h-12 w-12 mx-auto mb-4 text-purple-500" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      No Past History Found
-                    </h3>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <div className="mx-auto max-w-2xl rounded-lg border border-purple-200 bg-purple-50 p-6">
+                    <FiFileText className="mx-auto mb-4 h-12 w-12 text-purple-500" />
+                    <h3 className="mb-2 text-lg font-semibold text-gray-900">No follow-up history</h3>
                     <p className="text-sm text-gray-600">
-                      This patient has no past visit records. Past visit history will appear here once additional visits are recorded.
+                      This patient has no follow-up visits in past history yet.
                     </p>
                   </div>
                 </div>
-              ) : null}
+              )}
             </div>
           )}
         </Card>
