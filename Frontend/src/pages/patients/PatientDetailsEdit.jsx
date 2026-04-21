@@ -5373,8 +5373,9 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         </Card>
       )}
 
-      {/* Card 4: Past History - View-only display organized by card type */}
-      {(canViewPrescriptions ||
+      {/* Card 4: Past History — hidden on Edit Patient Details (edit=true); view-only history belongs on the view flow */}
+      {!isEdit &&
+        (canViewPrescriptions ||
         canViewClinicalProforma ||
         (canViewAllSections && patientAdlFiles.length > 0)) && (
         <Card className="shadow-lg border-0 bg-white">
@@ -6011,7 +6012,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         </Card>
       )}
 
-{(isResident || isFaculty || isJrSrUser || isAdminUser) && (
+{!isEdit && (isResident || isFaculty || isJrSrUser || isAdminUser) && (
   <div className="flex mt-4 flex-col sm:flex-row justify-end gap-4">
     <Button
       type="button"
