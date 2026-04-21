@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useSelector, useDispatch } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
@@ -35,6 +35,7 @@ import {
   CHILD_CLINICAL_INVESTIGATIONS_REQUIRED,
   CHILD_CLINICAL_PSYCHOLOGICAL_TREATMENT_OPTIONS,
 } from '../../utils/constants';
+import { formatDateForDatePicker } from '../../utils/formatters';
 
 // ── Top-level helpers (defined OUTSIDE component to keep stable references) ──
 
@@ -103,6 +104,36 @@ const RadioPill = ({ name, options, value, onChange, activeClass, disabled }) =>
   </div>
 );
 
+/** API may send `visit_date` and/or `date` as ISO strings; DatePicker expects YYYY-MM-DD. */
+function toYyyyMmDd(value) {
+  if (value == null || value === '') return '';
+  const s = String(value).trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const t = s.indexOf('T');
+  if (t === 10) return s.slice(0, 10);
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  return '';
+}
+
+/** Proforma table PK for API URLs — never use /child-patient/:id route param as proforma id. */
+function resolveChildProformaRecordId({ pathname, routeParamId, formDataId }) {
+  const formPk =
+    formDataId != null && formDataId !== ''
+      ? parseInt(String(formDataId), 10)
+      : NaN;
+  const routePk =
+    !pathname.includes('/child-patient') &&
+    routeParamId != null &&
+    String(routeParamId) !== 'new'
+      ? parseInt(String(routeParamId), 10)
+      : NaN;
+  if (!Number.isNaN(formPk) && formPk > 0) return formPk;
+  if (!Number.isNaN(routePk) && routePk > 0) return routePk;
+  return null;
+}
+
 const EditChildClinicalProforma = ({ 
   initialData: propInitialData = null, 
   childPatientId: propChildPatientId = null,
@@ -111,12 +142,16 @@ const EditChildClinicalProforma = ({
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { pathname } = useLocation();
   const currentUser = useSelector(selectCurrentUser);
   const dispatch = useDispatch();
   
-  // Check if we're in view mode (URL doesn't contain /edit)
-  const location = window.location.pathname;
-  const isViewMode = id && !location.includes('/edit') && !propInitialData && !propChildPatientId;
+  // Standalone proforma routes: view mode when path has no /edit. Embedded /child-patient uses propChildPatientId (never view-only here).
+  const isViewMode =
+    id &&
+    !pathname.includes('/edit') &&
+    !propInitialData &&
+    !propChildPatientId;
   
   const childPatientIdFromQuery = searchParams.get('child_patient_id');
   const childPatientId = propChildPatientId || childPatientIdFromQuery || null;
@@ -442,8 +477,8 @@ const EditChildClinicalProforma = ({
       // If propInitialData is provided, skip (will be handled by another useEffect)
       if (propInitialData) return;
       
-      // Case 1: Fetch by proforma ID (when accessed via route /child-clinical-proformas/:id)
-      if (id && !propChildPatientId) {
+      // Case 1: Fetch by proforma ID (only /child-clinical-proformas/:id — /child-patient/:id is child patient id, not proforma id)
+      if (id && !propChildPatientId && pathname.includes('/child-clinical-proformas')) {
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
@@ -484,6 +519,10 @@ const EditChildClinicalProforma = ({
                   ? (proforma.source_of_referral.length > 0 ? proforma.source_of_referral[0] : '')
                   : (proforma.source_of_referral || ''),
                 family_history: ensureArray(proforma.family_history),
+                date:
+                  toYyyyMmDd(proforma.date) ||
+                  toYyyyMmDd(proforma.visit_date) ||
+                  prev.date,
               }));
             }
           }
@@ -495,8 +534,8 @@ const EditChildClinicalProforma = ({
         return;
       }
       
-      // Case 2: Fetch most recent proforma by child patient ID (when embedded in CreateChildPatient)
-      if (propChildPatientId && !id) {
+      // Case 2: Fetch most recent proforma by child patient ID (embedded on /child-patient/:id — useParams id is patient id, same as prop)
+      if (propChildPatientId) {
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
@@ -539,6 +578,10 @@ const EditChildClinicalProforma = ({
                   ? (proforma.source_of_referral.length > 0 ? proforma.source_of_referral[0] : '')
                   : (proforma.source_of_referral || ''),
                 family_history: ensureArray(proforma.family_history),
+                date:
+                  toYyyyMmDd(proforma.date) ||
+                  toYyyyMmDd(proforma.visit_date) ||
+                  prev.date,
               }));
             }
           }
@@ -551,7 +594,7 @@ const EditChildClinicalProforma = ({
     };
     
     fetchProforma();
-  }, [id, propInitialData, propChildPatientId]);
+  }, [id, propInitialData, propChildPatientId, pathname]);
 
   // Load from propInitialData if provided
   useEffect(() => {
@@ -579,6 +622,10 @@ const EditChildClinicalProforma = ({
           ? (propInitialData.source_of_referral.length > 0 ? propInitialData.source_of_referral[0] : '')
           : (propInitialData.source_of_referral || ''),
         family_history: ensureArray(propInitialData.family_history),
+        date:
+          toYyyyMmDd(propInitialData.date) ||
+          toYyyyMmDd(propInitialData.visit_date) ||
+          prev.date,
       }));
     }
   }, [propInitialData]);
@@ -635,8 +682,11 @@ const EditChildClinicalProforma = ({
     setIsSaving(true);
     try {
       const token = localStorage.getItem('token');
-      // Match adult flow: update when we have a proforma id (URL or loaded record, e.g. embedded edit)
-      const proformaRecordId = id || formData?.id || null;
+      const proformaRecordId = resolveChildProformaRecordId({
+        pathname,
+        routeParamId: id,
+        formDataId: formData?.id,
+      });
       const url = proformaRecordId
         ? `${import.meta.env.VITE_API_URL || '/api'}/child-clinical-proformas/${proformaRecordId}`
         : `${import.meta.env.VITE_API_URL || '/api'}/child-clinical-proformas`;
@@ -792,7 +842,11 @@ const EditChildClinicalProforma = ({
       ]
     : [];
 
-  const proformaRecordId = id || formData?.id || null;
+  const proformaRecordId = resolveChildProformaRecordId({
+    pathname,
+    routeParamId: id,
+    formDataId: formData?.id,
+  });
   const isUpdateMode = Boolean(proformaRecordId);
 
   return (
@@ -845,10 +899,10 @@ const EditChildClinicalProforma = ({
                   <FiPrinter className="w-4 h-4" />
                   <span className="hidden sm:inline">Print</span>
                 </button>
-                {isViewMode && id && (
+                {isViewMode && proformaRecordId && (
                   <button
                     type="button"
-                    onClick={() => navigate(`/child-clinical-proformas/${id}/edit`)}
+                    onClick={() => navigate(`/child-clinical-proformas/${proformaRecordId}/edit`)}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-sm"
                   >
                     <FiEdit3 className="w-4 h-4" /> Edit
@@ -923,9 +977,11 @@ const EditChildClinicalProforma = ({
                 <DatePicker
                   label="Date of Visit"
                   name="date"
-                  value={formData.date}
-                  onChange={(value) => !isViewMode && setFormData(prev => ({ ...prev, date: value }))}
+                  value={formatDateForDatePicker(formData.date)}
+                  onChange={(e) => !isViewMode && handleChange(e)}
                   disabled={isViewMode}
+                  readOnly={isViewMode}
+                  defaultToday={false}
                 />
               </div>
               <div className="col-span-2">
@@ -1362,10 +1418,10 @@ const EditChildClinicalProforma = ({
                       <FiArrowLeft className="w-4 h-4 mr-1" />
                     Go Back
                   </Button>
-                    {id && (
+                    {proformaRecordId && (
                   <Button
                     type="button"
-                    onClick={() => navigate(`/child-clinical-proformas/${id}/edit`)}
+                    onClick={() => navigate(`/child-clinical-proformas/${proformaRecordId}/edit`)}
                         className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-green-500/30"
                   >
                         <FiEdit3 className="w-4 h-4" />
