@@ -37,6 +37,7 @@ import {
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useSelector } from 'react-redux';
 import PGI_Logo from '../../assets/PGI_Logo.png';
+import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
 
 const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, outpatientData, userRole }) => {
   const navigate = useNavigate();
@@ -283,6 +284,11 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     ? clinicalData.data.proformas
     : [];
 
+  const clinicalProformaRows = useMemo(
+    () => clinicalProformaRecordsOnly(patientProformas),
+    [patientProformas]
+  );
+
   // Debug: Log proformas to verify data is being fetched
   useEffect(() => {
     if (patientProformas.length > 0) {
@@ -362,13 +368,13 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
  
   const proformaIds = useMemo(() => {
-    const ids = patientProformas.map(p => p?.id).filter(Boolean).slice(0, 10);
+    const ids = clinicalProformaRows.map((p) => p?.id).filter(Boolean).slice(0, 10);
     // Pad to exactly 10 elements with null to ensure consistent hook calls
     while (ids.length < 10) {
       ids.push(null);
     }
     return ids;
-  }, [patientProformas]);
+  }, [clinicalProformaRows]);
 
   
   const prescriptionResult1 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[0] }, { skip: !proformaIds[0] });
@@ -432,7 +438,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     prescriptionResults.forEach((result, index) => {
       const proformaId = proformaIds[index];
       if (proformaId && result.data?.data?.prescription?.prescription) {
-        const proforma = patientProformas.find(p => p.id === proformaId);
+        const proforma = clinicalProformaRows.find((p) => p.id === proformaId);
         const prescriptionData = result.data.data.prescription;
         prescriptionData.prescription.forEach(prescription => {
           const uniqueKey = `${prescriptionData.id}-${prescription.id || prescription.medicine}`;
@@ -456,7 +462,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       const dateB = new Date(b.visit_date || b.created_at || 0);
       return dateB - dateA;
     });
-  }, [prescriptionResults, patientProformas, proformaIds, patientPrescriptionsData]);
+  }, [prescriptionResults, clinicalProformaRows, proformaIds, patientPrescriptionsData]);
 
   // Group prescriptions by visit date (keep for backward compatibility if needed)
   const prescriptionsByVisit = useMemo(() => {
@@ -2404,8 +2410,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       XLSX.utils.book_append_sheet(wb, ws1, 'Patient Details');
 
       // Sheet 2: Clinical Proformas (only if user has permission and is not MWO)
-      if (!isMWOUser && canViewClinicalProforma && patientProformas.length > 0) {
-        const proformaData = patientProformas.map((proforma, index) => ({
+      if (!isMWOUser && canViewClinicalProforma && clinicalProformaRows.length > 0) {
+        const proformaData = clinicalProformaRows.map((proforma, index) => ({
           'Visit #': index + 1,
           'Visit Date': proforma.visit_date ? formatDate(proforma.visit_date) : 'N/A',
           'Visit Type': proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up',

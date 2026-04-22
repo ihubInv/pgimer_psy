@@ -21,6 +21,7 @@ import ExportDateRangeModal from '../../components/ExportDateRangeModal';
 import { isAdmin, isMWO, isJrSr, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM } from '../../utils/constants';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
+import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
 
 const PatientsPage = () => {
   const user = useSelector(selectCurrentUser);
@@ -49,6 +50,7 @@ const PatientsPage = () => {
     refetchOnMountOrArgChange: true,
     skip: patientType === 'child', // Skip if showing child patients
   });
+  
 
   // Fetch child patients
   const { data: childData, isLoading: isChildLoading, isFetching: isChildFetching, refetch: refetchChild, error: childError } = useGetAllChildPatientsQuery({
@@ -547,9 +549,12 @@ const PatientsPage = () => {
         if (clinicalResponse.ok) {
           const clinicalResult = await clinicalResponse.json();
           const proformas = clinicalResult?.data?.proformas || clinicalResult?.data || [];
-          
+          const clinicalProformaRows = clinicalProformaRecordsOnly(
+            Array.isArray(proformas) ? proformas : []
+          );
+
           // Filter to only past proformas (not today's)
-          const pastProformas = proformas.filter(proforma => {
+          const pastProformas = clinicalProformaRows.filter(proforma => {
             if (!proforma) return false;
             const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
             if (!proformaDate) return true; // Include proformas without date as past
@@ -1137,9 +1142,12 @@ const PatientsPage = () => {
           if (clinicalResponse.ok) {
             const clinicalResult = await clinicalResponse.json();
             const proformas = clinicalResult?.data?.proformas || clinicalResult?.data || [];
-            
+            const clinicalProformaRows = clinicalProformaRecordsOnly(
+              Array.isArray(proformas) ? proformas : []
+            );
+
             // Filter proformas based on date range
-            let pastProformas = proformas.filter(proforma => {
+            let pastProformas = clinicalProformaRows.filter(proforma => {
               if (!proforma) return false;
               
               if (dateRange) {
@@ -1517,14 +1525,17 @@ const PatientsPage = () => {
         if (clinicalResponse.ok) {
           try {
             const clinicalResult = await clinicalResponse.json();
-            allClinicalProformas = clinicalResult?.data?.proformas || clinicalResult?.data || [];
+            const raw = clinicalResult?.data?.proformas || clinicalResult?.data || [];
+            allClinicalProformas = Array.isArray(raw) ? raw : [];
           } catch (e) {
             console.warn('Could not parse clinical proforma data:', e);
           }
         }
 
+        const mergedClinicalProformaRows = clinicalProformaRecordsOnly(allClinicalProformas);
+
         // Filter to only Past History (not today's visits)
-        clinicalProformas = allClinicalProformas.filter(proforma => {
+        clinicalProformas = mergedClinicalProformaRows.filter(proforma => {
           if (!proforma) return false;
           const proformaDate = toISTDateString(proforma.visit_date || proforma.created_at);
           if (!proformaDate) return true; // Include proformas without date as past

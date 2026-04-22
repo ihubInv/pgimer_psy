@@ -29,6 +29,7 @@ import Textarea from '../../components/Textarea';
 import Button from '../../components/Button';
 import { FiArrowLeft, FiAlertCircle, FiSave, FiHeart, FiActivity, FiUser, FiClipboard, FiList, FiCheckSquare, FiFileText, FiX, FiPlus, FiChevronDown, FiChevronUp, FiCalendar, FiPrinter } from 'react-icons/fi';
 import icd11Codes from '../../assets/ICD11_Codes.json';
+import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
 import { useUpdatePrescriptionMutation,useGetAllPrescriptionQuery, useCreatePrescriptionMutation } from '../../features/prescriptions/prescriptionApiSlice';
 import PrescriptionEdit from '../PrescribeMedication/PrescriptionEdit';
 import EditADL from '../adl/EditADL';
@@ -117,7 +118,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     { skip: !patientId || !!propInitialData } // Skip if embedded (handled by parent)
   );
   const patientProformas = patientClinicalData?.data?.proformas || [];
-  const hasHistory = patientProformas.length > 0;
+  const clinicalProformaRowsForPatient = clinicalProformaRecordsOnly(patientProformas);
+  const hasHistory = clinicalProformaRowsForPatient.length > 0;
 
   // State to control showing history vs form - always show form directly (simplified)
   const [showProformaForm, setShowProformaForm] = useState(true);
@@ -1360,7 +1362,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         <PatientClinicalHistory
           patient={patient}
           visitHistory={[]}
-          clinicalProformas={patientProformas}
+          clinicalProformas={clinicalProformaRowsForPatient}
           onAddNewProforma={() => setShowProformaForm(true)}
           isLoading={isLoadingPatientClinical}
         />

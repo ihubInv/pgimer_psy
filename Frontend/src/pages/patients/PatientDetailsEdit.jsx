@@ -42,6 +42,7 @@ import { useGetPrescriptionByIdQuery, useGetPrescriptionsByPatientIdQuery } from
 import { SelectWithOther } from '../../components/SelectWithOther';
 import {IconInput} from '../../components/IconInput';
 import PGI_Logo from '../../assets/PGI_Logo.png';
+import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
 
 const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, adlData, usersData, userRole, onSave, onCancel }) => {
   const [searchParams] = useSearchParams();
@@ -2155,6 +2156,11 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     ? clinicalData.data.proformas
     : [];
 
+  const clinicalProformaRows = useMemo(
+    () => clinicalProformaRecordsOnly(patientProformas),
+    [patientProformas]
+  );
+
   // Fetch visit history for existing patients
   const { data: visitHistoryData, isLoading: isLoadingVisitHistory } = useGetPatientVisitHistoryQuery(
     patient?.id,
@@ -2164,15 +2170,15 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   // The API returns { success: true, data: { patient: ..., visitHistory: [...] } }
   const visitHistory = visitHistoryData?.visitHistory || visitHistoryData?.data?.visitHistory || [];
 
-  // Fetch prescriptions for all proformas (including follow-up visits)
+  // Prescription-by-proforma API expects clinical_proforma IDs only (merged API includes followup_visit rows)
   const proformaIds = useMemo(() => {
-    const ids = patientProformas.map(p => p?.id).filter(Boolean).slice(0, 10);
+    const ids = clinicalProformaRows.map((p) => p?.id).filter(Boolean).slice(0, 10);
     // Pad to exactly 10 elements with null to ensure consistent hook calls
     while (ids.length < 10) {
       ids.push(null);
     }
     return ids;
-  }, [patientProformas]);
+  }, [clinicalProformaRows]);
 
   const prescriptionResult1 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[0] }, { skip: !proformaIds[0] });
   const prescriptionResult2 = useGetPrescriptionByIdQuery({ clinical_proforma_id: proformaIds[1] }, { skip: !proformaIds[1] });

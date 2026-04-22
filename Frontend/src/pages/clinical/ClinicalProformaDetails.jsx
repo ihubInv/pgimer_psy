@@ -23,6 +23,7 @@ import Input from '../../components/Input';
 import Textarea from '../../components/Textarea';
 import DatePicker from '../../components/CustomDatePicker';
 import { CheckboxGroup } from '../../components/CheckboxGroup';
+import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
 
 const ClinicalProformaDetails = ({ proforma: propProforma }) => {
   const navigate = useNavigate();
@@ -84,8 +85,10 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
   );
   const visitHistory = visitHistoryData || [];
   const patientProformas = patientClinicalData?.data?.proformas || [];
-  // Filter out current proforma from history
-  const otherProformas = patientProformas.filter(p => p.id !== proforma?.id);
+  // Filter out current proforma from history (exclude followup_visit rows — different id space)
+  const otherProformas = clinicalProformaRecordsOnly(patientProformas).filter(
+    (p) => p.id !== proforma?.id
+  );
   const hasHistory = visitHistory.length > 0 || otherProformas.length > 0;
 
   const handleDelete = async () => {

@@ -24,6 +24,7 @@ import {
   DURATION_OPTIONS,
   QUANTITY_OPTIONS
 } from '../../utils/constants';
+import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
 
 const CreatePrescription = ({ 
   patientId: propPatientId, 
@@ -110,9 +111,12 @@ const CreatePrescription = ({
 
   // Use prop patient if provided, otherwise use patient from query
   const finalPatient = patient || patientData?.data?.patient;
-  const clinicalHistory = clinicalHistoryData?.data?.proformas || [];
+  const clinicalHistory = useMemo(
+    () => clinicalProformaRecordsOnly(clinicalHistoryData?.data?.proformas || []),
+    [clinicalHistoryData]
+  );
 
-  // Get the most recent clinical proforma for past history
+  // Get the most recent clinical proforma for past history (merged API can list followup_visit rows first)
   const latestProforma = clinicalHistory.length > 0 ? clinicalHistory[0] : null;
   
 
