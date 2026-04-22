@@ -434,8 +434,8 @@ router.post('/register-complete', authenticateToken, authorizeRoles('Psychiatric
  *         schema:
  *           type: integer
  *           minimum: 1
- *           maximum: 100
- *         description: Number of patients per page
+ *           maximum: 1000
+ *         description: Number of patients per page (capped at 1000)
  *       - in: query
  *         name: sex
  *         schema:
@@ -469,10 +469,20 @@ router.post('/register-complete', authenticateToken, authorizeRoles('Psychiatric
  *         schema:
  *           type: string
  *           format: date
- *         description: When provided (YYYY-MM-DD), returns patients registered on that date by Psychiatric Welfare Officer. For Faculty/Resident, only patients assigned to the logged-in doctor are returned. Admin sees all.
+ *         description: When provided (YYYY-MM-DD), returns patients registered on that date by Psychiatric Welfare Officer. For Faculty/Resident, only patients assigned to the logged-in doctor are returned. Admin sees all. When set, list enrichment fields `has_visit_today`, `has_proforma_today`, and visit-day matching use this same calendar day (IST for proforma created_at).
+ *       - in: query
+ *         name: patient_type
+ *         schema:
+ *           type: string
+ *           enum: [adult, child]
+ *         description: Optional. `adult` excludes child registrations from the merged list. `child` returns only child registrations (requires `date` or `assigned_room` like the child list). Omit for both.
  *     responses:
  *       200:
- *         description: Patients retrieved successfully
+ *         description: |
+ *           Patients retrieved successfully. Each adult patient may include enriched fields:
+ *           `visit_number` (ordinal visit), `visit_count` (number of `follow_up` rows in `patient_visits`),
+ *           `has_visit_today`, `has_proforma_today` (aligned with `date` when provided). Child rows include
+ *           `visit_count` as the number of `followup_visits` rows for that child.
  *       401:
  *         description: Unauthorized
  *       500:

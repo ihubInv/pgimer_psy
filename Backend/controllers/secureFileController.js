@@ -1,29 +1,143 @@
 const path = require('path');
 const fs = require('fs');
 const Patient = require('../models/Patient');
-const { authenticateToken, authorizeRoles } = require('../middleware/auth');
+const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+const db = require('../config/database');
 
 /**
  * Secure file serving controller
- * Validates user authentication and authorization before serving files
+ * Validates paths and record existence before streaming from /fileupload
  */
 class SecureFileController {
   /**
+   * Resolve path under Backend/fileupload and ensure it stays within that directory.
+   * @param {string[]} pathParts — segments after /fileupload/
+   * @returns {string|null} normalized absolute file path or null if invalid
+   */
+  static _getNormalizedUploadFilePath(pathParts) {
+    const projectRoot = path.join(__dirname, '..');
+    const fileuploadDir = path.join(projectRoot, 'fileupload');
+    const expectedAbsolutePath = path.join(fileuploadDir, pathParts.join(path.sep));
+    const normalizedRequested = path.normalize(expectedAbsolutePath);
+    const normalizedBase = path.normalize(fileuploadDir);
+    if (!normalizedRequested.startsWith(normalizedBase)) {
+      return null;
+    }
+    return normalizedRequested;
+  }
+
+  /**
+   * Stream a file with appropriate headers (or send JSON error).
+   * @returns {boolean} true if response was sent successfully
+   */
+  static _streamFileResponse(req, res, normalizedRequested) {
+    if (!fs.existsSync(normalizedRequested)) {
+      res.status(404).json({
+        success: false,
+        message: 'File not found'
+      });
+      return false;
+    }
+
+    const stats = fs.statSync(normalizedRequested);
+    if (!stats.isFile()) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid file path'
+      });
+      return false;
+    }
+
+    const ext = path.extname(normalizedRequested).toLowerCase();
+    const contentTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.txt': 'text/plain'
+    };
+
+    const contentType = contentTypes[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    const etag = `"${stats.mtime.getTime()}-${stats.size}"`;
+    res.setHeader('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      res.status(304).end();
+      return true;
+    }
+
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf'].includes(ext)) {
+      res.setHeader('Content-Disposition', 'inline');
+    } else {
+      const filename = path.basename(normalizedRequested);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    }
+
+    const fileStream = fs.createReadStream(normalizedRequested);
+    fileStream.pipe(res);
+    return true;
+  }
+
+  /**
+   * Authorize child registration uploads: numeric folder = child row exists;
+   * legacy child_<timestamp> folder = some row still references that path.
+   */
+  static async _authorizeChildRegistrationPath(folderId) {
+    if (!folderId) return false;
+    if (/^\d+$/.test(String(folderId))) {
+      const c = await ChildPatientRegistration.findById(parseInt(folderId, 10));
+      return !!c;
+    }
+    if (String(folderId).startsWith('child_')) {
+      const like = `%/${folderId}/%`;
+      const r = await db.query(
+        `SELECT 1 FROM child_patient_registrations
+         WHERE (photo_path IS NOT NULL AND photo_path LIKE $1)
+            OR (documents IS NOT NULL AND documents::text LIKE $2)
+         LIMIT 1`,
+        [like, like]
+      );
+      return r.rows.length > 0;
+    }
+    return false;
+  }
+
+  /**
+   * Folder on disk was renamed to numeric id after registration, but DB/client URL may still use child_<ts>.
+   */
+  static async _childNumericIdForLegacyFolder(tempFolderId) {
+    if (!tempFolderId || !String(tempFolderId).startsWith('child_')) return null;
+    const like = `%/${tempFolderId}/%`;
+    const r = await db.query(
+      `SELECT id FROM child_patient_registrations
+       WHERE (photo_path IS NOT NULL AND photo_path LIKE $1)
+          OR (documents IS NOT NULL AND documents::text LIKE $2)
+       ORDER BY id DESC
+       LIMIT 1`,
+      [like, like]
+    );
+    if (!r.rows.length) return null;
+    return r.rows[0].id;
+  }
+
+  /**
    * Serve patient files securely
-   * Validates:
-   * 1. User is authenticated
-   * 2. User has authorized role
-   * 3. Patient exists
-   * 4. File path is valid and belongs to the patient
-   * 5. Prevents directory traversal attacks
+   * - Adult: /fileupload/{role}/{document_type}/{numeric_patient_id}/{filename} → registered_patient
+   * - Child registration: /fileupload/{role}/Child_Patient_Registration/{folder}/{filename}
    */
   static async servePatientFile(req, res) {
     try {
-      // Extract file path from request
-      // Path format: /fileupload/{role}/{document_type}/{patient_id}/{filename}
       const requestedPath = req.path;
-      
-      // Validate path format
+
       if (!requestedPath.startsWith('/fileupload/')) {
         return res.status(400).json({
           success: false,
@@ -31,9 +145,8 @@ class SecureFileController {
         });
       }
 
-      // Extract components from path: /fileupload/{role}/{document_type}/{patient_id}/{filename}
       const pathParts = requestedPath.replace(/^\/fileupload\//, '').split('/');
-      
+
       if (pathParts.length < 4) {
         return res.status(400).json({
           success: false,
@@ -41,18 +154,60 @@ class SecureFileController {
         });
       }
 
-      // Extract patient ID from path (4th component: role/doc_type/patient_id/filename)
-      const patientIdStr = pathParts[2]; // role is [0], doc_type is [1], patient_id is [2]
-      
-      // Handle "temp" patient ID (temporary files) - return 404 instead of 400
-      if (patientIdStr === 'temp' || patientIdStr.toLowerCase() === 'temp') {
+      const documentTypeRaw = pathParts[1];
+      const folderOrPatientId = pathParts[2];
+      // Case-insensitive / hyphen vs underscore so requests still hit child logic (avoids adult parseInt → 400)
+      const documentTypeNorm = String(documentTypeRaw || '')
+        .toLowerCase()
+        .replace(/-/g, '_');
+      const isChildPatientRegistration =
+        documentTypeNorm === 'child_patient_registration';
+
+      if (isChildPatientRegistration) {
+        const allowed = await SecureFileController._authorizeChildRegistrationPath(folderOrPatientId);
+        if (!allowed) {
+          return res.status(404).json({
+            success: false,
+            message: 'Child patient or file path not found'
+          });
+        }
+        let normalizedRequested = SecureFileController._getNormalizedUploadFilePath(pathParts);
+        if (!normalizedRequested) {
+          return res.status(403).json({
+            success: false,
+            message: 'Access denied: Invalid file path'
+          });
+        }
+        // After rename, files often live under .../Child_Patient_Registration/<numericId>/ while URLs still say child_<ts>/
+        if (
+          !fs.existsSync(normalizedRequested) &&
+          String(folderOrPatientId).startsWith('child_')
+        ) {
+          const numericId = await SecureFileController._childNumericIdForLegacyFolder(
+            folderOrPatientId
+          );
+          if (numericId != null) {
+            const altParts = [...pathParts];
+            altParts[2] = String(numericId);
+            const altPath = SecureFileController._getNormalizedUploadFilePath(altParts);
+            if (altPath && fs.existsSync(altPath)) {
+              normalizedRequested = altPath;
+            }
+          }
+        }
+        SecureFileController._streamFileResponse(req, res, normalizedRequested);
+        return;
+      }
+
+      // Adult registered_patient files
+      if (folderOrPatientId === 'temp' || String(folderOrPatientId).toLowerCase() === 'temp') {
         return res.status(404).json({
           success: false,
           message: 'File not found (temporary file)'
         });
       }
-      
-      const patientId = parseInt(patientIdStr, 10);
+
+      const patientId = parseInt(folderOrPatientId, 10);
 
       if (isNaN(patientId) || patientId <= 0) {
         return res.status(400).json({
@@ -61,7 +216,6 @@ class SecureFileController {
         });
       }
 
-      // Check if patient exists
       const patient = await Patient.findById(patientId);
       if (!patient) {
         return res.status(404).json({
@@ -70,90 +224,15 @@ class SecureFileController {
         });
       }
 
-      // Validate file path to prevent directory traversal
-      // Reconstruct expected path and compare
-      const uploadConfig = require('../config/uploadConfig');
-      const projectRoot = path.join(__dirname, '..');
-      const fileuploadDir = path.join(projectRoot, 'fileupload');
-      
-      // Build expected absolute path
-      const expectedRelativePath = pathParts.join(path.sep);
-      const expectedAbsolutePath = path.join(fileuploadDir, expectedRelativePath);
-      
-      // Normalize paths to prevent directory traversal
-      const normalizedRequested = path.normalize(expectedAbsolutePath);
-      const normalizedBase = path.normalize(fileuploadDir);
-      
-      // Ensure the requested file is within the fileupload directory
-      if (!normalizedRequested.startsWith(normalizedBase)) {
+      const normalizedRequested = SecureFileController._getNormalizedUploadFilePath(pathParts);
+      if (!normalizedRequested) {
         return res.status(403).json({
           success: false,
           message: 'Access denied: Invalid file path'
         });
       }
 
-      // Check if file exists
-      if (!fs.existsSync(normalizedRequested)) {
-        return res.status(404).json({
-          success: false,
-          message: 'File not found'
-        });
-      }
-
-      // Check if it's a file (not a directory)
-      const stats = fs.statSync(normalizedRequested);
-      if (!stats.isFile()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid file path'
-        });
-      }
-
-      // Set appropriate headers
-      const ext = path.extname(normalizedRequested).toLowerCase();
-      const contentTypes = {
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-        '.pdf': 'application/pdf',
-        '.doc': 'application/msword',
-        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        '.txt': 'text/plain'
-      };
-
-      const contentType = contentTypes[ext] || 'application/octet-stream';
-      res.setHeader('Content-Type', contentType);
-      
-      // Security headers
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      // Temporarily disable cache to fix cached error responses
-      // Change back to 'public, max-age=3600, must-revalidate' after cache clears
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      // Add ETag for cache validation
-      const etag = `"${stats.mtime.getTime()}-${stats.size}"`;
-      res.setHeader('ETag', etag);
-      
-      // Check if client has cached version
-      if (req.headers['if-none-match'] === etag) {
-        return res.status(304).end();
-      }
-      
-      // For images and PDFs, allow inline display; for other files, force download
-      if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf'].includes(ext)) {
-        res.setHeader('Content-Disposition', 'inline');
-      } else {
-        const filename = path.basename(normalizedRequested);
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      }
-
-      // Stream the file
-      const fileStream = fs.createReadStream(normalizedRequested);
-      fileStream.pipe(res);
-
+      SecureFileController._streamFileResponse(req, res, normalizedRequested);
     } catch (error) {
       console.error('Secure file serving error:', error);
       if (!res.headersSent) {
@@ -168,4 +247,3 @@ class SecureFileController {
 }
 
 module.exports = SecureFileController;
-

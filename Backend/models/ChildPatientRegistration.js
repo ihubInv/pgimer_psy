@@ -1,5 +1,6 @@
 // models/ChildPatientRegistration.js
 const db = require('../config/database');
+const uploadConfig = require('../config/uploadConfig');
 
 class ChildPatientRegistration {
   constructor(data = {}) {
@@ -81,8 +82,19 @@ class ChildPatientRegistration {
     // Assigned Room
     this.assigned_room = data.assigned_room || null;
     
-    // Documents & Files
-    this.documents = data.documents || (Array.isArray(data.documents) ? data.documents : []);
+    // Documents & Files (PostgreSQL jsonb may arrive as object or string)
+    if (Array.isArray(data.documents)) {
+      this.documents = data.documents;
+    } else if (typeof data.documents === 'string') {
+      try {
+        const parsed = JSON.parse(data.documents);
+        this.documents = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        this.documents = [];
+      }
+    } else {
+      this.documents = [];
+    }
     this.photo_path = data.photo_path || null;
     
     // Metadata
@@ -93,6 +105,9 @@ class ChildPatientRegistration {
 
   // Convert to JSON
   toJSON() {
+    const docList = Array.isArray(this.documents)
+      ? this.documents.map((u) => uploadConfig.toPublicFileUrl(u))
+      : this.documents;
     return {
       patient_type: 'child',
       id: this.id,
@@ -141,8 +156,8 @@ class ChildPatientRegistration {
       local_country: this.local_country,
       local_pincode: this.local_pincode,
       assigned_room: this.assigned_room,
-      documents: this.documents,
-      photo_path: this.photo_path,
+      documents: docList,
+      photo_path: uploadConfig.toPublicFileUrl(this.photo_path),
       filled_by: this.filled_by,
       filled_by_name: this.filled_by_name,
       filled_by_role: this.filled_by_role,
@@ -311,6 +326,28 @@ class ChildPatientRegistration {
       console.error('[ChildPatientRegistration.create] Error creating child patient:', error);
       throw error;
     }
+  }
+
+  /**
+   * Update documents JSON and photo_path (e.g. after upload folder rename temp id → numeric id)
+   */
+  static async updateDocumentsAndPhoto(id, documents, photo_path) {
+    const patientId = parseInt(id, 10);
+    if (isNaN(patientId) || patientId <= 0) {
+      throw new Error('Invalid child patient id');
+    }
+    const docs = Array.isArray(documents) ? documents : [];
+    const result = await db.query(
+      `UPDATE child_patient_registrations
+       SET documents = $1::jsonb,
+           photo_path = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING *`,
+      [JSON.stringify(docs), photo_path || null, patientId]
+    );
+    if (result.rows.length === 0) return null;
+    return new ChildPatientRegistration(result.rows[0]);
   }
 
   // Find by ID

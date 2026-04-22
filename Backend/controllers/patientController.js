@@ -689,10 +689,23 @@ class PatientController {
         }
       }
 
+      // Optional list filter: adult | child (does not change DB; only shapes this response)
+      const patientTypeRaw = req.query.patient_type
+        ? String(req.query.patient_type).toLowerCase().trim()
+        : '';
+      const patientTypeFilter =
+        patientTypeRaw === 'adult' || patientTypeRaw === 'child' ? patientTypeRaw : null;
+      const wantChildOnly =
+        patientTypeFilter === 'child' && !!(filters.date || filters.assigned_room);
+      const wantAdultOnly = patientTypeFilter === 'adult';
+
+      /** Per-child follow-up row counts (followup_visits), set when children are loaded */
+      let childFollowUpVisitCountMap = {};
+
       // Also fetch child patients if filtering by room or date
       let childPatients = [];
       let childPatientsTotal = 0;
-      if (filters.assigned_room || filters.date) {
+      if ((filters.assigned_room || filters.date) && !wantAdultOnly) {
         try {
           const ChildPatientRegistration = require('../models/ChildPatientRegistration');
           const childFilters = {};
@@ -763,6 +776,22 @@ class PatientController {
                   };
                 }
               });
+
+              try {
+                const childFuRes = await db.query(
+                  `SELECT child_patient_id, COUNT(*)::int AS visit_count
+                   FROM followup_visits
+                   WHERE child_patient_id = ANY($1::int[])
+                   GROUP BY child_patient_id`,
+                  [childPatientIds]
+                );
+                childFollowUpVisitCountMap = {};
+                (childFuRes.rows || []).forEach((row) => {
+                  childFollowUpVisitCountMap[row.child_patient_id] = Number(row.visit_count);
+                });
+              } catch (fuErr) {
+                console.error('[getAllPatients] Error counting child follow-up visits:', fuErr);
+              }
             } catch (err) {
               console.error('[getAllPatients] Error fetching child patient visit status:', err);
             }
@@ -788,6 +817,8 @@ class PatientController {
             updated_at: cp.updated_at, // CRITICAL: Include updated_at for filtering existing patients added to today's list
             visit_status: visitStatusMap[cp.id] || null, // Add visit_status from follow-up visits
             patient_type: 'child',
+            visit_number: null,
+            visit_count: childFollowUpVisitCountMap[cp.id] ?? 0,
             filled_by_name: cp.filled_by_name || null,
             filled_by_role: cp.filled_by_role || null
           }));
@@ -801,19 +832,38 @@ class PatientController {
       // Increase cap so "Today's Patients" view can see all patients with visits today
       // while still protecting against unbounded queries.
       const safeLimit = Math.min(limit, 1000); // Cap at 1000 instead of 100
-      const result = await Patient.findAll(page, safeLimit, filters);
+      let result;
+      if (wantChildOnly) {
+        result = {
+          patients: [],
+          pagination: {
+            page,
+            limit: safeLimit,
+            total: 0,
+            pages: 0
+          }
+        };
+      } else {
+        result = await Patient.findAll(page, safeLimit, filters);
+      }
 
       // Enrich with latest assignment info
       try {
         const db = require('../config/database');
         const patientIds = (result.patients || []).map(p => p.id);
         if (patientIds.length > 0) {
-          // Use CURRENT_DATE from database to ensure consistency with IST timezone
-          const todayResult = await db.query('SELECT CURRENT_DATE as today');
-          const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
-          
+          // Calendar day for visit/proforma flags: when ?date= is provided, align with that list date
+          // (same idea as Patient.findAll date filter); otherwise use DB current date.
+          let activeDate;
+          if (filters.date) {
+            activeDate = filters.date;
+          } else {
+            const todayResult = await db.query('SELECT CURRENT_DATE::text AS today');
+            activeDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+          }
+
           console.log(`[getAllPatients] Fetching visits for ${patientIds.length} patients (sample IDs: ${patientIds.slice(0, 3).join(', ')})`);
-          console.log(`[getAllPatients] Using today's date: ${today}`);
+          console.log(`[getAllPatients] Using active date for visits/proforma: ${activeDate}`);
           
           // Fetch visits with assigned_doctor info using PostgreSQL
           let visits = [];
@@ -822,7 +872,7 @@ class PatientController {
           
           try {
             const visitsResult = await db.query(
-              `SELECT patient_id, visit_date, assigned_doctor_id, room_no, visit_status
+              `SELECT id, patient_id, visit_date, assigned_doctor_id, room_no, visit_status
                FROM patient_visits
                WHERE patient_id = ANY($1)
                ORDER BY visit_date DESC`,
@@ -833,31 +883,51 @@ class PatientController {
             console.log(`[getAllPatients] Found ${visits.length} total visits`);
             
             const visitsTodayResult = await db.query(
-              `SELECT patient_id, visit_date, assigned_doctor_id, visit_status, room_no
+              `SELECT id, patient_id, visit_date, assigned_doctor_id, visit_status, room_no
                FROM patient_visits
-               WHERE patient_id = ANY($1) AND DATE(visit_date) = $2
+               WHERE patient_id = ANY($1) AND DATE(visit_date) = $2::date
                ORDER BY created_at DESC`,
-              [patientIds, today]
+              [patientIds, activeDate]
             );
             
             visitsToday = visitsTodayResult.rows || [];
-            console.log(`[getAllPatients] Found ${visitsToday.length} visits for today (${today})`);
+            console.log(`[getAllPatients] Found ${visitsToday.length} visits for active date (${activeDate})`);
           } catch (queryErr) {
             console.error('[getAllPatients] Error in PostgreSQL query:', queryErr);
             visitsTodayError = true;
           }
+
+          // Ordinal visit number (1, 2, …) per patient — additive field; visit_status unchanged for clients
+          let visitNumberByVisitId = new Map();
+          try {
+            const visitNumResult = await db.query(
+              `SELECT id, patient_id,
+                      ROW_NUMBER() OVER (
+                        PARTITION BY patient_id ORDER BY visit_date ASC, id ASC
+                      )::int AS visit_number
+               FROM patient_visits
+               WHERE patient_id = ANY($1::int[])`,
+              [patientIds]
+            );
+            (visitNumResult.rows || []).forEach((r) => {
+              visitNumberByVisitId.set(Number(r.id), Number(r.visit_number));
+            });
+          } catch (vnErr) {
+            console.error('[getAllPatients] Error computing visit_number (non-fatal):', vnErr);
+            visitNumberByVisitId = new Map();
+          }
           
-          // Fetch clinical proformas created today
+          // Fetch clinical proformas for the same calendar day as the list (IST for created_at, matches findAll)
           let proformasToday = [];
           let proformasTodayError = false;
           try {
             const proformasTodayResult = await db.query(
               `SELECT patient_id, created_at
                FROM clinical_proforma
-               WHERE patient_id = ANY($1) 
-                 AND DATE(created_at) = $2
+               WHERE patient_id = ANY($1::int[])
+                 AND DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date
                ORDER BY created_at DESC`,
-              [patientIds, today]
+              [patientIds, activeDate]
             );
             
             proformasToday = proformasTodayResult.rows || [];
@@ -872,6 +942,25 @@ class PatientController {
           const patientsWithProformaToday = new Set();
           if (!proformasTodayError && Array.isArray(proformasToday)) {
             proformasToday.forEach(p => patientsWithProformaToday.add(String(p.patient_id)));
+          }
+
+          // Count follow-up visits per adult (patient_visits.visit_type = 'follow_up')
+          let followUpVisitCountByPatientId = new Map();
+          try {
+            const fuRes = await db.query(
+              `SELECT patient_id, COUNT(*)::int AS visit_count
+               FROM patient_visits
+               WHERE patient_id = ANY($1::int[])
+                 AND visit_type = 'follow_up'
+               GROUP BY patient_id`,
+              [patientIds]
+            );
+            (fuRes.rows || []).forEach((r) => {
+              followUpVisitCountByPatientId.set(String(r.patient_id), Number(r.visit_count));
+            });
+          } catch (fuErr) {
+            console.error('[getAllPatients] Error counting adult follow-up visits:', fuErr);
+            followUpVisitCountByPatientId = new Map();
           }
 
           if (Array.isArray(visits) && visits.length > 0) {
@@ -923,6 +1012,21 @@ class PatientController {
               const visitInfo = hasVisitToday && visitsToday?.find(v => String(v.patient_id) === patientIdStr) 
                 ? visitsToday.find(v => String(v.patient_id) === patientIdStr)
                 : latest;
+
+              const activeVisitId =
+                visitInfo?.id != null
+                  ? Number(visitInfo.id)
+                  : latest?.id != null
+                    ? Number(latest.id)
+                    : null;
+              const visit_number =
+                activeVisitId != null && visitNumberByVisitId.has(activeVisitId)
+                  ? visitNumberByVisitId.get(activeVisitId)
+                  : null;
+
+              const listHasAdl =
+                !!p.has_adl_file ||
+                (!!p.file_status && String(p.file_status).toLowerCase() !== 'none');
               
               // Use doctor from visit if available, otherwise use from patient record
               const doctorId = visitInfo?.assigned_doctor_id || latest?.assigned_doctor_id || p.assigned_doctor_id;
@@ -930,6 +1034,7 @@ class PatientController {
               
               return {
                 ...p,
+                has_adl_file: listHasAdl,
                 assigned_doctor_id: doctorId || p.assigned_doctor_id || null,
                 // Use doctor from visits if available, otherwise use from patient record (already fetched in findAll)
                 // Filter out "Unknown Doctor" - treat it as null
@@ -938,6 +1043,8 @@ class PatientController {
                 last_assigned_date: latest?.visit_date || null,
                 visit_date: visitInfo?.visit_date || null,
                 visit_status: visitInfo?.visit_status || latest?.visit_status || null,
+                visit_number,
+                visit_count: followUpVisitCountByPatientId.get(patientIdStr) ?? 0,
                 has_visit_today: hasVisitToday,
                 has_proforma_today: hasProformaToday,
               };
@@ -946,9 +1053,14 @@ class PatientController {
             // If no visits found, ensure assigned_doctor fields are null (filter out "Unknown Doctor")
             result.patients = result.patients.map(p => ({
               ...p,
+              has_adl_file:
+                !!p.has_adl_file ||
+                (!!p.file_status && String(p.file_status).toLowerCase() !== 'none'),
               assigned_doctor_id: p.assigned_doctor_id || null,
               assigned_doctor_name: (p.assigned_doctor_name && p.assigned_doctor_name !== 'Unknown Doctor') ? p.assigned_doctor_name : null,
               assigned_doctor_role: p.assigned_doctor_role || null,
+              visit_number: null,
+              visit_count: followUpVisitCountByPatientId.get(String(p.id)) ?? 0,
               has_visit_today: false,
               has_proforma_today: patientsWithProformaToday.has(String(p.id)),
             }));
@@ -968,7 +1080,16 @@ class PatientController {
       }
 
       // Merge child patients with adult patients (if any were fetched)
-      if (childPatients.length > 0) {
+      if (wantChildOnly) {
+        result.patients = childPatients;
+        result.pagination = {
+          page,
+          limit: safeLimit,
+          total: childPatientsTotal,
+          pages:
+            childPatientsTotal === 0 ? 0 : Math.ceil(childPatientsTotal / safeLimit)
+        };
+      } else if (!wantAdultOnly && childPatients.length > 0) {
         // Combine adult and child patients, sort by created_at DESC
         const allPatients = [...(result.patients || []), ...childPatients].sort((a, b) => {
           const dateA = new Date(a.created_at || 0);
@@ -979,7 +1100,7 @@ class PatientController {
         // Update pagination to include child patients
         result.patients = allPatients;
         result.pagination.total = (result.pagination?.total || 0) + childPatientsTotal;
-        result.pagination.pages = Math.ceil(result.pagination.total / limit);
+        result.pagination.pages = Math.ceil(result.pagination.total / safeLimit);
       }
 
       // Filter patient data for PWO role

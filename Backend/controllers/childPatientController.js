@@ -4,6 +4,15 @@ const path = require('path');
 const fs = require('fs').promises;
 const uploadConfig = require('../config/uploadConfig');
 
+/** Rewrite URL paths after folder rename: .../Child_Patient_Registration/{tempId}/... → .../{numericId}/... */
+function rewriteChildRegistrationPaths(url, tempFolderId, numericId) {
+  if (!url || typeof url !== 'string') return url;
+  const from = `/${tempFolderId}/`;
+  const to = `/${numericId}/`;
+  if (!url.includes(from)) return url;
+  return url.split(from).join(to);
+}
+
 class ChildPatientController {
   // Register new child patient
   static async registerChildPatient(req, res) {
@@ -92,7 +101,7 @@ class ChildPatientController {
       }
 
       // Create child patient registration
-      const childPatient = await ChildPatientRegistration.create(childPatientData);
+      let childPatient = await ChildPatientRegistration.create(childPatientData);
 
       // Rename temp folder to actual patient ID now that we have it
       if (childId && childPatient.id) {
@@ -110,10 +119,40 @@ class ChildPatientController {
           String(childPatient.id)
         );
         
+        let renamedToNumericFolder = false;
         try {
           await fs.rename(oldDir, newDir);
-        } catch (error) {
-          console.warn('[childPatientController] Could not rename directory:', error.message);
+          renamedToNumericFolder = true;
+        } catch (renameErr) {
+          console.warn('[childPatientController] Could not rename directory:', renameErr.message);
+        }
+        // Only rewrite DB paths when rename succeeded (URLs then pointed at temp folder name)
+        if (renamedToNumericFolder) {
+          try {
+            let docs = childPatient.documents;
+            if (typeof docs === 'string') {
+              try {
+                docs = JSON.parse(docs);
+              } catch {
+                docs = [];
+              }
+            }
+            if (!Array.isArray(docs)) docs = [];
+            const newDocs = docs.map((u) => rewriteChildRegistrationPaths(u, childId, childPatient.id));
+            const newPhoto = childPatient.photo_path
+              ? rewriteChildRegistrationPaths(childPatient.photo_path, childId, childPatient.id)
+              : null;
+            const updated = await ChildPatientRegistration.updateDocumentsAndPhoto(
+              childPatient.id,
+              newDocs,
+              newPhoto
+            );
+            if (updated) {
+              childPatient = updated;
+            }
+          } catch (pathErr) {
+            console.error('[childPatientController] Failed to update paths after child folder rename:', pathErr);
+          }
         }
       }
 

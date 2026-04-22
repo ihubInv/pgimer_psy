@@ -144,6 +144,36 @@ const getDocumentType = (documentType) => {
   return typeMap[docType.toLowerCase()] || 'Patient_Details';
 };
 
+/**
+ * Optional public origin for file URLs returned to mobile/web clients (no trailing slash).
+ * Set PUBLIC_FILE_BASE_URL (e.g. https://pgimerpsych.org) so paths like /fileupload/... become absolute.
+ * Falls back to FRONTEND_URL or APP_URL if PUBLIC_FILE_BASE_URL is unset.
+ */
+const getPublicFileBaseUrl = () => {
+  const raw =
+    process.env.PUBLIC_FILE_BASE_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.APP_URL ||
+    '';
+  return String(raw).trim().replace(/\/+$/, '');
+};
+
+/** Prefix relative /fileupload/... paths with public origin when configured */
+const toPublicFileUrl = (relativeOrAbsolutePath) => {
+  if (relativeOrAbsolutePath === undefined || relativeOrAbsolutePath === null || relativeOrAbsolutePath === '') {
+    return relativeOrAbsolutePath;
+  }
+  const s = String(relativeOrAbsolutePath);
+  if (s.startsWith('http://') || s.startsWith('https://')) {
+    return s;
+  }
+  const base = getPublicFileBaseUrl();
+  if (!base) {
+    return s;
+  }
+  return s.startsWith('/') ? `${base}${s}` : `${base}/${s}`;
+};
+
 module.exports = {
   // Base paths (relative to project root)
   UPLOAD_BASE_PATH,
@@ -192,6 +222,9 @@ module.exports = {
   // Convert URL path to absolute file system path
   // Input: /fileupload/psychiatric_welfare_officer/Patient_Details/50/file.png
   // Output: /var/www/pgimer_psy/Backend/fileupload/psychiatric_welfare_officer/Patient_Details/50/file.png
+  getPublicFileBaseUrl,
+  toPublicFileUrl,
+
   urlPathToAbsolutePath: (urlPath) => {
     if (!urlPath) return null;
     
