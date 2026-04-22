@@ -482,7 +482,8 @@ router.post('/register-complete', authenticateToken, authorizeRoles('Psychiatric
  *           Patients retrieved successfully. Each adult patient may include enriched fields:
  *           `visit_number` (ordinal visit), `visit_count` (number of `follow_up` rows in `patient_visits`),
  *           `has_visit_today`, `has_proforma_today` (aligned with `date` when provided). Child rows include
- *           `visit_count` as the number of `followup_visits` rows for that child.
+ *           the same `has_visit_today` / `has_proforma_today` flags (from `followup_visits` and `child_clinical_proforma`),
+ *           and `visit_count` as the number of `followup_visits` rows for that child.
  *       401:
  *         description: Unauthorized
  *       500:

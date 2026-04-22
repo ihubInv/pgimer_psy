@@ -726,7 +726,9 @@ class PatientController {
           const today = filters.date || new Date().toISOString().slice(0, 10);
           const childPatientIds = childPatients.map(cp => cp.id);
           let visitStatusMap = {};
-          
+          /** child_patient_id strings with a child_clinical_proforma row on `today` (IST calendar day, same as adult list) */
+          let childrenWithProformaToday = new Set();
+
           let childDoctorFromFollowup = {};
           if (childPatientIds.length > 0) {
             try {
@@ -795,6 +797,21 @@ class PatientController {
             } catch (err) {
               console.error('[getAllPatients] Error fetching child patient visit status:', err);
             }
+
+            try {
+              const childProformaTodayRes = await db.query(
+                `SELECT DISTINCT child_patient_id
+                 FROM child_clinical_proforma
+                 WHERE child_patient_id = ANY($1::int[])
+                   AND DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date`,
+                [childPatientIds, today]
+              );
+              (childProformaTodayRes.rows || []).forEach((row) => {
+                childrenWithProformaToday.add(String(row.child_patient_id));
+              });
+            } catch (ccpErr) {
+              console.error('[getAllPatients] Error fetching child clinical proformas for list date:', ccpErr);
+            }
           }
           
           // Convert child patients to compatible format
@@ -820,7 +837,9 @@ class PatientController {
             visit_number: null,
             visit_count: childFollowUpVisitCountMap[cp.id] ?? 0,
             filled_by_name: cp.filled_by_name || null,
-            filled_by_role: cp.filled_by_role || null
+            filled_by_role: cp.filled_by_role || null,
+            has_visit_today: Object.prototype.hasOwnProperty.call(visitStatusMap, cp.id),
+            has_proforma_today: childrenWithProformaToday.has(String(cp.id))
           }));
         } catch (childError) {
           console.error('[getAllPatients] Error fetching child patients:', childError);
