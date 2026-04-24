@@ -7,7 +7,7 @@ import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery, useCreateClinicalProformaMutation } from '../../features/clinical/clinicalApiSlice';
 import { useCreatePrescriptionMutation, useGetPrescriptionByIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
-import { useGetAllMedicinesQuery } from '../../features/medicines/medicineApiSlice';
+import { PSYCHIATRIC_MEDS, searchPsychiatricMeds, prettyMedCategory } from '../../utils/psychiatricMeds';
 import { useGetAllPrescriptionTemplatesQuery, useCreatePrescriptionTemplateMutation } from '../../features/prescriptionTemplates/prescriptionTemplateApiSlice';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
@@ -205,37 +205,10 @@ const CreatePrescription = ({
     }
   }, [existingPrescriptions, clinicalProformaId, hasPopulatedPrescriptions, setPrescriptions]);
 
-  // Fetch medicines from API
-  const { data: medicinesApiData, isLoading: isLoadingMedicines, error: medicinesError } = useGetAllMedicinesQuery({
-    limit: 200, // Reduced from 1000 - use pagination or search for specific medicines
-    is_active: true
-  });
-
-  // Flatten medicines data for autocomplete from API
-  const allMedicines = useMemo(() => {
-    if (!medicinesApiData) return [];
-    
-    // API returns: { success: true, data: { medicines: [...], pagination: {...} } }
-    const medicines = medicinesApiData?.data?.medicines || medicinesApiData?.data || [];
-    
-    if (!Array.isArray(medicines) || medicines.length === 0) {
-      return [];
-    }
-    
-    return medicines.map(med => ({
-      name: med.name,
-      displayName: med.name,
-      category: med.category,
-      id: med.id
-    })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [medicinesApiData]);
-  
-  // Debug: Log medicines data
-  useEffect(() => {
-    if (medicinesError) {
-      console.error('[CreatePrescription] Medicines API error:', medicinesError);
-    }
-  }, [medicinesApiData, medicinesError, allMedicines.length]);
+  // Medicine suggestions are sourced from the local psychiatric medication catalogue
+  // (src/assets/psychiatric_meds_india.json). Free-text manual entry stays supported
+  // because the Medicine field remains a text input.
+  const allMedicines = PSYCHIATRIC_MEDS;
 
   // Medicine autocomplete state for each row
   const [medicineSuggestions, setMedicineSuggestions] = useState({});
@@ -286,11 +259,8 @@ const CreatePrescription = ({
       const searchTerm = value.toLowerCase().trim();
       
       if (searchTerm.length > 0 && allMedicines.length > 0) {
-        // Filter medicines based on name or category
-        const filtered = allMedicines.filter(med =>
-          med.name.toLowerCase().includes(searchTerm) ||
-          (med.category && med.category.toLowerCase().includes(searchTerm))
-        ).slice(0, 20); // Show up to 20 suggestions
+        // Match by generic name, brand name, category or group
+        const filtered = searchPsychiatricMeds(searchTerm, 20);
         
         setMedicineSuggestions(prev => ({ ...prev, [rowIdx]: filtered }));
         setShowSuggestions(prev => ({ ...prev, [rowIdx]: filtered.length > 0 }));
@@ -1496,11 +1466,7 @@ const CreatePrescription = ({
                             onFocus={() => {
                               if (allMedicines.length > 0) {
                                 if (row.medicine && row.medicine.trim().length > 0) {
-                                  const searchTerm = row.medicine.toLowerCase().trim();
-                                  const filtered = allMedicines.filter(med =>
-                                    med.name.toLowerCase().includes(searchTerm) ||
-                                    (med.category && med.category.toLowerCase().includes(searchTerm))
-                                  ).slice(0, 20);
+                                  const filtered = searchPsychiatricMeds(row.medicine.trim(), 20);
                                   setMedicineSuggestions(prev => ({ ...prev, [idx]: filtered }));
                                   setShowSuggestions(prev => ({ ...prev, [idx]: filtered.length > 0 }));
                                 } else {
@@ -1565,11 +1531,24 @@ const CreatePrescription = ({
                                         : 'hover:bg-green-50/50'
                                     }`}
                                   >
-                                    <div className="flex items-center justify-between">
-                                      <div className="font-semibold text-gray-900 text-sm">{med.name}</div>
-                                      {med.category && (
-                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
-                                          {med.category.replace('_', ' ')}
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <div className="font-semibold text-gray-900 text-sm truncate">{med.name}</div>
+                                        {Array.isArray(med.brands) && med.brands.length > 0 && (
+                                          <div className="text-[11px] text-gray-500 truncate">
+                                            {med.brands.slice(0, 4).join(' • ')}
+                                            {med.brands.length > 4 ? ` +${med.brands.length - 4}` : ''}
+                                          </div>
+                                        )}
+                                        {Array.isArray(med.strengths) && med.strengths.length > 0 && (
+                                          <div className="text-[11px] text-gray-400 truncate">
+                                            {med.strengths.join(', ')}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {(med.category || med.group) && (
+                                        <span className="shrink-0 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
+                                          {prettyMedCategory(med)}
                                         </span>
                                       )}
                                     </div>

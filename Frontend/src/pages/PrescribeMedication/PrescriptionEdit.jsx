@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { createPortal } from 'react-dom';
 import { useGetPrescriptionByIdQuery, useCreatePrescriptionMutation, useUpdatePrescriptionMutation } from "../../features/prescriptions/prescriptionApiSlice";
-import { useGetAllMedicinesQuery } from "../../features/medicines/medicineApiSlice";
+import { PSYCHIATRIC_MEDS, searchPsychiatricMeds, prettyMedCategory } from '../../utils/psychiatricMeds';
 import { useGetAllPrescriptionTemplatesQuery, useCreatePrescriptionTemplateMutation } from '../../features/prescriptionTemplates/prescriptionTemplateApiSlice';
 import { FiSave, FiEdit, FiPlus, FiTrash2, FiPackage, FiDroplet, FiActivity, FiClock, FiCalendar, FiFileText, FiBookmark, FiDownload } from 'react-icons/fi';
 import Select from '../../components/Select';
@@ -44,11 +44,8 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
   const [updatePrescription, { isLoading: isUpdating }] = useUpdatePrescriptionMutation();
   const prescriptionData = prescriptionsData?.data?.prescription;
   
-  // Fetch medicines from API
-  const { data: medicinesData, isLoading: isLoadingMedicines, error: medicinesError } = useGetAllMedicinesQuery({
-    limit: 200, // Reduced from 1000 - use pagination or search for specific medicines
-    is_active: true
-  });
+  // Medicine suggestions come from the local psychiatric medication catalogue
+  // (src/assets/psychiatric_meds_india.json); free-text entry still works.
 
   // Template functionality
   const { data: templatesData, isLoading: isLoadingTemplates } = useGetAllPrescriptionTemplatesQuery({ is_active: true });
@@ -64,13 +61,6 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
   const [detailsNotesField, setDetailsNotesField] = useState(null); // 'details' or 'notes'
   const [detailsNotesValue, setDetailsNotesValue] = useState('');
   
-  // Debug: Log medicines data
-  useEffect(() => {
-    if (medicinesError) {
-      console.error('[PrescriptionEdit] Medicines API error:', medicinesError);
-    }
-  }, [medicinesData, medicinesError]);
-  
   // Memoize existingPrescriptions to prevent infinite loops
   const existingPrescriptions = useMemo(() => {
     return prescriptionData?.prescription || [];
@@ -81,26 +71,8 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
   // Create mode: no existingPrescriptions OR mode === 'create'
   const isUpdateMode = mode === 'update' || (mode !== 'create' && existingPrescriptions.length > 0);
 
-  // Flatten medicines data for autocomplete from API
-  const allMedicines = useMemo(() => {
-    if (!medicinesData) {
-      return [];
-    }
-    
-    // API returns: { success: true, data: { medicines: [...], pagination: {...} } }
-    const medicines = medicinesData?.data?.medicines || medicinesData?.data || [];
-    
-    if (!Array.isArray(medicines) || medicines.length === 0) {
-      return [];
-    }
-    
-    return medicines.map(med => ({
-            name: med.name,
-            displayName: med.name,
-      category: med.category,
-      id: med.id
-    })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [medicinesData]);
+  // Autocomplete list from the local psychiatric medication catalogue
+  const allMedicines = PSYCHIATRIC_MEDS;
 
   // Medicine autocomplete state for each row
   const [medicineSuggestions, setMedicineSuggestions] = useState({});
@@ -331,11 +303,7 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
       const searchTerm = value.toLowerCase().trim();
       
       if (searchTerm.length > 0 && allMedicines.length > 0) {
-        // Filter medicines based on name or category
-        const filtered = allMedicines.filter(med =>
-          med.name.toLowerCase().includes(searchTerm) ||
-          (med.category && med.category.toLowerCase().includes(searchTerm))
-        ).slice(0, 20); // Show up to 20 suggestions
+        const filtered = searchPsychiatricMeds(searchTerm, 20);
         
         setMedicineSuggestions(prev => ({ ...prev, [rowIdx]: filtered }));
         setShowSuggestions(prev => ({ ...prev, [rowIdx]: filtered.length > 0 }));
@@ -810,11 +778,7 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
                           onFocus={() => {
                             if (allMedicines.length > 0) {
                               if (row.medicine && row.medicine.trim().length > 0) {
-                                const searchTerm = row.medicine.toLowerCase().trim();
-                                const filtered = allMedicines.filter(med =>
-                                  med.name.toLowerCase().includes(searchTerm) ||
-                                  (med.category && med.category.toLowerCase().includes(searchTerm))
-                                ).slice(0, 20);
+                                const filtered = searchPsychiatricMeds(row.medicine.trim(), 20);
                                 setMedicineSuggestions(prev => ({ ...prev, [idx]: filtered }));
                                 setShowSuggestions(prev => ({ ...prev, [idx]: filtered.length > 0 }));
                               } else {
@@ -879,11 +843,24 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
                                       : 'hover:bg-amber-50/50'
                                   }`}
                                 >
-                                  <div className="flex items-center justify-between">
-                                    <div className="font-semibold text-gray-900 text-sm">{med.name}</div>
-                                    {med.category && (
-                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
-                                        {med.category.replace('_', ' ')}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-gray-900 text-sm truncate">{med.name}</div>
+                                      {Array.isArray(med.brands) && med.brands.length > 0 && (
+                                        <div className="text-[11px] text-gray-500 truncate">
+                                          {med.brands.slice(0, 4).join(' • ')}
+                                          {med.brands.length > 4 ? ` +${med.brands.length - 4}` : ''}
+                                        </div>
+                                      )}
+                                      {Array.isArray(med.strengths) && med.strengths.length > 0 && (
+                                        <div className="text-[11px] text-gray-400 truncate">
+                                          {med.strengths.join(', ')}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {(med.category || med.group) && (
+                                      <span className="shrink-0 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
+                                        {prettyMedCategory(med)}
                                       </span>
                                     )}
                                   </div>
