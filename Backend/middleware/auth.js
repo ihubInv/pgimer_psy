@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 const { verifyAccessToken } = require('../utils/tokenUtils');
+const MobileToken = require('../models/MobileToken');
 
 // Verify JWT token (access token)
 // SECURITY FIX #2.7: Strict token validation - reject all invalid tokens
@@ -12,7 +13,8 @@ const authenticateToken = async (req, res, next) => {
     if (!authHeader) {
       return res.status(401).json({ 
         success: false, 
-        message: 'Authorization header required' 
+        message: 'Authorization header required',
+        code: 'NO_AUTH_HEADER'
       });
     }
     
@@ -20,7 +22,8 @@ const authenticateToken = async (req, res, next) => {
     if (!authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid authorization format. Expected: Bearer <token>' 
+        message: 'Invalid authorization format. Expected: Bearer <token>',
+        code: 'INVALID_AUTH_FORMAT'
       });
     }
     
@@ -30,16 +33,70 @@ const authenticateToken = async (req, res, next) => {
     if (!token || token.trim().length === 0) {
       return res.status(401).json({ 
         success: false, 
-        message: 'Access token required' 
+        message: 'Access token required',
+        code: 'NO_TOKEN'
       });
     }
-    
+
+    // OPAQUE MOBILE TOKEN PATH (Option B):
+    // Mobile apps may use a long-lived, DB-backed token that starts with `mt_`.
+    // We handle it before JWT validation so the existing JWT logic stays unchanged.
+    if (MobileToken.isMobileTokenString(token)) {
+      try {
+        const mobileTokenRecord = await MobileToken.findByToken(token);
+        if (!mobileTokenRecord || !mobileTokenRecord.isValid()) {
+          return res.status(401).json({
+            success: false,
+            message: 'Invalid or revoked mobile session',
+            code: 'INVALID_TOKEN'
+          });
+        }
+
+        const userResult = await db.query(
+          'SELECT id, name, role, email, is_active FROM users WHERE id = $1',
+          [mobileTokenRecord.user_id]
+        );
+
+        if (!userResult || !userResult.rows || userResult.rows.length === 0) {
+          await mobileTokenRecord.revoke();
+          return res.status(401).json({
+            success: false,
+            message: 'User not found',
+            code: 'USER_NOT_FOUND'
+          });
+        }
+
+        if (userResult.rows[0].is_active === false) {
+          await mobileTokenRecord.revoke();
+          return res.status(401).json({
+            success: false,
+            message: 'Account is deactivated',
+            code: 'ACCOUNT_DEACTIVATED'
+          });
+        }
+
+        // Best-effort activity update; never block request on this.
+        mobileTokenRecord.updateActivity().catch(() => {});
+
+        req.user = userResult.rows[0];
+        req.authMethod = 'mobile_token';
+        return next();
+      } catch (mobileTokenError) {
+        console.error('[Auth] Mobile token validation error:', mobileTokenError);
+        return res.status(503).json({
+          success: false,
+          message: 'Authentication service error. Please try again.'
+        });
+      }
+    }
+
     // SECURITY: Basic token format validation (JWT has 3 parts separated by dots)
     const tokenParts = token.split('.');
     if (tokenParts.length !== 3) {
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid token format' 
+        message: 'Invalid token format',
+        code: 'INVALID_TOKEN'
       });
     }
     
@@ -72,26 +129,30 @@ const authenticateToken = async (req, res, next) => {
       if (verifyError.name === 'JsonWebTokenError') {
         return res.status(401).json({ 
           success: false, 
-          message: 'Invalid token - authentication failed' 
+          message: 'Invalid token - authentication failed',
+          code: 'INVALID_TOKEN'
         });
       }
       if (verifyError.name === 'TokenExpiredError') {
         return res.status(401).json({ 
           success: false, 
-          message: 'Token expired - please login again' 
+          message: 'Token expired - please login again',
+          code: 'TOKEN_EXPIRED'
         });
       }
       if (verifyError.name === 'NotBeforeError') {
         return res.status(401).json({ 
           success: false, 
-          message: 'Token not yet valid' 
+          message: 'Token not yet valid',
+          code: 'TOKEN_NOT_ACTIVE'
         });
       }
       // SECURITY: Reject ANY other error during token verification
       // This ensures that malformed tokens, wrong secrets, or any other issues result in rejection
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid token - authentication failed' 
+        message: 'Invalid token - authentication failed',
+        code: 'INVALID_TOKEN'
       });
     }
     
@@ -100,7 +161,8 @@ const authenticateToken = async (req, res, next) => {
       console.warn('[Auth] Token decoded to null/undefined');
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid token - authentication failed' 
+        message: 'Invalid token - authentication failed',
+        code: 'INVALID_TOKEN'
       });
     }
     
@@ -109,7 +171,8 @@ const authenticateToken = async (req, res, next) => {
       console.warn('[Auth] Invalid userId in token:', decoded.userId);
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid token payload' 
+        message: 'Invalid token payload',
+        code: 'INVALID_TOKEN'
       });
     }
     
@@ -117,7 +180,8 @@ const authenticateToken = async (req, res, next) => {
       console.warn('[Auth] Invalid email in token');
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid token payload' 
+        message: 'Invalid token payload',
+        code: 'INVALID_TOKEN'
       });
     }
     
@@ -126,7 +190,8 @@ const authenticateToken = async (req, res, next) => {
       console.warn('[Auth] Wrong token type:', decoded.type);
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid token type - access token required' 
+        message: 'Invalid token type - access token required',
+        code: 'INVALID_TOKEN'
       });
     }
     
@@ -157,7 +222,8 @@ const authenticateToken = async (req, res, next) => {
       });
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid token - user not found' 
+        message: 'Invalid token - user not found',
+        code: 'USER_NOT_FOUND'
       });
     }
     
@@ -171,7 +237,8 @@ const authenticateToken = async (req, res, next) => {
       });
       return res.status(401).json({ 
         success: false, 
-        message: 'Account is deactivated' 
+        message: 'Account is deactivated',
+        code: 'ACCOUNT_DEACTIVATED'
       });
     }
     
@@ -180,7 +247,8 @@ const authenticateToken = async (req, res, next) => {
       console.error('[Auth] Invalid user data retrieved from database');
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid user data' 
+        message: 'Invalid user data',
+        code: 'INVALID_USER_DATA'
       });
     }
 

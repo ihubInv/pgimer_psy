@@ -9,12 +9,28 @@
  * Or a User-Agent containing "dart" / "flutter" (last resort).
  */
 const isMobileAppClient = (req) => {
-  if (!req || !req.headers) return false;
+  if (!req) return false;
 
-  const clientType = String(req.headers['x-client-type'] || '').trim().toLowerCase();
-  const platform = String(req.headers['x-platform'] || '').trim().toLowerCase();
-  const appVersionRaw = req.headers['x-app-version'];
-  const userAgent = String(req.headers['user-agent'] || '').toLowerCase();
+  const headers = req.headers || {};
+  const body = req.body || {};
+  const query = req.query || {};
+
+  const clientTypeHeader = String(headers['x-client-type'] || '').trim().toLowerCase();
+  const platformHeader = String(headers['x-platform'] || '').trim().toLowerCase();
+  const appVersionHeader = headers['x-app-version'];
+  const userAgent = String(headers['user-agent'] || '').toLowerCase();
+
+  // Fallbacks for clients that cannot set custom headers reliably.
+  const clientTypeBody = String(body.clientType || body.client_type || body.deviceType || '').trim().toLowerCase();
+  const platformBody = String(body.platform || '').trim().toLowerCase();
+  const appVersionBody = body.appVersion || body.app_version;
+  const clientTypeQuery = String(query.clientType || query.client_type || '').trim().toLowerCase();
+  const platformQuery = String(query.platform || '').trim().toLowerCase();
+  const appVersionQuery = query.appVersion || query.app_version;
+
+  const clientType = clientTypeHeader || clientTypeBody || clientTypeQuery;
+  const platform = platformHeader || platformBody || platformQuery;
+  const appVersionRaw = appVersionHeader ?? appVersionBody ?? appVersionQuery;
 
   const isFlutterUserAgent = userAgent.includes('dart') || userAgent.includes('flutter');
 

@@ -441,14 +441,16 @@
 
 const RefreshToken = require('../models/RefreshToken');
 const User = require('../models/User');
+const MobileToken = require('../models/MobileToken');
 const { generateAccessToken, getAccessTokenExpiresInSeconds } = require('../utils/tokenUtils');
-const { isMobileAppClient, getRefreshTokenFromRequest } = require('../utils/mobileClient');
+const { getRefreshTokenFromRequest } = require('../utils/mobileClient');
 
 class SessionController {
 
   /**
-   * Refresh access token
-   * Session expires if user inactive for 600 seconds (10 minutes)
+   * Refresh access token (web flow only).
+   * Session expires if user inactive for 600 seconds (10 minutes).
+   * Mobile app uses opaque mobile tokens and does not call this endpoint.
    */
   static async refreshToken(req, res) {
     try {
@@ -457,7 +459,8 @@ class SessionController {
       if (!refreshToken) {
         return res.status(401).json({
           success: false,
-          message: 'Refresh token required'
+          message: 'Refresh token required',
+          code: 'NO_REFRESH_TOKEN'
         });
       }
 
@@ -465,11 +468,11 @@ class SessionController {
       if (!tokenRecord || !tokenRecord.isValid()) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid or expired refresh token'
+          message: 'Invalid or expired refresh token',
+          code: 'REFRESH_INVALID'
         });
       }
 
-      // Check inactivity (600 seconds = 10 minutes)
       const lastActivity = new Date(tokenRecord.last_activity);
       const now = new Date();
       const inactiveSeconds = (now - lastActivity) / 1000;
@@ -490,46 +493,44 @@ class SessionController {
         });
       }
 
-      // Fetch user
       const user = await User.findById(tokenRecord.user_id);
-      if (!user || !user.is_active) {
+      if (!user) {
         await tokenRecord.revoke();
         return res.status(401).json({
           success: false,
-          message: 'User not found or inactive'
+          message: 'User not found',
+          code: 'USER_NOT_FOUND'
+        });
+      }
+      if (!user.is_active) {
+        await tokenRecord.revoke();
+        return res.status(401).json({
+          success: false,
+          message: 'Account is deactivated',
+          code: 'ACCOUNT_DEACTIVATED'
         });
       }
 
-      // Update activity
       await tokenRecord.updateActivity();
 
-      // New access token (TTL from JWT_ACCESS_EXPIRES_IN, default 10m)
       const accessToken = generateAccessToken({
         userId: user.id,
         email: user.email,
         role: user.role
       });
 
-      const mobile = isMobileAppClient(req);
       const accessTtlSec = getAccessTokenExpiresInSeconds();
 
-      if (!mobile) {
-        res.cookie('accessToken', accessToken, {
-          httpOnly: false,
-          secure: false,
-          sameSite: 'lax',
-          maxAge: accessTtlSec * 1000,
-        });
-      }
-
-      const data = { expiresIn: accessTtlSec };
-      if (mobile) {
-        data.accessToken = accessToken;
-      }
+      res.cookie('accessToken', accessToken, {
+        httpOnly: false,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: accessTtlSec * 1000,
+      });
 
       return res.json({
         success: true,
-        data
+        data: { expiresIn: accessTtlSec }
       });
 
     } catch (error) {
@@ -552,6 +553,22 @@ class SessionController {
       if (refreshToken) {
         const tokenRecord = await RefreshToken.findByToken(refreshToken);
         if (tokenRecord) await tokenRecord.revoke();
+      }
+
+      // If the client also sent a mobile (opaque) token in Authorization,
+      // revoke it so this device is fully logged out from the server side.
+      const authHeader = req.headers['authorization'];
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const possibleToken = authHeader.split(' ')[1];
+        if (MobileToken.isMobileTokenString(possibleToken)) {
+          try {
+            const mobileTokenRecord = await MobileToken.findByToken(possibleToken);
+            if (mobileTokenRecord) await mobileTokenRecord.revoke();
+          } catch (mobileTokenError) {
+            console.error('[Logout] Failed to revoke mobile token:', mobileTokenError);
+            // Do not fail the logout response; client should still clear local state.
+          }
+        }
       }
 
       res.clearCookie('refreshToken', {
@@ -585,7 +602,8 @@ class SessionController {
       if (!refreshToken) {
         return res.status(401).json({
           success: false,
-          message: 'Refresh token required'
+          message: 'Refresh token required',
+          code: 'NO_REFRESH_TOKEN'
         });
       }
 
@@ -593,7 +611,8 @@ class SessionController {
       if (!tokenRecord || !tokenRecord.isValid()) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid or expired refresh token'
+          message: 'Invalid or expired refresh token',
+          code: 'REFRESH_INVALID'
         });
       }
 
@@ -625,7 +644,8 @@ class SessionController {
       if (!refreshToken) {
         return res.status(401).json({
           success: false,
-          message: 'No active session'
+          message: 'No active session',
+          code: 'NO_REFRESH_TOKEN'
         });
       }
 
@@ -633,7 +653,8 @@ class SessionController {
       if (!tokenRecord || !tokenRecord.isValid()) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid or expired session'
+          message: 'Invalid or expired session',
+          code: 'REFRESH_INVALID'
         });
       }
 

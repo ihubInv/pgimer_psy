@@ -20,7 +20,8 @@ class RefreshToken {
     return crypto.randomBytes(64).toString('hex');
   }
 
-  // Create a new refresh token
+  // Create a new refresh token (web flow only).
+  // Mobile clients use the opaque `mobile_tokens` table instead.
   static async create(userId, deviceInfo = null, ipAddress = null) {
     try {
       const token = this.generateToken();

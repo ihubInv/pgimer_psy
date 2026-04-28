@@ -3,6 +3,7 @@ const PasswordResetToken = require('../models/PasswordResetToken');
 const PasswordSetupToken = require('../models/PasswordSetupToken');
 const LoginOTP = require('../models/LoginOTP');
 const RefreshToken = require('../models/RefreshToken');
+const MobileToken = require('../models/MobileToken');
 const { sendEmail } = require('../config/email');
 const {
   generateAccessToken,
@@ -124,7 +125,8 @@ class UserController {
       if (!user.is_active) {
         return res.status(401).json({
           success: false,
-          message: 'Account is deactivated. Please contact administrator.'
+          message: 'Account is deactivated. Please contact administrator.',
+          code: 'ACCOUNT_DEACTIVATED'
         });
       }
 
@@ -243,7 +245,8 @@ class UserController {
       if (!userData.is_active) {
         return res.status(401).json({
           success: false,
-          message: 'Account is deactivated. Please contact administrator.'
+          message: 'Account is deactivated. Please contact administrator.',
+          code: 'ACCOUNT_DEACTIVATED'
         });
       }
 
@@ -291,7 +294,8 @@ class UserController {
       if (!user.is_active) {
         return res.status(401).json({
           success: false,
-          message: 'Account is deactivated. Please contact administrator.'
+          message: 'Account is deactivated. Please contact administrator.',
+          code: 'ACCOUNT_DEACTIVATED'
         });
       }
 
@@ -1799,45 +1803,16 @@ class UserController {
     }
   }
 
-  // Helper method to complete login with access and refresh tokens
+  // Helper method to complete login.
+  // Web clients get short-lived JWT access + refresh-token cookies.
+  // Mobile clients get a single opaque, long-lived `mobileToken` (Option B)
+  // and do not deal with JWT/refresh at all.
   static async completeLogin(user, req, res) {
     try {
-      // Access token TTL: JWT_ACCESS_EXPIRES_IN (default 10m); see tokenUtils
-      const accessToken = generateAccessToken({
-        userId: user.id,
-        email: user.email,
-        role: user.role
-      });
-
-      // Create refresh token in database
+      const mobile = isMobileAppClient(req);
       const deviceInfo = getDeviceInfo(req);
       const ipAddress = getIpAddress(req);
-      const refreshTokenRecord = await RefreshToken.create(user.id, deviceInfo, ipAddress);
 
-      // SECURITY FIX #20: Set Secure flag based on HTTPS (DISABLED - using HTTP)
-      // Set refresh token in HttpOnly cookie
-      // const isHTTPS = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https';
-      const isHTTPS = false; // Using HTTP, not HTTPS
-      res.cookie('refreshToken', refreshTokenRecord.token, {
-        httpOnly: true,
-        secure: false, // Set to false for HTTP
-        sameSite: 'lax', // Changed from 'strict' to allow cross-origin requests
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-      });
-
-      const mobile = isMobileAppClient(req);
-
-      // Web / browser: non-HttpOnly access cookie; mobile: omit cookie and return tokens in JSON
-      if (!mobile) {
-        res.cookie('accessToken', accessToken, {
-          httpOnly: false,
-          secure: false,
-          sameSite: 'lax',
-          maxAge: getAccessTokenExpiresInSeconds() * 1000,
-        });
-      }
-
-      // Update last login
       await user.updateLastLogin();
 
       // Determine redirect URL based on user role
@@ -1851,29 +1826,66 @@ class UserController {
       }
 
       const userResponse = user.toJSON();
-
-      const data = {
-        user: {
-          id: userResponse.id,
-          name: userResponse.name,
-          email: userResponse.email,
-          role: userResponse.role,
-          two_factor_enabled: userResponse.two_factor_enabled,
-          created_at: userResponse.created_at
-        },
-        expiresIn: getAccessTokenExpiresInSeconds(),
-        redirectUrl
+      const userPayload = {
+        id: userResponse.id,
+        name: userResponse.name,
+        email: userResponse.email,
+        role: userResponse.role,
+        two_factor_enabled: userResponse.two_factor_enabled,
+        created_at: userResponse.created_at,
       };
 
       if (mobile) {
-        data.accessToken = accessToken;
-        data.refreshToken = refreshTokenRecord.token;
+        // Mobile: opaque DB-backed token only. Server can revoke instantly,
+        // user deactivation/deletion blocks access via auth middleware.
+        const mobileTokenRecord = await MobileToken.create(user.id, deviceInfo, ipAddress);
+
+        return res.json({
+          success: true,
+          message: 'Login successful',
+          data: {
+            user: userPayload,
+            mobileToken: mobileTokenRecord.token,
+            redirectUrl,
+          },
+        });
       }
 
-      res.json({
+      // Web flow: JWT access token + 7-day refresh token (HttpOnly cookie).
+      const accessToken = generateAccessToken({
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      });
+
+      const refreshTokenRecord = await RefreshToken.create(user.id, deviceInfo, ipAddress);
+      const refreshTokenMaxAgeMs = Math.max(
+        0,
+        new Date(refreshTokenRecord.expires_at).getTime() - Date.now()
+      );
+
+      res.cookie('refreshToken', refreshTokenRecord.token, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: refreshTokenMaxAgeMs || (7 * 24 * 60 * 60 * 1000),
+      });
+
+      res.cookie('accessToken', accessToken, {
+        httpOnly: false,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: getAccessTokenExpiresInSeconds() * 1000,
+      });
+
+      return res.json({
         success: true,
         message: 'Login successful',
-        data
+        data: {
+          user: userPayload,
+          expiresIn: getAccessTokenExpiresInSeconds(),
+          redirectUrl,
+        },
       });
     } catch (error) {
       console.error('Complete login error:', error);
