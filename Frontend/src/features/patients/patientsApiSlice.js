@@ -52,8 +52,15 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         body: patientData,
       }),
       invalidatesTags: (result, error, patientData) => {
-        const tags = ['Patient', 'Stats'];
-        // If creating a visit for existing patient, also invalidate visit count
+        // Use IST date string to match the date-specific cache key used by getAllPatients
+        const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const tags = [
+          'Patient',
+          'Stats',
+          { type: 'Patient', id: 'LIST' },
+          { type: 'Patient', id: `LIST-${todayIST}` },
+        ];
+        // If creating a visit for an existing patient, also invalidate their visit count cache
         if (patientData?.patient_id) {
           tags.push({ type: 'PatientVisit', id: patientData.patient_id });
         }
@@ -66,7 +73,17 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         method: 'POST',
         body: patientData,
       }),
-      invalidatesTags: ['Patient', 'Stats', 'ClinicalProforma', 'ADLFile'],
+      invalidatesTags: () => {
+        const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        return [
+          'Patient',
+          'Stats',
+          'ClinicalProforma',
+          'ADLFile',
+          { type: 'Patient', id: 'LIST' },
+          { type: 'Patient', id: `LIST-${todayIST}` },
+        ];
+      },
     }),
     updatePatient: builder.mutation({
       queryFn: async ({ id, files, files_to_remove, ...data }, _queryApi, _extraOptions, fetchWithBQ) => {

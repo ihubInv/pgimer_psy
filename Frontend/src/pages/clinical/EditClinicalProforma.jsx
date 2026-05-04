@@ -10,7 +10,6 @@ import {
   useAddClinicalOptionMutation,
   useUpdateClinicalOptionMutation,
   useDeleteClinicalOptionMutation,
-  useGetAllClinicalProformasQuery
 } from '../../features/clinical/clinicalApiSlice';
 import { useGetADLFileByIdQuery, useGetAllADLFilesQuery,useUpdateADLFileMutation, useCreateADLFileMutation } from '../../features/adl/adlApiSlice';
 import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
@@ -55,17 +54,27 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   const patientIdFromQuery = searchParams.get('patient_id');
   const [createPrescriptions, { isLoading: isSavingPrescriptions }] = useCreatePrescriptionMutation();
 
-  const { data: proformaData, isLoading: isLoadingProforma, isFetching, refetch, error: proformaError } = useGetAllClinicalProformasQuery({});
+  // Fetch the specific proforma directly by its ID (for /clinical/:id/edit route).
+  // Using the dedicated by-id endpoint avoids the previous fragile approach of scanning
+  // a paginated "get-all" list (which only returned the first 10 records).
+  const proformaNumericId = id ? parseInt(id, 10) : null;
+  const {
+    data: proformaByIdData,
+    isLoading: isLoadingProforma,
+    isFetching,
+    refetch,
+    error: proformaError,
+  } = useGetClinicalProformaByIdQuery(
+    proformaNumericId,
+    { skip: !proformaNumericId || !!propInitialData }
+  );
 
-  // Convert id to number for comparison since patient_id is a number
-  // URL params return strings, but patient_id in database is integer
-  // Priority: query param patient_id > URL id param
-  const patientIdFromUrl = patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : (id ? parseInt(id, 10) : null);
-  
-  // Find existing proforma: first check if id is a proforma ID, then check by patient_id
-  const proformaById = id ? proformaData?.data?.proformas?.find(p => p.id === parseInt(id, 10)) : null;
-  const proformaByPatientId = patientIdFromUrl ? proformaData?.data?.proformas?.find(p => p.patient_id === patientIdFromUrl) : null;
-  const proforma = proformaById || proformaByPatientId;
+  // patientIdFromUrl must only come from the ?patient_id= query param.
+  // The URL :id segment is a PROFORMA id, not a patient id – do NOT use it as a fallback.
+  const patientIdFromUrl = patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : null;
+
+  // The proforma object for this edit session
+  const proforma = proformaByIdData?.data?.proforma || null;
   const isErrorProforma = !!proformaError;
   const isComplexCase = proforma?.doctor_decision === 'complex_case' && proforma?.adl_file_id;
 
@@ -1127,14 +1136,15 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
       // Only update when explicitly editing a specific existing performa (corrections only)
       // ==============================
       try {
-        // Determine if we're editing an existing performa or creating a new visit
-        // CRITICAL RULE: Only update if propInitialData has an id (explicitly editing a specific past visit performa for corrections)
-        // For existing patients with pre-filled data (no id), ALWAYS CREATE a new record
-        // This ensures:
-        // 1. New patients → blank form → creates new record
-        // 2. Existing patients → pre-filled form (reference) → creates new record (old data unchanged)
-        // 3. Past visit corrections → form with id → updates that specific record
-        const isEditingSpecificProforma = propInitialData?.id && (isUpdateMode || (propInitialData?.id && id && proforma?.id));
+        // Determine if we're editing an existing proforma or creating a new one.
+        // Update when:
+        //   a) Embedded mode (propInitialData): propInitialData has an id
+        //   b) Standalone mode (/clinical/:id/edit): a specific proforma was loaded from the URL id
+        // Create when:
+        //   - Route is /clinical/new (no id) → blank form for a fresh visit
+        const isEditingSpecificProforma = propInitialData?.id
+          ? true
+          : (Boolean(id) && Boolean(proforma?.id));
         
         if (isEditingSpecificProforma) {
           // Update existing performa (ONLY for corrections/edits of a specific past visit record)
@@ -1142,7 +1152,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           const performaIdToUpdate = propInitialData?.id || proforma?.id;
           const updateData = { ...proformaData, id: performaIdToUpdate };
           const result = await updateProforma(updateData).unwrap();
-          savedProforma = result?.data?.proforma || proforma;
+          // Backend returns data.clinical_proforma (not data.proforma) for the update endpoint
+          savedProforma = result?.data?.clinical_proforma || result?.data?.proforma || proforma;
           toast.success("Clinical proforma updated successfully!");
         } else {
           // CREATE NEW performa for this visit (default behavior for all new visits)
@@ -1256,6 +1267,15 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           console.error('Prescription creation error:', err);
           toast.error(err?.data?.message || "Failed to create prescriptions");
         }
+      }
+
+      // Redirect back to Today's Patients after all operations complete successfully.
+      // If a returnPath was encoded in the URL (e.g. deep-link back), honour it; otherwise
+      // always go back to the Today's Patients list so the doctor doesn't have to navigate manually.
+      if (returnPath) {
+        navigate(returnPath);
+      } else {
+        navigate('/clinical-today-patients');
       }
 
     } catch (err) {

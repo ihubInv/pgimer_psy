@@ -800,7 +800,7 @@ const EditChildClinicalProforma = ({
 
           navigate('/clinical-today-patients');
         } else {
-          // Update path: refresh RTK cache so embedded lists reflect changes
+          // Update path: refresh RTK cache so embedded lists reflect changes, then navigate back
           const childPatientIdToInvalidate = childPatientId || formData.child_patient_id;
           if (childPatientIdToInvalidate) {
             dispatch(
@@ -810,6 +810,7 @@ const EditChildClinicalProforma = ({
               ])
             );
           }
+          navigate('/clinical-today-patients');
         }
       } else {
         toast.error(data.message || 'Failed to save child clinical proforma');

@@ -190,14 +190,15 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
   const hasExistingProforma = proformas.length > 0;
   const latestProformaId = hasExistingProforma ? proformas[0].id : null;
   
-  // Check if patient has a proforma created today
-  const hasProformaToday = proformas.some(proforma => {
+  // Find the proforma that was created/filled today (if any).
+  // This is used so the "Clinical Proforma" button opens the already-saved record for
+  // editing rather than opening a blank new form.
+  const todayProforma = proformas.find(proforma => {
     const proformaDate = toISTDateString(proforma.created_at || proforma.visit_date || proforma.date);
     return proformaDate === todayDateString;
   });
-  
-  // Note: We no longer hide patients with proformas today - they should still be visible in the list
-  // This allows users to view/edit proformas or create additional ones if needed
+  const todayProformaId = todayProforma?.id || null;
+  const hasProformaToday = Boolean(todayProformaId);
 
   const formatTime = (dateString) => {
     return new Date(dateString).toLocaleTimeString('en-IN', {
@@ -342,43 +343,51 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
             {/* Walk-In Clinical Proforma Button */}
             {/* 
               WORKFLOW REQUIREMENT:
-              - For CHILD patients: Always show button (auto-opens Child Clinical Proforma)
-              - For ADULT patients: Only show if no existing proforma (opens Adult Clinical Proforma)
-              - No manual selection required - system automatically routes based on patient type
+              - Show "Clinical Proforma" when EITHER:
+                  a) The patient has NO proformas from previous days (brand-new patient), OR
+                  b) A proforma has already been filled for TODAY — in this case the button
+                     must stay "Clinical Proforma" so the doctor can re-open and edit it,
+                     regardless of whether the patient has past history from earlier visits.
+              - Show "Follow-Up" ONLY when the patient has past history AND no proforma has
+                been filled yet today. That is the correct signal for a returning patient on
+                a different visit date who needs a follow-up note rather than a new proforma.
             */}
-            {(() => {
-              // For child patients: only show if no existing proforma
-              // For adult patients: only show if no existing proforma
-              const shouldShowButton = !hasExistingProforma;
-              
-              if (!shouldShowButton) return null;
-              
+            {(!hasPastHistory || hasProformaToday) && (() => {
+              // If a proforma was already filled today, open it for editing.
+              // Otherwise open a blank new form.
+              const handleClinicalProformaClick = () => {
+                if (isChildPatient) {
+                  if (todayProformaId) {
+                    navigate(`/child-clinical-proformas/${todayProformaId}/edit`);
+                  } else {
+                    navigate(`/child-clinical-proformas/new?child_patient_id=${patient.id}`);
+                  }
+                } else {
+                  if (todayProformaId) {
+                    navigate(`/clinical/${todayProformaId}/edit`);
+                  } else {
+                    navigate(`/clinical/new?patient_id=${patient.id}`);
+                  }
+                }
+              };
+
               return (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                    if (isChildPatient) {
-                      // Auto-open Child Clinical Proforma for child patients
-                      // No manual selection - automatically routes to child proforma
-                      navigate(`/child-clinical-proformas/new?child_patient_id=${patient.id}`);
-                    } else {
-                      // Create new proforma for adult patient
-                  navigate(`/clinical/new?patient_id=${patient.id}`);
-                    }
-              }}
-              className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all hover:shadow-sm"
-            >
-              <FiFileText className="w-3.5 h-3.5" />
-              <span className="whitespace-nowrap">Clinical Proforma</span>
-            </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClinicalProformaClick}
+                  className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all hover:shadow-sm"
+                >
+                  <FiFileText className="w-3.5 h-3.5" />
+                  <span className="whitespace-nowrap">Clinical Proforma</span>
+                </Button>
               );
             })()}
             
-            {/* Follow-Up Button - Show for EXISTING patients who already have a proforma */}
-            {/* For adult patients: show if hasExistingProforma */}
-            {/* For child patients: show if hasExistingProforma (child clinical proforma) */}
-            {hasExistingProforma && (() => {
+            {/* Follow-Up Button - Show only when patient has past history AND no proforma today */}
+            {/* If today's proforma is already filled (hasProformaToday), the "Clinical Proforma" */}
+            {/* button takes priority so the doctor can edit the existing record.                  */}
+            {(hasPastHistory && !hasProformaToday) && (() => {
               const isChildPatient = patient.patient_type === 'child';
               
               if (isChildPatient) {
@@ -1122,18 +1131,10 @@ const ClinicalTodayPatients = () => {
     return { midnightTodayIST, endOfDayIST };
   };
 
-  // Calculate total patients count - only patients registered today (from 12:00 AM IST to 11:59 PM IST)
-  const totalPatientsCount = useMemo(() => {
-    const { midnightTodayIST, endOfDayIST } = getISTTimeInfo();
-    const startTime = midnightTodayIST;
-    const endTime = endOfDayIST;
-    
-    return allTodayPatients.filter(patient => {
-      // Only count patients registered today (from 12:00 AM IST to 11:59 PM IST)
-      const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
-      return patientCreatedDate && patientCreatedDate >= startTime && patientCreatedDate <= endTime;
-    }).length;
-  }, [allTodayPatients]);
+  // Total patients seen today = new registrations + existing follow-up patients added today.
+  // allTodayPatients is already filtered to today's session (new + existing with visits today),
+  // so its length is the correct total count.
+  const totalPatientsCount = useMemo(() => allTodayPatients.length, [allTodayPatients]);
 
   // Calculate new patients count with midnight reset logic
   const newPatientsCount = useMemo(() => {
@@ -1236,7 +1237,7 @@ const ClinicalTodayPatients = () => {
                     </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Only patients registered today (from 12:00 AM IST to 11:59 PM IST) are counted. The counter resets at the start of a new day.
+                    Includes new registrations and returning patients added to today's list. Resets at midnight IST.
                   </p>
                 </div>
               </div>
@@ -1503,41 +1504,22 @@ const ClinicalTodayPatients = () => {
           isOpen={isSearchModalOpen}
           onClose={() => setIsSearchModalOpen(false)}
           currentRoom={effectiveRoomData?.data?.current_room || ''}
-          onSelectPatient={async (patient) => {
-            // Patient is added to today's list (either adult via visit or child via room update)
-            // Force refetch to show the newly added patient
-            console.log(`[ClinincalTodayPatients] onSelectPatient called for patient:`, patient);
-            console.log(`[ClinincalTodayPatients] Today's date (IST): ${todayIST}`);
+          onSelectPatient={async () => {
+            // Patient was added to today's list (adult via visit record, child via room update).
+            // The createPatient / addChildPatientToTodayList mutations already invalidate the
+            // date-specific RTK Query cache tag; this explicit invalidation + refetch is a
+            // belt-and-suspenders guard to guarantee an immediate UI update.
             try {
-              // Invalidate all patient-related caches, including date-specific ones
-              const tagsToInvalidate = [
+              dispatch(patientsApiSlice.util.invalidateTags([
                 'Patient',
                 'ChildPatient',
                 { type: 'Patient', id: 'LIST' },
                 { type: 'ChildPatient', id: 'LIST' },
-                { type: 'Patient', id: `LIST-${todayIST}` }, // Invalidate today's date-specific cache
-              ];
-              console.log(`[ClinincalTodayPatients] Invalidating tags:`, tagsToInvalidate);
-              dispatch(patientsApiSlice.util.invalidateTags(tagsToInvalidate));
-              
-              // Force immediate refetch
-              console.log(`[ClinincalTodayPatients] Refetching patients...`);
-              const refetchResult = await refetch();
-              console.log(`[ClinincalTodayPatients] Refetch result:`, refetchResult);
-              console.log(`[ClinincalTodayPatients] Refetch data:`, refetchResult.data);
-              console.log(`[ClinincalTodayPatients] Patients in response:`, refetchResult.data?.data?.patients || refetchResult.data?.patients);
-              
-              // Small delay and refetch again to ensure data is fresh (backend might need a moment)
-              setTimeout(async () => {
-                console.log(`[ClinincalTodayPatients] Second refetch after 500ms...`);
-                const secondRefetch = await refetch();
-                console.log(`[ClinincalTodayPatients] Second refetch result:`, secondRefetch);
-                console.log(`[ClinincalTodayPatients] Second refetch data:`, secondRefetch.data);
-                console.log(`[ClinincalTodayPatients] Patients in second response:`, secondRefetch.data?.data?.patients || secondRefetch.data?.patients);
-              }, 500);
+                { type: 'Patient', id: `LIST-${todayIST}` },
+              ]));
+              await refetch();
             } catch (error) {
-              console.error('[ClinincalTodayPatients] Failed to refetch patients:', error);
-              // Still try to refetch even if there's an error
+              console.error('[ClinincalTodayPatients] Failed to refetch patients after adding existing patient:', error);
               refetch();
             }
           }}

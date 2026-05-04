@@ -100,9 +100,9 @@ export const clinicalApiSlice = apiSlice.injectEndpoints({
           'Stats',
           'ADL'
         ];
-        // Get patient_id from either the request data or the result
-        const pid = result?.data?.proforma?.patient_id || patient_id;
-        // Also invalidate patient-specific clinical proforma query
+        // Backend returns data.clinical_proforma (not data.proforma) — use the correct key.
+        // Also fall back to the patient_id passed with the mutation arguments.
+        const pid = result?.data?.clinical_proforma?.patient_id || patient_id;
         if (pid) {
           tags.push({ type: 'Clinical', id: `patient-${pid}` });
           tags.push({ type: 'Clinical', id: `last-visit-${pid}` });
