@@ -420,6 +420,27 @@ class ChildPatientRegistration {
         params.push(filters.assigned_room);
         idx++;
       }
+
+      // "My Patients" filter for child registrations:
+      // include child if any follow-up visit OR child clinical proforma is by this doctor.
+      // (child_patient_registrations has no direct assigned_doctor_id column, so we rely on
+      //  follow-up visits and proforma to define the treating relationship.)
+      if (filters.treating_doctor_id) {
+        const doctorParam = `$${idx++}`;
+        where.push(`(
+          EXISTS (
+            SELECT 1 FROM followup_visits fv
+            WHERE fv.child_patient_id = cpr.id AND fv.assigned_doctor_id = ${doctorParam}
+          )
+          OR EXISTS (
+            SELECT 1 FROM child_clinical_proforma ccp
+            WHERE ccp.child_patient_id = cpr.id
+              AND (ccp.assigned_doctor = ${doctorParam} OR ccp.filled_by = ${doctorParam})
+          )
+        )`);
+        params.push(filters.treating_doctor_id);
+      }
+
       if (filters.date) {
         // For "Today's Patients" view: Include child patients that were either:
         // 1. Created today (in IST), OR

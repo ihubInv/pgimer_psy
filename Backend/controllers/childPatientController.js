@@ -177,7 +177,14 @@ class ChildPatientController {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
 
-      const result = await ChildPatientRegistration.findAll(page, limit);
+      // "My Patients" scope: when set, restrict to children treated by the
+      // authenticated user. Source of truth = JWT (req.user.id), never client.
+      const filters = {};
+      if (req.query.my_patients === 'true' && req.user?.id) {
+        filters.treating_doctor_id = req.user.id;
+      }
+
+      const result = await ChildPatientRegistration.findAll(page, limit, filters);
 
       res.json({
         success: true,

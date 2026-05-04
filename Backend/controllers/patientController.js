@@ -28,12 +28,34 @@ class PatientController {
 
   static async getPatientStats(req, res) {
     try {
-      const stats = await Patient.getStats();
+      // "My Patients" scope: same opt-in flag as the list endpoint.
+      const wantMyPatients = req.query.my_patients === 'true' && req.user?.id;
+      const treatingDoctorId = wantMyPatients ? req.user.id : null;
+
+      const stats = await Patient.getStats(treatingDoctorId);
+
+      // Child counts so the UI can decide which tabs (adult/child) to render
+      // for "My Patients" view (case 4: hide tab when the doctor has 0 there).
+      let childTotal = 0;
+      try {
+        const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+        const childFilters = {};
+        if (treatingDoctorId) childFilters.treating_doctor_id = treatingDoctorId;
+        const childResult = await ChildPatientRegistration.findAll(1, 1, childFilters);
+        childTotal = childResult?.pagination?.total || 0;
+      } catch (childErr) {
+        console.error('[getPatientStats] Child count error (non-fatal):', childErr);
+      }
 
       res.json({
         success: true,
         data: {
-          stats
+          stats: {
+            ...stats,
+            adult_total: parseInt(stats?.total_patients ?? 0, 10) || 0,
+            child_total: childTotal,
+            scope: treatingDoctorId ? 'my_patients' : 'all'
+          }
         }
       });
     } catch (error) {
@@ -678,6 +700,14 @@ class PatientController {
       if (req.query.has_adl_file !== undefined) filters.has_adl_file = req.query.has_adl_file === 'true';
       if (req.query.file_status) filters.file_status = req.query.file_status;
       if (req.query.assigned_room) filters.assigned_room = req.query.assigned_room;
+
+      // "My Patients" scope: when explicitly requested, restrict to patients
+      // treated/assigned to the authenticated user. Doctor id is taken from the
+      // JWT (req.user.id) so the client can never widen the scope by tampering.
+      const wantMyPatients = req.query.my_patients === 'true' && req.user?.id;
+      if (wantMyPatients) {
+        filters.treating_doctor_id = req.user.id;
+      }
       
       // Filter by registration date (for Today's Patients view)
       // When date is provided, filter patients created on that specific date
@@ -715,6 +745,9 @@ class PatientController {
           if (filters.date) {
             childFilters.date = filters.date;
             console.log(`[getAllPatients] Fetching child patients with date filter: ${filters.date}`);
+          }
+          if (filters.treating_doctor_id) {
+            childFilters.treating_doctor_id = filters.treating_doctor_id;
           }
           const childResult = await ChildPatientRegistration.findAll(page, limit, childFilters);
           childPatients = childResult.child_patients || [];

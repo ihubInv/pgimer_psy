@@ -211,6 +211,11 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
     };
   }, [isOpen]);
 
+  // Faculty/Resident see "My Patients" (scoped to their own list); Admin & MWO
+  // see the full "Patients" list. The route param ?my=1 tells the page to
+  // request the scoped data from the API (server-side filter, JWT-bound).
+  const isTreatingDoctor = user?.role === 'Faculty' || user?.role === 'Resident';
+
   const navigation = [
     { 
       name: 'Dashboard', 
@@ -219,8 +224,8 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
       roles: ['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'] 
     },
     { 
-      name: 'Patients', 
-      to: '/patients', 
+      name: isTreatingDoctor ? 'My Patients' : 'Patients', 
+      to: isTreatingDoctor ? '/patients?my=1' : '/patients', 
       icon: FiUsers, 
       roles: ['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'] 
     },
@@ -357,7 +362,10 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                   const editParam = searchParams.get('edit');
                   const modeParam = searchParams.get('mode');
                   
-                  if (item.to === '/clinical-today-patients') {
+                  // Strip query string for path-based matching (e.g. /patients?my=1 → /patients)
+                  const itemPath = item.to.split('?')[0];
+
+                  if (itemPath === '/clinical-today-patients') {
                     // "Today's Patients" should be active when:
                     // - On Today's Patients page itself
                     // - On patient detail page with edit=true&mode=create (creating new proforma from Today's Patients)
@@ -368,11 +376,11 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                     const isCreateMode = editParam === 'true' && modeParam === 'create';
                     const isViewMode = editParam === 'false' && modeParam === 'view';
                     
-                    isActive = currentLocation === item.to || 
+                    isActive = currentLocation === itemPath || 
                                currentLocation === '/clinical/new' ||
                                currentLocation.startsWith('/prescriptions') ||
                                (isPatientDetailPage && (isCreateMode || isViewMode));
-                  } else if (item.to === '/patients') {
+                  } else if (itemPath === '/patients') {
                     // "Patients" tab should be active when:
                     // - On /patients page
                     // - On patient detail page with edit=true (without mode=create) - editing patient
@@ -387,13 +395,13 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                       currentLocation.startsWith('/child-patient/') && currentLocation !== '/child-patient/new';
 
                     isActive =
-                      currentLocation === item.to ||
+                      currentLocation === itemPath ||
                       (isPatientDetailPage &&
                         (isEditMode || isViewFromAllPatients || hasNoEditParams)) ||
                       isChildPatientDetailPage;
                   } else {
                     // For other routes, use standard matching
-                    isActive = currentLocation === item.to || currentLocation.startsWith(item.to + '/');
+                    isActive = currentLocation === itemPath || currentLocation.startsWith(itemPath + '/');
                   }
 
                   return (

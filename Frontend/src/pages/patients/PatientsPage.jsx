@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
@@ -27,11 +27,20 @@ const PatientsPage = () => {
   const user = useSelector(selectCurrentUser);
   const token = useSelector(selectCurrentToken);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [patientType, setPatientType] = useState('adult'); // 'adult' or 'child'
   const limit = 10;
+
+  // "My Patients" mode is opt-in via URL (?my=1) and the backend re-checks
+  // it against the JWT, so this just decides which scope the page asks for.
+  const myPatientsMode = searchParams.get('my') === '1';
+  const myPatientsParam = useMemo(
+    () => (myPatientsMode ? { my_patients: 'true' } : {}),
+    [myPatientsMode]
+  );
 
   // Reset page to 1 when search or patient type changes
   useEffect(() => {
@@ -45,7 +54,8 @@ const PatientsPage = () => {
   const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
     page: search.trim() ? 1 : page, // Use current page when not searching, always page 1 when searching
     limit: fetchLimit,
-    search: search.trim() || undefined // Send search to backend if provided
+    search: search.trim() || undefined, // Send search to backend if provided
+    ...myPatientsParam,
   }, {
     refetchOnMountOrArgChange: true,
     skip: patientType === 'child', // Skip if showing child patients
@@ -56,10 +66,48 @@ const PatientsPage = () => {
   const { data: childData, isLoading: isChildLoading, isFetching: isChildFetching, refetch: refetchChild, error: childError } = useGetAllChildPatientsQuery({
     page: search.trim() ? 1 : page,
     limit: fetchLimit,
+    ...myPatientsParam,
   }, {
     refetchOnMountOrArgChange: true,
     skip: patientType === 'adult', // Skip if showing adult patients
   });
+
+  // Lightweight count for the *other* tab so we can hide it when the doctor
+  // has zero matches there (case 4: dynamic adult/child tabs).
+  const { data: otherAdultData } = useGetAllPatientsQuery(
+    { page: 1, limit: 1, ...myPatientsParam },
+    { skip: !myPatientsMode || patientType === 'adult' }
+  );
+  const { data: otherChildData } = useGetAllChildPatientsQuery(
+    { page: 1, limit: 1, ...myPatientsParam },
+    { skip: !myPatientsMode || patientType === 'child' }
+  );
+
+  const adultTotalForTabs = (
+    patientType === 'adult'
+      ? data?.data?.pagination?.total
+      : otherAdultData?.data?.pagination?.total
+  ) ?? null;
+  const childTotalForTabs = (
+    patientType === 'child'
+      ? childData?.data?.pagination?.total
+      : otherChildData?.data?.pagination?.total
+  ) ?? null;
+
+  // In "My Patients" mode hide a tab once we *know* (count !== null) it's 0.
+  // Outside that mode keep both tabs visible like before.
+  const showAdultTab = !myPatientsMode || adultTotalForTabs === null || adultTotalForTabs > 0;
+  const showChildTab = !myPatientsMode || childTotalForTabs === null || childTotalForTabs > 0;
+
+  // Auto-switch off a tab that resolved to 0 patients in My Patients mode.
+  useEffect(() => {
+    if (!myPatientsMode) return;
+    if (patientType === 'adult' && adultTotalForTabs === 0 && childTotalForTabs > 0) {
+      setPatientType('child');
+    } else if (patientType === 'child' && childTotalForTabs === 0 && adultTotalForTabs > 0) {
+      setPatientType('adult');
+    }
+  }, [myPatientsMode, patientType, adultTotalForTabs, childTotalForTabs]);
 
   // Get current data based on patient type
   const currentData = patientType === 'adult' ? data : childData;
@@ -2973,26 +3021,30 @@ const PatientsPage = () => {
           {/* Patient Type Tabs */}
           <div className="mb-6">
             <div className="flex gap-2 border-b border-gray-200">
-              <button
-                onClick={() => setPatientType('adult')}
-                className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
-                  patientType === 'adult'
-                    ? 'border-primary-600 text-primary-600 bg-primary-50'
-                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                Adult Patients
-              </button>
-              <button
-                onClick={() => setPatientType('child')}
-                className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
-                  patientType === 'child'
-                    ? 'border-primary-600 text-primary-600 bg-primary-50'
-                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                Child Patients
-              </button>
+              {showAdultTab && (
+                <button
+                  onClick={() => setPatientType('adult')}
+                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                    patientType === 'adult'
+                      ? 'border-primary-600 text-primary-600 bg-primary-50'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  Adult Patients
+                </button>
+              )}
+              {showChildTab && (
+                <button
+                  onClick={() => setPatientType('child')}
+                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                    patientType === 'child'
+                      ? 'border-primary-600 text-primary-600 bg-primary-50'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  Child Patients
+                </button>
+              )}
             </div>
           </div>
 

@@ -772,6 +772,26 @@ class Patient {
         params.push(filters.assigned_room);
       }
 
+      // "My Patients" filter: keep patients linked to a specific doctor.
+      // Linked = master row's assigned_doctor_id matches, OR any visit's assigned_doctor_id matches,
+      // OR any clinical proforma's assigned_doctor / filled_by matches.
+      if (filters.treating_doctor_id) {
+        const doctorParam = `$${idx++}`;
+        where.push(`(
+          p.assigned_doctor_id = ${doctorParam}
+          OR EXISTS (
+            SELECT 1 FROM patient_visits pv
+            WHERE pv.patient_id = p.id AND pv.assigned_doctor_id = ${doctorParam}
+          )
+          OR EXISTS (
+            SELECT 1 FROM clinical_proforma cp
+            WHERE cp.patient_id = p.id
+              AND (cp.assigned_doctor = ${doctorParam} OR cp.filled_by = ${doctorParam})
+          )
+        )`);
+        params.push(filters.treating_doctor_id);
+      }
+
       // Filter by registration date (for Today's Patients view)
       // Include patients who were EITHER:
       //   1. Registered/created on that date (new patients), OR
@@ -1309,19 +1329,41 @@ class Patient {
   }
 
   // Statistics
-  static async getStats() {
+  // When `treatingDoctorId` is provided, counts only patients linked to that doctor
+  // (master row, any visit, or any clinical proforma).
+  static async getStats(treatingDoctorId = null) {
     try {
+      const params = [];
+      let whereClause = '';
+      if (treatingDoctorId) {
+        params.push(treatingDoctorId);
+        whereClause = `
+          WHERE (
+            p.assigned_doctor_id = $1
+            OR EXISTS (
+              SELECT 1 FROM patient_visits pv
+              WHERE pv.patient_id = p.id AND pv.assigned_doctor_id = $1
+            )
+            OR EXISTS (
+              SELECT 1 FROM clinical_proforma cp
+              WHERE cp.patient_id = p.id
+                AND (cp.assigned_doctor = $1 OR cp.filled_by = $1)
+            )
+          )
+        `;
+      }
       const result = await db.query(`
         SELECT 
           COUNT(*) as total_patients,
-          COUNT(CASE WHEN sex = 'M' THEN 1 END) as male_patients,
-          COUNT(CASE WHEN sex = 'F' THEN 1 END) as female_patients,
-          COUNT(CASE WHEN sex NOT IN ('M','F') THEN 1 END) as other_patients,
-          COUNT(CASE WHEN has_adl_file = true THEN 1 END) as patients_with_adl,
-          COUNT(CASE WHEN case_complexity = 'complex' THEN 1 END) as complex_cases,
-          COUNT(CASE WHEN case_complexity = 'simple' THEN 1 END) as simple_cases
-        FROM registered_patient
-      `);
+          COUNT(CASE WHEN p.sex = 'M' THEN 1 END) as male_patients,
+          COUNT(CASE WHEN p.sex = 'F' THEN 1 END) as female_patients,
+          COUNT(CASE WHEN p.sex NOT IN ('M','F') THEN 1 END) as other_patients,
+          COUNT(CASE WHEN p.has_adl_file = true THEN 1 END) as patients_with_adl,
+          COUNT(CASE WHEN p.case_complexity = 'complex' THEN 1 END) as complex_cases,
+          COUNT(CASE WHEN p.case_complexity = 'simple' THEN 1 END) as simple_cases
+        FROM registered_patient p
+        ${whereClause}
+      `, params);
       return result.rows[0];
     } catch (error) {
       throw error;

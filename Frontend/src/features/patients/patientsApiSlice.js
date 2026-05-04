@@ -159,7 +159,10 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       ],
     }),
     getPatientStats: builder.query({
-      query: () => '/patients/stats',
+      query: (args) => ({
+        url: '/patients/stats',
+        params: args?.my_patients ? { my_patients: 'true' } : undefined,
+      }),
       providesTags: ['Stats'],
     }),
     assignPatient: builder.mutation({
@@ -171,7 +174,10 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: ['Patient'],
     }),
     getPatientsStats: builder.query({
-      query: () => '/patients/stats',
+      query: (args) => ({
+        url: '/patients/stats',
+        params: args?.my_patients ? { my_patients: 'true' } : undefined,
+      }),
       providesTags: ['Stats'],
     }),
     getAgeDistribution: builder.query({
