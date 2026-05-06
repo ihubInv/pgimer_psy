@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
@@ -8,8 +8,9 @@ import {
   FiHeart, FiFileText, FiShield, FiX
 } from 'react-icons/fi';
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
-import { useGetAllPatientsQuery, useGetAllChildPatientsQuery, useDeletePatientMutation, useDeleteChildPatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
+import { useGetAllPatientsQuery, useDeletePatientMutation, useDeleteChildPatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
+import { useGetProfileQuery } from '../../features/auth/authApiSlice';
 import { formatPatientsForExport, exportData } from '../../utils/exportUtils';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
@@ -18,7 +19,7 @@ import Table from '../../components/Table';
 import Pagination from '../../components/Pagination';
 import Badge from '../../components/Badge';
 import ExportDateRangeModal from '../../components/ExportDateRangeModal';
-import { isAdmin, isMWO, isJrSr, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM } from '../../utils/constants';
+import { isAdmin, isMWO, USER_DEPARTMENTS, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM } from '../../utils/constants';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
@@ -27,122 +28,47 @@ const PatientsPage = () => {
   const user = useSelector(selectCurrentUser);
   const token = useSelector(selectCurrentToken);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [patientType, setPatientType] = useState('adult'); // 'adult' or 'child'
   const limit = 10;
 
-  // "My Patients" mode is opt-in via URL (?my=1) and the backend re-checks
-  // it against the JWT, so this just decides which scope the page asks for.
-  const myPatientsMode = searchParams.get('my') === '1';
-  const myPatientsParam = useMemo(
-    () => (myPatientsMode ? { my_patients: 'true' } : {}),
-    [myPatientsMode]
-  );
+  const { data: profileData } = useGetProfileQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+  });
 
-  // Reset page to 1 when search or patient type changes
+  // Use freshest department from profile response so tab/CTA flips immediately
+  // after department change, without requiring logout/login.
+  const effectiveDepartment = profileData?.data?.user?.department || user?.department || '';
+  const isChildDepartment = String(effectiveDepartment).trim().toLowerCase() === USER_DEPARTMENTS.CHILD.toLowerCase();
+  const patientType = isChildDepartment ? 'child' : 'adult';
+  const showAdultTab = !isChildDepartment;
+  const showChildTab = isChildDepartment;
+
+  // Reset page to 1 when search changes
   useEffect(() => {
     setPage(1);
-  }, [search, patientType]);
+  }, [search]);
 
   // Fetch patients - use server-side pagination when not searching, client-side when searching
   const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
-  
-  // Fetch adult patients
-  const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
-    page: search.trim() ? 1 : page, // Use current page when not searching, always page 1 when searching
-    limit: fetchLimit,
-    search: search.trim() || undefined, // Send search to backend if provided
-    ...myPatientsParam,
-  }, {
-    refetchOnMountOrArgChange: true,
-    skip: patientType === 'child', // Skip if showing child patients
-  });
-  
 
-  // Fetch child patients
-  const { data: childData, isLoading: isChildLoading, isFetching: isChildFetching, refetch: refetchChild, error: childError } = useGetAllChildPatientsQuery({
+  // Unified patient list. Backend scopes to adult/child by `req.user.department`.
+  const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
     page: search.trim() ? 1 : page,
     limit: fetchLimit,
-    ...myPatientsParam,
+    search: search.trim() || undefined,
   }, {
     refetchOnMountOrArgChange: true,
-    skip: patientType === 'adult', // Skip if showing adult patients
   });
 
-  // Lightweight count for the *other* tab so we can hide it when the doctor
-  // has zero matches there (case 4: dynamic adult/child tabs).
-  const { data: otherAdultData } = useGetAllPatientsQuery(
-    { page: 1, limit: 1, ...myPatientsParam },
-    { skip: !myPatientsMode || patientType === 'adult' }
-  );
-  const { data: otherChildData } = useGetAllChildPatientsQuery(
-    { page: 1, limit: 1, ...myPatientsParam },
-    { skip: !myPatientsMode || patientType === 'child' }
-  );
+  const currentIsLoading = isLoading;
+  const currentIsFetching = isFetching;
+  const currentError = error;
 
-  const adultTotalForTabs = (
-    patientType === 'adult'
-      ? data?.data?.pagination?.total
-      : otherAdultData?.data?.pagination?.total
-  ) ?? null;
-  const childTotalForTabs = (
-    patientType === 'child'
-      ? childData?.data?.pagination?.total
-      : otherChildData?.data?.pagination?.total
-  ) ?? null;
-
-  // In "My Patients" mode hide a tab once we *know* (count !== null) it's 0.
-  // Outside that mode keep both tabs visible like before.
-  const showAdultTab = !myPatientsMode || adultTotalForTabs === null || adultTotalForTabs > 0;
-  const showChildTab = !myPatientsMode || childTotalForTabs === null || childTotalForTabs > 0;
-
-  // Auto-switch off a tab that resolved to 0 patients in My Patients mode.
-  useEffect(() => {
-    if (!myPatientsMode) return;
-    if (patientType === 'adult' && adultTotalForTabs === 0 && childTotalForTabs > 0) {
-      setPatientType('child');
-    } else if (patientType === 'child' && childTotalForTabs === 0 && adultTotalForTabs > 0) {
-      setPatientType('adult');
-    }
-  }, [myPatientsMode, patientType, adultTotalForTabs, childTotalForTabs]);
-
-  // Get current data based on patient type
-  const currentData = patientType === 'adult' ? data : childData;
-  const currentIsLoading = patientType === 'adult' ? isLoading : isChildLoading;
-  const currentIsFetching = patientType === 'adult' ? isFetching : isChildFetching;
-  const currentError = patientType === 'adult' ? error : childError;
-  const currentRefetch = patientType === 'adult' ? refetch : refetchChild;
-
-  // Transform child patients to match adult patient structure
-  const transformedChildPatients = childData?.data?.child_patients?.map(cp => ({
-    id: cp.id,
-    name: cp.child_name,
-    cr_no: cp.cr_number,
-    psy_no: null,
-    adl_no: null,
-    special_clinic_no: cp.cgc_number,
-    assigned_room: cp.assigned_room,
-    assigned_doctor_id: null,
-    assigned_doctor_name: null,
-    assigned_doctor_role: null,
-    has_adl_file: false,
-    case_complexity: 'simple',
-    sex: cp.sex,
-    age: null,
-    age_group: cp.age_group,
-    created_at: cp.created_at,
-    patient_type: 'child',
-    filled_by_name: cp.filled_by_name,
-    filled_by_role: cp.filled_by_role,
-  })) || [];
-
-  // Get patients list based on type
-  const allPatients = patientType === 'adult' 
-    ? (data?.data?.patients || [])
-    : transformedChildPatients;
+  // Backend response always uses { patients: [...] } now, with each row carrying
+  // `patient_type` ('adult' | 'child') so downstream UI checks keep working.
+  const allPatients = data?.data?.patients || [];
 
   // Client-side filtering by all fields including doctor name (only when searching)
   const filteredPatients = allPatients ? (() => {
@@ -186,15 +112,11 @@ const PatientsPage = () => {
           patient.assigned_doctor_role?.toLowerCase().includes(searchLower)
         );
       }).length || 0)
-    : (patientType === 'adult' 
-        ? (data?.data?.pagination?.total || 0)
-        : (childData?.data?.pagination?.total || 0));
-  
-  const totalPages = search.trim() 
+    : (data?.data?.pagination?.total || 0);
+
+  const totalPages = search.trim()
     ? Math.ceil(totalFiltered / limit)
-    : (patientType === 'adult'
-        ? (data?.data?.pagination?.pages || 1)
-        : (childData?.data?.pagination?.pages || 1));
+    : (data?.data?.pagination?.pages || 1);
  
   const [deletePatient] = useDeletePatientMutation();
   const [deleteChildPatient] = useDeleteChildPatientMutation();
@@ -257,13 +179,12 @@ const PatientsPage = () => {
         console.log('[handleDelete] Deleting child patient:', id);
         await deleteChildPatient(id).unwrap();
         toast.success('Child patient and all related records deleted successfully');
-        refetchChild();
       } else {
         console.log('[handleDelete] Deleting adult patient:', id);
-      await deletePatient(id).unwrap();
-      toast.success('Patient and all related records deleted successfully');
-      refetch();
+        await deletePatient(id).unwrap();
+        toast.success('Patient and all related records deleted successfully');
       }
+      refetch();
     } catch (err) {
       console.error('[handleDelete] Error deleting patient:', err);
       toast.error(err?.data?.message || err?.message || 'Failed to delete patient');
@@ -3018,29 +2939,23 @@ const PatientsPage = () => {
         {/* Header Section */}
         {/* Main Content Card */}
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
-          {/* Patient Type Tabs */}
+          {/* Department-scoped patient type tab (single visible tab) */}
           <div className="mb-6">
             <div className="flex gap-2 border-b border-gray-200">
               {showAdultTab && (
                 <button
-                  onClick={() => setPatientType('adult')}
-                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
-                    patientType === 'adult'
-                      ? 'border-primary-600 text-primary-600 bg-primary-50'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
+                  type="button"
+                  className="px-6 py-3 font-semibold text-sm border-b-2 border-primary-600 text-primary-600 bg-primary-50 cursor-default"
+                  aria-current="page"
                 >
                   Adult Patients
                 </button>
               )}
               {showChildTab && (
                 <button
-                  onClick={() => setPatientType('child')}
-                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
-                    patientType === 'child'
-                      ? 'border-primary-600 text-primary-600 bg-primary-50'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
+                  type="button"
+                  className="px-6 py-3 font-semibold text-sm border-b-2 border-primary-600 text-primary-600 bg-primary-50 cursor-default"
+                  aria-current="page"
                 >
                   Child Patients
                 </button>
@@ -3048,7 +2963,7 @@ const PatientsPage = () => {
             </div>
           </div>
 
-          {(currentError || error || childError) && (
+          {currentError && (
             <div className="mb-6 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-200 rounded-xl p-5 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="p-2.5 bg-red-100 rounded-lg flex-shrink-0">
@@ -3056,7 +2971,7 @@ const PatientsPage = () => {
                 </div>
                 <div className="flex-1">
                   <p className="text-red-800 font-semibold text-base mb-1">Error Loading Patients</p>
-                  <p className="text-red-600 text-sm">{(currentError || error || childError)?.data?.message || 'Failed to load patients. Please try again.'}</p>
+                  <p className="text-red-600 text-sm">{currentError?.data?.message || 'Failed to load patients. Please try again.'}</p>
                 </div>
               </div>
             </div>
@@ -3087,11 +3002,10 @@ const PatientsPage = () => {
               </div>
               {!isMWO(user?.role) && (
                 <div className="flex flex-col sm:flex-row gap-3 lg:flex-col xl:flex-row">
-                  <Link to="/patients/new">
+                  <Link to={isChildDepartment ? '/child-patient/new' : '/patients/new'}>
                     <Button className="bg-gradient-to-r h-12 px-5 from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap">
                       <FiPlus className="mr-2" />
-                 
-                      Add Patient
+                      {isChildDepartment ? 'Add Child Patient' : 'Add Patient'}
                     </Button>
                   </Link>
                 </div>
@@ -3144,19 +3058,11 @@ const PatientsPage = () => {
                   Clear Search
                 </Button>
               )}
-              {user?.role !== 'MWO' && !search && allPatients?.length === 0 && patientType === 'adult' && (
-                <Link to="/patients/new" className="mt-6">
+              {user?.role !== 'MWO' && !search && allPatients?.length === 0 && (
+                <Link to={isChildDepartment ? '/child-patient/new' : '/patients/new'} className="mt-6">
                   <Button className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg">
                     <FiPlus className="mr-2" />
-                    Add First Patient
-                  </Button>
-                </Link>
-              )}
-              {user?.role !== 'MWO' && !search && allPatients?.length === 0 && patientType === 'child' && (
-                <Link to="/child-patient/new" className="mt-6">
-                  <Button className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg">
-                    <FiPlus className="mr-2" />
-                    Register First Child Patient
+                    {isChildDepartment ? 'Register First Child Patient' : 'Add First Patient'}
                   </Button>
                 </Link>
               )}

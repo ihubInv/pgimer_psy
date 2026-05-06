@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiLock, FiShield, FiCalendar, FiClock, 
   FiKey, FiCheckCircle, FiAlertCircle, FiEdit3, FiSave, FiX,
   FiEye, FiEyeOff
 } from 'react-icons/fi';
-import { selectCurrentUser } from '../features/auth/authSlice';
+import { selectCurrentUser, updateUser as updateAuthUser } from '../features/auth/authSlice';
 import {
   useGetProfileQuery,
   useUpdateProfileMutation,
@@ -29,6 +29,7 @@ import { USER_DEPARTMENTS } from '../utils/constants';
 
 const Profile = () => {
   const user = useSelector(selectCurrentUser);
+  const dispatch = useDispatch();
   const { data: profileData, isLoading } = useGetProfileQuery();
   const [updateProfile, { isLoading: isUpdating }] = useUpdateProfileMutation();
   const [requestPasswordChangeOTP, { isLoading: isRequestingOTP }] = useRequestPasswordChangeOTPMutation();
@@ -103,7 +104,15 @@ const Profile = () => {
       return;
     }
     try {
-      await updateProfile(profileForm).unwrap();
+      const response = await updateProfile(profileForm).unwrap();
+      const updatedUser = response?.data?.user;
+      if (updatedUser) {
+        dispatch(updateAuthUser({
+          name: updatedUser.name,
+          email: updatedUser.email,
+          department: updatedUser.department,
+        }));
+      }
       toast.success('Profile updated successfully!');
     } catch (err) {
       toast.error(err?.data?.message || 'Failed to update profile');

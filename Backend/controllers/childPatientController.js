@@ -171,34 +171,8 @@ class ChildPatientController {
     }
   }
 
-  // Get all child patients with pagination
-  static async getAllChildPatients(req, res) {
-    try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-
-      // "My Patients" scope: when set, restrict to children treated by the
-      // authenticated user. Source of truth = JWT (req.user.id), never client.
-      const filters = {};
-      if (req.query.my_patients === 'true' && req.user?.id) {
-        filters.treating_doctor_id = req.user.id;
-      }
-
-      const result = await ChildPatientRegistration.findAll(page, limit, filters);
-
-      res.json({
-        success: true,
-        data: result
-      });
-    } catch (error) {
-      console.error('[childPatientController.getAllChildPatients] Error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to get child patients',
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-      });
-    }
-  }
+  // The child-patient list endpoint was removed. The unified `GET /api/patients`
+  // route returns child rows when the logged-in user is in the Child Department.
 
   // Get child patient by ID
   static async getChildPatientById(req, res) {

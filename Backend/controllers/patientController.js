@@ -28,23 +28,32 @@ class PatientController {
 
   static async getPatientStats(req, res) {
     try {
-      // "My Patients" scope: same opt-in flag as the list endpoint.
-      const wantMyPatients = req.query.my_patients === 'true' && req.user?.id;
-      const treatingDoctorId = wantMyPatients ? req.user.id : null;
+      // Department-based scoping (mirrors getAllPatients):
+      // - Child Department users see child registration stats
+      // - Adult Department / unspecified users see adult registered_patient stats
+      const userDepartmentRaw = req.user?.department ? String(req.user.department).trim() : '';
+      const isChildDepartment = userDepartmentRaw.toLowerCase() === 'child department';
 
-      const stats = await Patient.getStats(treatingDoctorId);
-
-      // Child counts so the UI can decide which tabs (adult/child) to render
-      // for "My Patients" view (case 4: hide tab when the doctor has 0 there).
+      let stats;
+      let adultTotal = 0;
       let childTotal = 0;
-      try {
+
+      if (isChildDepartment) {
         const ChildPatientRegistration = require('../models/ChildPatientRegistration');
-        const childFilters = {};
-        if (treatingDoctorId) childFilters.treating_doctor_id = treatingDoctorId;
-        const childResult = await ChildPatientRegistration.findAll(1, 1, childFilters);
+        const childResult = await ChildPatientRegistration.findAll(1, 1, {});
         childTotal = childResult?.pagination?.total || 0;
-      } catch (childErr) {
-        console.error('[getPatientStats] Child count error (non-fatal):', childErr);
+        stats = {
+          total_patients: childTotal,
+          male_patients: 0,
+          female_patients: 0,
+          other_patients: 0,
+          patients_with_adl: 0,
+          complex_cases: 0,
+          simple_cases: 0,
+        };
+      } else {
+        stats = await Patient.getStats(null);
+        adultTotal = parseInt(stats?.total_patients ?? 0, 10) || 0;
       }
 
       res.json({
@@ -52,9 +61,10 @@ class PatientController {
         data: {
           stats: {
             ...stats,
-            adult_total: parseInt(stats?.total_patients ?? 0, 10) || 0,
+            adult_total: adultTotal,
             child_total: childTotal,
-            scope: treatingDoctorId ? 'my_patients' : 'all'
+            department: userDepartmentRaw || null,
+            scope: 'department'
           }
         }
       });
@@ -675,8 +685,13 @@ class PatientController {
         return PatientController.getPatientById(req, res);
       }
 
-      // Check if search parameter is provided
-      if (req.query.search && req.query.search.trim().length >= 2) {
+      // Department scope is server-enforced for this unified endpoint.
+      const userDepartmentRaw = req.user?.department ? String(req.user.department).trim() : '';
+      const userDepartment = userDepartmentRaw.toLowerCase();
+      const isChildDepartment = userDepartment === 'child department';
+
+      // Check if search parameter is provided. Child Department never uses adult search.
+      if (req.query.search && req.query.search.trim().length >= 2 && !isChildDepartment) {
         const result = await Patient.search(req.query.search.trim(), page, limit);
         return res.json({
           success: true,
@@ -690,14 +705,6 @@ class PatientController {
       if (req.query.has_adl_file !== undefined) filters.has_adl_file = req.query.has_adl_file === 'true';
       if (req.query.file_status) filters.file_status = req.query.file_status;
       if (req.query.assigned_room) filters.assigned_room = req.query.assigned_room;
-
-      // "My Patients" scope: when explicitly requested, restrict to patients
-      // treated/assigned to the authenticated user. Doctor id is taken from the
-      // JWT (req.user.id) so the client can never widen the scope by tampering.
-      const wantMyPatients = req.query.my_patients === 'true' && req.user?.id;
-      if (wantMyPatients) {
-        filters.treating_doctor_id = req.user.id;
-      }
       
       // Filter by registration date (for Today's Patients view)
       // When date is provided, filter patients created on that specific date
@@ -709,15 +716,53 @@ class PatientController {
         }
       }
 
-      // Optional list filter: adult | child (does not change DB; only shapes this response)
-      const patientTypeRaw = req.query.patient_type
-        ? String(req.query.patient_type).toLowerCase().trim()
-        : '';
-      const patientTypeFilter =
-        patientTypeRaw === 'adult' || patientTypeRaw === 'child' ? patientTypeRaw : null;
-      const wantChildOnly =
-        patientTypeFilter === 'child' && !!(filters.date || filters.assigned_room);
-      const wantAdultOnly = patientTypeFilter === 'adult';
+      // Unified patient list scoped by the logged-in user's department:
+      // - Child Department users get child registrations (`patient_type: 'child'`).
+      // - Adult Department / unspecified users get adult patients (`patient_type: 'adult'`).
+      // The `my_patients` flag and any client-supplied `patient_type` query are intentionally
+      // ignored — there is one endpoint and the response shape is decided server-side.
+      if (isChildDepartment) {
+        const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+        const childFilters = {};
+        if (filters.assigned_room) childFilters.assigned_room = filters.assigned_room;
+        if (filters.date) childFilters.date = filters.date;
+
+        const childResult = await ChildPatientRegistration.findAll(page, limit, childFilters);
+        const childPatients = childResult.child_patients || [];
+
+        return res.json({
+          success: true,
+          data: {
+            patients: childPatients.map((cp) => ({
+              id: cp.id,
+              name: cp.child_name ?? cp.name ?? null,
+              cr_no: cp.cr_number ?? cp.cr_no ?? null,
+              psy_no: null,
+              special_clinic_no: cp.cgc_number ?? cp.special_clinic_no ?? null,
+              assigned_room: cp.assigned_room ?? null,
+              assigned_doctor_id: null,
+              assigned_doctor_name: null,
+              assigned_doctor_role: null,
+              sex: cp.sex ?? null,
+              age: null,
+              age_group: cp.age_group ?? null,
+              created_at: cp.created_at ?? null,
+              updated_at: cp.updated_at ?? null,
+              has_adl_file: false,
+              case_complexity: 'simple',
+              patient_type: 'child',
+              filled_by_name: cp.filled_by_name ?? null,
+              filled_by_role: cp.filled_by_role ?? null,
+            })),
+            pagination: childResult.pagination,
+          },
+        });
+      }
+
+      // Adults (default)
+      const patientTypeFilter = 'adult';
+      const wantChildOnly = false;
+      const wantAdultOnly = true;
 
       /** Per-child follow-up row counts (followup_visits), set when children are loaded */
       let childFollowUpVisitCountMap = {};
@@ -735,9 +780,6 @@ class PatientController {
           if (filters.date) {
             childFilters.date = filters.date;
             console.log(`[getAllPatients] Fetching child patients with date filter: ${filters.date}`);
-          }
-          if (filters.treating_doctor_id) {
-            childFilters.treating_doctor_id = filters.treating_doctor_id;
           }
           const childResult = await ChildPatientRegistration.findAll(page, limit, childFilters);
           childPatients = childResult.child_patients || [];
@@ -1143,6 +1185,14 @@ class PatientController {
         result.patients = allPatients;
         result.pagination.total = (result.pagination?.total || 0) + childPatientsTotal;
         result.pagination.pages = Math.ceil(result.pagination.total / safeLimit);
+      }
+
+      // Ensure patient_type is always present for the unified /api/patients list
+      if (result.patients && Array.isArray(result.patients)) {
+        result.patients = result.patients.map((p) => ({
+          ...p,
+          patient_type: p.patient_type || 'adult',
+        }));
       }
 
       // Filter patient data for PWO role

@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const ChildPatientController = require('../controllers/childPatientController');
 const { authenticateToken, authorizeRoles, requireAdmin } = require('../middleware/auth');
-const { validatePagination, validateId } = require('../middleware/validation');
+const { validateId } = require('../middleware/validation');
 const { handleUpload } = require('../middleware/upload');
 
 /**
@@ -65,42 +65,11 @@ router.post(
 );
 
 /**
- * @swagger
- * /api/child-patient:
- *   get:
- *     summary: Get all child patients with pagination
- *     tags: [Child Patient Registration]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *         description: Number of records per page
- *     responses:
- *       200:
- *         description: Child patients retrieved successfully
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
+ * Note: the unified patient list lives at `GET /api/patients`. The backend decides
+ * whether to return adult or child rows from the logged-in user's `department`,
+ * so a separate `GET /api/child-patient` listing endpoint is intentionally not
+ * exposed here (it would duplicate that contract).
  */
-router.get(
-  '/',
-  authenticateToken,
-  authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'),
-  validatePagination,
-  ChildPatientController.getAllChildPatients
-);
 
 /**
  * @swagger

@@ -211,10 +211,7 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
     };
   }, [isOpen]);
 
-  // Faculty/Resident see "My Patients" (scoped to their own list); Admin & MWO
-  // see the full "Patients" list. The route param ?my=1 tells the page to
-  // request the scoped data from the API (server-side filter, JWT-bound).
-  const isTreatingDoctor = user?.role === 'Faculty' || user?.role === 'Resident';
+  // Patients list is department-scoped by backend on /api/patients.
 
   const navigation = [
     { 
@@ -224,8 +221,8 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
       roles: ['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'] 
     },
     { 
-      name: isTreatingDoctor ? 'My Patients' : 'Patients', 
-      to: isTreatingDoctor ? '/patients?my=1' : '/patients', 
+      name: 'Patients', 
+      to: '/patients', 
       icon: FiUsers, 
       roles: ['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'] 
     },

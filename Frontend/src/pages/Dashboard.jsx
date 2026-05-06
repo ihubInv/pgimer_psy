@@ -244,11 +244,9 @@ const Dashboard = () => {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   };
 
-  // Get all assigned patients for Faculty/Resident dashboard
-  // Note: Backend caps limit at 100, so we get up to 100 assigned patients
-  // Pass date parameter to filter only patients registered today
+  // Faculty/Resident list uses department-scoped patients from backend.
   const { data: allAssignedPatients } = useGetAllPatientsQuery(
-    { page: 1, limit: 100, date: getTodayIST() }, // Backend caps at 100, filter by today's date
+    { page: 1, limit: 100 },
     { 
       skip: !isAuthenticated || !isJrSrUser,
       refetchOnMountOrArgChange: true 
@@ -1059,16 +1057,8 @@ const Dashboard = () => {
     // Calculate statistics from assigned patients
     const assignedPatients = useMemo(() => {
       if (!allAssignedPatients?.data?.patients) return [];
-      const patients = allAssignedPatients.data.patients;
-      const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
-      
-      return patients.filter(p => {
-        // Only include patients assigned to this doctor
-        const patientDoctorId = p.assigned_doctor_id ? parseInt(p.assigned_doctor_id, 10) : null;
-        const currentUserId = user?.id ? parseInt(user.id, 10) : null;
-        return patientDoctorId === currentUserId;
-      });
-    }, [allAssignedPatients, user]);
+      return allAssignedPatients.data.patients;
+    }, [allAssignedPatients]);
 
     // Calculate summary statistics
     const stats = useMemo(() => {
@@ -1520,16 +1510,8 @@ const Dashboard = () => {
     // Calculate statistics from assigned patients
     const assignedPatients = useMemo(() => {
       if (!allAssignedPatients?.data?.patients) return [];
-      const patients = allAssignedPatients.data.patients;
-      const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
-      
-      return patients.filter(p => {
-        // Only include patients assigned to this doctor
-        const patientDoctorId = p.assigned_doctor_id ? parseInt(p.assigned_doctor_id, 10) : null;
-        const currentUserId = user?.id ? parseInt(user.id, 10) : null;
-        return patientDoctorId === currentUserId;
-      });
-    }, [allAssignedPatients, user]);
+      return allAssignedPatients.data.patients;
+    }, [allAssignedPatients]);
 
     // Calculate summary statistics
     const stats = useMemo(() => {

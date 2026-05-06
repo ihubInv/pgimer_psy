@@ -176,9 +176,8 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       ],
     }),
     getPatientStats: builder.query({
-      query: (args) => ({
+      query: () => ({
         url: '/patients/stats',
-        params: args?.my_patients ? { my_patients: 'true' } : undefined,
       }),
       providesTags: ['Stats'],
     }),
@@ -191,9 +190,8 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: ['Patient'],
     }),
     getPatientsStats: builder.query({
-      query: (args) => ({
+      query: () => ({
         url: '/patients/stats',
-        params: args?.my_patients ? { my_patients: 'true' } : undefined,
       }),
       providesTags: ['Stats'],
     }),
@@ -325,14 +323,6 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         'Patient',
       ],
     }),
-    getAllChildPatients: builder.query({
-      query: ({ page = 1, limit = 10, ...filters }) => ({
-        url: '/child-patient',
-        params: { page, limit, ...filters },
-      }),
-      providesTags: ['ChildPatient'],
-      keepUnusedDataFor: 60,
-    }),
     getChildPatientByCRNo: builder.query({
       query: (cr_number) => `/child-patient/cr/${cr_number}`,
       providesTags: (result, error, cr_number) => {
@@ -457,7 +447,6 @@ export const {
   useUploadPatientFilesMutation,
   useGetPatientFilesQuery,
   useDeletePatientFileMutation,
-  useGetAllChildPatientsQuery,
   useGetChildPatientByCRNoQuery,
   useAddChildPatientToTodayListMutation,
   useDeleteChildPatientMutation,
