@@ -11,30 +11,7 @@ import {
 import PatientRegistrationCalendar from '../components/PatientRegistrationCalendar';
 import RoomPatientsModal from '../components/RoomPatientsModal';
 import { selectCurrentUser, selectIsAuthenticated } from '../features/auth/authSlice';
-import { 
-  useGetAllPatientsQuery, 
-  useGetPatientsStatsQuery, 
-  useGetPatientStatsQuery,
-  useGetAgeDistributionQuery
-} from '../features/patients/patientsApiSlice';
-import { 
-  useGetClinicalStatsQuery, 
-  useGetCasesByDecisionQuery, 
-  useGetMyProformasQuery, 
-  useGetComplexCasesQuery,
-  useGetAllClinicalProformasQuery,
-  useGetVisitTrendsQuery
-} from '../features/clinical/clinicalApiSlice';
-import { 
-  useGetADLStatsQuery, 
-  useGetFilesByStatusQuery, 
-  useGetActiveFilesQuery,
-  useGetAllADLFilesQuery
-} from '../features/adl/adlApiSlice';
-import { useGetAllPrescriptionQuery } from '../features/prescriptions/prescriptionApiSlice';
-import { useGetPatientFilesQuery, useGetFileStatsQuery } from '../features/patients/patientFilesApiSlice';
-import { useGetDoctorsQuery, useGetUserStatsQuery } from '../features/users/usersApiSlice';
-import { useGetAllRoomsQuery, useGetAvailableRoomsQuery } from '../features/rooms/roomsApiSlice';
+import { useGetDashboardQuery } from '../features/dashboard/dashboardApiSlice';
 import Card from '../components/Card';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Badge from '../components/Badge';
@@ -179,184 +156,37 @@ const Dashboard = () => {
   const isFaculty = isSR(user?.role);
   const isJrSrUser = isJrSr(user?.role);
   
-  // Don't make any queries if not authenticated
-  if (!isAuthenticated || !user) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
-  // Admin Stats - Full System Analytics
-  const { data: patientStats, isLoading: patientsLoading } = useGetPatientStatsQuery(undefined, {
-    skip: !isAdminUser,
-    pollingInterval: isAdminUser ? 60000 : 0, // Increased from 30s to 60s
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: false, // Disable auto-refetch on focus
-  });
-
-  const { data: clinicalStats, isLoading: clinicalLoading } = useGetClinicalStatsQuery(undefined, {
-    skip: !isAdminUser,
-    pollingInterval: isAdminUser ? 60000 : 0, // Increased from 30s to 60s
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: false,
-  });
-
-  const { data: adlStats, isLoading: adlLoading } = useGetADLStatsQuery(undefined, {
-    skip: !isAdminUser,
-    pollingInterval: isAdminUser ? 60000 : 0, // Increased from 30s to 60s
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: false,
-  });
-
-  const { data: userStats } = useGetUserStatsQuery(undefined, {
-    skip: !isAdminUser,
-    refetchOnMountOrArgChange: true,
-  });
-
-  // File stats - skip for MWO (Psychiatric Welfare Officer)
-  const { data: fileStats } = useGetFileStatsQuery(undefined, {
-    skip: !isAuthenticated || isMwo,
-    refetchOnMountOrArgChange: true,
-  });
-
-  // Role-specific stats for Faculty/Resident
-  const { data: decisionStats } = useGetCasesByDecisionQuery(
-    isJrSrUser ? { user_id: user?.id } : undefined, 
-    { 
-      skip: !isAuthenticated || !isJrSrUser, 
-      refetchOnMountOrArgChange: true 
-    }
-  );
-
-  // Visit trends for all roles
-  const { data: visitTrends } = useGetVisitTrendsQuery(
-    { period: selectedPeriod, ...(isJrSrUser ? { user_id: user?.id } : {}) },
-    { 
-      skip: !isAuthenticated,
-      refetchOnMountOrArgChange: true 
-    }
-  );
-
-  // Helper: get today's date in IST for backend filtering
-  const getTodayIST = () => {
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-  };
-
-  // Faculty/Resident list uses department-scoped patients from backend.
-  const { data: allAssignedPatients } = useGetAllPatientsQuery(
-    { page: 1, limit: 100 },
-    { 
-      skip: !isAuthenticated || !isJrSrUser,
-      refetchOnMountOrArgChange: true 
-    }
-  );
-
-  // Age distribution for admin
-  const { data: ageDistribution } = useGetAgeDistributionQuery(undefined, {
-    skip: !isAdminUser,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: myProformas } = useGetMyProformasQuery({ page: 1, limit: 10 }, { 
-    skip: !isJrSrUser, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  const { data: complexCases } = useGetComplexCasesQuery({ page: 1, limit: 5 }, { 
-    skip: !isJrSrUser, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  const { data: activeADLFiles } = useGetActiveFilesQuery(undefined, { 
-    skip: !isJrSrUser, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  // Role-specific stats for MWO (aggregated patient statistics)
-  const { data: outpatientStats, isLoading: outpatientLoading } = useGetPatientsStatsQuery(undefined, { 
-    skip: !isMwo, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  const { data: adlByStatus } = useGetFilesByStatusQuery(undefined, { 
-    skip: !isMwo, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  const { data: myRecords } = useGetAllPatientsQuery({ page: 1, limit: 10 }, { 
-    skip: !isMwo, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  // Get all patients for MWO to calculate state-wise distribution
-  const { data: allPatientsForMWO } = useGetAllPatientsQuery({ page: 1, limit: 100 }, { 
-    skip: !isMwo, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  // Get all rooms for MWO to calculate total rooms count
-  const { data: allRoomsForMWO } = useGetAllRoomsQuery({ page: 1, limit: 1000 }, { 
-    skip: !isMwo, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  // Get all patients for Admin to calculate state distribution and weekly patients
-  // Note: For analytics, Admin may need all patients, but for "today's patients" we filter by date
-  const { data: allPatientsForAdmin } = useGetAllPatientsQuery({ page: 1, limit: 100 }, { 
-    skip: !isAdminUser, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  // Get today's patients for Admin (filtered by date) - for displaying today's patient counts
-  const { data: todayPatientsForAdmin } = useGetAllPatientsQuery(
-    { page: 1, limit: 100, date: getTodayIST() }, 
-    { 
-      skip: !isAdminUser, 
-      refetchOnMountOrArgChange: true 
-    }
-  );
-
-  // Get all rooms for Admin to calculate total rooms count
-  const { data: allRoomsForAdmin } = useGetAllRoomsQuery({ page: 1, limit: 1000 }, { 
-    skip: !isAdminUser, 
-    refetchOnMountOrArgChange: true 
-  });
-
-  // Get room distribution with patient counts for today
-  const { data: roomDistributionData } = useGetAvailableRoomsQuery(undefined, {
-    skip: !isAdminUser,
+  const { data: dashboardResponse, isLoading: dashboardLoading } = useGetDashboardQuery(undefined, {
+    skip: !isAuthenticated || !user,
     pollingInterval: isAdminUser ? 60000 : 0,
     refetchOnMountOrArgChange: true,
+    refetchOnFocus: false,
   });
 
-  // Get recent prescriptions - skip for MWO (Psychiatric Welfare Officer)
-  const { data: recentPrescriptions } = useGetAllPrescriptionQuery({ 
-    page: 1, 
-    limit: 5 
-  }, { 
-    skip: isMwo,
-    refetchOnMountOrArgChange: true 
-  });
-
-  // Get recent ADL files - skip for MWO (Psychiatric Welfare Officer)
-  const { data: recentADLFiles } = useGetAllADLFilesQuery({ 
-    page: 1, 
-    limit: 5 
-  }, { 
-    skip: isMwo,
-    refetchOnMountOrArgChange: true 
-  });
-
-  // Get recent clinical proformas - skip for MWO (Psychiatric Welfare Officer)
-  const { data: recentClinicalProformas } = useGetAllClinicalProformasQuery({ 
-    page: 1, 
-    limit: 5 
-  }, { 
-    skip: isMwo,
-    refetchOnMountOrArgChange: true 
-  });
+  const dash = dashboardResponse?.data || {};
+  const patientStats = dash.patientStats;
+  const clinicalStats = dash.clinicalStats;
+  const adlStats = dash.adlStats;
+  const userStats = dash.userStats;
+  const decisionStats = dash.decisionStats;
+  const visitTrends = dash.visitTrends;
+  const allAssignedPatients = dash.allAssignedPatients;
+  const ageDistribution = dash.ageDistribution;
+  const myProformas = dash.myProformas;
+  const complexCases = dash.complexCases;
+  const activeADLFiles = dash.activeADLFiles;
+  const outpatientStats = dash.outpatientStats;
+  const adlByStatus = dash.adlByStatus;
+  const myRecords = dash.myRecords;
+  const allPatientsForMWO = dash.allPatientsForMWO;
+  const allRoomsForMWO = dash.allRoomsForMWO;
+  const allPatientsForAdmin = dash.allPatientsForAdmin;
+  const todayPatientsForAdmin = dash.todayPatientsForAdmin;
+  const allRoomsForAdmin = dash.allRoomsForAdmin;
+  const roomDistributionData = dash.roomDistributionData;
+  const recentPrescriptions = dash.recentPrescriptions;
+  const recentADLFiles = dash.recentADLFiles;
+  const recentClinicalProformas = dash.recentClinicalProformas;
 
   // Calculate total staff from user stats
   const totalStaff = useMemo(() => {
@@ -491,7 +321,7 @@ const Dashboard = () => {
     return maritalMap;
   }, [allPatientsForMWO, isMwo]);
 
-  const isLoading = isAdminUser ? (patientsLoading || clinicalLoading || adlLoading) : false;
+  const isLoading = dashboardLoading;
 
   // Chart options
   const chartOptions = {
@@ -756,6 +586,14 @@ const Dashboard = () => {
       }],
     };
   }, [maritalStatusDistribution, isMwo]);
+
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -1055,16 +893,20 @@ const Dashboard = () => {
   // ==================== FACULTY DASHBOARD ====================
   if (isFaculty) {
     // Calculate statistics from assigned patients
-    const assignedPatients = useMemo(() => {
+    const assignedPatients = (() => {
       if (!allAssignedPatients?.data?.patients) return [];
       return allAssignedPatients.data.patients;
-    }, [allAssignedPatients]);
+    })();
 
     // Calculate summary statistics
-    const stats = useMemo(() => {
+    const stats = (() => {
       const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
 
-      const allPatientsCount = assignedPatients.length;
+      const allPatientsCount =
+        dash?.totalPatients ??
+        dash?.totalAdultPatients ??
+        allAssignedPatients?.data?.pagination?.total ??
+        assignedPatients.length;
       const adlFileCount = assignedPatients.filter(p => p.has_adl_file === true).length;
       const assignedAfterCreation = userCreatedAt 
         ? assignedPatients.filter(p => {
@@ -1178,7 +1020,7 @@ const Dashboard = () => {
         stateData,
         recentPatients
       };
-    }, [assignedPatients, user]);
+    })();
 
     // Gender chart data
     const genderChartData = {
@@ -1241,7 +1083,7 @@ const Dashboard = () => {
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <StatCard 
               title="All Patients Count" 
               value={stats.allPatientsCount} 
@@ -1249,20 +1091,6 @@ const Dashboard = () => {
               colorClasses="from-blue-500 to-blue-600"
               to="/patients"
               subtitle="Total assigned patients"
-            />
-            <StatCard 
-              title="Adult Intake Records (ADL)" 
-              value={stats.adlFileCount} 
-              icon={FiFolder} 
-              colorClasses="from-purple-500 to-purple-600"
-              subtitle="Adult patients with ADL files"
-            />
-            <StatCard 
-              title="Assigned Patients Count" 
-              value={stats.assignedAfterCreation} 
-              icon={FiUserPlus} 
-              colorClasses="from-green-500 to-green-600"
-              subtitle="Assigned after account creation"
             />
           </div>
 
@@ -1508,16 +1336,20 @@ const Dashboard = () => {
   // ==================== RESIDENT DASHBOARD ====================
   if (isResident) {
     // Calculate statistics from assigned patients
-    const assignedPatients = useMemo(() => {
+    const assignedPatients = (() => {
       if (!allAssignedPatients?.data?.patients) return [];
       return allAssignedPatients.data.patients;
-    }, [allAssignedPatients]);
+    })();
 
     // Calculate summary statistics
-    const stats = useMemo(() => {
+    const stats = (() => {
       const userCreatedAt = user?.created_at ? new Date(user.created_at) : null;
 
-      const allPatientsCount = assignedPatients.length;
+      const allPatientsCount =
+        dash?.totalPatients ??
+        dash?.totalAdultPatients ??
+        allAssignedPatients?.data?.pagination?.total ??
+        assignedPatients.length;
       const adlFileCount = assignedPatients.filter(p => p.has_adl_file === true).length;
       const assignedAfterCreation = userCreatedAt 
         ? assignedPatients.filter(p => {
@@ -1631,7 +1463,7 @@ const Dashboard = () => {
         stateData,
         recentPatients
       };
-    }, [assignedPatients, user]);
+    })();
 
     // Gender chart data
     const genderChartData = {
@@ -1694,7 +1526,7 @@ const Dashboard = () => {
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <StatCard 
               title="All Patients Count" 
               value={stats.allPatientsCount} 
@@ -1702,20 +1534,6 @@ const Dashboard = () => {
               colorClasses="from-blue-500 to-blue-600"
               to="/patients"
               subtitle="Total assigned patients"
-            />
-            <StatCard 
-              title="Adult Intake Records (ADL)" 
-              value={stats.adlFileCount} 
-              icon={FiFolder} 
-              colorClasses="from-purple-500 to-purple-600"
-              subtitle="Adult patients with ADL files"
-            />
-            <StatCard 
-              title="Assigned Patients Count" 
-              value={stats.assignedAfterCreation} 
-              icon={FiUserPlus} 
-              colorClasses="from-green-500 to-green-600"
-              subtitle="Assigned after account creation"
             />
           </div>
 
