@@ -18,6 +18,7 @@ import Button from '../../components/Button';
 import { USER_ROLES, USER_DEPARTMENTS, isAdmin } from '../../utils/constants';
 
 const CreateUser = ({ editMode = false, existingUser = null, userId = null }) => {
+  const rolesRequiringDepartment = [USER_ROLES.FACULTY, USER_ROLES.RESIDENT];
   const navigate = useNavigate();
   const currentUser = useSelector(selectCurrentUser);
   const [createUser, { isLoading: isCreating }] = useCreateUserMutation();
@@ -62,7 +63,17 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      if (name === 'role') {
+        const requiresDepartment = rolesRequiringDepartment.includes(value);
+        return {
+          ...prev,
+          role: value,
+          department: requiresDepartment ? prev.department : '',
+        };
+      }
+      return { ...prev, [name]: value };
+    });
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: '' }));
     }
@@ -94,7 +105,8 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
       newErrors.role = 'Role is required';
     }
 
-    if (!formData.department) {
+    const requiresDepartment = rolesRequiringDepartment.includes(formData.role);
+    if (requiresDepartment && !formData.department) {
       newErrors.department = 'Department is required';
     }
 
@@ -112,19 +124,31 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
 
     try {
       if (editMode) {
-        // Explicit payload so department/mobile are always sent (spread can omit keys if state is stale)
-        await updateUser({
+        const payload = {
           id: userId,
           name: formData.name.trim(),
           email: formData.email.trim(),
           mobile: formData.mobile.trim(),
           role: formData.role,
-          department: formData.department.trim(),
-        }).unwrap();
+        };
+        if (rolesRequiringDepartment.includes(formData.role)) {
+          payload.department = formData.department.trim();
+        }
+        // Explicit payload so department/mobile are always sent (spread can omit keys if state is stale)
+        await updateUser(payload).unwrap();
         toast.success('User updated successfully!');
       } else {
         // SECURITY FIX #2.11: Create user without password - user will receive secure setup link
-        await createUser(formData).unwrap();
+        const payload = {
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          mobile: formData.mobile.trim(),
+          role: formData.role,
+        };
+        if (rolesRequiringDepartment.includes(formData.role)) {
+          payload.department = formData.department.trim();
+        }
+        await createUser(payload).unwrap();
         toast.success('User created successfully! Password setup link has been sent to the user\'s email.');
       }
       navigate('/users');
@@ -161,6 +185,7 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
     value,
     label: value,
   }));
+  const shouldShowDepartment = rolesRequiringDepartment.includes(formData.role);
 
   const departmentOptions = Object.values(USER_DEPARTMENTS).map((value) => ({
     value,
@@ -277,21 +302,23 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
                       </div>
                     </div>
 
-                    <div className="relative md:col-span-2">
-                      <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-blue-500/5 rounded-xl"></div>
-                      <div className="relative max-w-full md:max-w-md">
-                        <Select
-                          label="Department"
-                          name="department"
-                          value={formData.department}
-                          onChange={handleChange}
-                          options={departmentOptions}
-                          error={errors.department}
-                          required
-                          className="h-14"
-                        />
+                    {shouldShowDepartment && (
+                      <div className="relative md:col-span-2">
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-blue-500/5 rounded-xl"></div>
+                        <div className="relative max-w-full md:max-w-md">
+                          <Select
+                            label="Department"
+                            name="department"
+                            value={formData.department}
+                            onChange={handleChange}
+                            options={departmentOptions}
+                            error={errors.department}
+                            required
+                            className="h-14"
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* 2FA Toggle Section - Only visible to Admin in Edit Mode */}
