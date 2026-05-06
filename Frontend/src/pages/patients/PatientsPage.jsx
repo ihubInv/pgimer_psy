@@ -32,6 +32,8 @@ const PatientsPage = () => {
   const [search, setSearch] = useState('');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const isPwoRole = isMWO(user?.role);
+  const isAdminRole = isAdmin(user?.role);
+  const canSwitchPatientType = isPwoRole || isAdminRole;
   const limit = 10;
 
   const { data: profileData } = useGetProfileQuery(undefined, {
@@ -43,14 +45,14 @@ const PatientsPage = () => {
   const effectiveDepartment = profileData?.data?.user?.department || user?.department || '';
   const isChildDepartment = String(effectiveDepartment).trim().toLowerCase() === USER_DEPARTMENTS.CHILD.toLowerCase();
   const [patientType, setPatientType] = useState(isChildDepartment ? 'child' : 'adult');
-  const showAdultTab = isPwoRole || !isChildDepartment;
-  const showChildTab = isPwoRole || isChildDepartment;
+  const showAdultTab = canSwitchPatientType || !isChildDepartment;
+  const showChildTab = canSwitchPatientType || isChildDepartment;
 
   useEffect(() => {
-    if (!isPwoRole) {
+    if (!canSwitchPatientType) {
       setPatientType(isChildDepartment ? 'child' : 'adult');
     }
-  }, [isPwoRole, isChildDepartment]);
+  }, [canSwitchPatientType, isChildDepartment]);
 
   // Reset page to 1 when search changes
   useEffect(() => {
@@ -65,7 +67,7 @@ const PatientsPage = () => {
     page: search.trim() ? 1 : page,
     limit: fetchLimit,
     search: search.trim() || undefined,
-    ...(isPwoRole ? { patient_type: patientType } : {}),
+    ...(canSwitchPatientType ? { patient_type: patientType } : {}),
   }, {
     refetchOnMountOrArgChange: true,
   });

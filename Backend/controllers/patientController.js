@@ -692,11 +692,13 @@ class PatientController {
       const userDepartment = userDepartmentRaw.toLowerCase();
       const isChildDepartment = userDepartment === 'child department';
       const userRole = String(req.user?.role || '').trim();
-      const isPwoRole = userRole.toLowerCase() === 'psychiatric welfare officer';
+      const normalizedRole = userRole.toLowerCase();
+      const canSwitchPatientTypeByQuery =
+        normalizedRole === 'psychiatric welfare officer' || normalizedRole === 'admin';
       const requestedPatientType = String(req.query.patient_type || '').trim().toLowerCase();
       const wantsChildType = requestedPatientType === 'child';
       const wantsAdultType = requestedPatientType === 'adult';
-      const useChildDataset = isPwoRole
+      const useChildDataset = canSwitchPatientTypeByQuery
         ? (wantsChildType ? true : wantsAdultType ? false : false)
         : isChildDepartment;
 

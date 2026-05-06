@@ -25,7 +25,7 @@ import Modal from '../components/Modal';
 import { formatDate } from '../utils/formatters';
 import { validatePassword, getPasswordRequirements } from '../utils/passwordValidation';
 import { encryptPasswordForTransmission } from '../utils/passwordEncryption';
-import { USER_DEPARTMENTS } from '../utils/constants';
+import { USER_DEPARTMENTS, isAdmin } from '../utils/constants';
 
 const Profile = () => {
   const user = useSelector(selectCurrentUser);
@@ -76,6 +76,8 @@ const Profile = () => {
   const [disable2FAOTP, setDisable2FAOTP] = useState('');
   const [isDisabling2FA, setIsDisabling2FA] = useState(false);
   const isPwoRole = String(user?.role || '').trim().toLowerCase() === 'psychiatric welfare officer';
+  const isAdminRole = isAdmin(user?.role);
+  const shouldUseDepartment = !isPwoRole && !isAdminRole;
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -100,12 +102,12 @@ const Profile = () => {
 
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
-    if (!isPwoRole && !profileForm.department) {
+    if (shouldUseDepartment && !profileForm.department) {
       toast.error('Please select a department');
       return;
     }
     try {
-      const payload = isPwoRole
+      const payload = !shouldUseDepartment
         ? { name: profileForm.name, email: profileForm.email }
         : profileForm;
       const response = await updateProfile(payload).unwrap();
@@ -488,7 +490,7 @@ const Profile = () => {
                     />
                   </div>
 
-                  {!isPwoRole && (
+                  {shouldUseDepartment && (
                     <div className="bg-white rounded-xl border border-gray-200 p-4">
                       <Select
                         label="Department"
