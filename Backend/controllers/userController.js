@@ -20,7 +20,7 @@ class UserController {
   // User receives secure password setup link via email
   static async register(req, res) {
     try {
-      const { name, role, email, mobile } = req.body;
+      const { name, role, email, mobile, department } = req.body;
 
       // SECURITY FIX #2.11: Create user without password - user will set it via secure setup link
       const user = await User.create({
@@ -28,6 +28,7 @@ class UserController {
         role,
         email,
         mobile,
+        department,
         // password is NOT included - user must set it via secure setup link
       });
 
@@ -362,11 +363,28 @@ class UserController {
         });
       }
 
-      const { name, email } = req.body;
+      const { name, email, department } = req.body;
       const updateData = {};
+      const validDepartments = ['Child Department', 'Adult Department'];
 
       if (name) updateData.name = name;
       if (email) updateData.email = email;
+      if (department !== undefined && department !== null && department !== '') {
+        if (!validDepartments.includes(department)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Department must be Child Department or Adult Department',
+          });
+        }
+        updateData.department = department;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No valid fields to update',
+        });
+      }
 
       await user.update(updateData);
 
@@ -649,12 +667,27 @@ class UserController {
         });
       }
 
-      const { name, role, email } = req.body;
+      const { name, role, email, mobile, department } = req.body;
       const updateData = {};
+      const validDepartments = ['Child Department', 'Adult Department'];
 
       if (name) updateData.name = name;
       if (role) updateData.role = role;
       if (email) updateData.email = email;
+      if (mobile !== undefined && mobile !== null && String(mobile).trim() !== '') {
+        updateData.mobile = String(mobile).trim();
+      }
+
+      if (department !== undefined && department !== null && String(department).trim() !== '') {
+        const deptTrimmed = String(department).trim();
+        if (!validDepartments.includes(deptTrimmed)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Department must be Child Department or Adult Department',
+          });
+        }
+        updateData.department = deptTrimmed;
+      }
 
       await user.update(updateData);
 
@@ -1845,6 +1878,7 @@ class UserController {
         role: userResponse.role,
         two_factor_enabled: userResponse.two_factor_enabled,
         created_at: userResponse.created_at,
+        department: userResponse.department ?? null,
       };
 
       if (mobile) {

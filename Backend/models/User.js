@@ -21,6 +21,7 @@ class User {
     this.updated_at = data.updated_at;
     this.current_room = data.current_room || null;
     this.room_assignment_time = data.room_assignment_time || null;
+    this.department = data.department ?? null;
     // SECURITY FIX #6: Account lockout fields
     this.failed_login_attempts = data.failed_login_attempts || 0;
     this.account_locked_until = data.account_locked_until || null;
@@ -30,7 +31,7 @@ class User {
   // SECURITY FIX #2.11: Password is optional - user will set it via secure setup link
   static async create(userData) {
     try {
-      const { name, role, email, password, mobile } = userData;
+      const { name, role, email, password, mobile, department } = userData;
       
       // Normalize email for comparison only (lowercase, preserves dots and plus signs)
       // Store the original email as entered by the user
@@ -70,10 +71,10 @@ class User {
       // Insert user - store email exactly as entered (lowercase, but with dots/plus preserved)
       // password_hash can be NULL if user needs to set password via setup link
       const result = await db.query(
-        `INSERT INTO users (name, role, email, password_hash, mobile) 
-         VALUES ($1, $2, $3, $4, $5) 
-         RETURNING id, name, role, email, mobile, created_at`,
-        [name, role, emailToStore, password_hash, mobile]
+        `INSERT INTO users (name, role, email, password_hash, mobile, department) 
+         VALUES ($1, $2, $3, $4, $5, $6) 
+         RETURNING id, name, role, email, mobile, department, created_at`,
+        [name, role, emailToStore, password_hash, mobile, department ?? null]
       );
 
       return new User(result.rows[0]);
@@ -135,7 +136,7 @@ class User {
   static async findAll(page = 1, limit = 10, role = null) {
     try {
       const offset = (page - 1) * limit;
-      let query = 'SELECT id, name, role, email, mobile, is_active, two_factor_enabled, last_login, created_at FROM users';
+      let query = 'SELECT id, name, role, email, mobile, department, is_active, two_factor_enabled, last_login, created_at FROM users';
       let countQuery = 'SELECT COUNT(*) FROM users';
       const params = [];
       let paramCount = 0;
@@ -175,7 +176,7 @@ class User {
   // Update user
   async update(updateData) {
     try {
-      const allowedFields = ['name', 'role', 'email', 'mobile'];
+      const allowedFields = ['name', 'role', 'email', 'mobile', 'department'];
       const updates = [];
       const values = [];
       let paramCount = 0;
@@ -213,7 +214,7 @@ class User {
       const result = await db.query(
         `UPDATE users SET ${updates.join(', ')} 
          WHERE id = $${paramCount} 
-         RETURNING id, name, role, email, mobile, created_at`,
+         RETURNING id, name, role, email, mobile, department, created_at`,
         values
       );
 
@@ -533,6 +534,7 @@ class User {
       last_login: this.last_login,
       current_room: this.current_room,
       room_assignment_time: this.room_assignment_time,
+      department: this.department,
       created_at: this.created_at
     };
   }

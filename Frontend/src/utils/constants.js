@@ -5,6 +5,11 @@ export const USER_ROLES = {
   MWO: 'Psychiatric Welfare Officer',
 };
 
+export const USER_DEPARTMENTS = {
+  CHILD: 'Child Department',
+  ADULT: 'Adult Department',
+};
+
 // Helper function to get display name for a role
 export const getRoleDisplayName = (role) => {
   if (!role) return 'N/A';

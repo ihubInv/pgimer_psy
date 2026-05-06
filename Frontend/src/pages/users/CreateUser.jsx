@@ -15,7 +15,7 @@ import Card from '../../components/Card';
 import { IconInput } from '../../components/IconInput';
 import Select from '../../components/Select';
 import Button from '../../components/Button';
-import { USER_ROLES, isAdmin } from '../../utils/constants';
+import { USER_ROLES, USER_DEPARTMENTS, isAdmin } from '../../utils/constants';
 
 const CreateUser = ({ editMode = false, existingUser = null, userId = null }) => {
   const navigate = useNavigate();
@@ -40,6 +40,7 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
     email: '',
     mobile: '',
     role: '',
+    department: '',
     // SECURITY FIX #2.11: Password fields removed - user will set password via secure setup link
   });
 
@@ -53,6 +54,7 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
         email: currentUserData.email || '',
         mobile: currentUserData.mobile || '',
         role: currentUserData.role || '',
+        department: currentUserData.department || '',
         // SECURITY FIX #2.11: Password fields removed
       });
     }
@@ -92,6 +94,10 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
       newErrors.role = 'Role is required';
     }
 
+    if (!formData.department) {
+      newErrors.department = 'Department is required';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -106,9 +112,15 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
 
     try {
       if (editMode) {
-        // For edit mode, only send fields that can be updated (name, email, role, mobile)
-        // Password is handled separately via reset-password endpoint
-        await updateUser({ id: userId, ...formData }).unwrap();
+        // Explicit payload so department/mobile are always sent (spread can omit keys if state is stale)
+        await updateUser({
+          id: userId,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          mobile: formData.mobile.trim(),
+          role: formData.role,
+          department: formData.department.trim(),
+        }).unwrap();
         toast.success('User updated successfully!');
       } else {
         // SECURITY FIX #2.11: Create user without password - user will receive secure setup link
@@ -150,6 +162,11 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
     label: value,
   }));
 
+  const departmentOptions = Object.values(USER_DEPARTMENTS).map((value) => ({
+    value,
+    label: value,
+  }));
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Animated Background Elements */}
@@ -187,7 +204,7 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
               {/* Main Form Card */}
               <Card className="relative shadow-2xl border border-white/40 bg-white/70 backdrop-blur-2xl rounded-3xl overflow-hidden">
                 <div className="space-y-6 lg:space-y-8 p-6 lg:p-8">
-                  {/* Form Fields - Exactly 3 Rows, 2 Columns Each */}
+                  {/* Form fields: two columns; department spans full width on md+ */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Row 1: Full Name | Email */}
                     <div className="relative">
@@ -256,6 +273,22 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
                           error={errors.mobile}
                           required
                            className="h-14"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="relative md:col-span-2">
+                      <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-blue-500/5 rounded-xl"></div>
+                      <div className="relative max-w-full md:max-w-md">
+                        <Select
+                          label="Department"
+                          name="department"
+                          value={formData.department}
+                          onChange={handleChange}
+                          options={departmentOptions}
+                          error={errors.department}
+                          required
+                          className="h-14"
                         />
                       </div>
                     </div>

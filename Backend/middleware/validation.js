@@ -58,6 +58,12 @@ const validateUserRegistration = [
   body('role')
     .isIn(['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'])
     .withMessage('Role must be one of: Admin, Faculty, Resident, Psychiatric Welfare Officer'),
+  body('department')
+    .trim()
+    .notEmpty()
+    .withMessage('Department is required')
+    .isIn(['Child Department', 'Adult Department'])
+    .withMessage('Department must be Child Department or Adult Department'),
   handleValidationErrors
 ];
 
