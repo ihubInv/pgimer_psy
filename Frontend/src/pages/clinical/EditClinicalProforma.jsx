@@ -1205,8 +1205,10 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
             setFilesToRemove([]);
             // Refetch files after update with delay to ensure backend processing is complete
             setTimeout(() => {
-              if (refetchFiles) {
-                refetchFiles();
+              try {
+                refetchFiles?.();
+              } catch {
+                /* RTK #38 if query unsubscribed / skipped */
               }
             }, 1000);
           } else if (selectedFiles.length > 0) {
@@ -1221,8 +1223,10 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
             setSelectedFiles([]);
             // Refetch files after create with delay to ensure backend processing is complete
             setTimeout(() => {
-              if (refetchFiles) {
-                refetchFiles();
+              try {
+                refetchFiles?.();
+              } catch {
+                /* RTK #38 if query unsubscribed / skipped */
               }
             }, 1000);
           }
@@ -1738,8 +1742,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                 </div>
               </div>
 
-              {/* Patient Documents & Files Section - Hide in Follow-Up Mode */}
-              {patientId && !isFollowUpMode && (
+              {/* Patient Documents & Files (including follow-up mode — same as dedicated Follow-Up Visit page) */}
+              {patientId && (
                 <div className="space-y-6 pt-6 border-t border-gray-200">
                   <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                     <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
@@ -1747,6 +1751,11 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                     </div>
                     Patient Documents & Files
                   </h4>
+                  {isFollowUpMode && (
+                    <p className="text-sm text-gray-500 -mt-4 mb-2">
+                      Optional: attach PDFs or images to this patient&apos;s file. Files upload when you save this follow-up proforma.
+                    </p>
+                  )}
 
                   {/* File Upload Component */}
                   {!hideFileUpload && (
@@ -2173,8 +2182,8 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                 </div>
               </div>
 
-              {/* Patient Documents & Files Section - Hide in Follow-Up Mode */}
-              {patientId && !isFollowUpMode && (
+              {/* Patient Documents & Files (including follow-up mode — same as dedicated Follow-Up Visit page) */}
+              {patientId && (
                 <div className="space-y-6 pt-6 border-t border-gray-200">
                   <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                     <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
@@ -2182,6 +2191,11 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                     </div>
                     Patient Documents & Files
                   </h4>
+                  {isFollowUpMode && (
+                    <p className="text-sm text-gray-500 -mt-4 mb-2">
+                      Optional: attach PDFs or images to this patient&apos;s file. Files upload when you save this follow-up proforma.
+                    </p>
+                  )}
 
                   {/* File Upload Component */}
                   {!hideFileUpload && (

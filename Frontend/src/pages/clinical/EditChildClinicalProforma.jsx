@@ -12,7 +12,10 @@ import Textarea from '../../components/Textarea';
 import Button from '../../components/Button';
 import DatePicker from '../../components/CustomDatePicker';
 import { IconInput } from '../../components/IconInput';
-import { FiArrowLeft, FiSave, FiUser, FiCalendar, FiClock, FiEdit3, FiClipboard, FiPrinter, FiChevronDown, FiChevronUp, FiAlertCircle } from 'react-icons/fi';
+import { FiArrowLeft, FiSave, FiUser, FiCalendar, FiClock, FiEdit3, FiClipboard, FiPrinter, FiChevronDown, FiChevronUp, FiAlertCircle, FiFileText } from 'react-icons/fi';
+import FileUpload from '../../components/FileUpload';
+import FilePreview from '../../components/FilePreview';
+import { useUpdateChildPatientDocumentsMutation } from '../../features/patients/patientsApiSlice';
 import {
   CHILD_CLINICAL_DURATION_OF_ILLNESS_OPTIONS,
   CHILD_CLINICAL_ONSET_OPTIONS,
@@ -160,6 +163,11 @@ const EditChildClinicalProforma = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [childPatient, setChildPatient] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [filesToRemove, setFilesToRemove] = useState([]);
+
+  const [updateChildPatientDocuments, { isLoading: isUploadingChildDocs }] =
+    useUpdateChildPatientDocumentsMutation();
   
   // Card expand/collapse state - persist in localStorage
   const getInitialExpandedCards = () => {
@@ -469,6 +477,11 @@ const EditChildClinicalProforma = ({
     };
     
     fetchChildPatient();
+  }, [childPatientId]);
+
+  useEffect(() => {
+    setSelectedFiles([]);
+    setFilesToRemove([]);
   }, [childPatientId]);
 
   // Load existing proforma if editing
@@ -784,6 +797,40 @@ const EditChildClinicalProforma = ({
             : 'Child clinical proforma saved as draft'
         );
 
+        const cpIdForDocs =
+          childPatientId ||
+          formData.child_patient_id ||
+          createdOrUpdated?.child_patient_id;
+        if (
+          cpIdForDocs &&
+          (selectedFiles.length > 0 || filesToRemove.length > 0)
+        ) {
+          try {
+            const docRes = await updateChildPatientDocuments({
+              id: cpIdForDocs,
+              files: selectedFiles,
+              files_to_remove: filesToRemove,
+            }).unwrap();
+            if (docRes?.data?.childPatient) {
+              setChildPatient(docRes.data.childPatient);
+            }
+            if (selectedFiles.length > 0) {
+              toast.success(`${selectedFiles.length} file(s) uploaded successfully!`);
+            }
+            if (filesToRemove.length > 0) {
+              toast.success(`${filesToRemove.length} file(s) removed successfully!`);
+            }
+            setSelectedFiles([]);
+            setFilesToRemove([]);
+          } catch (docErr) {
+            toast.error(
+              docErr?.data?.message ||
+                docErr?.message ||
+                'Failed to update documents. Proforma was saved.'
+            );
+          }
+        }
+
         if (propOnUpdate) {
           propOnUpdate(createdOrUpdated);
         } else if (!proformaRecordId) {
@@ -849,6 +896,10 @@ const EditChildClinicalProforma = ({
     formDataId: formData?.id,
   });
   const isUpdateMode = Boolean(proformaRecordId);
+
+  const childDocumentFiles = Array.isArray(childPatient?.documents)
+    ? childPatient.documents
+    : [];
 
   return (
     <div className={isEmbedded ? '' : 'min-h-screen bg-gray-50'}>
@@ -1388,6 +1439,71 @@ const EditChildClinicalProforma = ({
               </div>
           </SectionCard>
 
+          {/* ── 15. PATIENT DOCUMENTS (child registration paths — same API as child follow-up form) ─ */}
+          {childPatientId && (
+            <SectionCard number={15} title="Patient Documents & Files">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-100 shrink-0">
+                  <FiFileText className="w-5 h-5 text-emerald-700" />
+                </div>
+                <p className="text-sm text-gray-600">
+                  Optional: attach PDFs or images to this child&apos;s registration record. Changes apply when you save this proforma (same storage as child intake / follow-up uploads).
+                </p>
+              </div>
+              {!isViewMode && (
+                <div className="mb-6">
+                  <FileUpload
+                    files={selectedFiles}
+                    onFilesChange={setSelectedFiles}
+                    maxFiles={20}
+                    maxSizeMB={10}
+                    patientId={childPatientId}
+                    disabled={!childPatientId}
+                  />
+                </div>
+              )}
+              {childDocumentFiles.filter((f) => !filesToRemove.includes(f)).length > 0 ? (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">
+                    Existing files (
+                    {
+                      childDocumentFiles.filter((f) => !filesToRemove.includes(f))
+                        .length
+                    }
+                    )
+                  </h4>
+                  <FilePreview
+                    files={childDocumentFiles.filter((f) => !filesToRemove.includes(f))}
+                    onDelete={
+                      !isViewMode
+                        ? (path) =>
+                            setFilesToRemove((prev) =>
+                              prev.includes(path) ? prev : [...prev, path]
+                            )
+                        : undefined
+                    }
+                    canDelete={!isViewMode}
+                    patient_id={null}
+                    baseUrl={import.meta.env.VITE_API_URL || '/api'}
+                  />
+                </div>
+              ) : (
+                !isViewMode && (
+                  <p className="text-center py-2 text-gray-500 text-sm">
+                    No files uploaded yet
+                  </p>
+                )
+              )}
+              {!isViewMode && filesToRemove.length > 0 && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    <strong>{filesToRemove.length}</strong> file(s) will be removed when you save.
+                  </p>
+                </div>
+              )}
+            </SectionCard>
+          )}
+
           {/* ── ACTION BAR (aligned with adult Walk-in Clinical Proforma: single primary save) ─ */}
           <div className="sticky bottom-4 z-10 print:hidden">
             <div className="bg-white/90 backdrop-blur-md border border-gray-200 rounded-2xl shadow-xl px-5 py-4 flex items-center justify-between gap-3">
@@ -1400,8 +1516,8 @@ const EditChildClinicalProforma = ({
               {!isViewMode && (
                 <Button
                   type="submit"
-                  loading={isSaving}
-                  disabled={isSaving}
+                  loading={isSaving || isUploadingChildDocs}
+                  disabled={isSaving || isUploadingChildDocs}
                   className="flex items-center gap-2 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-lg shadow-primary-500/30 px-5 py-2.5 rounded-md"
                 >
                   <FiSave className="w-4 h-4" />

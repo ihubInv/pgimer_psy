@@ -199,6 +199,15 @@ router.post(
   ChildPatientController.addChildPatientToTodayList
 );
 
+router.post(
+  '/:id/documents',
+  authenticateToken,
+  authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'),
+  validateId,
+  handleUpload,
+  ChildPatientController.updateChildPatientDocuments
+);
+
 /**
  * @swagger
  * /api/child-patient/{id}:

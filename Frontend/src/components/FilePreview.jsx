@@ -653,9 +653,13 @@ const FilePreview = ({
       // Show success message
       toast.success(result?.message || 'File deleted successfully');
 
-      // Refetch files if callback provided
+      // Refetch files if callback provided (avoid RTK Query #38 if hook unsubscribed)
       if (refetchFiles) {
-        await refetchFiles();
+        try {
+          await refetchFiles();
+        } catch {
+          /* ignored */
+        }
       }
 
       // Call optional callback if provided

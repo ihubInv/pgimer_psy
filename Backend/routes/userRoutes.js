@@ -1049,7 +1049,9 @@ router.get('/doctors', authenticateToken, UserController.getDoctors);
  * /api/users/rooms/available:
  *   get:
  *     summary: Get available rooms
- *     description: Get list of all available rooms and their patient distribution
+ *     description: |
+ *       Lists rooms, occupancy, and today's patient counts per room.
+ *       Counts are informational only—doctors may select any unoccupied room even if today's count is zero (e.g. walk-ins).
  *     tags: [Room Management]
  *     security:
  *       - bearerAuth: []
@@ -1081,7 +1083,8 @@ router.get('/rooms/my-room', authenticateToken, UserController.getMyRoom);
  *     summary: Select room for doctor
  *     description: |
  *       Allows Faculty, Admin, or Resident doctors to select their room for the day.
- *       Automatically assigns all patients in that room to the doctor.
+ *       Selection does not require patients to be pre-registered for that room today.
+ *       Any patients already tied to that room for today are assigned to the doctor; if there are none yet, the room is still claimed for walk-ins and new registrations.
  *     tags: [Room Management]
  *     security:
  *       - bearerAuth: []

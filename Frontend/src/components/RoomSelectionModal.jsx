@@ -102,20 +102,19 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
     return null;
   }
 
-  const rooms = roomsData?.data?.rooms || []; // These are only available (unoccupied) rooms
+  const rooms = roomsData?.data?.rooms || []; // All active rooms; occupied ones are disabled below
   const distribution = roomsData?.data?.distribution_today || {}; // Use today's distribution for day-specific room selection
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
   const roomOptions = rooms.map(room => {
     const totalPatients = distribution[room] || 0;
-    // Disable rooms with zero patients
-    const isDisabled = totalPatients === 0;
-    
+    const isOccupied = occupiedRooms[room] !== undefined;
+    const occupiedBy = isOccupied ? occupiedRooms[room]?.doctor_name : null;
     return {
       value: room,
-      label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''} today)`,
-      disabled: isDisabled,
-      disabledReason: isDisabled ? 'This room has no patients assigned' : undefined,
+      label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''} today)${isOccupied ? ` - Assigned to ${occupiedBy || 'Doctor'}` : ''}`,
+      disabled: isOccupied,
+      disabledReason: isOccupied ? `This room is already assigned to ${occupiedBy || 'another doctor'}` : undefined,
     };
   });
 
@@ -126,21 +125,19 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
       // Only add if not occupied
       if (!occupiedRooms[roomName]) {
         const totalPatients = distribution[roomName] || 0;
-        // Disable rooms with zero patients
-        const isDisabled = totalPatients === 0;
-        
         roomOptions.push({
           value: roomName,
           label: `${roomName} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''})`,
-          disabled: isDisabled,
-          disabledReason: isDisabled ? 'This room has no patients assigned' : undefined,
+          disabled: false,
+          disabledReason: undefined,
         });
       }
     }
   }
   
-  // Show message if all rooms are occupied
-  const allRoomsOccupied = roomOptions.length === 0 && Object.keys(occupiedRooms).length > 0;
+  const allRoomsOccupied =
+    (roomOptions.length === 0 && Object.keys(occupiedRooms).length > 0) ||
+    (roomOptions.length > 0 && roomOptions.every((o) => o.disabled));
 
   return (
     <Modal
@@ -154,9 +151,9 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
         <div className="space-y-4">
           <p className="text-sm text-gray-600 mb-4">
             Please select the room you are sitting in today and the time you started.
-            All unassigned patients in this room will be automatically assigned to you.
+            You may choose a room even if no patients are listed for it yet today (for example walk-ins). Patients already tied to that room for today will be assigned to you.
             <span className="block mt-1 text-xs text-orange-600 font-medium">
-              Note: Only one doctor can be assigned to each room. Rooms already assigned to other doctors are not shown.
+              Note: Only one doctor can be assigned to each room. Rooms taken by other doctors appear in the list but cannot be selected.
             </span>
           </p>
 
@@ -177,7 +174,10 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
                 <Select
                   name="room"
                   value={selectedRoom}
-                  onChange={(e) => setSelectedRoom(e.target.value)}
+                  onChange={(e) => {
+                    const opt = roomOptions.find((o) => o.value === e.target.value);
+                    if (opt && !opt.disabled) setSelectedRoom(e.target.value);
+                  }}
                   options={roomOptions}
                   placeholder="Select room"
                   searchable={true}
@@ -191,14 +191,12 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
                 )}
                 {Object.keys(occupiedRooms).length > 0 && (
                   <p className="text-xs text-gray-500 mt-1 italic">
-                    {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and are not shown.
+                    {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and cannot be selected.
                   </p>
                 )}
-                {roomOptions.some(opt => opt.disabled && (distribution[opt.value] || 0) === 0) && (
-                  <p className="text-xs text-gray-500 mt-1 italic">
-                    Rooms with zero patients are disabled and cannot be selected.
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 mt-1 italic">
+                  You can select any free room, even if no patients are listed for it yet today.
+                </p>
               </>
             )}
           </div>
@@ -257,7 +255,14 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
           <Button
             type="submit"
             loading={isSubmitting || isSelectingRoom}
-            disabled={isSubmitting || isSelectingRoom || !selectedRoom || !assignmentTime || allRoomsOccupied}
+            disabled={
+              isSubmitting ||
+              isSelectingRoom ||
+              !selectedRoom ||
+              !assignmentTime ||
+              allRoomsOccupied ||
+              Boolean(roomOptions.find((o) => o.value === selectedRoom)?.disabled)
+            }
             className="bg-[#0ea5e9] hover:bg-[#0284c7]"
           >
             <FiCheck className="mr-2" />

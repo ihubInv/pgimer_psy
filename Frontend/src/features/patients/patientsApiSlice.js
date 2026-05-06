@@ -383,6 +383,53 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         ];
       },
     }),
+
+    /** Append/remove files on child registration (`POST /child-patient/:id/documents`) */
+    updateChildPatientDocuments: builder.mutation({
+      queryFn: async ({ id, files = [], files_to_remove = [] }, _queryApi, _extraOptions) => {
+        const formData = new FormData();
+        if (files_to_remove && files_to_remove.length > 0) {
+          formData.append('files_to_remove', JSON.stringify(files_to_remove));
+        }
+        (files || []).forEach((file) => {
+          formData.append('files', file);
+        });
+
+        const baseUrl = import.meta.env.VITE_API_URL || '/api';
+        let token = localStorage.getItem('token');
+        try {
+          const rawUser = localStorage.getItem('user');
+          if (rawUser) {
+            const parsed = JSON.parse(rawUser);
+            if (parsed?.token) token = parsed.token;
+          }
+        } catch {
+          /* keep token */
+        }
+
+        try {
+          const response = await fetch(`${baseUrl}/child-patient/${id}/documents`, {
+            method: 'POST',
+            headers: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: formData,
+            credentials: 'include',
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            return { error: { status: response.status, data } };
+          }
+          return { data };
+        } catch (error) {
+          return { error: { status: 'FETCH_ERROR', error: error.message } };
+        }
+      },
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'ChildPatient', id },
+        { type: 'ChildPatient', id: 'LIST' },
+      ],
+    }),
   }),
 });
 
@@ -414,5 +461,6 @@ export const {
   useGetChildPatientByCRNoQuery,
   useAddChildPatientToTodayListMutation,
   useDeleteChildPatientMutation,
+  useUpdateChildPatientDocumentsMutation,
 } = patientsApiSlice;
 

@@ -937,9 +937,15 @@ class UserController {
       );
       console.log(`[selectRoom] Assignment result: ${assignmentResult.assigned} patient(s) assigned`);
 
+      const assignedCount = assignmentResult.assigned;
+      const assignSuffix =
+        assignedCount === 0
+          ? 'No patients are listed in this room for today yet; you can still use it for walk-ins and new registrations.'
+          : `${assignedCount} patient(s) assigned to you.`;
+
       res.json({
         success: true,
-        message: `Room ${roomNumber} selected successfully. ${assignmentResult.assigned} patient(s) assigned to you.`,
+        message: `Room ${roomNumber} selected successfully. ${assignSuffix}`,
         data: {
           room: roomNumber,
           assignment_time: assignmentTime,
@@ -1023,7 +1029,7 @@ class UserController {
           rooms: allRooms, // ALL rooms (including occupied ones)
           available_rooms: availableRooms, // Only available (unoccupied) rooms (for backward compatibility)
           distribution, // All patients (for consistency with deletion validation)
-          distribution_today: todayDistribution, // Today's patients only (for reference)
+          distribution_today: todayDistribution, // Today's patient counts per room (informational; must not gate room selection)
           occupied_rooms: occupiedRoomsInfo // Info about which rooms are taken and by whom
         }
       });
@@ -1223,9 +1229,15 @@ class UserController {
       );
       console.log(`[changeDoctorRoom] Assignment result: ${assignmentResult.assigned} patient(s) assigned`);
 
+      const changedAssigned = assignmentResult.assigned;
+      const changedSuffix =
+        changedAssigned === 0
+          ? `No patients are listed in that room for today yet; Dr. ${doctor.name} can still work there for walk-ins.`
+          : `${changedAssigned} patient(s) assigned to Dr. ${doctor.name}.`;
+
       res.json({
         success: true,
-        message: `Doctor's room changed successfully. ${assignmentResult.assigned} patient(s) assigned to Dr. ${doctor.name}.`,
+        message: `Doctor's room changed successfully. ${changedSuffix}`,
         data: {
           doctor: {
             id: doctor.id,

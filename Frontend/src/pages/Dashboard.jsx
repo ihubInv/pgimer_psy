@@ -912,7 +912,7 @@ const Dashboard = () => {
               const rooms = allRoomsForAdmin?.data?.rooms || [];
               const distributionToday = roomDistributionData?.data?.distribution_today || {};
               
-              // Combine rooms with patient counts
+              // Combine rooms with patient counts (counts are informational; zero does not mean the room is unusable)
               const roomsWithCounts = rooms
                 .filter(room => room.is_active)
                 .map(room => ({
@@ -940,33 +940,18 @@ const Dashboard = () => {
                         onClick={() => setSelectedRoomForPatients(room.room_number)}
                         className={`
                           p-4 rounded-lg border-2 cursor-pointer transition-all transform hover:scale-105
-                          ${room.patientCount > 0
-                            ? 'border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50 hover:shadow-lg'
-                            : 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:shadow-md'
-                          }
+                          border-blue-200 bg-gradient-to-br from-blue-50/90 to-indigo-50/90 hover:border-blue-300 hover:shadow-lg
                         `}
                       >
                         <div className="flex flex-col items-center text-center space-y-2">
-                          <div className={`
-                            w-12 h-12 rounded-full flex items-center justify-center
-                            ${room.patientCount > 0
-                              ? 'bg-blue-100 text-blue-600'
-                              : 'bg-gray-100 text-gray-400'
-                            }
-                          `}>
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-blue-100 text-blue-600">
                             <FiHome className="w-6 h-6" />
                           </div>
                           <div>
                             <p className="font-semibold text-gray-900">{room.room_number}</p>
                             <p className="text-xs text-gray-600 mt-1">Room</p>
                           </div>
-                          <div className={`
-                            px-3 py-1 rounded-full text-sm font-bold
-                            ${room.patientCount > 0
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-500'
-                            }
-                          `}>
+                          <div className="px-3 py-1 rounded-full text-sm font-bold bg-blue-100 text-blue-700">
                             {room.patientCount} {room.patientCount === 1 ? 'Patient' : 'Patients'}
                           </div>
                           {room.assigned_doctor && (
@@ -1276,11 +1261,11 @@ const Dashboard = () => {
               subtitle="Total assigned patients"
             />
             <StatCard 
-              title="Total Out Patient Intake Record" 
+              title="Adult Intake Records (ADL)" 
               value={stats.adlFileCount} 
               icon={FiFolder} 
               colorClasses="from-purple-500 to-purple-600"
-              subtitle="Patients with ADL files"
+              subtitle="Adult patients with ADL files"
             />
             <StatCard 
               title="Assigned Patients Count" 
@@ -1737,11 +1722,11 @@ const Dashboard = () => {
               subtitle="Total assigned patients"
             />
             <StatCard 
-              title="Total Out Patient Intake Record" 
+              title="Adult Intake Records (ADL)" 
               value={stats.adlFileCount} 
               icon={FiFolder} 
               colorClasses="from-purple-500 to-purple-600"
-              subtitle="Patients with ADL files"
+              subtitle="Adult patients with ADL files"
             />
             <StatCard 
               title="Assigned Patients Count" 

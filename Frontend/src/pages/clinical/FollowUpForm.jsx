@@ -5,10 +5,13 @@ import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { useCreateFollowUpMutation } from '../../features/followUp/followUpApiSlice';
+import { useGetPatientFilesQuery, useUpdatePatientFilesMutation, useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
 import Textarea from '../../components/Textarea';
-import { FiArrowLeft, FiSave, FiUser, FiCalendar, FiHash, FiPhone } from 'react-icons/fi';
+import FileUpload from '../../components/FileUpload';
+import FilePreview from '../../components/FilePreview';
+import { FiArrowLeft, FiSave, FiUser, FiCalendar, FiHash, FiPhone, FiFileText } from 'react-icons/fi';
 
 const FollowUpForm = () => {
   const { id } = useParams();
@@ -38,8 +41,19 @@ const FollowUpForm = () => {
 
   const [followUpAssessment, setFollowUpAssessment] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [filesToRemove, setFilesToRemove] = useState([]);
 
   const [createFollowUp, { isLoading: isCreatingFollowUp }] = useCreateFollowUpMutation();
+  const { data: patientFilesData } = useGetPatientFilesQuery(patientId, {
+    skip: !patientId,
+    refetchOnMountOrArgChange: true,
+  });
+  const [updatePatientFiles, { isLoading: isUploadingFiles }] = useUpdatePatientFilesMutation();
+  const [createPatientFiles] = useCreatePatientFilesMutation();
+
+  const existingFiles = patientFilesData?.data?.files || [];
+  const canEditFiles = patientFilesData?.data?.can_edit !== false;
 
   const handleSave = async (retryCount = 0) => {
     if (!patientId) {
@@ -84,7 +98,48 @@ const FollowUpForm = () => {
       console.log('[FollowUpForm] Follow-up visit created:', createdFollowUpId);
 
       toast.success('Follow-up visit saved successfully');
-      
+
+      if (
+        patientId &&
+        ((selectedFiles && selectedFiles.length > 0) || (filesToRemove && filesToRemove.length > 0))
+      ) {
+        try {
+          const hasExistingFiles = existingFiles && existingFiles.length > 0;
+
+          if (hasExistingFiles && (selectedFiles.length > 0 || filesToRemove.length > 0)) {
+            await updatePatientFiles({
+              patient_id: patientId,
+              files: selectedFiles,
+              files_to_remove: filesToRemove,
+            }).unwrap();
+
+            if (selectedFiles.length > 0) {
+              toast.success(`${selectedFiles.length} file(s) uploaded successfully!`);
+            }
+            if (filesToRemove.length > 0) {
+              toast.success(`${filesToRemove.length} file(s) removed successfully!`);
+            }
+
+            setSelectedFiles([]);
+            setFilesToRemove([]);
+            // Do not refetch here: we navigate away immediately below; delayed refetch after
+            // unmount throws RTK Query error #38. Mutations already invalidate patient file tags.
+          } else if (selectedFiles.length > 0) {
+            await createPatientFiles({
+              patient_id: patientId,
+              user_id: currentUser?.id,
+              files: selectedFiles,
+            }).unwrap();
+
+            toast.success(`${selectedFiles.length} file(s) uploaded successfully!`);
+            setSelectedFiles([]);
+          }
+        } catch (fileErr) {
+          console.error('File upload error:', fileErr);
+          toast.error(fileErr?.data?.message || 'Failed to update files. Follow-up visit was saved.');
+        }
+      }
+
       // Navigate back to today's patients
       navigate('/clinical-today-patients');
     } catch (error) {
@@ -264,6 +319,68 @@ const FollowUpForm = () => {
             </div>
           </Card>
 
+          {/* Patient Documents & Files */}
+          {patientId && (
+            <Card className="shadow-lg">
+              <div className="p-6 space-y-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-2 border-b pb-2 flex items-center gap-2">
+                  <div className="p-2 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-lg border border-white/30">
+                    <FiFileText className="w-5 h-5 text-purple-600" />
+                  </div>
+                  Patient Documents & Files
+                </h2>
+                <p className="text-sm text-gray-500 -mt-2">
+                  Optional: attach PDFs or images to this patient&apos;s file. Upload runs when you save the follow-up visit.
+                </p>
+
+                <div>
+                  <FileUpload
+                    files={selectedFiles}
+                    onFilesChange={setSelectedFiles}
+                    maxFiles={20}
+                    maxSizeMB={10}
+                    patientId={patientId}
+                    disabled={!patientId}
+                  />
+                </div>
+
+                {existingFiles && existingFiles.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                      Existing files (
+                      {existingFiles.filter((file) => !filesToRemove.includes(file)).length})
+                    </h3>
+                    <FilePreview
+                      files={existingFiles.filter((file) => !filesToRemove.includes(file))}
+                      onDelete={
+                        canEditFiles
+                          ? (filePath) => {
+                              setFilesToRemove((prev) =>
+                                prev.includes(filePath) ? prev : [...prev, filePath]
+                              );
+                            }
+                          : undefined
+                      }
+                      canDelete={canEditFiles}
+                      baseUrl={import.meta.env.VITE_API_URL || '/api'}
+                    />
+                  </div>
+                )}
+                {existingFiles && existingFiles.length === 0 && (
+                  <p className="text-center py-2 text-gray-500 text-sm">No files uploaded yet</p>
+                )}
+
+                {filesToRemove.length > 0 && (
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      <strong>{filesToRemove.length}</strong> file(s) will be removed when you save.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
           {/* Info Note */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
@@ -283,8 +400,14 @@ const FollowUpForm = () => {
             </Button>
             <Button
               onClick={handleSave}
-              loading={isSaving || isCreatingFollowUp}
-              disabled={isSaving || isCreatingFollowUp || !patientId || !followUpAssessment.trim()}
+              loading={isSaving || isCreatingFollowUp || isUploadingFiles}
+              disabled={
+                isSaving ||
+                isCreatingFollowUp ||
+                isUploadingFiles ||
+                !patientId ||
+                !followUpAssessment.trim()
+              }
               className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-lg px-8"
             >
               <FiSave className="w-4 h-4 mr-2" />

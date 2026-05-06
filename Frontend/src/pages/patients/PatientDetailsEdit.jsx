@@ -153,6 +153,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   const [expandedPastHistoryCards, setExpandedPastHistoryCards] = useState({
     patientDetails: false,
     intakeRecord: false,
+    patientDocuments: true,
   });
 
   // State to toggle editing the first visit proforma inline
@@ -5403,6 +5404,11 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                     : patientAdlFiles.length > 0
                       ? 'Out Patient Intake Record on file — View only'
                       : 'No past visits - View only'}
+                  {patient?.id && existingFiles.length > 0 && (
+                    <span className="block sm:inline sm:before:content-['\00a0•\00a0'] mt-1 sm:mt-0 text-indigo-700">
+                      {existingFiles.length} document{existingFiles.length !== 1 ? 's' : ''} on file
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -5593,6 +5599,58 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                             </div>
                           )}
                         </Card>
+
+                        {patient?.id && (
+                          <Card className="shadow-md border-2 border-indigo-200">
+                            <div
+                              className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-indigo-50/50 transition-colors cursor-pointer"
+                              onClick={() => togglePastHistoryCard('patientDocuments')}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-indigo-100 rounded-lg">
+                                  <FiFileText className="h-5 w-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                  <h4 className="text-lg font-bold text-gray-900">
+                                    Patient documents & files
+                                  </h4>
+                                  <p className="text-sm text-gray-500 mt-0.5">
+                                    {existingFiles.length > 0
+                                      ? `${existingFiles.length} file${existingFiles.length !== 1 ? 's' : ''} on record (follow-up and proforma uploads included)`
+                                      : 'No scanned documents on file'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="cursor-pointer">
+                                {expandedPastHistoryCards.patientDocuments ? (
+                                  <FiChevronUp className="h-5 w-5 text-gray-500" />
+                                ) : (
+                                  <FiChevronDown className="h-5 w-5 text-gray-500" />
+                                )}
+                              </div>
+                            </div>
+                            {expandedPastHistoryCards.patientDocuments && (
+                              <div className="p-6">
+                                <p className="text-sm text-gray-600 mb-4">
+                                  View-only in Past History; add or remove files from the Patient Details card above.
+                                </p>
+                                {existingFiles.length > 0 ? (
+                                  <FilePreview
+                                    files={existingFiles}
+                                    patient_id={patient.id}
+                                    canDelete={false}
+                                    baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
+                                    refetchFiles={refetchFiles}
+                                  />
+                                ) : (
+                                  <p className="text-center py-8 text-gray-500 rounded-lg border border-dashed border-gray-200 bg-gray-50/50">
+                                    No documents uploaded yet.
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </Card>
+                        )}
 
                         {canViewAllSections && orphanPastHistoryAdlFiles.length > 0 && (
                           <Card className="shadow-md border-2 border-orange-200">

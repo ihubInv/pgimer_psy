@@ -45,7 +45,8 @@ const RoomPatientsModal = ({ isOpen, onClose, roomNumber }) => {
               <div className="text-center py-12 text-gray-500">
                 <FiUsers className="w-16 h-16 mx-auto mb-4 text-gray-300" />
                 <p className="text-lg font-medium">No patients assigned to this room today</p>
-                <p className="text-sm mt-2">Patients registered today or with visits today will appear here</p>
+                <p className="text-sm mt-2">Patients registered today or with visits today will appear here.</p>
+                <p className="text-sm mt-2 text-gray-600">A count of zero does not mean the room is closed—doctors may still select it and see walk-ins.</p>
               </div>
             ) : (
               <div className="max-h-96 overflow-y-auto space-y-2">

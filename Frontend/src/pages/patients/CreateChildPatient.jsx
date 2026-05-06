@@ -38,10 +38,11 @@ import { useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
 import { useGetChildClinicalProformasByChildPatientIdQuery } from '../../features/clinical/childClinicalApiSlice';
 import { useGetFollowUpsByChildPatientIdQuery } from '../../features/followUp/followUpApiSlice';
 import { useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
-import { useGetADLFilesByChildPatientIdQuery } from '../../features/adl/adlApiSlice';
+import { useGetChildCapWorkupsByChildPatientIdQuery } from '../../features/childCapWorkup/childCapWorkupApiSlice';
 import { formatDate } from '../../utils/formatters';
 import EditChildClinicalProforma from '../clinical/EditChildClinicalProforma';
-import EditADL from '../adl/EditADL';
+import EditChildCapWorkup, { CHILD_CAP_INTAKE_COMING_SOON } from '../adl/EditChildCapWorkup';
+import ChildCapIntakeComingSoon from '../../components/ChildCapIntakeComingSoon';
 import ChildPatientRegistrationViewCards from '../../components/ChildPatientRegistrationViewCards';
 import ChildClinicalProformaSummaryView from '../../components/ChildClinicalProformaSummaryView';
 import FilePreview from '../../components/FilePreview';
@@ -202,8 +203,8 @@ const CreateChildPatient = () => {
     }
   );
 
-  const { data: childAdlData, isLoading: isLoadingChildAdl } = useGetADLFilesByChildPatientIdQuery(id, {
-    skip: !id || !isViewMode,
+  const { data: childCapWorkupData, isLoading: isLoadingChildCapWorkup } = useGetChildCapWorkupsByChildPatientIdQuery(id, {
+    skip: !id || !isViewMode || CHILD_CAP_INTAKE_COMING_SOON,
     refetchOnMountOrArgChange: true,
   });
   
@@ -246,7 +247,7 @@ const CreateChildPatient = () => {
     ? prescriptionData.data.prescriptions
     : [];
 
-  const childAdlFiles = Array.isArray(childAdlData?.data?.adlFiles) ? childAdlData.data.adlFiles : [];
+  const childCapWorkupRecords = Array.isArray(childCapWorkupData?.data?.records) ? childCapWorkupData.data.records : [];
 
   const childDocumentFilesForPreview = useMemo(() => {
     const docs = Array.isArray(formData.documents) ? [...formData.documents] : [];
@@ -1542,8 +1543,14 @@ const CreateChildPatient = () => {
                     <FiFolder className="h-6 w-6 text-purple-600" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">Out Patient Intake Record</h3>
-                    <p className="mt-1 text-sm text-gray-500">ADL / intake files for this child patient</p>
+                    <h3 className="text-xl font-bold text-gray-900">CAP Detailed Work-up Record</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {CHILD_CAP_INTAKE_COMING_SOON
+                        ? 'Coming soon — detailed intake work-up is being updated'
+                        : childCapWorkupRecords.length > 0
+                          ? `Record created ${formatDate(childCapWorkupRecords[0].created_at)}`
+                          : 'Child & Adolescent Psychiatry intake record'}
+                    </p>
                   </div>
                 </div>
                 <div className="cursor-pointer" onClick={() => toggleCard('viewIntake')}>
@@ -1556,34 +1563,30 @@ const CreateChildPatient = () => {
               </div>
               {expandedCards.viewIntake && (
                 <div className="p-6">
-                  {isLoadingChildAdl ? (
+                  {CHILD_CAP_INTAKE_COMING_SOON ? (
+                    <ChildCapIntakeComingSoon />
+                  ) : isLoadingChildCapWorkup ? (
                     <p className="text-sm text-gray-500">Loading…</p>
-                  ) : childAdlFiles.length === 0 ? (
+                  ) : childCapWorkupRecords.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-4 py-8 text-center">
                       <p className="text-sm font-medium text-gray-500">Not created yet</p>
                     </div>
                   ) : (
                     <ul className="space-y-2">
-                      {childAdlFiles.map((file) => (
+                      {childCapWorkupRecords.map((rec) => (
                         <li
-                          key={file.id}
+                          key={rec.id}
                           className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm"
                         >
                           <span className="text-gray-800">
-                            {file.adl_no ? `ADL ${file.adl_no}` : `Intake record #${file.id}`}
-                            {file.created_at && (
-                              <span className="text-gray-500"> · {formatDate(file.created_at)}</span>
+                            {rec.cap_no ? `CAP ${rec.cap_no}` : `Work-up record #${rec.id}`}
+                            {rec.created_at && (
+                              <span className="text-gray-500"> · {formatDate(rec.created_at)}</span>
+                            )}
+                            {rec.provisional_diagnosis && (
+                              <span className="text-gray-600"> · {rec.provisional_diagnosis}</span>
                             )}
                           </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => navigate(`/adl-files/${file.id}/view`)}
-                          >
-                            <FiEye className="mr-1 inline" />
-                            View
-                          </Button>
                         </li>
                       ))}
                     </ul>
@@ -1826,9 +1829,11 @@ const CreateChildPatient = () => {
                     <FiFolder className="h-6 w-6 text-purple-600" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">Out Patient Intake Record</h3>
+                    <h3 className="text-xl font-bold text-gray-900">CAP Detailed Work-up Record</h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      Out-patient intake record (ADL) for this patient
+                      {CHILD_CAP_INTAKE_COMING_SOON
+                        ? 'Coming soon — detailed intake work-up is being updated'
+                        : 'Child & Adolescent Psychiatry detailed intake record'}
                     </p>
                   </div>
                 </div>
@@ -1846,10 +1851,9 @@ const CreateChildPatient = () => {
 
               {expandedCards.intakeRecord && (
                 <div className="p-6">
-                  <EditADL
+                  <EditChildCapWorkup
                     isEmbedded={true}
                     childPatientId={id}
-                    patientId={null}
                   />
                 </div>
               )}
@@ -1943,6 +1947,12 @@ const CreateChildPatient = () => {
                     {childFollowUps.length > 0
                       ? `${childFollowUps.length} follow-up visit${childFollowUps.length !== 1 ? 's' : ''} on ${unifiedVisits.length} day${unifiedVisits.length !== 1 ? 's' : ''} — view only`
                       : 'No follow-up visits — view only'}
+                    {childDocumentFilesForPreview.length > 0 && (
+                      <span className="block sm:inline sm:before:content-['\00a0•\00a0'] mt-1 sm:mt-0 text-indigo-700">
+                        {childDocumentFilesForPreview.length} document
+                        {childDocumentFilesForPreview.length !== 1 ? 's' : ''} on file
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1960,6 +1970,30 @@ const CreateChildPatient = () => {
 
             {expandedCards.pastHistory && (
               <div className="p-6 space-y-4">
+                <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-white p-5 shadow-sm">
+                  <h4 className="mb-2 flex items-center gap-2 text-lg font-bold text-gray-900">
+                    <span className="rounded-lg border border-indigo-100 bg-white p-2 shadow-sm">
+                      <FiFileText className="h-5 w-5 text-indigo-600" />
+                    </span>
+                    Patient documents & files
+                  </h4>
+                  <p className="mb-4 text-sm text-gray-600">
+                    Registration and follow-up uploads stored on this child&apos;s record (same files as in Patient Documents above).
+                  </p>
+                  {childDocumentFilesForPreview.length > 0 ? (
+                    <FilePreview
+                      files={childDocumentFilesForPreview}
+                      patient_id={null}
+                      canDelete={false}
+                      baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
+                    />
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-gray-200 bg-white py-6 text-center text-sm text-gray-500">
+                      No documents uploaded yet.
+                    </p>
+                  )}
+                </div>
+
                 {unifiedVisits.length > 0 ? (
                   <div className="space-y-6">
                     {unifiedVisits.map((visitGroup) => {

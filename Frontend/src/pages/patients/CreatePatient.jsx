@@ -1688,7 +1688,7 @@ const CreatePatient = () => {
                                   error={errors.assigned_room}
                                 />
                                 <p className="text-xs text-gray-500 italic">
-                                  Room selection is mandatory. When a doctor selects a room, all patients in that room will be assigned to that doctor.
+                                  Room selection is mandatory. Choose any active room, including one with &quot;0 patients today&quot;—that only means no one is pre-registered yet (walk-ins are fine). When a doctor has selected a room for the day, patients registered or seen in that room are assigned accordingly.
                                 </p>
                               </div>
                         </div>

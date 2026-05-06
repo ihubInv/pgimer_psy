@@ -264,6 +264,136 @@ class ChildPatientController {
     }
   }
 
+  /**
+   * Append or remove document files for an existing child patient (e.g. from follow-up form).
+   * POST /api/child-patient/:id/documents — multipart: files (field "files" or "attachments[]"), files_to_remove (JSON array string)
+   */
+  static async updateChildPatientDocuments(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id) || id <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid child patient ID',
+        });
+      }
+
+      const childPatient = await ChildPatientRegistration.findById(id);
+      if (!childPatient) {
+        return res.status(404).json({
+          success: false,
+          message: 'Child patient not found',
+        });
+      }
+
+      let docs = Array.isArray(childPatient.documents) ? [...childPatient.documents] : [];
+      if (typeof docs === 'string') {
+        try {
+          docs = JSON.parse(docs);
+        } catch {
+          docs = [];
+        }
+      }
+      if (!Array.isArray(docs)) docs = [];
+
+      let toRemove = [];
+      if (req.body.files_to_remove != null && req.body.files_to_remove !== '') {
+        if (typeof req.body.files_to_remove === 'string') {
+          try {
+            const parsed = JSON.parse(req.body.files_to_remove);
+            toRemove = Array.isArray(parsed) ? parsed : [req.body.files_to_remove];
+          } catch {
+            toRemove = [req.body.files_to_remove];
+          }
+        } else if (Array.isArray(req.body.files_to_remove)) {
+          toRemove = req.body.files_to_remove;
+        }
+      }
+
+      const normalizeStoragePath = (p) => {
+        if (p == null) return '';
+        let s = String(p).trim();
+        if (s.startsWith('http://') || s.startsWith('https://')) {
+          try {
+            s = new URL(s).pathname;
+          } catch {
+            // keep s
+          }
+        }
+        s = s.split('?')[0].replace(/\\/g, '/');
+        if (s && !s.startsWith('/')) s = `/${s}`;
+        return s;
+      };
+
+      const pathsMatch = (a, b) => {
+        const na = normalizeStoragePath(a);
+        const nb = normalizeStoragePath(b);
+        if (!na || !nb) return false;
+        if (na === nb) return true;
+        return na.endsWith(nb) || nb.endsWith(na);
+      };
+
+      const removedForFs = [];
+      docs = docs.filter((d) => {
+        const shouldRemove = toRemove.some((r) => pathsMatch(d, r));
+        if (shouldRemove) removedForFs.push(d);
+        return !shouldRemove;
+      });
+
+      for (const rel of removedForFs) {
+        try {
+          const pathForFs = rel.startsWith('/') ? rel : `/${rel}`;
+          const abs = uploadConfig.urlPathToAbsolutePath(pathForFs);
+          if (abs) {
+            await fs.unlink(abs).catch(() => {});
+          }
+        } catch (unlinkErr) {
+          console.warn('[updateChildPatientDocuments] Could not delete file from disk:', unlinkErr.message);
+        }
+      }
+
+      const fileList = Array.isArray(req.files) ? req.files : [];
+      if (fileList.length > 0) {
+        const role = uploadConfig.mapRoleToFolder(req.user?.role);
+        const uploadDir = path.join(
+          uploadConfig.getAbsolutePath(uploadConfig.PATIENT_FILES_PATH),
+          role,
+          'Child_Patient_Registration',
+          String(id)
+        );
+        await fs.mkdir(uploadDir, { recursive: true });
+
+        for (const file of fileList) {
+          const safeName = String(file.originalname || 'file').replace(/[^a-zA-Z0-9.-]/g, '_');
+          const fileName = `${Date.now()}_${safeName}`;
+          const destPath = path.join(uploadDir, fileName);
+          await fs.copyFile(file.path, destPath);
+          const urlPath = uploadConfig.getUrlPath(destPath);
+          docs.push(urlPath);
+        }
+      }
+
+      const updated = await ChildPatientRegistration.updateDocumentsAndPhoto(
+        id,
+        docs,
+        childPatient.photo_path
+      );
+
+      return res.json({
+        success: true,
+        message: 'Documents updated successfully',
+        data: { childPatient: updated.toJSON() },
+      });
+    } catch (error) {
+      console.error('[childPatientController.updateChildPatientDocuments] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update documents',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+  }
+
   // Add child patient to today's list (update assigned_room)
   static async addChildPatientToTodayList(req, res) {
     try {

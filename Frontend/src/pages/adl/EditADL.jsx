@@ -97,6 +97,14 @@ const EditADL = ({
   const childPatientIdFromQuery = searchParams.get('child_patient_id');
   const clinicalProformaIdFromQuery = searchParams.get('clinical_proforma_id');
 
+  // Child patients use the CAP Detailed Work-up on the child patient profile (UI currently shows Coming Soon — see EditChildCapWorkup.jsx).
+  // Redirect any direct /adl/new?child_patient_id=... URL to the child patient page.
+  useEffect(() => {
+    if (!isEmbedded && childPatientIdFromQuery) {
+      navigate(`/child-patient/${childPatientIdFromQuery}`, { replace: true });
+    }
+  }, [isEmbedded, childPatientIdFromQuery, navigate]);
+
   // Use prop id if provided, otherwise use URL param
   // Note: for /adl/patient/:id route, the :id is the patient_id, not the ADL file id
   const id = adlFileId || urlId;

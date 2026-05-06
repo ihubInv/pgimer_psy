@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { 
   FiSearch, FiEye, FiDownload, FiUpload, FiArchive, 
   FiFileText, FiUsers, FiShield, FiClock, FiTrendingUp,
-  FiMoreVertical, FiCalendar, FiCheckCircle, FiEdit
+  FiMoreVertical, FiCalendar, FiCheckCircle, FiEdit, FiFolder
 } from 'react-icons/fi';
 import {
   useGetAllADLFilesQuery,
@@ -208,7 +208,24 @@ const ADLFilesPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-       
+
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <FiFolder className="h-6 w-6 text-purple-600" />
+              Out Patient Intake Records
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Adult patient intake (ADL) files. &nbsp;
+              <span className="text-purple-600 font-medium">Child patients</span>
+              {' '}
+              will use the <span className="font-medium">CAP Detailed Work-up Record</span> from their patient profile when it is released (
+              <span className="font-medium text-amber-700">coming soon</span>).
+            </p>
+          </div>
+        </div>
+
         {/* Main Content Card */}
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
           {error && (

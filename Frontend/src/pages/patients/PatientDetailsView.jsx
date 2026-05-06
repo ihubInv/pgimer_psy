@@ -4004,6 +4004,11 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                   {pastHistoryFollowUpCount > 0
                     ? `${pastHistoryFollowUpCount} follow-up visit${pastHistoryFollowUpCount !== 1 ? 's' : ''} on ${pastHistoryFollowUpDays.length} day${pastHistoryFollowUpDays.length !== 1 ? 's' : ''} — view only`
                     : 'No follow-up visits — view only'}
+                  {patient?.id && existingFiles.length > 0 && (
+                    <span className="block sm:inline sm:before:content-['\00a0•\00a0'] mt-1 sm:mt-0 text-indigo-700">
+                      {existingFiles.length} document{existingFiles.length !== 1 ? 's' : ''} on file
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -4018,6 +4023,33 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
           {expandedCards.pastHistory && (
             <div className="space-y-4 p-6">
+              {patient?.id && (
+                <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-white p-5 shadow-sm">
+                  <h4 className="mb-2 flex items-center gap-2 text-lg font-bold text-gray-900">
+                    <span className="rounded-lg border border-indigo-100 bg-white p-2 shadow-sm">
+                      <FiFileText className="h-5 w-5 text-indigo-600" />
+                    </span>
+                    Patient documents & files
+                  </h4>
+                  <p className="mb-4 text-sm text-gray-600">
+                    Scanned files on record (including uploads from follow-up visits, walk-in proforma, and this profile).
+                  </p>
+                  {existingFiles.length > 0 ? (
+                    <FilePreview
+                      files={existingFiles}
+                      patient_id={patient.id}
+                      canDelete={false}
+                      baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
+                      refetchFiles={refetchFiles}
+                    />
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-gray-200 bg-white py-6 text-center text-sm text-gray-500">
+                      No documents uploaded yet.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {pastHistoryFollowUpDays.length > 0 ? (
                 <div className="space-y-6">
                   {pastHistoryFollowUpDays.map((visitGroup) => {

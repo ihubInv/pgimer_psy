@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiPhone,  FiClock, FiEye,
@@ -20,8 +20,8 @@ import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { isAdmin, isMWO, isJrSr, isSR, isJR } from '../../utils/constants';
 
-// Component to check for existing proforma and render patient row
-const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkCompleted, onRoomChanged, availableRooms = [] }) => {
+// listContext: 'new' = New Patients sub-tab (strip returning-patient-only actions); 'existing' = full actions
+const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availableRooms = [], listContext = 'existing' }) => {
   // Get patient ID safely - use 0 if invalid to satisfy hook rules (skip will prevent API call)
   const patientId = patient?.id || 0;
   const isValidPatient = Boolean(patient && patient.id);
@@ -352,7 +352,10 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
                 been filled yet today. That is the correct signal for a returning patient on
                 a different visit date who needs a follow-up note rather than a new proforma.
             */}
-            {(!hasPastHistory || hasProformaToday) && (() => {
+            {(
+              (!hasPastHistory || hasProformaToday) ||
+              (listContext === 'new' && hasPastHistory && !hasProformaToday)
+            ) && (() => {
               // If a proforma was already filled today, open it for editing.
               // Otherwise open a blank new form.
               const handleClinicalProformaClick = () => {
@@ -384,10 +387,8 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
               );
             })()}
             
-            {/* Follow-Up Button - Show only when patient has past history AND no proforma today */}
-            {/* If today's proforma is already filled (hasProformaToday), the "Clinical Proforma" */}
-            {/* button takes priority so the doctor can edit the existing record.                  */}
-            {(hasPastHistory && !hasProformaToday) && (() => {
+            {/* Follow-Up — returning patients only; shown only on Existing Patients sub-tab */}
+            {listContext === 'existing' && (hasPastHistory && !hasProformaToday) && (() => {
               const isChildPatient = patient.patient_type === 'child';
               
               if (isChildPatient) {
@@ -425,27 +426,23 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
               }
             })()}
             
-            {/* Out Patient Intake Record Button */}
-            {/* For child patients: Show standard ADL (Intake Record) form, linked to child_patient_id */}
-            {/* For adult patients: Show ADL (Out Patient Intake Record) form */}
+            {/* Intake Record Button */}
+            {/* For child patients: Navigate to the child patient page (CAP intake work-up section — coming soon in UI) */}
+            {/* For adult patients: Navigate to the ADL (Out Patient Intake Record) form */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
                 const isChildPatient = patient.patient_type === 'child';
-                
                 if (isChildPatient) {
-                  // For child patients: Navigate to standard ADL form with child_patient_id
-                  // Check if child patient has existing ADL file
-                  // For now, always create new (we'll add check later if needed)
-                  navigate(`/adl/new?child_patient_id=${patient.id}`);
+                  // Child patients: open the child patient edit page (CAP detailed intake — coming soon / gated in EditChildCapWorkup)
+                  navigate(`/child-patient/${patient.id}`);
                 } else {
-                  // For adult patients: Navigate to ADL (Out Patient Intake Record) form
-                // If patient has existing ADL, open for editing, otherwise create new
-                if (patient.has_adl_file) {
-                  navigate(`/adl/patient/${patient.id}`);
-                } else {
-                  navigate(`/adl/new?patient_id=${patient.id}`);
+                  // Adult patients: open the ADL intake form
+                  if (patient.has_adl_file) {
+                    navigate(`/adl/patient/${patient.id}`);
+                  } else {
+                    navigate(`/adl/new?patient_id=${patient.id}`);
                   }
                 }
               }}
@@ -547,6 +544,7 @@ const PatientRow = ({ patient, isNewPatient: propIsNewPatient, navigate, onMarkC
 const ClinicalTodayPatients = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -820,7 +818,7 @@ const ClinicalTodayPatients = () => {
   const distribution = roomsData?.data?.distribution_today || {}; // Use today's distribution only
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
   
-  // Create room options with disabled state for occupied rooms and rooms with zero patients
+  // Create room options: disable only when another doctor occupies the room (not when patient count is zero)
   // Note: distribution_today shows only patients registered today (from 12:00 AM IST to 11:59 PM IST)
   const roomOptions = rooms.map(room => {
     const totalPatients = distribution[room] || 0; // This shows only patients registered today
@@ -830,13 +828,10 @@ const ClinicalTodayPatients = () => {
     // Check if this is the current user's room
     const isMyRoom = validRoomData?.data?.current_room === room;
     
-    // Disable if occupied by another doctor OR if room has zero patients
-    const isDisabled = (isOccupied && !isMyRoom) || totalPatients === 0;
+    const isDisabled = isOccupied && !isMyRoom;
     let disabledReason = undefined;
     if (isOccupied && !isMyRoom) {
       disabledReason = `This room is already assigned to ${occupiedBy || 'another doctor'}`;
-    } else if (totalPatients === 0) {
-      disabledReason = 'This room has no patients assigned';
     }
     
     return {
@@ -856,13 +851,10 @@ const ClinicalTodayPatients = () => {
       const occupiedBy = isOccupied ? occupiedRooms[roomName]?.doctor_name : null;
       const totalPatients = distribution[roomName] || 0;
       
-      // Disable if occupied by another doctor OR if room has zero patients
-      const isDisabled = isOccupied || totalPatients === 0;
+      const isDisabled = isOccupied;
       let disabledReason = undefined;
       if (isOccupied) {
         disabledReason = `This room is already assigned to ${occupiedBy || 'another doctor'}`;
-      } else if (totalPatients === 0) {
-        disabledReason = 'This room has no patients assigned';
       }
       
       allRoomOptions.push({
@@ -957,21 +949,6 @@ const ClinicalTodayPatients = () => {
     const targetDate = toISTDateString(selectedDate || new Date());
     const patientCreatedDate = toISTDateString(patient.created_at);
     return patientCreatedDate && patientCreatedDate === targetDate;
-  }, [selectedDate]);
-
-  // Existing patient = patient who was NOT created today but has a visit today
-  // These are patients added via the "Existing Patient" flow (follow-up visits)
-  const isExistingPatientBasic = useCallback((patient) => {
-    if (!patient?.created_at) return false;
-    const targetDate = toISTDateString(selectedDate || new Date());
-    const patientCreatedDate = toISTDateString(patient.created_at);
-    const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
-    
-    // Patient is "existing" if they were NOT created today but have a visit today
-    // has_visit_today is set by the backend when a visit record exists for today
-    const hasVisitToday = patient?.has_visit_today === true;
-    
-    return !createdToday && hasVisitToday;
   }, [selectedDate]);
 
   // First filter by date (today's patients)
@@ -1114,47 +1091,35 @@ const ClinicalTodayPatients = () => {
     return timeA - timeB;
   });
 
-  // Helper function to get start (00:00:00) and end (23:59:59) of current day in IST
-  const getISTTimeInfo = () => {
-    const now = new Date();
-    
-    // Get today's date in IST (YYYY-MM-DD format)
-    const todayIST = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    
-    // Create midnight timestamp for today in IST (using ISO string with timezone offset)
-    // IST is UTC+5:30
-    const midnightTodayIST = new Date(`${todayIST}T00:00:00+05:30`);
-    
-    // Create end of day timestamp (11:59:59 PM) for today in IST
-    const endOfDayIST = new Date(`${todayIST}T23:59:59+05:30`);
-    
-    return { midnightTodayIST, endOfDayIST };
-  };
+  // Sub-tabs: New (registered today) vs Existing (follow-up / prior registration with visit today)
+  const activePatientListTab = searchParams.get('tab') === 'existing' ? 'existing' : 'new';
+  const setActivePatientListTab = useCallback(
+    (tab) => {
+      if (tab === 'existing') {
+        setSearchParams({ tab: 'existing' }, { replace: true });
+      } else {
+        setSearchParams({}, { replace: true });
+      }
+    },
+    [setSearchParams]
+  );
 
-  // Total patients seen today = new registrations + existing follow-up patients added today.
-  // allTodayPatients is already filtered to today's session (new + existing with visits today),
-  // so its length is the correct total count.
-  const totalPatientsCount = useMemo(() => allTodayPatients.length, [allTodayPatients]);
+  const newSubTabPatients = useMemo(
+    () => filteredPatients.filter((p) => isNewPatientBasic(p)),
+    [filteredPatients, isNewPatientBasic]
+  );
+  const existingSubTabPatients = useMemo(
+    () => filteredPatients.filter((p) => !isNewPatientBasic(p)),
+    [filteredPatients, isNewPatientBasic]
+  );
 
-  // Calculate new patients count with midnight reset logic
-  const newPatientsCount = useMemo(() => {
-    const { midnightTodayIST, endOfDayIST } = getISTTimeInfo();
-    const startTime = midnightTodayIST;
-    const endTime = endOfDayIST;
-    const newPatients = todayPatients.filter(isNewPatientBasic);
-    
-    return newPatients.filter(patient => {
-      const patientCreatedDate = patient?.created_at ? new Date(patient.created_at) : null;
-      return patientCreatedDate && patientCreatedDate >= startTime && patientCreatedDate <= endTime;
-    }).length;
-  }, [todayPatients, isNewPatientBasic]);
+  const patientsForActiveSubTab =
+    activePatientListTab === 'existing' ? existingSubTabPatients : newSubTabPatients;
 
-  // Calculate existing patients count - patients NOT created today but with visits today
-  const existingPatientsCount = useMemo(() => {
-    return todayPatients.filter(isExistingPatientBasic).length;
-  }, [todayPatients, isExistingPatientBasic]);
-
-
+  // Follow-up search must be available even when today's list is empty (e.g. after selecting a room, before first patient).
+  const showExistingPatientButton =
+    activePatientListTab === 'existing' &&
+    (isMWO(currentUser?.role) || (isDoctor && Boolean(effectiveRoomData?.data?.current_room)));
 
   if (isLoading) {
     return (
@@ -1207,147 +1172,94 @@ const ClinicalTodayPatients = () => {
           />
         )}
 
-        {/* Total Patient Count Card - At the top */}
-        <Card className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-200 shadow-lg">
-          <div className="p-5">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
-                  <FiUsers className="w-8 h-8 text-white" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Total Patients Today</p>
-                  <div className="flex items-baseline gap-3">
-                    <p className="text-3xl font-bold text-gray-900">
-                      {totalPatientsCount}
-                    </p>
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                        <span className="text-gray-600 font-medium">
-                          New: <span className="font-bold text-blue-600">{newPatientsCount}</span>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                        <span className="text-gray-600 font-medium">
-                          Existing: <span className="font-bold text-green-600">{existingPatientsCount}</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Includes new registrations and returning patients added to today's list. Resets at midnight IST.
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-500 mb-1">Current Time (IST)</p>
-                <p className="text-sm font-semibold text-gray-700">
-                  {new Date().toLocaleTimeString('en-IN', { 
-                    timeZone: 'Asia/Kolkata',
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: true 
-                  })}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {new Date().toLocaleDateString('en-IN', { 
-                    timeZone: 'Asia/Kolkata',
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric'
-                  })}
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-      
-        {/* Current Room Assignment Card - Show if doctor has selected a room TODAY */}
-        {isDoctor && !isLoadingRoom && effectiveRoomData?.data?.current_room && effectiveRoomData.data.current_room !== null && effectiveRoomData.data.current_room !== '' && (
-          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
-            <div className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                  <FiHome className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Current Room Assignment</p>
-                  <p className="text-lg font-semibold text-gray-800">
-                    Room: {effectiveRoomData.data.current_room}
-                  </p>
-                  {effectiveRoomData.data.room_assignment_time && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Assigned at:{' '}
-                      {new Date(effectiveRoomData.data.room_assignment_time).toLocaleString('en-IN', {
-                        timeZone: 'Asia/Kolkata',
-                        day: 'numeric',
-                        month: 'numeric',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: true,
-                      })}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
-
         {/* Patients List */}
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
           <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-slate-50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                  Today's Patients
-                <span className="ml-2 px-2.5 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-medium">
-                  {filteredPatients.length}
-                </span>
-              </h3>
-              {/* Show current room if doctor has one - simplified display since we have a card above */}
-              {isDoctor && effectiveRoomData?.data?.current_room && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg border border-blue-200">
-                  <FiHome className="w-4 h-4" />
-                  <span className="text-sm font-medium">Room: {effectiveRoomData.data.current_room}</span>
-                </div>
-              )}
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-blue-500 border-2 border-blue-600"></div>
-                    <span className="text-gray-600 font-medium">
-                      New ({todayPatients.filter(isNewPatientBasic).length})
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-lg font-semibold text-gray-900">Today&apos;s Patients</h3>
+                    <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
+                      Total {filteredPatients.length}
                     </span>
+                    {isDoctor && effectiveRoomData?.data?.current_room && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg border border-blue-200">
+                        <FiHome className="w-4 h-4" />
+                        <span className="text-sm font-medium">Room: {effectiveRoomData.data.current_room}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-green-500 border-2 border-green-600"></div>
-                    <span className="text-gray-600 font-medium">
-                      Existing ({todayPatients.filter(isExistingPatientBasic).length})
-                    </span>
+                  {/* New vs Existing sub-tabs */}
+                  <div
+                    className="flex flex-wrap items-center gap-2"
+                    role="tablist"
+                    aria-label="Today patients category"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activePatientListTab === 'new'}
+                      onClick={() => setActivePatientListTab('new')}
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border ${
+                        activePatientListTab === 'new'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-blue-400" aria-hidden />
+                      New Patients
+                      <span
+                        className={`min-w-[1.5rem] px-1.5 py-0.5 rounded-full text-xs font-bold ${
+                          activePatientListTab === 'new' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
+                        {newSubTabPatients.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activePatientListTab === 'existing'}
+                      onClick={() => setActivePatientListTab('existing')}
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border ${
+                        activePatientListTab === 'existing'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" aria-hidden />
+                      Existing Patients
+                      <span
+                        className={`min-w-[1.5rem] px-1.5 py-0.5 rounded-full text-xs font-bold ${
+                          activePatientListTab === 'existing'
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        {existingSubTabPatients.length}
+                      </span>
+                    </button>
                   </div>
                 </div>
+                {/* Add returning patient — Existing tab; doctors need today&apos;s room, MWO always */}
+                {showExistingPatientButton && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        onClick={() => setIsSearchModalOpen(true)}
+                        className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
+                        size="sm"
+                      >
+                        <FiUserPlus className="w-4 h-4 mr-2" />
+                        Existing Patient
+                      </Button>
+                    </div>
+                  )}
               </div>
-              {/* Existing Patient Button */}
-         {filteredPatients.length !==0 && filteredPatients.length !==undefined &&   ( <div className="flex items-center gap-2">
-                <Button
-                  onClick={() => setIsSearchModalOpen(true)}
-                  className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
-                  size="sm"
-                >
-                  <FiUserPlus className="w-4 h-4 mr-2" />
-                  Existing Patient
-                </Button>
-              </div>)
-               }
             </div>
           </div>
 
-          {/* Room Selection Card - Show only when there is no room assignment AND no patients yet */}
+          {/* Room selection card: no today room yet, and today's filtered list is empty (pick room before first patient appears) */}
           {showRoomSelectionCard && filteredPatients.length === 0 && (
             <div className="space-y-6">
               <Card id="room-selection-card" className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
@@ -1358,7 +1270,7 @@ const ClinicalTodayPatients = () => {
                       </div>
                       <div>
                         <h3 className="text-lg font-semibold text-gray-800">Select Your Room for Today</h3>
-                        <p className="text-sm text-gray-600">Room selection is required each day. You must select a room before patients can be assigned to you.</p>
+                        <p className="text-sm text-gray-600">Room selection is required each day. Choose any room not taken by another doctor, even if no patients are registered there yet today—then register or add patients to that room as usual.</p>
                         <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
                           <p className="text-xs text-yellow-800 font-medium">
                             ⚠️ Important: Room selection is day-specific. Yesterday's room assignment does not carry over. Please select your room for today.
@@ -1407,11 +1319,9 @@ const ClinicalTodayPatients = () => {
                                 {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and are disabled.
                               </p>
                             )}
-                            {allRoomOptions.some(opt => opt.disabled && (distribution[opt.value] || 0) === 0) && (
-                              <p className="text-xs text-gray-500 mt-1 italic">
-                                Rooms with zero patients are disabled and cannot be selected.
-                              </p>
-                            )}
+                            <p className="text-xs text-gray-500 mt-1 italic">
+                              You can select any free room, even if no patients are registered there yet today (for example walk-ins).
+                            </p>
                           </>
                         )}
                       </div>
@@ -1446,7 +1356,7 @@ const ClinicalTodayPatients = () => {
                     <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="text-xs text-blue-800">
                         <strong>Note:</strong> Only one doctor can be assigned to each room. Rooms already assigned to other doctors are shown but disabled.
-                        All unassigned patients in your selected room will be automatically assigned to you.
+                        You can use an empty room for walk-ins; any patients already tied to that room for today will be assigned to you when you confirm.
                       </p>
                     </div>
                   </div>
@@ -1468,13 +1378,47 @@ const ClinicalTodayPatients = () => {
                 }
               </p>
             </div>
+          ) : patientsForActiveSubTab.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-4">
+                <FiUsers className="w-10 h-10 text-gray-400" />
+              </div>
+              <p className="text-lg font-semibold text-gray-700 mb-2">
+                {activePatientListTab === 'new'
+                  ? 'No new patients for today'
+                  : 'No existing patients for today'}
+              </p>
+              <p className="text-gray-500 text-center max-w-md text-sm">
+                {activePatientListTab === 'new'
+                  ? 'New registrations for today will appear here. Use the Existing Patients tab for follow-up visits.'
+                  : 'Returning patients and follow-ups appear here once added to today\'s list.'}
+              </p>
+              {activePatientListTab === 'new' && existingSubTabPatients.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActivePatientListTab('existing')}
+                  className="mt-4 text-sm font-semibold text-emerald-700 hover:text-emerald-800 underline"
+                >
+                  Go to Existing Patients ({existingSubTabPatients.length})
+                </button>
+              )}
+              {activePatientListTab === 'existing' && newSubTabPatients.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActivePatientListTab('new')}
+                  className="mt-4 text-sm font-semibold text-blue-700 hover:text-blue-800 underline"
+                >
+                  Go to New Patients ({newSubTabPatients.length})
+                </button>
+              )}
+            </div>
           ) : (
-            <div className="p-4 sm:p-5 space-y-3">
-              {filteredPatients.map((patient) => (
+            <div className="p-4 sm:p-5 space-y-3" role="tabpanel">
+              {patientsForActiveSubTab.map((patient) => (
                 <PatientRow
                   key={patient.id}
                   patient={patient}
-                  isNewPatient={isNewPatientBasic(patient)}
+                  listContext={activePatientListTab}
                   navigate={navigate}
                   onMarkCompleted={handleMarkCompleted}
                   onRoomChanged={handleMarkCompleted}
@@ -1484,15 +1428,22 @@ const ClinicalTodayPatients = () => {
             </div>
           )}
 
-          {/* Patient count info - no pagination needed since we fetch all today's patients */}
-          {filteredPatients.length > 0 && (
+          {/* Patient count info - reflects active sub-tab */}
+          {filteredPatients.length > 0 && patientsForActiveSubTab.length > 0 && (
             <div className="px-6 py-5 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-slate-50">
               <div className="text-sm text-gray-700 font-medium">
-                Showing <span className="font-semibold text-gray-900">{filteredPatients.length}</span> patient{filteredPatients.length !== 1 ? 's' : ''} for today
+                Showing{' '}
+                <span className="font-semibold text-gray-900">{patientsForActiveSubTab.length}</span> patient
+                {patientsForActiveSubTab.length !== 1 ? 's' : ''}{' '}
+                <span className="text-gray-500">
+                  ({activePatientListTab === 'new' ? 'New Patients' : 'Existing Patients'})
+                </span>
                 <span className="ml-3 text-gray-500">
-                  (<span className="text-blue-600 font-semibold">{todayPatients.filter(isNewPatientBasic).length} new</span>
-                  {' / '}
-                  <span className="text-green-600 font-semibold">{todayPatients.filter(isExistingPatientBasic).length} existing</span>)
+                  · Total today{' '}
+                  <span className="font-semibold text-gray-800">{filteredPatients.length}</span>
+                  <span className="text-blue-600 font-semibold ml-1">{newSubTabPatients.length} new</span>
+                  <span className="mx-1 text-gray-400">/</span>
+                  <span className="text-green-600 font-semibold">{existingSubTabPatients.length} existing</span>
                 </span>
               </div>
             </div>

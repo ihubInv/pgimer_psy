@@ -505,6 +505,7 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
     }
     
     if (patients.length === 0) {
+      // Normal when the doctor claims a room before any same-day registrations—selection must still succeed.
       console.log(`[assignPatientsToDoctor] No patients to assign in room ${roomNumber}`);
       return {
         assigned: 0,
