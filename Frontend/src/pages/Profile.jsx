@@ -75,6 +75,7 @@ const Profile = () => {
   const [showDisable2FAModal, setShowDisable2FAModal] = useState(false);
   const [disable2FAOTP, setDisable2FAOTP] = useState('');
   const [isDisabling2FA, setIsDisabling2FA] = useState(false);
+  const isPwoRole = String(user?.role || '').trim().toLowerCase() === 'psychiatric welfare officer';
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -99,12 +100,15 @@ const Profile = () => {
 
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
-    if (!profileForm.department) {
+    if (!isPwoRole && !profileForm.department) {
       toast.error('Please select a department');
       return;
     }
     try {
-      const response = await updateProfile(profileForm).unwrap();
+      const payload = isPwoRole
+        ? { name: profileForm.name, email: profileForm.email }
+        : profileForm;
+      const response = await updateProfile(payload).unwrap();
       const updatedUser = response?.data?.user;
       if (updatedUser) {
         dispatch(updateAuthUser({
@@ -484,18 +488,20 @@ const Profile = () => {
                     />
                   </div>
 
-                  <div className="bg-white rounded-xl border border-gray-200 p-4">
-                    <Select
-                      label="Department"
-                      name="department"
-                      value={profileForm.department}
-                      onChange={handleProfileChange}
-                      options={departmentOptions}
-                      required
-                      className="bg-white"
-                      containerClassName="bg-white"
-                    />
-                  </div>
+                  {!isPwoRole && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-4">
+                      <Select
+                        label="Department"
+                        name="department"
+                        value={profileForm.department}
+                        onChange={handleProfileChange}
+                        options={departmentOptions}
+                        required
+                        className="bg-white"
+                        containerClassName="bg-white"
+                      />
+                    </div>
+                  )}
 
                   <div className="flex justify-end pt-4">
                     <Button 

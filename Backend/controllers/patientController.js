@@ -686,12 +686,23 @@ class PatientController {
       }
 
       // Department scope is server-enforced for this unified endpoint.
+      // Exception: Psychiatric Welfare Officer can explicitly switch patient type
+      // via `patient_type=adult|child` so both tabs can be used from one route.
       const userDepartmentRaw = req.user?.department ? String(req.user.department).trim() : '';
       const userDepartment = userDepartmentRaw.toLowerCase();
       const isChildDepartment = userDepartment === 'child department';
+      const userRole = String(req.user?.role || '').trim();
+      const isPwoRole = userRole.toLowerCase() === 'psychiatric welfare officer';
+      const requestedPatientType = String(req.query.patient_type || '').trim().toLowerCase();
+      const wantsChildType = requestedPatientType === 'child';
+      const wantsAdultType = requestedPatientType === 'adult';
+      const useChildDataset = isPwoRole
+        ? (wantsChildType ? true : wantsAdultType ? false : false)
+        : isChildDepartment;
 
-      // Check if search parameter is provided. Child Department never uses adult search.
-      if (req.query.search && req.query.search.trim().length >= 2 && !isChildDepartment) {
+      // Check if search parameter is provided.
+      // Child dataset does not use Patient.search (adult table only).
+      if (req.query.search && req.query.search.trim().length >= 2 && !useChildDataset) {
         const result = await Patient.search(req.query.search.trim(), page, limit);
         return res.json({
           success: true,
@@ -719,9 +730,9 @@ class PatientController {
       // Unified patient list scoped by the logged-in user's department:
       // - Child Department users get child registrations (`patient_type: 'child'`).
       // - Adult Department / unspecified users get adult patients (`patient_type: 'adult'`).
-      // The `my_patients` flag and any client-supplied `patient_type` query are intentionally
-      // ignored — there is one endpoint and the response shape is decided server-side.
-      if (isChildDepartment) {
+      // - Psychiatric Welfare Officer may switch tab by sending `patient_type`.
+      // The `my_patients` flag is intentionally ignored.
+      if (useChildDataset) {
         const ChildPatientRegistration = require('../models/ChildPatientRegistration');
         const childFilters = {};
         if (filters.assigned_room) childFilters.assigned_room = filters.assigned_room;

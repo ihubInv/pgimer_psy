@@ -31,6 +31,7 @@ const PatientsPage = () => {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const isPwoRole = isMWO(user?.role);
   const limit = 10;
 
   const { data: profileData } = useGetProfileQuery(undefined, {
@@ -41,14 +42,20 @@ const PatientsPage = () => {
   // after department change, without requiring logout/login.
   const effectiveDepartment = profileData?.data?.user?.department || user?.department || '';
   const isChildDepartment = String(effectiveDepartment).trim().toLowerCase() === USER_DEPARTMENTS.CHILD.toLowerCase();
-  const patientType = isChildDepartment ? 'child' : 'adult';
-  const showAdultTab = !isChildDepartment;
-  const showChildTab = isChildDepartment;
+  const [patientType, setPatientType] = useState(isChildDepartment ? 'child' : 'adult');
+  const showAdultTab = isPwoRole || !isChildDepartment;
+  const showChildTab = isPwoRole || isChildDepartment;
+
+  useEffect(() => {
+    if (!isPwoRole) {
+      setPatientType(isChildDepartment ? 'child' : 'adult');
+    }
+  }, [isPwoRole, isChildDepartment]);
 
   // Reset page to 1 when search changes
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, patientType]);
 
   // Fetch patients - use server-side pagination when not searching, client-side when searching
   const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
@@ -58,6 +65,7 @@ const PatientsPage = () => {
     page: search.trim() ? 1 : page,
     limit: fetchLimit,
     search: search.trim() || undefined,
+    ...(isPwoRole ? { patient_type: patientType } : {}),
   }, {
     refetchOnMountOrArgChange: true,
   });
@@ -2945,8 +2953,13 @@ const PatientsPage = () => {
               {showAdultTab && (
                 <button
                   type="button"
-                  className="px-6 py-3 font-semibold text-sm border-b-2 border-primary-600 text-primary-600 bg-primary-50 cursor-default"
-                  aria-current="page"
+                  onClick={() => setPatientType('adult')}
+                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                    patientType === 'adult'
+                      ? 'border-primary-600 text-primary-600 bg-primary-50'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                  aria-current={patientType === 'adult' ? 'page' : undefined}
                 >
                   Adult Patients
                 </button>
@@ -2954,8 +2967,13 @@ const PatientsPage = () => {
               {showChildTab && (
                 <button
                   type="button"
-                  className="px-6 py-3 font-semibold text-sm border-b-2 border-primary-600 text-primary-600 bg-primary-50 cursor-default"
-                  aria-current="page"
+                  onClick={() => setPatientType('child')}
+                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                    patientType === 'child'
+                      ? 'border-primary-600 text-primary-600 bg-primary-50'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                  aria-current={patientType === 'child' ? 'page' : undefined}
                 >
                   Child Patients
                 </button>
