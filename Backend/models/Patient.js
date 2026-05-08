@@ -636,7 +636,7 @@ class Patient {
           END as case_complexity
         FROM registered_patient p
         LEFT JOIN adl_files af ON af.patient_id = p.id
-        WHERE p.name ILIKE $1 OR p.cr_no ILIKE $1 OR p.psy_no ILIKE $1 OR p.adl_no ILIKE $1
+        WHERE p.name ILIKE $1 OR p.cr_no ILIKE $1 OR p.psy_no ILIKE $1 OR p.adl_no ILIKE $1 OR p.contact_number ILIKE $1
         GROUP BY p.id, af.id
         ORDER BY p.created_at DESC
         LIMIT $2 OFFSET $3
@@ -645,7 +645,7 @@ class Patient {
       const countQuery = `
         SELECT COUNT(DISTINCT p.id) as cnt FROM registered_patient p
         LEFT JOIN adl_files af ON af.patient_id = p.id
-        WHERE p.name ILIKE $1 OR p.cr_no ILIKE $1 OR p.psy_no ILIKE $1 OR p.adl_no ILIKE $1
+        WHERE p.name ILIKE $1 OR p.cr_no ILIKE $1 OR p.psy_no ILIKE $1 OR p.adl_no ILIKE $1 OR p.contact_number ILIKE $1
       `;
 
       const [result, countResult] = await Promise.all([

@@ -517,6 +517,59 @@ class ChildPatientRegistration {
       throw error;
     }
   }
+
+  /**
+   * Search child registrations by name, CR, CGC, or mobile (aligned with adult Patient.search).
+   */
+  static async search(searchTerm = '', page = 1, limit = 10) {
+    try {
+      const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 100);
+      const safePage = Math.max(parseInt(page, 10) || 1, 1);
+      const offset = (safePage - 1) * safeLimit;
+      const searchPattern = `%${searchTerm}%`;
+
+      const query = `
+        SELECT cpr.* FROM child_patient_registrations cpr
+        WHERE
+          COALESCE(cpr.child_name::text, '') ILIKE $1
+          OR COALESCE(cpr.cr_number::text, '') ILIKE $1
+          OR COALESCE(cpr.cgc_number::text, '') ILIKE $1
+          OR COALESCE(cpr.mobile_no::text, '') ILIKE $1
+        ORDER BY cpr.created_at DESC
+        LIMIT $2 OFFSET $3
+      `;
+
+      const countQuery = `
+        SELECT COUNT(*)::int AS cnt FROM child_patient_registrations cpr
+        WHERE
+          COALESCE(cpr.child_name::text, '') ILIKE $1
+          OR COALESCE(cpr.cr_number::text, '') ILIKE $1
+          OR COALESCE(cpr.cgc_number::text, '') ILIKE $1
+          OR COALESCE(cpr.mobile_no::text, '') ILIKE $1
+      `;
+
+      const [result, countResult] = await Promise.all([
+        db.query(query, [searchPattern, safeLimit, offset]),
+        db.query(countQuery, [searchPattern]),
+      ]);
+
+      const total = parseInt(countResult.rows[0]?.cnt || 0, 10);
+      const registrations = (result.rows || []).map((row) => new ChildPatientRegistration(row));
+
+      return {
+        child_patients: registrations,
+        pagination: {
+          page: safePage,
+          limit: safeLimit,
+          total,
+          pages: Math.ceil(total / safeLimit) || 1,
+        },
+      };
+    } catch (error) {
+      console.error('[ChildPatientRegistration.search] Error:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = ChildPatientRegistration;

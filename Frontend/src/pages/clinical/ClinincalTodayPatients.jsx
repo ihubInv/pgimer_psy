@@ -340,7 +340,7 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
               <span className="whitespace-nowrap">View Details</span>
             </Button>
             
-            {/* Walk-In Clinical Proforma Button */}
+            {/* Walk-In Clinical Proforma Button — hidden on Existing Patients tab (use Follow-Up / other flows there) */}
             {/* 
               WORKFLOW REQUIREMENT:
               - Show "Clinical Proforma" when EITHER:
@@ -348,12 +348,12 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
                   b) A proforma has already been filled for TODAY — in this case the button
                      must stay "Clinical Proforma" so the doctor can re-open and edit it,
                      regardless of whether the patient has past history from earlier visits.
-              - Show "Follow-Up" ONLY when the patient has past history AND no proforma has
-                been filled yet today. That is the correct signal for a returning patient on
-                a different visit date who needs a follow-up note rather than a new proforma.
+              - Existing Patients tab: always show Follow-Up, View Details, Prescription,
+                Change Room, and Mark as Completed (regardless of whether today's clinical
+                proforma has been filled). Do not show Clinical Proforma or Intake Record there.
             */}
-            {(
-              (!hasPastHistory || hasProformaToday) ||
+            {listContext !== 'existing' && (
+              ((!hasPastHistory || hasProformaToday) ||
               (listContext === 'new' && hasPastHistory && !hasProformaToday)
             ) && (() => {
               // If a proforma was already filled today, open it for editing.
@@ -385,10 +385,11 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
                   <span className="whitespace-nowrap">Clinical Proforma</span>
                 </Button>
               );
-            })()}
+            })()
+            )}
             
-            {/* Follow-Up — returning patients only; shown only on Existing Patients sub-tab */}
-            {listContext === 'existing' && (hasPastHistory && !hasProformaToday) && (() => {
+            {/* Follow-Up — always shown on Existing Patients tab, regardless of whether today&apos;s clinical proforma has been filled or not */}
+            {listContext === 'existing' && (() => {
               const isChildPatient = patient.patient_type === 'child';
               
               if (isChildPatient) {
@@ -426,19 +427,16 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
               }
             })()}
             
-            {/* Intake Record Button */}
-            {/* For child patients: Navigate to the child patient page (CAP intake work-up section — coming soon in UI) */}
-            {/* For adult patients: Navigate to the ADL (Out Patient Intake Record) form */}
+            {/* Intake Record — hidden on Existing Patients tab (same as Clinical Proforma) */}
+            {listContext !== 'existing' && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
                 const isChildPatient = patient.patient_type === 'child';
                 if (isChildPatient) {
-                  // Child patients: open the child patient edit page (CAP detailed intake — coming soon / gated in EditChildCapWorkup)
                   navigate(`/child-patient/${patient.id}`);
                 } else {
-                  // Adult patients: open the ADL intake form
                   if (patient.has_adl_file) {
                     navigate(`/adl/patient/${patient.id}`);
                   } else {
@@ -451,13 +449,16 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
               <FiClipboard className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">Intake Record</span>
             </Button>
+            )}
             
-            {/* Prescription Button - Opens only the Prescription form */}
+            {/* Prescription Button — full width on Existing Patients tab (matches Change Room / Mark as Completed) */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => navigate(`/prescriptions/create?patient_id=${patient.id}`)}
-              className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100 hover:border-teal-400 transition-all hover:shadow-sm"
+              className={`flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100 hover:border-teal-400 transition-all hover:shadow-sm ${
+                listContext === 'existing' ? 'col-span-2 w-full' : ''
+              }`}
             >
               <FiPlusCircle className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">Prescription</span>
@@ -878,7 +879,6 @@ const ClinicalTodayPatients = () => {
     if (!Array.isArray(patients)) return [];
 
     const targetDate = toISTDateString(selectedDate || new Date());
-    console.log(`[filterTodayPatients] Filtering ${patients.length} patients for date: ${targetDate}`);
 
     const filtered = patients.filter((patient) => {
       if (!patient) return false;
@@ -902,23 +902,10 @@ const ClinicalTodayPatients = () => {
       //   3. has_visit_today flag set by backend (existing patient with a visit record for today)
       const hasVisitToday = patient?.has_visit_today === true;
       const shouldInclude = createdToday || (updatedToday && hasAssignedRoom) || hasVisitToday;
-      
-      if (patient.patient_type === 'child') {
-        console.log(`[filterTodayPatients] Child patient ${patient.id} (${patient.name}):`, {
-          createdDate: patientCreatedDate,
-          updatedDate: patientUpdatedDate,
-          createdToday,
-          updatedToday,
-          hasAssignedRoom,
-          assigned_room: patient?.assigned_room,
-          shouldInclude
-        });
-      }
-      
+
       return shouldInclude;
     });
-    
-    console.log(`[filterTodayPatients] Filtered to ${filtered.length} patients`);
+
     return filtered;
   };
 
@@ -953,19 +940,14 @@ const ClinicalTodayPatients = () => {
 
   // First filter by date (today's patients)
   const todayPatientsByDate = filterTodayPatients(deduplicatedApiPatients);
-  console.log(`[ClinincalTodayPatients] After date filter: ${todayPatientsByDate.length} patients`);
-  
+
   // Filter out completed visits - only show patients with pending visits
   // Patients will only disappear when "Mark as Completed" button is clicked
   const todayPatientsNotCompleted = todayPatientsByDate.filter(patient => {
     // Show patient if visit_status is not 'completed' or if there's no visit_status (new patients)
     const isCompleted = patient.visit_status === 'completed';
-    if (isCompleted && patient.patient_type === 'child') {
-      console.log(`[ClinincalTodayPatients] Child patient ${patient.id} (${patient.name}) filtered out: visit_status is 'completed'`);
-    }
     return !isCompleted;
   });
-  console.log(`[ClinincalTodayPatients] After completed filter: ${todayPatientsNotCompleted.length} patients`);
 
   // Then filter by role-based access (using the not-completed list)
   const todayPatients = todayPatientsNotCompleted.filter((p) => {
@@ -1023,11 +1005,6 @@ const ClinicalTodayPatients = () => {
       // Show if: (created today OR updated today) AND in my room
       if ((createdToday || updatedToday) && inMyRoom) {
         return true;
-      }
-
-      // Log why child patients are being filtered out
-      if (p.patient_type === 'child' && !inMyRoom) {
-        console.log(`[ClinincalTodayPatients] Child patient ${p.id} (${p.name}) filtered out by role: not in my room. Doctor room: "${doctorRoom}", Patient room: "${p.assigned_room}"`);
       }
 
       // Otherwise, hide for doctors
@@ -1190,9 +1167,9 @@ const ClinicalTodayPatients = () => {
                       </div>
                     )}
                   </div>
-                  {/* New vs Existing sub-tabs */}
+                  {/* New vs Existing sub-tabs (underline style, matches Adult/Child Patients tabs) */}
                   <div
-                    className="flex flex-wrap items-center gap-2"
+                    className="flex gap-2 border-b border-gray-200 -mx-6 px-6"
                     role="tablist"
                     aria-label="Today patients category"
                   >
@@ -1200,18 +1177,20 @@ const ClinicalTodayPatients = () => {
                       type="button"
                       role="tab"
                       aria-selected={activePatientListTab === 'new'}
+                      aria-current={activePatientListTab === 'new' ? 'page' : undefined}
                       onClick={() => setActivePatientListTab('new')}
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border ${
+                      className={`inline-flex items-center gap-2 px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
                         activePatientListTab === 'new'
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                          ? 'border-primary-600 text-primary-600 bg-primary-50'
+                          : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                       }`}
                     >
-                      <span className="w-2 h-2 rounded-full bg-blue-400" aria-hidden />
                       New Patients
                       <span
                         className={`min-w-[1.5rem] px-1.5 py-0.5 rounded-full text-xs font-bold ${
-                          activePatientListTab === 'new' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-800'
+                          activePatientListTab === 'new'
+                            ? 'bg-primary-600 text-white'
+                            : 'bg-gray-200 text-gray-700'
                         }`}
                       >
                         {newSubTabPatients.length}
@@ -1221,20 +1200,20 @@ const ClinicalTodayPatients = () => {
                       type="button"
                       role="tab"
                       aria-selected={activePatientListTab === 'existing'}
+                      aria-current={activePatientListTab === 'existing' ? 'page' : undefined}
                       onClick={() => setActivePatientListTab('existing')}
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border ${
+                      className={`inline-flex items-center gap-2 px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
                         activePatientListTab === 'existing'
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                          ? 'border-primary-600 text-primary-600 bg-primary-50'
+                          : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                       }`}
                     >
-                      <span className="w-2 h-2 rounded-full bg-emerald-400" aria-hidden />
                       Existing Patients
                       <span
                         className={`min-w-[1.5rem] px-1.5 py-0.5 rounded-full text-xs font-bold ${
                           activePatientListTab === 'existing'
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-emerald-100 text-emerald-800'
+                            ? 'bg-primary-600 text-white'
+                            : 'bg-gray-200 text-gray-700'
                         }`}
                       >
                         {existingSubTabPatients.length}
@@ -1259,8 +1238,8 @@ const ClinicalTodayPatients = () => {
             </div>
           </div>
 
-          {/* Room selection card: no today room yet, and today's filtered list is empty (pick room before first patient appears) */}
-          {showRoomSelectionCard && filteredPatients.length === 0 && (
+          {/* Room selection card: shown in both New and Existing sub-tabs whenever the doctor has not yet picked today's room */}
+          {showRoomSelectionCard && (
             <div className="space-y-6">
               <Card id="room-selection-card" className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
                   <div className="p-6">

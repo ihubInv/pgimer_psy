@@ -25,14 +25,7 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
     if (token) {
       // Construct URL: if baseUrl is empty, use relative path; otherwise prepend baseUrl
       const fullUrl = baseUrl ? `${baseUrl}${urlPath}` : urlPath;
-      
-      console.log('[AuthenticatedImage] Fetching image:', {
-        urlPath,
-        baseUrl: baseUrl || '(empty - using relative)',
-        fullUrl,
-        hasToken: !!token
-      });
-      
+
       fetch(fullUrl, {
         method: 'GET',
         headers: {
@@ -41,14 +34,6 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
         credentials: 'include',
       })
         .then(response => {
-          console.log('[AuthenticatedImage] Response received:', {
-            status: response.status,
-            statusText: response.statusText,
-            ok: response.ok,
-            contentType: response.headers.get('content-type'),
-            url: fullUrl
-          });
-          
           if (!response.ok) {
             // Try to get error message from response
             return response.text().then(text => {
@@ -84,11 +69,6 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
           }
           
           const blobUrl = URL.createObjectURL(blob);
-          console.log('[AuthenticatedImage] Image blob created successfully:', {
-            blobSize: blob.size,
-            blobType: blob.type,
-            blobUrl: blobUrl.substring(0, 50) + '...'
-          });
           setImageSrc(blobUrl);
           setIsLoading(false);
           setHasError(false);
@@ -103,7 +83,6 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
           });
           // Try fallback to src if available
           if (src) {
-            console.log('[AuthenticatedImage] Attempting fallback to src:', src);
             setImageSrc(src);
             setHasError(false);
           } else {
@@ -130,7 +109,6 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
   if (hasError && !imageSrc) {
     // If we have a src fallback, try using it as last resort
     if (src) {
-      console.log('[AuthenticatedImage] Using fallback src after error:', src);
       return (
         <img
           src={src}
@@ -144,7 +122,6 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
             }
           }}
           onLoad={(e) => {
-            console.log('[AuthenticatedImage] Fallback src loaded successfully');
             if (onLoad) {
               onLoad(e);
             }
@@ -175,15 +152,6 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
   }
 
   const finalSrc = imageSrc || src;
-  
-  // Debug: Log what we're trying to render
-  console.log('[AuthenticatedImage] Rendering image:', {
-    imageSrc: imageSrc ? imageSrc.substring(0, 50) + '...' : 'null',
-    src: src ? src.substring(0, 50) + '...' : 'null',
-    finalSrc: finalSrc ? finalSrc.substring(0, 50) + '...' : 'null',
-    hasError,
-    isLoading
-  });
 
   return (
     <img
@@ -203,11 +171,6 @@ const AuthenticatedImage = ({ src, urlPath, baseUrl, token, alt, className, onEr
         }
       }}
       onLoad={(e) => {
-        console.log('[AuthenticatedImage] Image onLoad triggered:', {
-          src: e.target?.src,
-          naturalWidth: e.target?.naturalWidth,
-          naturalHeight: e.target?.naturalHeight
-        });
         if (onLoad) {
           onLoad(e);
         }
@@ -287,11 +250,6 @@ const FilePreview = ({
       if (!relativePath.startsWith('/')) {
         relativePath = '/' + relativePath;
       }
-      console.log('[FilePreview] Converted Backend/fileupload path:', { 
-        original: filePath, 
-        normalized: normalizedPath,
-        converted: relativePath 
-      });
       return relativePath;
     }
     
@@ -303,11 +261,6 @@ const FilePreview = ({
       if (!relativePath.startsWith('/')) {
         relativePath = '/' + relativePath;
       }
-      console.log('[FilePreview] Converted Backend/uploads path:', { 
-        original: filePath, 
-        normalized: normalizedPath,
-        converted: relativePath 
-      });
       return relativePath;
     }
     
@@ -315,11 +268,6 @@ const FilePreview = ({
     if (normalizedPath.includes('/fileupload/')) {
       const fileuploadIndex = normalizedPath.indexOf('/fileupload/');
       const relativePath = normalizedPath.substring(fileuploadIndex);
-      console.log('[FilePreview] Converted fileupload path:', { 
-        original: filePath, 
-        normalized: normalizedPath,
-        converted: relativePath 
-      });
       return relativePath;
     }
     
@@ -327,11 +275,6 @@ const FilePreview = ({
     if (normalizedPath.includes('/uploads/')) {
       const uploadsIndex = normalizedPath.indexOf('/uploads/');
       const relativePath = normalizedPath.substring(uploadsIndex);
-      console.log('[FilePreview] Converted uploads path:', { 
-        original: filePath, 
-        normalized: normalizedPath,
-        converted: relativePath 
-      });
       return relativePath;
     }
     
@@ -615,13 +558,6 @@ const FilePreview = ({
         return;
       }
       
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[FilePreview] Deleting file - backend will handle path resolution:', {
-          patient_id: patientIdStr,
-          file_identifier: fileIdentifier
-        });
-      }
-
       // Use direct fetch to ensure correct endpoint: /api/patient-files/delete/{patient_id}/{file_path}
       // Backend handles all path resolution using req.user.role and module
       const baseUrl = import.meta.env.VITE_API_URL || '/api';
@@ -733,16 +669,7 @@ const FilePreview = ({
             const fileName = actualPath.split('/').pop();
             const urlPath = getFileUrlPath(actualPath);
             const fileUrl = urlPath ? `${baseUrlWithoutApi}${urlPath}` : '';
-            
-            // Debug logging
-            console.log('[FilePreview] Processing file:', {
-              actualPath,
-              urlPath,
-              fileUrl,
-              baseUrlWithoutApi: baseUrlWithoutApi || '(empty - relative)',
-              fileName
-            });
-            
+
             return {
               actualPath,
               fileType,

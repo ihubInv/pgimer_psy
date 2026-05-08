@@ -74,9 +74,13 @@ const SelectExistingPatient = () => {
   // Auto-select patient when CR number matches
   useEffect(() => {
     if (searchData?.data?.patients && crNumber && crNumber.length >= 2) {
-      const exactMatch = searchData.data.patients.find(
-        (p) => p.cr_no?.toLowerCase() === crNumber.toLowerCase()
-      );
+      const exactMatch = searchData.data.patients.find((p) => {
+        const q = crNumber.toLowerCase();
+        return (
+          p.cr_no?.toLowerCase() === q ||
+          (p.cr_number && String(p.cr_number).toLowerCase() === q)
+        );
+      });
 
       if (exactMatch) {
         // If we already have a selected patient with the same ID, merge the data

@@ -1221,15 +1221,52 @@ class PatientController {
       const searchTerm = q.trim();
       
       // Note: We use parameterized queries in Patient.search(), so SQL injection is prevented
-      // This is just for additional safety and output encoding
-      const result = await Patient.search(searchTerm, page, limit);
-      
-      // Filter patient data for PWO role
-      if (result.patients && Array.isArray(result.patients)) {
-        result.patients = result.patients.map(patient =>
-          PatientController.filterPatientDataForRole(patient, req.user?.role)
-        );
-      }
+      const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+      const limitNum = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50);
+      const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+
+      // Fetch matching adults and children (cap each pool so merge sort stays bounded)
+      const fetchCap = Math.min(1000, Math.max(limitNum * pageNum * 2, 100));
+      const [adultResult, childResult] = await Promise.all([
+        Patient.search(searchTerm, 1, fetchCap),
+        ChildPatientRegistration.search(searchTerm, 1, fetchCap),
+      ]);
+
+      const adultPatients = (adultResult.patients || []).map((p) => ({
+        ...p,
+        patient_type: 'adult',
+      }));
+
+      const childPatients = (childResult.child_patients || []).map((c) => {
+        const json = typeof c.toJSON === 'function' ? c.toJSON() : c;
+        return {
+          ...json,
+          patient_type: 'child',
+          name: json.child_name || json.name,
+        };
+      });
+
+      const combined = [...adultPatients, ...childPatients].sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      );
+
+      const total =
+        (adultResult.pagination?.total || 0) + (childResult.pagination?.total || 0);
+      const offset = (pageNum - 1) * limitNum;
+      const pageSlice = combined.slice(offset, offset + limitNum).map((patient) =>
+        PatientController.filterPatientDataForRole(patient, req.user?.role)
+      );
+
+      const result = {
+        patients: pageSlice,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.max(1, Math.ceil(total / limitNum)),
+        },
+      };
 
       res.json({
         success: true,
