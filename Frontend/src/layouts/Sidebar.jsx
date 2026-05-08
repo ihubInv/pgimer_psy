@@ -211,7 +211,7 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
     };
   }, [isOpen]);
 
-  // Patients list is department-scoped by backend on /api/patients.
+  // Patients list is scoped by `patient_type` (adult/child) selected in the UI.
 
   const navigation = [
     { 

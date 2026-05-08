@@ -172,7 +172,7 @@ class ChildPatientController {
   }
 
   // The child-patient list endpoint was removed. The unified `GET /api/patients`
-  // route returns child rows when the logged-in user is in the Child Department.
+  // route returns child rows when called with `patient_type=child`.
 
   // Get child patient by ID
   static async getChildPatientById(req, res) {

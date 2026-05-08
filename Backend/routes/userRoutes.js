@@ -38,10 +38,6 @@ const { enhancedOTPRateLimit } = require('../middleware/otpRateLimit');
  *           type: string
  *           enum: ['Psychiatric Welfare Officer', 'Faculty', 'Resident', 'Admin']
  *           description: User's role in the system
- *         department:
- *           type: string
- *           enum: ['Child Department', 'Adult Department']
- *           description: Psychiatry department assignment
  *         two_factor_enabled:
  *           type: boolean
  *           description: Whether 2FA is enabled
@@ -57,7 +53,6 @@ const { enhancedOTPRateLimit } = require('../middleware/otpRateLimit');
  *         - email
  *         - role
  *         - mobile
- *         - department
  *       properties:
  *         name:
  *           type: string
@@ -70,9 +65,6 @@ const { enhancedOTPRateLimit } = require('../middleware/otpRateLimit');
  *           type: string
  *           pattern: '^[6-9]\d{9}$'
  *           description: 10-digit mobile number starting with 6-9
- *         department:
- *           type: string
- *           enum: ['Child Department', 'Adult Department']
  *         role:
  *           type: string
  *           enum: ['Psychiatric Welfare Officer', 'Faculty', 'Resident', 'Admin']
@@ -299,7 +291,6 @@ router.post('/register', authenticateToken, requireAdmin, validateUserRegistrati
  *                       role: "SR"
  *                       two_factor_enabled: false
  *                       created_at: "2025-01-01T00:00:00.000Z"
- *                       department: "Child Department"
  *                     accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *                     expiresIn: 300
  *                     note: "Refresh token is automatically set in HttpOnly cookie"
@@ -777,10 +768,6 @@ router.get('/profile', authenticateToken, UserController.getProfile);
  *                 type: string
  *                 format: email
  *                 example: "updated@pgimer.ac.in"
- *               department:
- *                 type: string
- *                 enum: ['Child Department', 'Adult Department']
- *                 example: 'Child Department'
  *     responses:
  *       200:
  *         description: Profile updated successfully

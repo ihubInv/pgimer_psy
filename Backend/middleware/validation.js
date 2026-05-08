@@ -58,30 +58,6 @@ const validateUserRegistration = [
   body('role')
     .isIn(['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'])
     .withMessage('Role must be one of: Admin, Faculty, Resident, Psychiatric Welfare Officer'),
-  body('department')
-    .optional({ nullable: true })
-    .custom((value, { req }) => {
-      const role = req.body?.role;
-      const rolesRequiringDepartment = ['Faculty', 'Resident'];
-      const rolesWithoutDepartment = ['Admin', 'Psychiatric Welfare Officer'];
-
-      if (rolesRequiringDepartment.includes(role)) {
-        if (value === undefined || value === null || String(value).trim() === '') {
-          throw new Error('Department is required for Faculty and Resident roles');
-        }
-        if (!['Child Department', 'Adult Department'].includes(String(value).trim())) {
-          throw new Error('Department must be Child Department or Adult Department');
-        }
-      }
-
-      if (rolesWithoutDepartment.includes(role)) {
-        if (value !== undefined && value !== null && String(value).trim() !== '') {
-          throw new Error('Department is not allowed for Admin and Psychiatric Welfare Officer roles');
-        }
-      }
-
-      return true;
-    }),
   handleValidationErrors
 ];
 
@@ -305,7 +281,7 @@ const validatePatientRegistration = [
     .optional()
     .isLength({ max: 255 })
     .withMessage('Exact source must not exceed 255 characters'),
-  
+
   // Quick Entry Additional Fields
   body('department')
     .optional()

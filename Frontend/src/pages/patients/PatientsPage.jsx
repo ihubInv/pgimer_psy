@@ -10,7 +10,6 @@ import {
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
 import { useGetAllPatientsQuery, useDeletePatientMutation, useDeleteChildPatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
-import { useGetProfileQuery } from '../../features/auth/authApiSlice';
 import { formatPatientsForExport, exportData } from '../../utils/exportUtils';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
@@ -19,7 +18,7 @@ import Table from '../../components/Table';
 import Pagination from '../../components/Pagination';
 import Badge from '../../components/Badge';
 import ExportDateRangeModal from '../../components/ExportDateRangeModal';
-import { isAdmin, isMWO, USER_DEPARTMENTS, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM } from '../../utils/constants';
+import { isAdmin, isMWO, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM } from '../../utils/constants';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
@@ -31,28 +30,8 @@ const PatientsPage = () => {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const isPwoRole = isMWO(user?.role);
-  const isAdminRole = isAdmin(user?.role);
-  const canSwitchPatientType = isPwoRole || isAdminRole;
   const limit = 10;
-
-  const { data: profileData } = useGetProfileQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-  });
-
-  // Use freshest department from profile response so tab/CTA flips immediately
-  // after department change, without requiring logout/login.
-  const effectiveDepartment = profileData?.data?.user?.department || user?.department || '';
-  const isChildDepartment = String(effectiveDepartment).trim().toLowerCase() === USER_DEPARTMENTS.CHILD.toLowerCase();
-  const [patientType, setPatientType] = useState(isChildDepartment ? 'child' : 'adult');
-  const showAdultTab = canSwitchPatientType || !isChildDepartment;
-  const showChildTab = canSwitchPatientType || isChildDepartment;
-
-  useEffect(() => {
-    if (!canSwitchPatientType) {
-      setPatientType(isChildDepartment ? 'child' : 'adult');
-    }
-  }, [canSwitchPatientType, isChildDepartment]);
+  const [patientType, setPatientType] = useState('adult');
 
   // Reset page to 1 when search changes
   useEffect(() => {
@@ -62,12 +41,12 @@ const PatientsPage = () => {
   // Fetch patients - use server-side pagination when not searching, client-side when searching
   const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
 
-  // Unified patient list. Backend scopes to adult/child by `req.user.department`.
+  // Unified patient list. Backend scopes adult/child by `patient_type` query.
   const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
     page: search.trim() ? 1 : page,
     limit: fetchLimit,
     search: search.trim() || undefined,
-    ...(canSwitchPatientType ? { patient_type: patientType } : {}),
+    patient_type: patientType,
   }, {
     refetchOnMountOrArgChange: true,
   });
@@ -2949,37 +2928,33 @@ const PatientsPage = () => {
         {/* Header Section */}
         {/* Main Content Card */}
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
-          {/* Department-scoped patient type tab (single visible tab) */}
+          {/* Patient type tabs */}
           <div className="mb-6">
             <div className="flex gap-2 border-b border-gray-200">
-              {showAdultTab && (
-                <button
-                  type="button"
-                  onClick={() => setPatientType('adult')}
-                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
-                    patientType === 'adult'
-                      ? 'border-primary-600 text-primary-600 bg-primary-50'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                  aria-current={patientType === 'adult' ? 'page' : undefined}
-                >
-                  Adult Patients
-                </button>
-              )}
-              {showChildTab && (
-                <button
-                  type="button"
-                  onClick={() => setPatientType('child')}
-                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
-                    patientType === 'child'
-                      ? 'border-primary-600 text-primary-600 bg-primary-50'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                  aria-current={patientType === 'child' ? 'page' : undefined}
-                >
-                  Child Patients
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setPatientType('adult')}
+                className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                  patientType === 'adult'
+                    ? 'border-primary-600 text-primary-600 bg-primary-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+                aria-current={patientType === 'adult' ? 'page' : undefined}
+              >
+                Adult Patients
+              </button>
+              <button
+                type="button"
+                onClick={() => setPatientType('child')}
+                className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                  patientType === 'child'
+                    ? 'border-primary-600 text-primary-600 bg-primary-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+                aria-current={patientType === 'child' ? 'page' : undefined}
+              >
+                Child Patients
+              </button>
             </div>
           </div>
 
@@ -3022,10 +2997,10 @@ const PatientsPage = () => {
               </div>
               {!isMWO(user?.role) && (
                 <div className="flex flex-col sm:flex-row gap-3 lg:flex-col xl:flex-row">
-                  <Link to={isChildDepartment ? '/child-patient/new' : '/patients/new'}>
+                  <Link to={patientType === 'child' ? '/child-patient/new' : '/patients/new'}>
                     <Button className="bg-gradient-to-r h-12 px-5 from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap">
                       <FiPlus className="mr-2" />
-                      {isChildDepartment ? 'Add Child Patient' : 'Add Patient'}
+                      {patientType === 'child' ? 'Add Child Patient' : 'Add Patient'}
                     </Button>
                   </Link>
                 </div>
@@ -3079,10 +3054,10 @@ const PatientsPage = () => {
                 </Button>
               )}
               {user?.role !== 'MWO' && !search && allPatients?.length === 0 && (
-                <Link to={isChildDepartment ? '/child-patient/new' : '/patients/new'} className="mt-6">
+                <Link to={patientType === 'child' ? '/child-patient/new' : '/patients/new'} className="mt-6">
                   <Button className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg">
                     <FiPlus className="mr-2" />
-                    {isChildDepartment ? 'Register First Child Patient' : 'Add First Patient'}
+                    {patientType === 'child' ? 'Register First Child Patient' : 'Add First Patient'}
                   </Button>
                 </Link>
               )}

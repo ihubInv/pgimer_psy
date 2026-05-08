@@ -14,42 +14,13 @@ const {
 const { isMobileAppClient } = require('../utils/mobileClient');
 const db = require('../config/database');
 
-const ROLES_REQUIRING_DEPARTMENT = ['Faculty', 'Resident'];
-const ROLES_WITHOUT_DEPARTMENT = ['Admin', 'Psychiatric Welfare Officer'];
-const VALID_DEPARTMENTS = ['Child Department', 'Adult Department'];
-
-const normalizeDepartmentByRole = (role, department) => {
-  if (ROLES_WITHOUT_DEPARTMENT.includes(role)) {
-    return null;
-  }
-
-  if (ROLES_REQUIRING_DEPARTMENT.includes(role)) {
-    const normalizedDepartment = department === undefined || department === null
-      ? ''
-      : String(department).trim();
-
-    if (!normalizedDepartment) {
-      throw new Error('Department is required for Faculty and Resident roles');
-    }
-
-    if (!VALID_DEPARTMENTS.includes(normalizedDepartment)) {
-      throw new Error('Department must be Child Department or Adult Department');
-    }
-
-    return normalizedDepartment;
-  }
-
-  return null;
-};
-
 class UserController {
   // Register a new user
   // SECURITY FIX #2.11: Secure user onboarding - admin creates user without password
   // User receives secure password setup link via email
   static async register(req, res) {
     try {
-      const { name, role, email, mobile, department } = req.body;
-      const normalizedDepartment = normalizeDepartmentByRole(role, department);
+      const { name, role, email, mobile } = req.body;
 
       // SECURITY FIX #2.11: Create user without password - user will set it via secure setup link
       const user = await User.create({
@@ -57,7 +28,6 @@ class UserController {
         role,
         email,
         mobile,
-        department: normalizedDepartment,
         // password is NOT included - user must set it via secure setup link
       });
 
@@ -102,13 +72,6 @@ class UserController {
         return res.status(409).json({
           success: false,
           message: error.message
-        });
-      }
-      if (error.message === 'Department is required for Faculty and Resident roles' ||
-          error.message === 'Department must be Child Department or Adult Department') {
-        return res.status(400).json({
-          success: false,
-          message: error.message,
         });
       }
 
@@ -399,21 +362,11 @@ class UserController {
         });
       }
 
-      const { name, email, department } = req.body;
+      const { name, email } = req.body;
       const updateData = {};
-      const validDepartments = ['Child Department', 'Adult Department'];
 
       if (name) updateData.name = name;
       if (email) updateData.email = email;
-      if (department !== undefined && department !== null && department !== '') {
-        if (!validDepartments.includes(department)) {
-          return res.status(400).json({
-            success: false,
-            message: 'Department must be Child Department or Adult Department',
-          });
-        }
-        updateData.department = department;
-      }
 
       if (Object.keys(updateData).length === 0) {
         return res.status(400).json({
@@ -703,41 +656,14 @@ class UserController {
         });
       }
 
-      const { name, role, email, mobile, department } = req.body;
+      const { name, role, email, mobile } = req.body;
       const updateData = {};
-      const nextRole = role || user.role;
 
       if (name) updateData.name = name;
       if (role) updateData.role = role;
       if (email) updateData.email = email;
       if (mobile !== undefined && mobile !== null && String(mobile).trim() !== '') {
         updateData.mobile = String(mobile).trim();
-      }
-
-      if (ROLES_WITHOUT_DEPARTMENT.includes(nextRole)) {
-        updateData.department = null;
-      } else if (ROLES_REQUIRING_DEPARTMENT.includes(nextRole)) {
-        let departmentToSave;
-        if (department !== undefined) {
-          departmentToSave = String(department || '').trim();
-        } else {
-          departmentToSave = String(user.department || '').trim();
-        }
-
-        if (!departmentToSave) {
-          return res.status(400).json({
-            success: false,
-            message: 'Department is required for Faculty and Resident roles',
-          });
-        }
-
-        if (!VALID_DEPARTMENTS.includes(departmentToSave)) {
-          return res.status(400).json({
-            success: false,
-            message: 'Department must be Child Department or Adult Department',
-          });
-        }
-        updateData.department = departmentToSave;
       }
 
       await user.update(updateData);
@@ -1930,9 +1856,6 @@ class UserController {
         two_factor_enabled: userResponse.two_factor_enabled,
         created_at: userResponse.created_at,
       };
-      if (ROLES_REQUIRING_DEPARTMENT.includes(userResponse.role)) {
-        userPayload.department = userResponse.department ?? null;
-      }
 
       if (mobile) {
         // Mobile: opaque DB-backed token only. Server can revoke instantly,

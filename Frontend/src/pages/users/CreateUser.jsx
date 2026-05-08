@@ -15,10 +15,9 @@ import Card from '../../components/Card';
 import { IconInput } from '../../components/IconInput';
 import Select from '../../components/Select';
 import Button from '../../components/Button';
-import { USER_ROLES, USER_DEPARTMENTS, isAdmin } from '../../utils/constants';
+import { USER_ROLES, isAdmin } from '../../utils/constants';
 
 const CreateUser = ({ editMode = false, existingUser = null, userId = null }) => {
-  const rolesRequiringDepartment = [USER_ROLES.FACULTY, USER_ROLES.RESIDENT];
   const navigate = useNavigate();
   const currentUser = useSelector(selectCurrentUser);
   const [createUser, { isLoading: isCreating }] = useCreateUserMutation();
@@ -41,7 +40,6 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
     email: '',
     mobile: '',
     role: '',
-    department: '',
     // SECURITY FIX #2.11: Password fields removed - user will set password via secure setup link
   });
 
@@ -55,7 +53,6 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
         email: currentUserData.email || '',
         mobile: currentUserData.mobile || '',
         role: currentUserData.role || '',
-        department: currentUserData.department || '',
         // SECURITY FIX #2.11: Password fields removed
       });
     }
@@ -63,17 +60,7 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => {
-      if (name === 'role') {
-        const requiresDepartment = rolesRequiringDepartment.includes(value);
-        return {
-          ...prev,
-          role: value,
-          department: requiresDepartment ? prev.department : '',
-        };
-      }
-      return { ...prev, [name]: value };
-    });
+    setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: '' }));
     }
@@ -105,11 +92,6 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
       newErrors.role = 'Role is required';
     }
 
-    const requiresDepartment = rolesRequiringDepartment.includes(formData.role);
-    if (requiresDepartment && !formData.department) {
-      newErrors.department = 'Department is required';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -131,10 +113,6 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
           mobile: formData.mobile.trim(),
           role: formData.role,
         };
-        if (rolesRequiringDepartment.includes(formData.role)) {
-          payload.department = formData.department.trim();
-        }
-        // Explicit payload so department/mobile are always sent (spread can omit keys if state is stale)
         await updateUser(payload).unwrap();
         toast.success('User updated successfully!');
       } else {
@@ -145,9 +123,6 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
           mobile: formData.mobile.trim(),
           role: formData.role,
         };
-        if (rolesRequiringDepartment.includes(formData.role)) {
-          payload.department = formData.department.trim();
-        }
         await createUser(payload).unwrap();
         toast.success('User created successfully! Password setup link has been sent to the user\'s email.');
       }
@@ -182,12 +157,6 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
   };
 
   const roleOptions = Object.entries(USER_ROLES).map(([key, value]) => ({
-    value,
-    label: value,
-  }));
-  const shouldShowDepartment = rolesRequiringDepartment.includes(formData.role);
-
-  const departmentOptions = Object.values(USER_DEPARTMENTS).map((value) => ({
     value,
     label: value,
   }));
@@ -229,7 +198,7 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
               {/* Main Form Card */}
               <Card className="relative shadow-2xl border border-white/40 bg-white/70 backdrop-blur-2xl rounded-3xl overflow-hidden">
                 <div className="space-y-6 lg:space-y-8 p-6 lg:p-8">
-                  {/* Form fields: two columns; department spans full width on md+ */}
+                  {/* Form fields: two columns */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Row 1: Full Name | Email */}
                     <div className="relative">
@@ -302,23 +271,6 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
                       </div>
                     </div>
 
-                    {shouldShowDepartment && (
-                      <div className="relative md:col-span-2">
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-blue-500/5 rounded-xl"></div>
-                        <div className="relative max-w-full md:max-w-md">
-                          <Select
-                            label="Department"
-                            name="department"
-                            value={formData.department}
-                            onChange={handleChange}
-                            options={departmentOptions}
-                            error={errors.department}
-                            required
-                            className="h-14"
-                          />
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   {/* 2FA Toggle Section - Only visible to Admin in Edit Mode */}

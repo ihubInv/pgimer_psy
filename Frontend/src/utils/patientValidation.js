@@ -413,12 +413,12 @@ export const validatePatientRegistration = (formData, step = 1) => {
   // Validate all fields
   allFieldNames.forEach(fieldName => {
     let value = formData[fieldName];
-    
+
     // Special handling for department field - use default value if not set
     if (fieldName === 'department' && (!value || value === '')) {
       value = 'Psychiatry';
     }
-    
+
     const rules = getFieldValidationRules(fieldName, step);
     
     // Only validate if rules exist (field is known) or if value is provided

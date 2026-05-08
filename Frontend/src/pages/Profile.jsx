@@ -18,14 +18,13 @@ import {
 } from '../features/auth/authApiSlice';
 import Card from '../components/Card';
 import Input from '../components/Input';
-import Select from '../components/Select';
 import Button from '../components/Button';
 import Badge from '../components/Badge';
 import Modal from '../components/Modal';
 import { formatDate } from '../utils/formatters';
 import { validatePassword, getPasswordRequirements } from '../utils/passwordValidation';
 import { encryptPasswordForTransmission } from '../utils/passwordEncryption';
-import { USER_DEPARTMENTS, isAdmin } from '../utils/constants';
+import { isAdmin } from '../utils/constants';
 
 const Profile = () => {
   const user = useSelector(selectCurrentUser);
@@ -42,7 +41,6 @@ const Profile = () => {
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    department: user?.department || '',
   });
 
   // Update form when profile data loads
@@ -51,7 +49,6 @@ const Profile = () => {
       setProfileForm({
         name: profileData.data.user.name || '',
         email: profileData.data.user.email || '',
-        department: profileData.data.user.department || '',
       });
     }
   }, [profileData]);
@@ -75,9 +72,6 @@ const Profile = () => {
   const [showDisable2FAModal, setShowDisable2FAModal] = useState(false);
   const [disable2FAOTP, setDisable2FAOTP] = useState('');
   const [isDisabling2FA, setIsDisabling2FA] = useState(false);
-  const isPwoRole = String(user?.role || '').trim().toLowerCase() === 'psychiatric welfare officer';
-  const isAdminRole = isAdmin(user?.role);
-  const shouldUseDepartment = !isPwoRole && !isAdminRole;
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -95,28 +89,16 @@ const Profile = () => {
     }
   };
 
-  const departmentOptions = Object.values(USER_DEPARTMENTS).map((value) => ({
-    value,
-    label: value,
-  }));
-
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
-    if (shouldUseDepartment && !profileForm.department) {
-      toast.error('Please select a department');
-      return;
-    }
     try {
-      const payload = !shouldUseDepartment
-        ? { name: profileForm.name, email: profileForm.email }
-        : profileForm;
+      const payload = { name: profileForm.name, email: profileForm.email };
       const response = await updateProfile(payload).unwrap();
       const updatedUser = response?.data?.user;
       if (updatedUser) {
         dispatch(updateAuthUser({
           name: updatedUser.name,
           email: updatedUser.email,
-          department: updatedUser.department,
         }));
       }
       toast.success('Profile updated successfully!');
@@ -489,21 +471,6 @@ const Profile = () => {
                       required
                     />
                   </div>
-
-                  {shouldUseDepartment && (
-                    <div className="bg-white rounded-xl border border-gray-200 p-4">
-                      <Select
-                        label="Department"
-                        name="department"
-                        value={profileForm.department}
-                        onChange={handleProfileChange}
-                        options={departmentOptions}
-                        required
-                        className="bg-white"
-                        containerClassName="bg-white"
-                      />
-                    </div>
-                  )}
 
                   <div className="flex justify-end pt-4">
                     <Button 

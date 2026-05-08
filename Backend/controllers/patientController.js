@@ -28,32 +28,17 @@ class PatientController {
 
   static async getPatientStats(req, res) {
     try {
-      // Department-based scoping (mirrors getAllPatients):
-      // - Child Department users see child registration stats
-      // - Adult Department / unspecified users see adult registered_patient stats
-      const userDepartmentRaw = req.user?.department ? String(req.user.department).trim() : '';
-      const isChildDepartment = userDepartmentRaw.toLowerCase() === 'child department';
+      // Combined adult + child counts. Department gating removed.
+      const stats = await Patient.getStats(null);
+      const adultTotal = parseInt(stats?.total_patients ?? 0, 10) || 0;
 
-      let stats;
-      let adultTotal = 0;
       let childTotal = 0;
-
-      if (isChildDepartment) {
+      try {
         const ChildPatientRegistration = require('../models/ChildPatientRegistration');
         const childResult = await ChildPatientRegistration.findAll(1, 1, {});
         childTotal = childResult?.pagination?.total || 0;
-        stats = {
-          total_patients: childTotal,
-          male_patients: 0,
-          female_patients: 0,
-          other_patients: 0,
-          patients_with_adl: 0,
-          complex_cases: 0,
-          simple_cases: 0,
-        };
-      } else {
-        stats = await Patient.getStats(null);
-        adultTotal = parseInt(stats?.total_patients ?? 0, 10) || 0;
+      } catch (e) {
+        console.warn('[getPatientStats] child count skipped:', e.message);
       }
 
       res.json({
@@ -63,8 +48,6 @@ class PatientController {
             ...stats,
             adult_total: adultTotal,
             child_total: childTotal,
-            department: userDepartmentRaw || null,
-            scope: 'department'
           }
         }
       });
@@ -685,22 +668,11 @@ class PatientController {
         return PatientController.getPatientById(req, res);
       }
 
-      // Department scope is server-enforced for this unified endpoint.
-      // Exception: Psychiatric Welfare Officer can explicitly switch patient type
-      // via `patient_type=adult|child` so both tabs can be used from one route.
-      const userDepartmentRaw = req.user?.department ? String(req.user.department).trim() : '';
-      const userDepartment = userDepartmentRaw.toLowerCase();
-      const isChildDepartment = userDepartment === 'child department';
-      const userRole = String(req.user?.role || '').trim();
-      const normalizedRole = userRole.toLowerCase();
-      const canSwitchPatientTypeByQuery =
-        normalizedRole === 'psychiatric welfare officer' || normalizedRole === 'admin';
+      // Unified patient list now follows explicit patient_type selection from UI.
+      // If not provided, default to adult.
       const requestedPatientType = String(req.query.patient_type || '').trim().toLowerCase();
       const wantsChildType = requestedPatientType === 'child';
-      const wantsAdultType = requestedPatientType === 'adult';
-      const useChildDataset = canSwitchPatientTypeByQuery
-        ? (wantsChildType ? true : wantsAdultType ? false : false)
-        : isChildDepartment;
+      const useChildDataset = wantsChildType;
 
       // Check if search parameter is provided.
       // Child dataset does not use Patient.search (adult table only).
@@ -729,10 +701,9 @@ class PatientController {
         }
       }
 
-      // Unified patient list scoped by the logged-in user's department:
-      // - Child Department users get child registrations (`patient_type: 'child'`).
-      // - Adult Department / unspecified users get adult patients (`patient_type: 'adult'`).
-      // - Psychiatric Welfare Officer may switch tab by sending `patient_type`.
+      // Unified patient list scoped by requested `patient_type`:
+      // - `patient_type=child` returns child registrations.
+      // - otherwise returns adult patients.
       // The `my_patients` flag is intentionally ignored.
       if (useChildDataset) {
         const ChildPatientRegistration = require('../models/ChildPatientRegistration');

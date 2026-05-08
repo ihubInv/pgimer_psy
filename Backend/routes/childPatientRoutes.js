@@ -65,9 +65,9 @@ router.post(
 );
 
 /**
- * Note: the unified patient list lives at `GET /api/patients`. The backend decides
- * whether to return adult or child rows from the logged-in user's `department`,
- * so a separate `GET /api/child-patient` listing endpoint is intentionally not
+ * Note: the unified patient list lives at `GET /api/patients`. The backend
+ * returns adult or child rows based on the `patient_type` query parameter, so a
+ * separate `GET /api/child-patient` listing endpoint is intentionally not
  * exposed here (it would duplicate that contract).
  */
 
