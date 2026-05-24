@@ -5,10 +5,17 @@ import { toast } from 'react-toastify';
 import { 
   FiPlus, FiSearch, FiTrash2, FiEye,  FiEdit, FiUsers, 
    FiDownload,  FiClock, FiPrinter,
-  FiHeart, FiFileText, FiShield, FiX
+  FiHeart, FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle
 } from 'react-icons/fi';
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
-import { useGetAllPatientsQuery, useDeletePatientMutation, useDeleteChildPatientMutation, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
+import {
+  useGetAllPatientsQuery,
+  useDeletePatientMutation,
+  useDeleteChildPatientMutation,
+  useGetPatientByIdQuery,
+  useMarkReferralSeenMutation,
+  useCompleteReferralMutation,
+} from '../../features/patients/patientsApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { formatPatientsForExport, exportData } from '../../utils/exportUtils';
 import Card from '../../components/Card';
@@ -18,7 +25,20 @@ import Table from '../../components/Table';
 import Pagination from '../../components/Pagination';
 import Badge from '../../components/Badge';
 import ExportDateRangeModal from '../../components/ExportDateRangeModal';
-import { isAdmin, isMWO, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM, isJuniorResidentUser, isSeniorResidentUser } from '../../utils/constants';
+import {
+  isAdmin,
+  isMWO,
+  PATIENT_REGISTRATION_FORM,
+  CLINICAL_PROFORMA_FORM,
+  ADL_FILE_FORM,
+  PRESCRIPTION_FORM,
+  isJuniorResidentUser,
+  isSeniorResidentUser,
+  canReferPatients,
+  getResidentSubRoleLabel,
+} from '../../utils/constants';
+import ReferPatientModal from '../../components/ReferPatientModal';
+import BulkReferPatientsModal from '../../components/BulkReferPatientsModal';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
@@ -32,11 +52,20 @@ const PatientsPage = () => {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const limit = 10;
   const [patientType, setPatientType] = useState('adult');
+  const [referralSubView, setReferralSubView] = useState('to_me'); // to_me | by_me
+  const [referModalPatient, setReferModalPatient] = useState(null);
+  const [bulkReferModalOpen, setBulkReferModalOpen] = useState(false);
+
+  const isReferredTab = patientType === 'referred';
 
   // Reset page to 1 when search changes
   useEffect(() => {
     setPage(1);
-  }, [search, patientType]);
+  }, [search, patientType, referralSubView]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [referralSubView]);
 
   const patientsTabTitle = isJuniorResidentUser(user)
     ? 'My Patients'
@@ -48,14 +77,27 @@ const PatientsPage = () => {
   const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
 
   // Unified patient list. Backend scopes adult/child by `patient_type` query.
-  const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
-    page: search.trim() ? 1 : page,
-    limit: fetchLimit,
-    search: search.trim() || undefined,
-    patient_type: patientType,
-  }, {
-    refetchOnMountOrArgChange: true,
-  });
+  const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery(
+    isReferredTab
+      ? {
+          page: search.trim() ? 1 : page,
+          limit: fetchLimit,
+          search: search.trim() || undefined,
+          referral_view: referralSubView === 'by_me' ? 'referred_by_me' : 'referred_to_me',
+        }
+      : {
+          page: search.trim() ? 1 : page,
+          limit: fetchLimit,
+          search: search.trim() || undefined,
+          patient_type: patientType,
+        },
+    {
+      refetchOnMountOrArgChange: true,
+    }
+  );
+
+  const [markReferralSeen] = useMarkReferralSeenMutation();
+  const [completeReferral] = useCompleteReferralMutation();
 
   const currentIsLoading = isLoading;
   const currentIsFetching = isFetching;
@@ -84,7 +126,13 @@ const PatientsPage = () => {
         patient.adl_no?.toLowerCase().includes(searchLower) ||
         patient.special_clinic_no?.toLowerCase().includes(searchLower) ||
         patient.assigned_doctor_name?.toLowerCase().includes(searchLower) ||
-        patient.assigned_doctor_role?.toLowerCase().includes(searchLower)
+        patient.assigned_doctor_role?.toLowerCase().includes(searchLower) ||
+        (isReferredTab && (
+          patient.referred_by_name?.toLowerCase().includes(searchLower) ||
+          patient.referred_to_name?.toLowerCase().includes(searchLower) ||
+          patient.referral_reason?.toLowerCase().includes(searchLower) ||
+          patient.referral_status?.toLowerCase().includes(searchLower)
+        ))
       );
     });
 
@@ -104,7 +152,13 @@ const PatientsPage = () => {
           patient.adl_no?.toLowerCase().includes(searchLower) ||
           patient.special_clinic_no?.toLowerCase().includes(searchLower) ||
           patient.assigned_doctor_name?.toLowerCase().includes(searchLower) ||
-          patient.assigned_doctor_role?.toLowerCase().includes(searchLower)
+          patient.assigned_doctor_role?.toLowerCase().includes(searchLower) ||
+          (isReferredTab && (
+            patient.referred_by_name?.toLowerCase().includes(searchLower) ||
+            patient.referred_to_name?.toLowerCase().includes(searchLower) ||
+            patient.referral_reason?.toLowerCase().includes(searchLower) ||
+            patient.referral_status?.toLowerCase().includes(searchLower)
+          ))
         );
       }).length || 0)
     : (data?.data?.pagination?.total || 0);
@@ -149,6 +203,30 @@ const PatientsPage = () => {
       navigate(`/child-patient/${patientId}?mode=edit`);
     } else {
     navigate(`/patients/${patientId}?edit=true`);
+    }
+  };
+
+  const handleViewReferred = async (row) => {
+    if (row.referral_id && referralSubView === 'to_me') {
+      try {
+        await markReferralSeen(row.referral_id).unwrap();
+      } catch {
+        /* non-blocking */
+      }
+    }
+    handleView(row);
+  };
+
+  const handleCompleteReferral = async (row) => {
+    if (!row.referral_id) return;
+    const confirmed = window.confirm('Mark this referral as completed?');
+    if (!confirmed) return;
+    try {
+      await completeReferral({ referralId: row.referral_id }).unwrap();
+      toast.success('Referral marked as completed');
+      refetch();
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to complete referral');
     }
   };
 
@@ -2805,6 +2883,78 @@ const PatientsPage = () => {
         </div>
       ),
     },
+    ...(isReferredTab
+      ? [
+          {
+            header: (
+              <div className="flex items-center gap-2">
+                <FiUsers className="w-4 h-4 text-primary-600" />
+                <span className="font-semibold">
+                  {referralSubView === 'by_me' ? 'Referred To' : 'Referred By'}
+                </span>
+              </div>
+            ),
+            render: (row) => (
+              <div className="space-y-0.5">
+                {referralSubView === 'by_me' ? (
+                  <>
+                    <span className="font-medium text-gray-900">{row.referred_to_name || 'N/A'}</span>
+                    {row.referred_to_sub_role ? (
+                      <p className="text-xs text-gray-500">{getResidentSubRoleLabel(row.referred_to_sub_role)}</p>
+                    ) : row.referred_to_role ? (
+                      <p className="text-xs text-gray-500">{row.referred_to_role}</p>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-gray-900">{row.referred_by_name || 'N/A'}</span>
+                    {row.referred_by_sub_role ? (
+                      <p className="text-xs text-gray-500">{getResidentSubRoleLabel(row.referred_by_sub_role)}</p>
+                    ) : row.referred_by_role ? (
+                      <p className="text-xs text-gray-500">{row.referred_by_role}</p>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ),
+          },
+          {
+            header: (
+              <div className="flex items-center gap-2">
+                <FiFileText className="w-4 h-4 text-primary-600" />
+                <span className="font-semibold">Reason</span>
+              </div>
+            ),
+            render: (row) => (
+              <p className="text-sm text-gray-700 max-w-xs line-clamp-3" title={row.referral_reason || ''}>
+                {row.referral_reason?.trim() ? row.referral_reason : '—'}
+              </p>
+            ),
+          },
+          {
+            header: (
+              <div className="flex items-center gap-2">
+                <FiShield className="w-4 h-4 text-primary-600" />
+                <span className="font-semibold">Status</span>
+              </div>
+            ),
+            render: (row) => {
+              const st = (row.referral_status || 'pending').toLowerCase();
+              const styles =
+                st === 'completed'
+                  ? 'bg-green-100 text-green-800 border-green-200'
+                  : st === 'seen'
+                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                    : 'bg-amber-100 text-amber-900 border-amber-200';
+              return (
+                <Badge className={`border ${styles}`}>
+                  {st === 'completed' ? 'Completed' : st === 'seen' ? 'Seen' : 'Pending'}
+                </Badge>
+              );
+            },
+          },
+        ]
+      : []),
     // {
     //   header: (
     //     <div className="flex items-center gap-2">
@@ -2839,7 +2989,9 @@ const PatientsPage = () => {
       header: (
         <div className="flex items-center gap-2">
           <FiFileText className="w-4 h-4 text-primary-600" />
-          <span className="font-semibold">{patientType === 'child' ? 'CGC No' : 'PSY No'}</span>
+          <span className="font-semibold">
+            {isReferredTab ? 'PSY / CGC No' : patientType === 'child' ? 'CGC No' : 'PSY No'}
+          </span>
         </div>
       ),
       accessor: 'psy_no',
@@ -2869,12 +3021,17 @@ const PatientsPage = () => {
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={() => handleView(row)}
+              onClick={() => (
+                isReferredTab && referralSubView === 'to_me'
+                  ? handleViewReferred(row)
+                  : handleView(row)
+              )}
               className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
               title={`View Details for Patient ID: ${patientId || 'N/A'}`}
             >
               <FiEye className="w-4 h-4 text-blue-600" />
             </Button>
+            {!isReferredTab && (
             <Button 
               variant="ghost" 
               size="sm"
@@ -2884,6 +3041,8 @@ const PatientsPage = () => {
             >
               <FiEdit className="w-4 h-4 text-green-600" />
             </Button>
+            )}
+            {!isReferredTab && (
             <Button 
               variant="ghost" 
               size="sm"
@@ -2894,6 +3053,8 @@ const PatientsPage = () => {
               <FiPrinter className="w-4 h-4 text-purple-600" />
              
             </Button>
+            )}
+            {!isReferredTab && (
             <Button 
               variant="ghost" 
               size="sm"
@@ -2903,6 +3064,29 @@ const PatientsPage = () => {
             >
               <BsFileEarmarkExcelFill className="w-4 h-4 text-green-600" />
             </Button>
+            )}
+            {canReferPatients(user) && !isReferredTab && patientId && (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setReferModalPatient(row)}
+                className="h-9 w-9 p-0 bg-gradient-to-r from-sky-50 to-cyan-50 hover:from-sky-100 hover:to-cyan-100 border border-sky-200 hover:border-sky-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                title="Refer Patient to Doctor"
+              >
+                <FiUserPlus className="w-4 h-4 text-sky-700" />
+              </Button>
+            )}
+            {isReferredTab && row.referral_status !== 'completed' && (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => handleCompleteReferral(row)}
+                className="h-9 w-9 p-0 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+                title="Mark referral completed"
+              >
+                <FiCheckCircle className="w-4 h-4 text-emerald-700" />
+              </Button>
+            )}
             {/* Show Delete button only for Admin - Full authority to delete any patient */}
             {isAdmin(user?.role) && patientId && (
               <Button 
@@ -2936,9 +3120,16 @@ const PatientsPage = () => {
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
           <div className="mb-4 px-1">
             <h1 className="text-2xl font-bold text-gray-900">{patientsTabTitle}</h1>
-            {isJuniorResidentUser(user) && (
+            {isJuniorResidentUser(user) && !isReferredTab && (
               <p className="text-sm text-gray-600 mt-1">
                 Patients assigned to you when you select your room for the day.
+              </p>
+            )}
+            {isReferredTab && (
+              <p className="text-sm text-gray-600 mt-1">
+                {referralSubView === 'by_me'
+                  ? 'Patients you referred to other doctors — only your referrals are listed here.'
+                  : 'Patients referred to you by other doctors. Open a patient to mark as seen.'}
               </p>
             )}
           </div>
@@ -2969,6 +3160,23 @@ const PatientsPage = () => {
               >
                 Child Patients
               </button>
+              {canReferPatients(user) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPatientType('referred');
+                    setReferralSubView('to_me');
+                  }}
+                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                    patientType === 'referred'
+                      ? 'border-primary-600 text-primary-600 bg-primary-50'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                  aria-current={patientType === 'referred' ? 'page' : undefined}
+                >
+                  Referred Patients
+                </button>
+              )}
             </div>
           </div>
 
@@ -2994,7 +3202,13 @@ const PatientsPage = () => {
                   <FiSearch className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                 </div>
                 <Input
-                  placeholder={patientType === 'child' ? "Search by CR No, Child Name, CGC No..." : "Search by CR No, Patient Name, PSY No..."}
+                  placeholder={
+                    isReferredTab
+                      ? 'Search by CR No, patient name, referrer, reason...'
+                      : patientType === 'child'
+                        ? 'Search by CR No, Child Name, CGC No...'
+                        : 'Search by CR No, Patient Name, PSY No...'
+                  }
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-12 pr-12 h-12 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-200 shadow-sm hover:shadow-md"
@@ -3011,12 +3225,24 @@ const PatientsPage = () => {
               </div>
               {!isMWO(user?.role) && (
                 <div className="flex flex-col sm:flex-row gap-3 lg:flex-col xl:flex-row">
+                  {canReferPatients(user) && isReferredTab && (
+                    <Button
+                      type="button"
+                      onClick={() => setBulkReferModalOpen(true)}
+                      className="h-12 px-5 bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap"
+                    >
+                      <FiUserPlus className="mr-2" />
+                      Refer Patient(s)
+                    </Button>
+                  )}
+                  {!isReferredTab && (
                   <Link to={patientType === 'child' ? '/child-patient/new' : '/patients/new'}>
                     <Button className="bg-gradient-to-r h-12 px-5 from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap">
                       <FiPlus className="mr-2" />
                       {patientType === 'child' ? 'Add Child Patient' : 'Add Patient'}
                     </Button>
                   </Link>
+                  )}
                 </div>
               )}
               <div className="flex gap-3">
@@ -3031,6 +3257,32 @@ const PatientsPage = () => {
                 </Button>
               </div>
             </div>
+            {isReferredTab && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReferralSubView('to_me')}
+                  className={`px-4 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                    referralSubView === 'to_me'
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  Referred to Me
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReferralSubView('by_me')}
+                  className={`px-4 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                    referralSubView === 'by_me'
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  My Referrals
+                </button>
+              </div>
+            )}
           </div>
 
           {(currentIsLoading || currentIsFetching) ? (
@@ -3068,12 +3320,26 @@ const PatientsPage = () => {
                 </Button>
               )}
               {user?.role !== 'MWO' && !search && allPatients?.length === 0 && (
-                <Link to={patientType === 'child' ? '/child-patient/new' : '/patients/new'} className="mt-6">
-                  <Button className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg">
-                    <FiPlus className="mr-2" />
-                    {patientType === 'child' ? 'Register First Child Patient' : 'Add First Patient'}
-                  </Button>
-                </Link>
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 items-center justify-center">
+                  {canReferPatients(user) && isReferredTab && (
+                    <Button
+                      type="button"
+                      onClick={() => setBulkReferModalOpen(true)}
+                      className="bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 shadow-lg"
+                    >
+                      <FiUserPlus className="mr-2" />
+                      Refer Existing Patient(s)
+                    </Button>
+                  )}
+                  {!isReferredTab && (
+                    <Link to={patientType === 'child' ? '/child-patient/new' : '/patients/new'}>
+                      <Button variant="outline" className="border-2 border-primary-200">
+                        <FiPlus className="mr-2" />
+                        {patientType === 'child' ? 'Register First Child Patient' : 'Register New Patient'}
+                      </Button>
+                    </Link>
+                  )}
+                </div>
               )}
             </div>
           ) : (
@@ -3115,6 +3381,21 @@ const PatientsPage = () => {
         </Card>
 
       </div>
+
+      <BulkReferPatientsModal
+        isOpen={bulkReferModalOpen}
+        onClose={() => setBulkReferModalOpen(false)}
+        currentUserId={user?.id}
+        onSuccess={() => refetch()}
+      />
+
+      <ReferPatientModal
+        isOpen={!!referModalPatient}
+        onClose={() => setReferModalPatient(null)}
+        patient={referModalPatient}
+        currentUserId={user?.id}
+        onSuccess={() => refetch()}
+      />
 
       {/* Export Date Range Modal */}
       <ExportDateRangeModal

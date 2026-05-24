@@ -660,9 +660,18 @@ class PatientController {
       const limit = parseInt(req.query.limit) || 10;
       const filters = {};
 
+      const referralView = String(req.query.referral_view || '').trim().toLowerCase();
+      if (referralView === 'referred_to_me' || referralView === 'referred_by_me') {
+        return PatientController.getReferredPatientsList(req, res);
+      }
+
       const isJuniorResident =
         req.user?.role === 'Resident' && req.user?.sub_role === 'Junior Resident';
       const treatingDoctorId = isJuniorResident ? req.user?.id : null;
+      const forReferralPick =
+        (req.query.for_referral === 'true' || req.query.for_referral === '1') &&
+        PatientController._canReferPatients(req.user);
+      const scopedDoctorId = forReferralPick ? null : treatingDoctorId;
 
       // If id is provided, redirect to getPatientById for better performance
       if (req.query.id) {
@@ -681,9 +690,9 @@ class PatientController {
       // Check if search parameter is provided.
       // Junior residents: search must stay scoped to their assigned patients (server-side).
       if (req.query.search && req.query.search.trim().length >= 2 && !useChildDataset) {
-        if (treatingDoctorId) {
+        if (scopedDoctorId) {
           filters.search = req.query.search.trim();
-          filters.treating_doctor_id = treatingDoctorId;
+          filters.treating_doctor_id = scopedDoctorId;
         } else {
           const result = await Patient.search(req.query.search.trim(), page, limit);
           return res.json({
@@ -691,8 +700,8 @@ class PatientController {
             data: result
           });
         }
-      } else if (treatingDoctorId) {
-        filters.treating_doctor_id = treatingDoctorId;
+      } else if (scopedDoctorId) {
+        filters.treating_doctor_id = scopedDoctorId;
       }
 
       // Apply filters
@@ -721,13 +730,13 @@ class PatientController {
         const childFilters = {};
         if (filters.assigned_room) childFilters.assigned_room = filters.assigned_room;
         if (filters.date) childFilters.date = filters.date;
-        if (treatingDoctorId) {
+        if (scopedDoctorId) {
           let doctorRoom = null;
           try {
             const db = require('../config/database');
             const roomRes = await db.query(
               'SELECT current_room, room_assignment_time FROM users WHERE id = $1',
-              [treatingDoctorId]
+              [scopedDoctorId]
             );
             const roomRow = roomRes.rows[0];
             if (roomRow?.current_room && roomRow?.room_assignment_time) {
@@ -744,7 +753,7 @@ class PatientController {
             console.warn('[getAllPatients] Could not resolve junior resident room:', roomErr.message);
           }
           childFilters.junior_my_patients = {
-            doctor_id: treatingDoctorId,
+            doctor_id: scopedDoctorId,
             room: doctorRoom,
           };
         }
@@ -2917,6 +2926,385 @@ class PatientController {
         success: false,
         message: 'Failed to change patient room',
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  static _canReferPatients(user) {
+    const role = user?.role;
+    return role === 'Faculty' || role === 'Resident' || role === 'Admin';
+  }
+
+  static async getReferredPatientsList(req, res) {
+    try {
+      const PatientReferral = require('../models/PatientReferral');
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const view = String(req.query.referral_view || 'referred_to_me').toLowerCase();
+      const search = req.query.search?.trim() || null;
+
+      const result = await PatientReferral.findForDoctor({
+        doctorId: req.user.id,
+        view,
+        page,
+        limit,
+        search,
+        statusFilter: 'active',
+      });
+
+      const patients = result.referrals.map((r) => ({
+        id: r.patient_id,
+        referral_id: r.id,
+        name: r.patient_name,
+        cr_no: r.cr_no,
+        psy_no: r.psy_no,
+        sex: r.sex,
+        age: r.age,
+        age_group: r.age_group,
+        assigned_room: r.assigned_room,
+        patient_type: r.patient_type,
+        referral_status: r.status,
+        referral_reason: r.referral_reason,
+        referred_at: r.referred_at,
+        seen_at: r.seen_at,
+        referred_by_doctor_id: r.referred_by_doctor_id,
+        referred_by_name: r.referred_by_name,
+        referred_by_role: r.referred_by_role,
+        referred_by_sub_role: r.referred_by_sub_role,
+        referred_to_doctor_id: r.referred_to_doctor_id,
+        referred_to_name: r.referred_to_name,
+        referred_to_role: r.referred_to_role,
+        referred_to_sub_role: r.referred_to_sub_role,
+      }));
+
+      return res.json({
+        success: true,
+        data: {
+          patients,
+          pagination: result.pagination,
+        },
+      });
+    } catch (error) {
+      console.error('[getReferredPatientsList] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to load referred patients',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      });
+    }
+  }
+
+  static async referPatientToDoctor(req, res) {
+    try {
+      if (!PatientController._canReferPatients(req.user)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only doctors can refer patients',
+        });
+      }
+
+      const patientId = parseInt(req.params.id, 10);
+      const {
+        referred_to_doctor_id: referredToDoctorIdRaw,
+        referral_reason: referralReason,
+        patient_type: patientTypeRaw,
+        notes,
+      } = req.body || {};
+
+      const referredToDoctorId = parseInt(referredToDoctorIdRaw, 10);
+      const patientType =
+        String(patientTypeRaw || 'adult').toLowerCase() === 'child' ? 'child' : 'adult';
+
+      if (!patientId || patientId <= 0) {
+        return res.status(400).json({ success: false, message: 'Invalid patient ID' });
+      }
+      if (!referredToDoctorId || referredToDoctorId <= 0) {
+        return res.status(400).json({ success: false, message: 'Target doctor is required' });
+      }
+      if (referredToDoctorId === req.user.id) {
+        return res.status(400).json({ success: false, message: 'Cannot refer a patient to yourself' });
+      }
+
+      const User = require('../models/User');
+      const targetDoctor = await User.findById(referredToDoctorId);
+      if (!targetDoctor || !targetDoctor.is_active) {
+        return res.status(404).json({ success: false, message: 'Target doctor not found' });
+      }
+      const targetRole = targetDoctor.role;
+      if (targetRole !== 'Faculty' && targetRole !== 'Resident') {
+        return res.status(400).json({
+          success: false,
+          message: 'Patient can only be referred to Faculty or Resident',
+        });
+      }
+
+      if (patientType === 'child') {
+        const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+        const child = await ChildPatientRegistration.findById(patientId);
+        if (!child) {
+          return res.status(404).json({ success: false, message: 'Child patient not found' });
+        }
+      } else {
+        const patient = await Patient.findById(patientId);
+        if (!patient) {
+          return res.status(404).json({ success: false, message: 'Patient not found' });
+        }
+      }
+
+      const PatientReferral = require('../models/PatientReferral');
+      const duplicate = await PatientReferral.findPendingDuplicate(
+        patientId,
+        patientType,
+        referredToDoctorId
+      );
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          message: 'This patient already has an active referral to the selected doctor',
+        });
+      }
+
+      const referral = await PatientReferral.create({
+        patient_id: patientId,
+        patient_type: patientType,
+        referred_by_doctor_id: req.user.id,
+        referred_to_doctor_id: referredToDoctorId,
+        referral_reason: referralReason?.trim() || null,
+        notes: notes?.trim() || null,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: `Patient referred to Dr. ${targetDoctor.name}`,
+        data: { referral: referral.toJSON() },
+      });
+    } catch (error) {
+      console.error('[referPatientToDoctor] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to refer patient',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      });
+    }
+  }
+
+  static async bulkReferPatients(req, res) {
+    try {
+      if (!PatientController._canReferPatients(req.user)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only doctors can refer patients',
+        });
+      }
+
+      const {
+        patients: patientsRaw,
+        referred_to_doctor_id: referredToDoctorIdRaw,
+        referral_reason: referralReason,
+        notes,
+      } = req.body || {};
+
+      const referredToDoctorId = parseInt(referredToDoctorIdRaw, 10);
+      const patients = Array.isArray(patientsRaw) ? patientsRaw : [];
+
+      if (!patients.length) {
+        return res.status(400).json({ success: false, message: 'Select at least one patient' });
+      }
+      if (patients.length > 100) {
+        return res.status(400).json({ success: false, message: 'Cannot refer more than 100 patients at once' });
+      }
+      if (!referredToDoctorId || referredToDoctorId <= 0) {
+        return res.status(400).json({ success: false, message: 'Target doctor is required' });
+      }
+      if (referredToDoctorId === req.user.id) {
+        return res.status(400).json({ success: false, message: 'Cannot refer patients to yourself' });
+      }
+
+      const User = require('../models/User');
+      const PatientReferral = require('../models/PatientReferral');
+      const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+
+      const targetDoctor = await User.findById(referredToDoctorId);
+      if (!targetDoctor || !targetDoctor.is_active) {
+        return res.status(404).json({ success: false, message: 'Target doctor not found' });
+      }
+      if (targetDoctor.role !== 'Faculty' && targetDoctor.role !== 'Resident') {
+        return res.status(400).json({
+          success: false,
+          message: 'Patients can only be referred to Faculty or Resident',
+        });
+      }
+
+      const created = [];
+      const skipped = [];
+
+      for (const item of patients) {
+        const patientId = parseInt(item.patient_id ?? item.id, 10);
+        const patientType =
+          String(item.patient_type || 'adult').toLowerCase() === 'child' ? 'child' : 'adult';
+
+        if (!patientId || patientId <= 0) {
+          skipped.push({ patient_id: item.patient_id, reason: 'Invalid patient ID' });
+          continue;
+        }
+
+        if (patientType === 'child') {
+          const child = await ChildPatientRegistration.findById(patientId);
+          if (!child) {
+            skipped.push({ patient_id: patientId, patient_type: patientType, reason: 'Child patient not found' });
+            continue;
+          }
+        } else {
+          const patient = await Patient.findById(patientId);
+          if (!patient) {
+            skipped.push({ patient_id: patientId, patient_type: patientType, reason: 'Patient not found' });
+            continue;
+          }
+        }
+
+        const duplicate = await PatientReferral.findPendingDuplicate(
+          patientId,
+          patientType,
+          referredToDoctorId
+        );
+        if (duplicate) {
+          skipped.push({
+            patient_id: patientId,
+            patient_type: patientType,
+            reason: 'Already has an active referral to this doctor',
+          });
+          continue;
+        }
+
+        const referral = await PatientReferral.create({
+          patient_id: patientId,
+          patient_type: patientType,
+          referred_by_doctor_id: req.user.id,
+          referred_to_doctor_id: referredToDoctorId,
+          referral_reason: referralReason?.trim() || null,
+          notes: notes?.trim() || null,
+        });
+        created.push(referral.toJSON());
+      }
+
+      if (created.length === 0) {
+        return res.status(409).json({
+          success: false,
+          message: 'No patients were referred. They may already have active referrals to this doctor.',
+          data: { created, skipped },
+        });
+      }
+
+      res.status(201).json({
+        success: true,
+        message: `${created.length} patient(s) referred to Dr. ${targetDoctor.name}`,
+        data: { created, skipped, referred_to: targetDoctor.name },
+      });
+    } catch (error) {
+      console.error('[bulkReferPatients] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to refer patients',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      });
+    }
+  }
+
+  static async markReferralSeen(req, res) {
+    try {
+      const referralId = parseInt(req.params.referralId, 10);
+      if (!referralId) {
+        return res.status(400).json({ success: false, message: 'Invalid referral ID' });
+      }
+
+      const PatientReferral = require('../models/PatientReferral');
+      const referral = await PatientReferral.markSeen(referralId, req.user.id);
+
+      if (!referral) {
+        return res.status(404).json({ success: false, message: 'Referral not found' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Referral marked as seen',
+        data: { referral: referral.toJSON() },
+      });
+    } catch (error) {
+      if (error.code === 'FORBIDDEN') {
+        return res.status(403).json({ success: false, message: error.message });
+      }
+      console.error('[markReferralSeen] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update referral',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      });
+    }
+  }
+
+  static async completeReferral(req, res) {
+    try {
+      const referralId = parseInt(req.params.referralId, 10);
+      const notes = req.body?.notes?.trim() || null;
+
+      if (!referralId) {
+        return res.status(400).json({ success: false, message: 'Invalid referral ID' });
+      }
+
+      const PatientReferral = require('../models/PatientReferral');
+      const referral = await PatientReferral.markCompleted(referralId, req.user.id, notes);
+
+      if (!referral) {
+        return res.status(404).json({ success: false, message: 'Referral not found' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Referral marked as completed',
+        data: { referral: referral.toJSON() },
+      });
+    } catch (error) {
+      if (error.code === 'FORBIDDEN') {
+        return res.status(403).json({ success: false, message: error.message });
+      }
+      console.error('[completeReferral] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to complete referral',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      });
+    }
+  }
+
+  static async getReferralLogs(req, res) {
+    try {
+      const referralId = parseInt(req.params.referralId, 10);
+      if (!referralId) {
+        return res.status(400).json({ success: false, message: 'Invalid referral ID' });
+      }
+
+      const PatientReferral = require('../models/PatientReferral');
+      const referral = await PatientReferral.findById(referralId);
+      if (!referral) {
+        return res.status(404).json({ success: false, message: 'Referral not found' });
+      }
+
+      const isInvolved =
+        referral.referred_by_doctor_id === req.user.id ||
+        referral.referred_to_doctor_id === req.user.id ||
+        req.user.role === 'Admin';
+      if (!isInvolved) {
+        return res.status(403).json({ success: false, message: 'Access denied' });
+      }
+
+      const logs = await PatientReferral.getLogs(referralId);
+      res.json({ success: true, data: { logs } });
+    } catch (error) {
+      console.error('[getReferralLogs] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to load referral logs',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
       });
     }
   }

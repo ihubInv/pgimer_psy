@@ -559,6 +559,32 @@ router.get('/patients-by-date/:date', authenticateToken, authorizeRoles('Admin')
 
 router.get('/by-room/:room_number', authenticateToken, authorizeRoles('Admin'), PatientController.getPatientsByRoom);
 
+router.post(
+  '/refer/bulk',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident'),
+  PatientController.bulkReferPatients
+);
+
+router.patch(
+  '/referrals/:referralId/seen',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident'),
+  PatientController.markReferralSeen
+);
+router.patch(
+  '/referrals/:referralId/complete',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident'),
+  PatientController.completeReferral
+);
+router.get(
+  '/referrals/:referralId/logs',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident'),
+  PatientController.getReferralLogs
+);
+
 /**
  * @swagger
  * /api/patients/cr/{cr_no}:
@@ -765,6 +791,14 @@ router.post('/:id/visits/complete', authenticateToken, authorizeRoles('Admin', '
  *         description: Server error
  */
 router.post('/:id/change-room', authenticateToken, authorizeRoles('Admin', 'Faculty', 'Resident'), validateId, PatientController.changePatientRoom);
+
+router.post(
+  '/:id/refer',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident'),
+  validateId,
+  PatientController.referPatientToDoctor
+);
 
 /**
  * @swagger

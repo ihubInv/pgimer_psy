@@ -8,9 +8,10 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         params: { page, limit, ...filters },
       }),
       providesTags: (result, error, arg) => {
-        // Provide tags that match what mutations invalidate
         const tags = ['Patient', { type: 'Patient', id: 'LIST' }];
-        // If filtering by date, also provide a date-specific tag
+        if (arg?.referral_view) {
+          tags.push({ type: 'Patient', id: `REFERRAL-${arg.referral_view}` });
+        }
         if (arg?.date) {
           tags.push({ type: 'Patient', id: `LIST-${arg.date}` });
         }
@@ -375,6 +376,45 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
     }),
 
     /** Append/remove files on child registration (`POST /child-patient/:id/documents`) */
+    referPatientToDoctor: builder.mutation({
+      query: ({ patientId, referred_to_doctor_id, referral_reason, patient_type, notes }) => ({
+        url: `/patients/${patientId}/refer`,
+        method: 'POST',
+        body: {
+          referred_to_doctor_id,
+          referral_reason,
+          patient_type,
+          notes,
+        },
+      }),
+      invalidatesTags: ['Patient', { type: 'Patient', id: 'LIST' }],
+    }),
+    bulkReferPatients: builder.mutation({
+      query: ({ patients, referred_to_doctor_id, referral_reason, notes }) => ({
+        url: '/patients/refer/bulk',
+        method: 'POST',
+        body: { patients, referred_to_doctor_id, referral_reason, notes },
+      }),
+      invalidatesTags: ['Patient', { type: 'Patient', id: 'LIST' }],
+    }),
+    markReferralSeen: builder.mutation({
+      query: (referralId) => ({
+        url: `/patients/referrals/${referralId}/seen`,
+        method: 'PATCH',
+      }),
+      invalidatesTags: ['Patient', { type: 'Patient', id: 'LIST' }],
+    }),
+    completeReferral: builder.mutation({
+      query: ({ referralId, notes }) => ({
+        url: `/patients/referrals/${referralId}/complete`,
+        method: 'PATCH',
+        body: notes ? { notes } : {},
+      }),
+      invalidatesTags: ['Patient', { type: 'Patient', id: 'LIST' }],
+    }),
+    getReferralLogs: builder.query({
+      query: (referralId) => `/patients/referrals/${referralId}/logs`,
+    }),
     updateChildPatientDocuments: builder.mutation({
       queryFn: async ({ id, files = [], files_to_remove = [] }, _queryApi, _extraOptions) => {
         const formData = new FormData();
@@ -453,5 +493,10 @@ export const {
   useAddChildPatientToTodayListMutation,
   useDeleteChildPatientMutation,
   useUpdateChildPatientDocumentsMutation,
+  useReferPatientToDoctorMutation,
+  useBulkReferPatientsMutation,
+  useMarkReferralSeenMutation,
+  useCompleteReferralMutation,
+  useGetReferralLogsQuery,
 } = patientsApiSlice;
 

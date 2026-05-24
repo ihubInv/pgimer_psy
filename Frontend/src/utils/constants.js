@@ -24,6 +24,16 @@ export const isJuniorResidentUser = (user) =>
 export const isSeniorResidentUser = (user) =>
   user?.role === USER_ROLES.RESIDENT && user?.sub_role === RESIDENT_SUB_ROLES.SENIOR;
 
+/** Faculty, Resident, or Admin — can refer patients to another doctor */
+export const canReferPatients = (user) => {
+  if (!user?.role) return false;
+  return (
+    user.role === USER_ROLES.ADMIN ||
+    user.role === USER_ROLES.FACULTY ||
+    user.role === USER_ROLES.RESIDENT
+  );
+};
+
 // Helper function to get display name for a role
 export const getRoleDisplayName = (role) => {
   if (!role) return 'N/A';
