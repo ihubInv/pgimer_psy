@@ -2750,13 +2750,17 @@ class PatientController {
       const todayResult = await db.query('SELECT CURRENT_DATE as today');
       const todayDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
 
-      // Find the doctor assigned to the new room for today
+      // Find the doctor(s) assigned to the new room for today.
+      // For shared rooms (capacity > 1), pick Faculty first, then the earliest-assigned doctor.
+      // For solo rooms the result is always at most one row.
       const newRoomDoctorResult = await db.query(
-        `SELECT id, name, role 
-         FROM users 
-         WHERE current_room = $1 
-           AND DATE(room_assignment_time) = $2
-         LIMIT 1`,
+        `SELECT u.id, u.name, u.role
+         FROM users u
+         WHERE u.current_room = $1
+           AND DATE(u.room_assignment_time) = $2
+         ORDER BY
+           CASE WHEN u.role IN ('Faculty') THEN 0 ELSE 1 END ASC,
+           u.room_assignment_time ASC`,
         [newRoomTrimmed, todayDate]
       );
 
@@ -2769,7 +2773,11 @@ class PatientController {
         newDoctorId = newDoctor.id;
         newDoctorName = newDoctor.name;
         newDoctorRole = newDoctor.role;
-        console.log(`[changePatientRoom] Found doctor ${newDoctorId} (${newDoctorName}) in room ${newRoomTrimmed}`);
+        if (newRoomDoctorResult.rows.length > 1) {
+          console.log(`[changePatientRoom] Shared room ${newRoomTrimmed} has ${newRoomDoctorResult.rows.length} doctors – assigning to ${newDoctorName} (${newDoctorRole}) as primary`);
+        } else {
+          console.log(`[changePatientRoom] Found doctor ${newDoctorId} (${newDoctorName}) in room ${newRoomTrimmed}`);
+        }
       } else {
         console.log(`[changePatientRoom] No doctor currently assigned to room ${newRoomTrimmed}`);
       }

@@ -898,16 +898,21 @@ class UserController {
       const assignmentTime = assignment_time || new Date().toISOString();
       const roomNumber = room_number.trim();
 
-      // Check if room is already occupied by another doctor (exclude current user to allow re-selection)
-      const { isRoomOccupied } = require('../utils/roomAssignment');
-      const roomStatus = await isRoomOccupied(roomNumber, userId);
-      
-      if (roomStatus.occupied) {
+      // Check room capacity: allow if there is still a slot (excludes current user for re-select)
+      const { canJoinRoom, getDoctorsInRoomToday, assignPatientsToDoctor } = require('../utils/roomAssignment');
+      const joinCheck = await canJoinRoom(roomNumber, userId);
+
+      if (!joinCheck.allowed) {
         return res.status(409).json({
           success: false,
-          message: `Room ${roomNumber} is already assigned to Dr. ${roomStatus.doctor.name}. Only one doctor can be assigned to a room.`
+          message: joinCheck.reason,
         });
       }
+
+      // Check how many doctors are already in the room BEFORE this assignment
+      // (to decide whether to run bulk patient assignment)
+      const existingDoctors = await getDoctorsInRoomToday(roomNumber, userId);
+      const isFirstDoctor = existingDoctors.length === 0;
 
       // Get user and assign room
       const user = await User.findById(userId);
@@ -935,23 +940,23 @@ class UserController {
       // Assign room to doctor (or re-assign if same room - this allows re-assignment of patients)
       await user.assignRoom(roomNumber, assignmentTime);
 
-      // Auto-assign all patients in this room to this doctor
-      // This will assign ALL patients in the room, even if they were previously assigned to another doctor
-      // This ensures when a doctor selects a room, they get all patients in that room
-      const { assignPatientsToDoctor } = require('../utils/roomAssignment');
-      console.log(`[selectRoom] Calling assignPatientsToDoctor for doctor ${userId} in room ${roomNumber}`);
-      const assignmentResult = await assignPatientsToDoctor(
-        userId,
-        roomNumber,
-        assignmentTime
-      );
-      console.log(`[selectRoom] Assignment result: ${assignmentResult.assigned} patient(s) assigned`);
+      // Only bulk-assign patients to the first doctor who selects this room today.
+      // Subsequent doctors in a shared room must NOT steal assignments from their colleagues.
+      let assignmentResult = { assigned: 0, patients: [] };
+      if (isFirstDoctor) {
+        console.log(`[selectRoom] First doctor in room ${roomNumber} – calling assignPatientsToDoctor for doctor ${userId}`);
+        assignmentResult = await assignPatientsToDoctor(userId, roomNumber, assignmentTime);
+        console.log(`[selectRoom] Assignment result: ${assignmentResult.assigned} patient(s) assigned`);
+      } else {
+        console.log(`[selectRoom] Room ${roomNumber} already has ${existingDoctors.length} doctor(s) – skipping bulk assign for doctor ${userId}`);
+      }
 
       const assignedCount = assignmentResult.assigned;
-      const assignSuffix =
-        assignedCount === 0
-          ? 'No patients are listed in this room for today yet; you can still use it for walk-ins and new registrations.'
-          : `${assignedCount} patient(s) assigned to you.`;
+      const assignSuffix = isFirstDoctor
+        ? (assignedCount === 0
+            ? 'No patients are listed in this room for today yet; you can still use it for walk-ins and new registrations.'
+            : `${assignedCount} patient(s) assigned to you.`)
+        : `Joined shared room with ${existingDoctors.length} colleague(s). All today's patients in this room are visible to you.`;
 
       res.json({
         success: true,
@@ -992,55 +997,65 @@ class UserController {
   // Get available rooms
   static async getAvailableRooms(req, res) {
     try {
-      const { getAvailableRooms, getRoomDistribution, getTodayRoomDistribution, getOccupiedRooms } = require('../utils/roomAssignment');
-      const allRooms = await getAvailableRooms(false); // Get ALL rooms (including occupied)
-      const availableRooms = await getAvailableRooms(true); // Get only available (unoccupied) rooms
-      const distribution = await getRoomDistribution(); // All patients (for consistency with deletion)
+      const { getAvailableRooms, getRoomDistribution, getTodayRoomDistribution } = require('../utils/roomAssignment');
+      const allRooms = await getAvailableRooms(false); // Get ALL rooms (including at-capacity ones)
+      const availableRooms = await getAvailableRooms(true); // Rooms with remaining capacity
+      const distribution = await getRoomDistribution(); // All patients (for deletion validation)
       const todayDistribution = await getTodayRoomDistribution(); // Today's patients only
-      const occupiedRooms = await getOccupiedRooms();
-      
+
       // Debug logging
       console.log('[getAvailableRooms] All rooms:', allRooms);
-      console.log('[getAvailableRooms] Available rooms:', availableRooms);
-      console.log('[getAvailableRooms] Distribution (all patients):', distribution);
+      console.log('[getAvailableRooms] Available rooms (with capacity):', availableRooms);
       console.log('[getAvailableRooms] Today distribution:', todayDistribution);
-      console.log('[getAvailableRooms] Occupied rooms:', Array.from(occupiedRooms));
-      
-      // Get doctor info for occupied rooms
-      const today = new Date().toISOString().slice(0, 10);
-      const occupiedRoomsArray = Array.from(occupiedRooms);
-      let occupiedRoomsInfo = {};
-      
-      if (occupiedRoomsArray.length > 0) {
-        // Query each room individually to avoid array parameter issues
-        for (const room of occupiedRoomsArray) {
-          const occupiedResult = await db.query(
-            `SELECT current_room, id, name 
-             FROM users 
-             WHERE current_room = $1
-               AND DATE(room_assignment_time) = $2
-             LIMIT 1`,
-            [room, today]
-          );
-          
-          if (occupiedResult.rows.length > 0) {
-            const row = occupiedResult.rows[0];
-            occupiedRoomsInfo[row.current_room] = {
-              doctor_id: row.id,
-              doctor_name: row.name
-            };
-          }
+
+      // Build occupied_rooms info with full capacity + multi-doctor list per room.
+      // Shape: { "Room 3": { capacity: 3, doctors: [{doctor_id, doctor_name}], slots_remaining: 1 } }
+      // The legacy fields doctor_id / doctor_name are kept from doctors[0] for backward compatibility.
+      const todayResult = await db.query('SELECT CURRENT_DATE as today');
+      const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+
+      const occupancyResult = await db.query(
+        `SELECT u.current_room, u.id, u.name, r.doctor_capacity
+         FROM users u
+         LEFT JOIN rooms r ON TRIM(u.current_room) = TRIM(r.room_number) AND r.is_active = true
+         WHERE u.current_room IS NOT NULL
+           AND u.current_room != ''
+           AND DATE(u.room_assignment_time) = $1
+         ORDER BY u.current_room, u.room_assignment_time ASC`,
+        [today]
+      );
+
+      // Group by room
+      const occupiedRoomsInfo = {};
+      for (const row of occupancyResult.rows) {
+        const room = row.current_room;
+        const capacity = row.doctor_capacity != null ? parseInt(row.doctor_capacity, 10) : 1;
+        if (!occupiedRoomsInfo[room]) {
+          occupiedRoomsInfo[room] = { capacity, doctors: [], slots_remaining: capacity };
+        }
+        occupiedRoomsInfo[room].doctors.push({ doctor_id: row.id, doctor_name: row.name });
+        occupiedRoomsInfo[room].slots_remaining = Math.max(0, capacity - occupiedRoomsInfo[room].doctors.length);
+      }
+
+      // Also populate legacy top-level doctor_id / doctor_name from the first (oldest) doctor
+      for (const room of Object.keys(occupiedRoomsInfo)) {
+        const info = occupiedRoomsInfo[room];
+        if (info.doctors.length > 0) {
+          info.doctor_id = info.doctors[0].doctor_id;
+          info.doctor_name = info.doctors[0].doctor_name;
         }
       }
+
+      console.log('[getAvailableRooms] occupied_rooms:', JSON.stringify(occupiedRoomsInfo));
 
       res.json({
         success: true,
         data: {
-          rooms: allRooms, // ALL rooms (including occupied ones)
-          available_rooms: availableRooms, // Only available (unoccupied) rooms (for backward compatibility)
-          distribution, // All patients (for consistency with deletion validation)
-          distribution_today: todayDistribution, // Today's patient counts per room (informational; must not gate room selection)
-          occupied_rooms: occupiedRoomsInfo // Info about which rooms are taken and by whom
+          rooms: allRooms,
+          available_rooms: availableRooms,
+          distribution,
+          distribution_today: todayDistribution,
+          occupied_rooms: occupiedRoomsInfo,
         }
       });
     } catch (error) {
@@ -1207,16 +1222,20 @@ class UserController {
       const newRoomNumber = new_room.trim();
       const assignmentTime = new Date().toISOString();
 
-      // Check if the new room is already occupied by another doctor
-      const { isRoomOccupied } = require('../utils/roomAssignment');
-      const roomStatus = await isRoomOccupied(newRoomNumber, doctorIdInt);
-      
-      if (roomStatus.occupied) {
+      // Check room capacity (excludes the target doctor themselves for re-assign)
+      const { canJoinRoom, getDoctorsInRoomToday, assignPatientsToDoctor } = require('../utils/roomAssignment');
+      const joinCheck = await canJoinRoom(newRoomNumber, doctorIdInt);
+
+      if (!joinCheck.allowed) {
         return res.status(409).json({
           success: false,
-          message: `Room ${newRoomNumber} is already assigned to Dr. ${roomStatus.doctor.name}. Only one doctor can be assigned to a room.`
+          message: joinCheck.reason,
         });
       }
+
+      // Check occupancy BEFORE reassigning so we know whether to bulk-assign patients
+      const existingDoctors = await getDoctorsInRoomToday(newRoomNumber, doctorIdInt);
+      const isFirstDoctor = existingDoctors.length === 0;
 
       // Get the old room before changing
       const oldRoom = doctor.current_room;
@@ -1229,21 +1248,22 @@ class UserController {
       // Assign new room to doctor
       await doctor.assignRoom(newRoomNumber, assignmentTime);
 
-      // Auto-assign all patients in the new room to this doctor
-      const { assignPatientsToDoctor } = require('../utils/roomAssignment');
-      console.log(`[changeDoctorRoom] Calling assignPatientsToDoctor for doctor ${doctorIdInt} in room ${newRoomNumber}`);
-      const assignmentResult = await assignPatientsToDoctor(
-        doctorIdInt,
-        newRoomNumber,
-        assignmentTime
-      );
-      console.log(`[changeDoctorRoom] Assignment result: ${assignmentResult.assigned} patient(s) assigned`);
+      // Only bulk-assign patients when this doctor is the first occupant of the room today
+      let assignmentResult = { assigned: 0, patients: [] };
+      if (isFirstDoctor) {
+        console.log(`[changeDoctorRoom] First doctor in room ${newRoomNumber} – calling assignPatientsToDoctor for doctor ${doctorIdInt}`);
+        assignmentResult = await assignPatientsToDoctor(doctorIdInt, newRoomNumber, assignmentTime);
+        console.log(`[changeDoctorRoom] Assignment result: ${assignmentResult.assigned} patient(s) assigned`);
+      } else {
+        console.log(`[changeDoctorRoom] Room ${newRoomNumber} already has ${existingDoctors.length} doctor(s) – skipping bulk assign for doctor ${doctorIdInt}`);
+      }
 
       const changedAssigned = assignmentResult.assigned;
-      const changedSuffix =
-        changedAssigned === 0
-          ? `No patients are listed in that room for today yet; Dr. ${doctor.name} can still work there for walk-ins.`
-          : `${changedAssigned} patient(s) assigned to Dr. ${doctor.name}.`;
+      const changedSuffix = isFirstDoctor
+        ? (changedAssigned === 0
+            ? `No patients are listed in that room for today yet; Dr. ${doctor.name} can still work there for walk-ins.`
+            : `${changedAssigned} patient(s) assigned to Dr. ${doctor.name}.`)
+        : `Dr. ${doctor.name} joined shared room with ${existingDoctors.length} colleague(s). All today's patients in this room are visible.`;
 
       res.json({
         success: true,

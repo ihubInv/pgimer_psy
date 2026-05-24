@@ -102,36 +102,53 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
     return null;
   }
 
-  const rooms = roomsData?.data?.rooms || []; // All active rooms; occupied ones are disabled below
-  const distribution = roomsData?.data?.distribution_today || {}; // Use today's distribution for day-specific room selection
+  const rooms = roomsData?.data?.rooms || []; // All active rooms
+  const distribution = roomsData?.data?.distribution_today || {};
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
-  
-  const roomOptions = rooms.map(room => {
-    const totalPatients = distribution[room] || 0;
-    const isOccupied = occupiedRooms[room] !== undefined;
-    const occupiedBy = isOccupied ? occupiedRooms[room]?.doctor_name : null;
+  const currentUserId = currentUser?.id ? parseInt(currentUser.id, 10) : null;
+
+  // Build capacity-aware room option
+  const buildOption = (room, totalPatients) => {
+    const info = occupiedRooms[room];
+    const capacity = info?.capacity ?? 1;
+    const doctors = info?.doctors ?? (info ? [{ doctor_id: info.doctor_id, doctor_name: info.doctor_name }] : []);
+    const slotsRemaining = info?.slots_remaining ?? (info ? 0 : capacity);
+    const atCapacity = info && slotsRemaining <= 0;
+    const imInRoom = doctors.some(d => d.doctor_id === currentUserId);
+    const isDisabled = atCapacity && !imInRoom;
+
+    let occupancyLabel = '';
+    if (info) {
+      if (capacity > 1) {
+        const names = doctors.map(d => `Dr. ${d.doctor_name}`).join(', ');
+        occupancyLabel = ` - ${doctors.length}/${capacity}: ${names}${slotsRemaining > 0 ? ` (${slotsRemaining} slot${slotsRemaining !== 1 ? 's' : ''} left)` : ' — Full'}`;
+      } else {
+        occupancyLabel = ` - Assigned to ${doctors[0]?.doctor_name || 'Doctor'}`;
+      }
+    }
+
+    const disabledReason = isDisabled
+      ? (capacity === 1
+          ? `This room is already assigned to ${doctors[0]?.doctor_name || 'another doctor'}`
+          : `Room is full (${doctors.length}/${capacity} doctors)`)
+      : undefined;
+
     return {
       value: room,
-      label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''} today)${isOccupied ? ` - Assigned to ${occupiedBy || 'Doctor'}` : ''}`,
-      disabled: isOccupied,
-      disabledReason: isOccupied ? `This room is already assigned to ${occupiedBy || 'another doctor'}` : undefined,
+      label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''} today)${occupancyLabel}`,
+      disabled: isDisabled,
+      disabledReason,
     };
-  });
+  };
 
-  // If no rooms available, add default rooms (but only if they're not occupied)
+  const roomOptions = rooms.map(room => buildOption(room, distribution[room] || 0));
+
+  // If no rooms available, add default rooms (only non-full ones)
   if (roomOptions.length === 0) {
     for (let i = 1; i <= 10; i++) {
       const roomName = `Room ${i}`;
-      // Only add if not occupied
-      if (!occupiedRooms[roomName]) {
-        const totalPatients = distribution[roomName] || 0;
-        roomOptions.push({
-          value: roomName,
-          label: `${roomName} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''})`,
-          disabled: false,
-          disabledReason: undefined,
-        });
-      }
+      const opt = buildOption(roomName, distribution[roomName] || 0);
+      if (!opt.disabled) roomOptions.push(opt);
     }
   }
   
@@ -153,7 +170,7 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
             Please select the room you are sitting in today and the time you started.
             You may choose a room even if no patients are listed for it yet today (for example walk-ins). Patients already tied to that room for today will be assigned to you.
             <span className="block mt-1 text-xs text-orange-600 font-medium">
-              Note: Only one doctor can be assigned to each room. Rooms taken by other doctors appear in the list but cannot be selected.
+              Note: Rooms at full capacity are disabled. Shared rooms (capacity 2+) show remaining slots and are still selectable.
             </span>
           </p>
 
@@ -191,7 +208,7 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
                 )}
                 {Object.keys(occupiedRooms).length > 0 && (
                   <p className="text-xs text-gray-500 mt-1 italic">
-                    {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and cannot be selected.
+                    Rooms shown as full are disabled. Shared rooms with remaining capacity are still available.
                   </p>
                 )}
                 <p className="text-xs text-gray-500 mt-1 italic">

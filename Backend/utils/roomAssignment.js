@@ -28,25 +28,25 @@ async function getOccupiedRooms() {
 }
 
 /**
- * Get all available rooms from rooms table (active rooms)
- * Excludes rooms that are already assigned to doctors today
- * Uses the rooms table as the source of truth
+ * Get all available rooms from rooms table (active rooms).
+ * When excludeOccupied=true, rooms that are AT capacity are excluded.
+ * Rooms with remaining capacity (shared rooms partially filled) are still included.
  */
 async function getAvailableRooms(excludeOccupied = true) {
   try {
-    // Get active rooms from rooms table
+    // Get active rooms with capacity from rooms table
     const roomsResult = await db.query(
-      `SELECT room_number 
+      `SELECT room_number, doctor_capacity 
        FROM rooms 
        WHERE is_active = true
        ORDER BY room_number`
     );
 
-    let rooms = roomsResult.rows.map(row => row.room_number).filter(Boolean);
+    let allRooms = roomsResult.rows; // [{room_number, doctor_capacity}]
+    let rooms = allRooms.map(r => r.room_number).filter(Boolean);
 
     // If no active rooms in table, fallback to discovering from patients
     if (rooms.length === 0) {
-      const today = new Date().toISOString().slice(0, 10);
       const result = await db.query(
         `SELECT DISTINCT assigned_room 
          FROM registered_patient 
@@ -56,17 +56,41 @@ async function getAvailableRooms(excludeOccupied = true) {
       );
       
       rooms = result.rows.map(row => row.assigned_room).filter(Boolean);
+      allRooms = rooms.map(r => ({ room_number: r, doctor_capacity: 1 }));
       
       // If still no rooms, return default room numbers (1-10)
       if (rooms.length === 0) {
         rooms = Array.from({ length: 10 }, (_, i) => `Room ${i + 1}`);
+        allRooms = rooms.map(r => ({ room_number: r, doctor_capacity: 1 }));
       }
     }
 
-    // Exclude rooms that are already assigned to doctors today
+    // Exclude rooms that are AT capacity (fully occupied)
     if (excludeOccupied) {
-      const occupiedRooms = await getOccupiedRooms();
-      rooms = rooms.filter(room => !occupiedRooms.has(room));
+      const capacityMap = {};
+      for (const r of allRooms) {
+        capacityMap[r.room_number] = r.doctor_capacity || 1;
+      }
+      // Build a map of room -> doctor count today
+      const todayResult = await db.query('SELECT CURRENT_DATE as today');
+      const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+      const occupancyResult = await db.query(
+        `SELECT current_room, COUNT(*) as cnt
+         FROM users
+         WHERE current_room IS NOT NULL AND current_room != ''
+           AND DATE(room_assignment_time) = $1
+         GROUP BY current_room`,
+        [today]
+      );
+      const occupancyMap = {};
+      for (const row of occupancyResult.rows) {
+        occupancyMap[row.current_room] = parseInt(row.cnt, 10);
+      }
+      rooms = rooms.filter(room => {
+        const cap = capacityMap[room] || 1;
+        const occ = occupancyMap[room] || 0;
+        return occ < cap; // still has a slot
+      });
     }
 
     return rooms;
@@ -622,40 +646,106 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
 }
 
 /**
- * Check if a room is already assigned to a doctor today
- * @param {string} roomNumber - The room number to check
- * @param {number} excludeUserId - Optional user ID to exclude from check (allows same doctor to re-select their room)
+ * Get all doctors currently assigned to a room today.
+ * @param {string} roomNumber
+ * @param {number|null} excludeUserId - Omit this user from the result (for re-select checks)
+ * @returns {Promise<Array<{id: number, name: string, role: string}>>}
  */
-async function isRoomOccupied(roomNumber, excludeUserId = null) {
+async function getDoctorsInRoomToday(roomNumber, excludeUserId = null) {
   try {
-    const today = new Date().toISOString().slice(0, 10);
-    
-    let query = `SELECT id, name, current_room 
-                 FROM users 
-                 WHERE current_room = $1 
+    const todayResult = await db.query('SELECT CURRENT_DATE as today');
+    const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+
+    let query = `SELECT id, name, role
+                 FROM users
+                 WHERE current_room = $1
                    AND DATE(room_assignment_time) = $2`;
-    let params = [roomNumber, today];
-    
-    // Exclude current user if provided (allows same doctor to re-select their room)
+    const params = [roomNumber, today];
+
     if (excludeUserId) {
       query += ` AND id != $3`;
       params.push(excludeUserId);
     }
-    
-    query += ` LIMIT 1`;
-    
-    const result = await db.query(query, params);
 
-    if (result.rows.length > 0) {
+    query += ` ORDER BY room_assignment_time ASC`;
+
+    const result = await db.query(query, params);
+    return result.rows.map(r => ({ id: r.id, name: r.name, role: r.role }));
+  } catch (error) {
+    console.error('[getDoctorsInRoomToday] Error:', error);
+    return [];
+  }
+}
+
+/**
+ * Get the doctor_capacity configured for a room (defaults to 1 if room not found or column missing).
+ * @param {string} roomNumber
+ * @returns {Promise<number>}
+ */
+async function getRoomDoctorCapacity(roomNumber) {
+  try {
+    const result = await db.query(
+      `SELECT doctor_capacity FROM rooms WHERE room_number = $1 AND is_active = true LIMIT 1`,
+      [roomNumber]
+    );
+    if (result.rows.length > 0 && result.rows[0].doctor_capacity != null) {
+      return parseInt(result.rows[0].doctor_capacity, 10);
+    }
+    return 1; // safe default
+  } catch (error) {
+    console.error('[getRoomDoctorCapacity] Error:', error);
+    return 1;
+  }
+}
+
+/**
+ * Check whether a doctor can join (select) a room today, respecting capacity.
+ * @param {string} roomNumber
+ * @param {number|null} excludeUserId - Current doctor's ID; excluded from occupant count to allow re-select
+ * @returns {Promise<{allowed: boolean, doctors: Array, capacity: number, reason?: string}>}
+ */
+async function canJoinRoom(roomNumber, excludeUserId = null) {
+  try {
+    const [doctors, capacity] = await Promise.all([
+      getDoctorsInRoomToday(roomNumber, excludeUserId),
+      getRoomDoctorCapacity(roomNumber),
+    ]);
+
+    if (doctors.length >= capacity) {
+      const names = doctors.map(d => `Dr. ${d.name}`).join(', ');
       return {
-        occupied: true,
-        doctor: {
-          id: result.rows[0].id,
-          name: result.rows[0].name
-        }
+        allowed: false,
+        doctors,
+        capacity,
+        reason: capacity === 1
+          ? `Room ${roomNumber} is already assigned to ${names}. Only one doctor can be assigned to a room.`
+          : `Room ${roomNumber} is full (${doctors.length}/${capacity} doctors: ${names}).`,
       };
     }
 
+    return { allowed: true, doctors, capacity };
+  } catch (error) {
+    console.error('[canJoinRoom] Error:', error);
+    // Fail open so a DB error doesn't permanently lock out doctors
+    return { allowed: true, doctors: [], capacity: 1 };
+  }
+}
+
+/**
+ * Check if a room is already occupied by another doctor today (legacy helper kept for backward compat).
+ * Use canJoinRoom for new capacity-aware logic.
+ * @param {string} roomNumber
+ * @param {number} excludeUserId
+ */
+async function isRoomOccupied(roomNumber, excludeUserId = null) {
+  try {
+    const joinCheck = await canJoinRoom(roomNumber, excludeUserId);
+    if (!joinCheck.allowed) {
+      return {
+        occupied: true,
+        doctor: joinCheck.doctors[0] || null,
+      };
+    }
     return { occupied: false };
   } catch (error) {
     console.error('[isRoomOccupied] Error:', error);
@@ -711,6 +801,11 @@ module.exports = {
   getTodayRoomDistribution,
   // autoAssignRoom - DEPRECATED: Room selection is now mandatory, no auto-assignment
   assignPatientsToDoctor,
+  // Capacity-aware helpers (new)
+  getDoctorsInRoomToday,
+  getRoomDoctorCapacity,
+  canJoinRoom,
+  // isRoomOccupied kept for backward compatibility; internally uses canJoinRoom
   isRoomOccupied,
   hasRoomToday
 };

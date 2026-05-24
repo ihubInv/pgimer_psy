@@ -67,7 +67,7 @@ class RoomController {
   // Create new room
   static async createRoom(req, res) {
     try {
-      const { room_number, description, is_active } = req.body;
+      const { room_number, description, is_active, doctor_capacity } = req.body;
 
       if (!room_number || room_number.trim() === '') {
         return res.status(400).json({
@@ -85,10 +85,16 @@ class RoomController {
         });
       }
 
+      const parsedCapacity = doctor_capacity != null ? parseInt(doctor_capacity, 10) : 1;
+      if (isNaN(parsedCapacity) || parsedCapacity < 1 || parsedCapacity > 5) {
+        return res.status(400).json({ success: false, message: 'Doctor capacity must be between 1 and 5.' });
+      }
+
       const roomData = {
         room_number: room_number.trim(),
         description: description?.trim() || null,
-        is_active: is_active !== undefined ? is_active : true
+        is_active: is_active !== undefined ? is_active : true,
+        doctor_capacity: parsedCapacity,
       };
 
       const room = await Room.create(roomData);
@@ -130,7 +136,7 @@ class RoomController {
         });
       }
 
-      const { room_number, description, is_active } = req.body;
+      const { room_number, description, is_active, doctor_capacity } = req.body;
 
       // If room_number is being updated, check if new number already exists
       if (room_number && room_number.trim() !== room.room_number) {
@@ -143,10 +149,18 @@ class RoomController {
         }
       }
 
+      if (doctor_capacity !== undefined) {
+        const cap = parseInt(doctor_capacity, 10);
+        if (isNaN(cap) || cap < 1 || cap > 5) {
+          return res.status(400).json({ success: false, message: 'Doctor capacity must be between 1 and 5.' });
+        }
+      }
+
       const updateData = {};
       if (room_number !== undefined) updateData.room_number = room_number.trim();
       if (description !== undefined) updateData.description = description?.trim() || null;
       if (is_active !== undefined) updateData.is_active = is_active;
+      if (doctor_capacity !== undefined) updateData.doctor_capacity = parseInt(doctor_capacity, 10);
 
       await room.update(updateData);
 

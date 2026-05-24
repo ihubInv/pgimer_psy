@@ -6,6 +6,7 @@ class Room {
     this.room_number = data.room_number;
     this.description = data.description;
     this.is_active = data.is_active !== undefined ? data.is_active : true;
+    this.doctor_capacity = data.doctor_capacity != null ? parseInt(data.doctor_capacity, 10) : 1;
     this.created_at = data.created_at;
     this.updated_at = data.updated_at;
   }
@@ -13,7 +14,7 @@ class Room {
   // Create a new room
   static async create(roomData) {
     try {
-      const { room_number, description, is_active } = roomData;
+      const { room_number, description, is_active, doctor_capacity } = roomData;
       
       // Check if room already exists
       const existingRoom = await db.query(
@@ -25,11 +26,12 @@ class Room {
         throw new Error('Room number already exists');
       }
 
+      const cap = doctor_capacity != null ? parseInt(doctor_capacity, 10) : 1;
       const result = await db.query(
-        `INSERT INTO rooms (room_number, description, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `INSERT INTO rooms (room_number, description, is_active, doctor_capacity, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
-        [room_number, description || null, is_active !== undefined ? is_active : true]
+        [room_number, description || null, is_active !== undefined ? is_active : true, cap]
       );
 
       return new Room(result.rows[0]);
@@ -83,32 +85,12 @@ class Room {
       const todayResult = await db.query('SELECT CURRENT_DATE as today');
       const today = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
       
-      // Build query with LEFT JOIN to get assigned doctor information for today
-      // Use a derived table to get today's room assignments first, then join
-      let query = `
-        SELECT 
-          r.*,
-          u.id as assigned_doctor_id,
-          u.name as assigned_doctor_name,
-          u.role as assigned_doctor_role,
-          u.room_assignment_time
-        FROM rooms r
-        LEFT JOIN (
-          SELECT DISTINCT ON (current_room) 
-            id, name, role, current_room, room_assignment_time
-          FROM users
-          WHERE current_room IS NOT NULL 
-            AND current_room != ''
-            AND DATE(room_assignment_time) = $1
-          ORDER BY current_room, room_assignment_time DESC
-        ) u ON TRIM(COALESCE(r.room_number::text, '')) = TRIM(COALESCE(u.current_room::text, ''))
-        WHERE 1=1
-      `;
-      
+      // Base rooms query (no per-row doctor join — we aggregate separately below)
+      let query = `SELECT r.* FROM rooms r WHERE 1=1`;
       let countQuery = 'SELECT COUNT(*) FROM rooms WHERE 1=1';
-      const params = [today]; // First param is today's date
-      const countParams = []; // Separate params for count query
-      let paramCount = 1;
+      const params = [];
+      const countParams = [];
+      let paramCount = 0;
       let countParamCount = 0;
 
       // Filter by is_active
@@ -139,28 +121,35 @@ class Room {
         db.query(countQuery, countParams)
       ]);
 
-      // Map results and include assigned doctor info
+      // Fetch today's doctor assignments for all rooms in one query
+      const doctorsResult = await db.query(
+        `SELECT id, name, role, current_room, room_assignment_time
+         FROM users
+         WHERE current_room IS NOT NULL
+           AND current_room != ''
+           AND DATE(room_assignment_time) = $1
+         ORDER BY current_room, room_assignment_time ASC`,
+        [today]
+      );
+
+      // Group doctors by room
+      const doctorsByRoom = {};
+      for (const d of doctorsResult.rows) {
+        const rn = d.current_room;
+        if (!doctorsByRoom[rn]) doctorsByRoom[rn] = [];
+        doctorsByRoom[rn].push({ id: d.id, name: d.name, role: d.role, assignment_time: d.room_assignment_time });
+      }
+
+      // Map results and include multi-doctor info
       const rooms = roomsResult.rows.map(row => {
-        const room = new Room({
-          id: row.id,
-          room_number: row.room_number,
-          description: row.description,
-          is_active: row.is_active,
-          created_at: row.created_at,
-          updated_at: row.updated_at
-        });
+        const room = new Room(row);
         
-        // Add assigned doctor information if available
-        if (row.assigned_doctor_id) {
-          room.assigned_doctor = {
-            id: row.assigned_doctor_id,
-            name: row.assigned_doctor_name,
-            role: row.assigned_doctor_role,
-            assignment_time: row.room_assignment_time
-          };
-        } else {
-          room.assigned_doctor = null;
-        }
+        const doctors = doctorsByRoom[row.room_number] || [];
+        room.assigned_doctors = doctors;
+        // Legacy single-doctor field from the first (oldest) assignment
+        room.assigned_doctor = doctors.length > 0
+          ? { id: doctors[0].id, name: doctors[0].name, role: doctors[0].role, assignment_time: doctors[0].assignment_time }
+          : null;
         
         return room;
       });
@@ -184,7 +173,7 @@ class Room {
   // Update room
   async update(updateData) {
     try {
-      const allowedFields = ['room_number', 'description', 'is_active'];
+      const allowedFields = ['room_number', 'description', 'is_active', 'doctor_capacity'];
       const updates = [];
       const values = [];
       let paramCount = 0;
@@ -280,12 +269,17 @@ class Room {
       room_number: this.room_number,
       description: this.description,
       is_active: this.is_active,
+      doctor_capacity: this.doctor_capacity,
       created_at: this.created_at,
       updated_at: this.updated_at
     };
     
     // Include assigned doctor information if available
-    if (this.assigned_doctor) {
+    // assigned_doctors is the multi-doctor list; assigned_doctor is the legacy single entry
+    if (this.assigned_doctors) {
+      json.assigned_doctors = this.assigned_doctors;
+    }
+    if (this.assigned_doctor !== undefined) {
       json.assigned_doctor = this.assigned_doctor;
     } else {
       json.assigned_doctor = null;

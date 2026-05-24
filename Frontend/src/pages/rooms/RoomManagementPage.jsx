@@ -27,6 +27,7 @@ const RoomManagementPage = () => {
     room_number: '',
     description: '',
     is_active: true,
+    doctor_capacity: 1,
   });
   
   // Delete confirmation modal state
@@ -72,6 +73,7 @@ const RoomManagementPage = () => {
         room_number: room.room_number || '',
         description: room.description || '',
         is_active: room.is_active !== undefined ? room.is_active : true,
+        doctor_capacity: room.doctor_capacity ?? 1,
       });
     } else {
       setSelectedRoom(null);
@@ -80,6 +82,7 @@ const RoomManagementPage = () => {
         room_number: '',
         description: '',
         is_active: true,
+        doctor_capacity: 1,
       });
     }
     setIsModalOpen(true);
@@ -92,6 +95,7 @@ const RoomManagementPage = () => {
     setFormData({
       room_number: '',
       description: '',
+      doctor_capacity: 1,
       is_active: true,
     });
   };
@@ -290,7 +294,8 @@ const RoomManagementPage = () => {
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Room Number</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Description</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Assigned Doctor</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Capacity</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Assigned Doctor(s)</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Created</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Actions</th>
                 </tr>
@@ -298,12 +303,15 @@ const RoomManagementPage = () => {
               <tbody>
                 {rooms.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-8 text-gray-500">
+                    <td colSpan="6" className="text-center py-8 text-gray-500">
                       No rooms found
                     </td>
                   </tr>
                 ) : (
-                  rooms.map((room) => (
+                  rooms.map((room) => {
+                    const doctors = room.assigned_doctors || (room.assigned_doctor ? [room.assigned_doctor] : []);
+                    const capacity = room.doctor_capacity ?? 1;
+                    return (
                     <tr key={room.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-4">
                         <span className="font-medium text-gray-900">{room.room_number}</span>
@@ -317,27 +325,30 @@ const RoomManagementPage = () => {
                           </span>
                         ) : '-'}
                       </td>
+                      <td className="py-3 px-4 text-sm">
+                        {capacity > 1 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium text-xs">
+                            {capacity} (shared)
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">1 (solo)</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4">
-                        {room.assigned_doctor ? (
-                          <div className="flex items-start gap-2">
-                            <FiUser className="w-4 h-4 text-primary-600 mt-0.5 flex-shrink-0" />
-                            <div className="flex flex-col gap-1">
-                              <span className="font-medium text-gray-900">{room.assigned_doctor.name}</span>
-                              <span className="text-xs text-gray-500">
+                        {doctors.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            {doctors.map((doc, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <FiUser className="w-3.5 h-3.5 text-primary-600 flex-shrink-0" />
+                                <span className="text-sm font-medium text-gray-900">{doc.name}</span>
                                 <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded text-xs font-medium">
-                                  {room.assigned_doctor.role}
+                                  {doc.role}
                                 </span>
-                                {room.assigned_doctor.assignment_time && (
-                                  <span className="ml-2">
-                                    {new Date(room.assigned_doctor.assignment_time).toLocaleTimeString('en-IN', {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                      timeZone: 'Asia/Kolkata'
-                                    })} IST
-                                  </span>
-                                )}
-                              </span>
-                            </div>
+                              </div>
+                            ))}
+                            {capacity > 1 && (
+                              <span className="text-xs text-gray-400">{doctors.length}/{capacity} doctors today</span>
+                            )}
                           </div>
                         ) : (
                           <div className="flex items-center gap-2 text-gray-400">
@@ -387,7 +398,8 @@ const RoomManagementPage = () => {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -456,6 +468,27 @@ const RoomManagementPage = () => {
                 rows="3"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Doctor Capacity <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="doctor_capacity"
+                value={formData.doctor_capacity}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                {[1, 2, 3, 4, 5].map(n => (
+                  <option key={n} value={n}>
+                    {n} {n === 1 ? '— Solo (one doctor only)' : `— Shared (up to ${n} doctors)`}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Set to 2 or more for rooms where Faculty and Residents consult together.
+              </p>
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t">

@@ -3,18 +3,18 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiPhone,  FiClock, FiEye,
-  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus, FiClipboard, FiRepeat
+  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus, FiClipboard, FiRepeat, FiX
 } from 'react-icons/fi';
 import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useChangePatientRoomMutation, patientsApiSlice } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
 import { useGetChildClinicalProformasByChildPatientIdQuery } from '../../features/clinical/childClinicalApiSlice';
-import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice, useGetAllRoomsQuery, useChangeDoctorRoomMutation } from '../../features/rooms/roomsApiSlice';
-import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
+import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice, useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
 import { useDispatch } from 'react-redux';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
 import Select from '../../components/Select';
 import SearchExistingPatientModal from '../../components/SearchExistingPatientModal';
+import AdminDoctorRoomManager from '../../components/AdminDoctorRoomManager';
 // Removed RoomSelectionModal - using inline card instead
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
@@ -656,11 +656,16 @@ const ClinicalTodayPatients = () => {
                           myRoomData.data.current_room !== '';
   
   // Fallback: If myRoomData has a room but date check failed, check if it's in occupied_rooms
-  // This handles timezone edge cases where the room is assigned but date comparison fails
-  // Also check if the current user's ID matches the doctor_id in occupied_rooms
+  // This handles timezone edge cases where the room is assigned but date comparison fails.
+  // With multi-doctor rooms, the user may be one of several doctors – check the doctors array.
   const currentUserId = currentUser?.id ? parseInt(currentUser.id, 10) : null;
-  const fallbackRoomData = !validRoomData && hasRoomAssigned && 
-    roomsData?.data?.occupied_rooms?.[myRoomData.data.current_room]?.doctor_id === currentUserId
+  const fallbackRoomInfo = roomsData?.data?.occupied_rooms?.[myRoomData?.data?.current_room];
+  const imInFallbackRoom = fallbackRoomInfo
+    ? (fallbackRoomInfo.doctors
+        ? fallbackRoomInfo.doctors.some(d => d.doctor_id === currentUserId)
+        : fallbackRoomInfo.doctor_id === currentUserId)
+    : false;
+  const fallbackRoomData = !validRoomData && hasRoomAssigned && imInFallbackRoom
     ? myRoomData
     : null;
   
@@ -698,10 +703,10 @@ const ClinicalTodayPatients = () => {
       return;
     }
     
-    // Check if selected room is disabled (occupied)
+    // Check if selected room is disabled (at capacity)
     const selectedOption = allRoomOptions.find(opt => opt.value === selectedRoom);
     if (selectedOption && selectedOption.disabled) {
-      toast.error(`Room ${selectedRoom} is already assigned to another doctor. Please select a different room.`);
+      toast.error(selectedOption.disabledReason || `Room ${selectedRoom} is full. Please select a different room.`);
       return;
     }
     
@@ -818,52 +823,50 @@ const ClinicalTodayPatients = () => {
   const rooms = roomsData?.data?.rooms || []; // ALL rooms (including occupied)
   const distribution = roomsData?.data?.distribution_today || {}; // Use today's distribution only
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
-  
-  // Create room options: disable only when another doctor occupies the room (not when patient count is zero)
-  // Note: distribution_today shows only patients registered today (from 12:00 AM IST to 11:59 PM IST)
-  const roomOptions = rooms.map(room => {
-    const totalPatients = distribution[room] || 0; // This shows only patients registered today
-    const isOccupied = occupiedRooms[room] !== undefined;
-    const occupiedBy = isOccupied ? occupiedRooms[room]?.doctor_name : null;
-    
-    // Check if this is the current user's room
-    const isMyRoom = validRoomData?.data?.current_room === room;
-    
-    const isDisabled = isOccupied && !isMyRoom;
-    let disabledReason = undefined;
-    if (isOccupied && !isMyRoom) {
-      disabledReason = `This room is already assigned to ${occupiedBy || 'another doctor'}`;
+
+  // Build a room option label for a room that may have 1 or many doctors.
+  // occupiedRooms[room] shape: { capacity, doctors: [{doctor_id, doctor_name}], slots_remaining, doctor_id, doctor_name }
+  const buildRoomOption = (room, totalPatients, forFallback = false) => {
+    const info = occupiedRooms[room];
+    const capacity = info?.capacity ?? 1;
+    const doctors = info?.doctors ?? (info ? [{ doctor_id: info.doctor_id, doctor_name: info.doctor_name }] : []);
+    const slotsRemaining = info?.slots_remaining ?? (info ? 0 : capacity);
+    const atCapacity = info && slotsRemaining <= 0;
+    const imInRoom = doctors.some(d => d.doctor_id === currentUserId);
+    const isDisabled = atCapacity && !imInRoom;
+
+    let occupancyLabel = '';
+    if (info) {
+      if (capacity > 1) {
+        const names = doctors.map(d => `Dr. ${d.doctor_name}`).join(', ');
+        occupancyLabel = ` - ${doctors.length}/${capacity}: ${names}${slotsRemaining > 0 ? ` (${slotsRemaining} slot${slotsRemaining !== 1 ? 's' : ''} left)` : ' — Full'}`;
+      } else {
+        occupancyLabel = ` - Assigned to ${doctors[0]?.doctor_name || 'Doctor'}`;
+      }
     }
-    
-    return {
-      value: room,
-      label: `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''} today)${isOccupied ? ` - Assigned to ${occupiedBy || 'Doctor'}` : ''}${isMyRoom ? ' (Your room)' : ''}`,
-      disabled: isDisabled,
-      disabledReason: disabledReason,
-    };
-  });
+
+    let disabledReason;
+    if (isDisabled) {
+      disabledReason = capacity === 1
+        ? `This room is already assigned to ${doctors[0]?.doctor_name || 'another doctor'}`
+        : `Room is full (${doctors.length}/${capacity} doctors)`;
+    }
+
+    const myRoomLabel = imInRoom ? ' (Your room)' : '';
+    const label = `${room} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''} today)${occupancyLabel}${myRoomLabel}`;
+
+    return { value: room, label, disabled: isDisabled, disabledReason };
+  };
+
+  // Create room options: disable only when room is at capacity and current user is not already in it
+  const roomOptions = rooms.map(room => buildRoomOption(room, distribution[room] || 0));
   
   // If no rooms available, add default rooms
   const allRoomOptions = [...roomOptions];
   if (allRoomOptions.length === 0) {
     for (let i = 1; i <= 10; i++) {
       const roomName = `Room ${i}`;
-      const isOccupied = occupiedRooms[roomName] !== undefined;
-      const occupiedBy = isOccupied ? occupiedRooms[roomName]?.doctor_name : null;
-      const totalPatients = distribution[roomName] || 0;
-      
-      const isDisabled = isOccupied;
-      let disabledReason = undefined;
-      if (isOccupied) {
-        disabledReason = `This room is already assigned to ${occupiedBy || 'another doctor'}`;
-      }
-      
-      allRoomOptions.push({
-        value: roomName,
-        label: `${roomName} (${totalPatients} patient${totalPatients !== 1 ? 's' : ''})${isOccupied ? ` - Assigned to ${occupiedBy || 'Doctor'}` : ''}`,
-        disabled: isDisabled,
-        disabledReason: disabledReason,
-      });
+      allRoomOptions.push(buildRoomOption(roomName, distribution[roomName] || 0, true));
     }
   }
   
@@ -985,14 +988,6 @@ const ClinicalTodayPatients = () => {
       }
       }
 
-      // If patient is explicitly assigned to some other doctor (name + role set), hide
-      if (p.assigned_doctor_name && p.assigned_doctor_role && p.assigned_doctor_id && parseInt(p.assigned_doctor_id, 10) !== currentUserId) {
-        return false;
-      }
-
-      // Fallback visibility rule for NEW patients:
-      // Show patients created today in the current doctor's room even if not yet assigned to a doctor.
-      // ALSO show existing patients (updated today) in the current doctor's room
       const targetDate = toISTDateString(selectedDate || new Date());
       const patientCreatedDate = p?.created_at ? toISTDateString(p.created_at) : '';
       const patientUpdatedDate = p?.updated_at ? toISTDateString(p.updated_at) : '';
@@ -1002,6 +997,28 @@ const ClinicalTodayPatients = () => {
       const doctorRoom = effectiveRoomData?.data?.current_room;
       const inMyRoom = doctorRoom && p.assigned_room && p.assigned_room === doctorRoom;
 
+      // Shared-room exception: if I am in a shared room (capacity > 1) and this patient is in my
+      // room today and assigned to a colleague, still show the patient (shared consultation queue).
+      if (inMyRoom && p.assigned_doctor_id && parseInt(p.assigned_doctor_id, 10) !== currentUserId) {
+        const roomInfo = occupiedRooms[doctorRoom];
+        const isSharedRoom = roomInfo
+          ? (roomInfo.capacity > 1 || (roomInfo.doctors && roomInfo.doctors.length > 1))
+          : false;
+        if (isSharedRoom && (createdToday || updatedToday)) {
+          return true;
+        }
+        // Solo room: patient belongs to another doctor — hide
+        return false;
+      }
+
+      // If patient is assigned to another doctor (and above shared-room check didn't apply), hide
+      if (p.assigned_doctor_name && p.assigned_doctor_role && p.assigned_doctor_id && parseInt(p.assigned_doctor_id, 10) !== currentUserId) {
+        return false;
+      }
+
+      // Fallback visibility rule for NEW patients:
+      // Show patients created today in the current doctor's room even if not yet assigned to a doctor.
+      // ALSO show existing patients (updated today) in the current doctor's room
       // Show if: (created today OR updated today) AND in my room
       if ((createdToday || updatedToday) && inMyRoom) {
         return true;
@@ -1141,9 +1158,9 @@ const ClinicalTodayPatients = () => {
 
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-6 py-6">
       
-        {/* Admin: Doctor Room Management Card */}
+        {/* Admin: compact entry point — full UI opens in side panel */}
         {isAdmin(currentUser?.role) && (
-          <AdminDoctorRoomManager 
+          <AdminDoctorRoomManager
             refetch={refetch}
             refetchRooms={refetchRooms}
           />
@@ -1249,7 +1266,7 @@ const ClinicalTodayPatients = () => {
                       </div>
                       <div>
                         <h3 className="text-lg font-semibold text-gray-800">Select Your Room for Today</h3>
-                        <p className="text-sm text-gray-600">Room selection is required each day. Choose any room not taken by another doctor, even if no patients are registered there yet today—then register or add patients to that room as usual.</p>
+                        <p className="text-sm text-gray-600">Room selection is required each day. Choose any room that still has available capacity. Rooms marked as shared can accommodate multiple doctors simultaneously.</p>
                         <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
                           <p className="text-xs text-yellow-800 font-medium">
                             ⚠️ Important: Room selection is day-specific. Yesterday's room assignment does not carry over. Please select your room for today.
@@ -1295,7 +1312,7 @@ const ClinicalTodayPatients = () => {
                             )}
                             {Object.keys(occupiedRooms).length > 0 && (
                               <p className="text-xs text-gray-500 mt-1 italic">
-                                {Object.keys(occupiedRooms).length} room(s) are already assigned to other doctors and are disabled.
+                                Rooms at full capacity are disabled. Shared rooms with remaining slots are still selectable.
                               </p>
                             )}
                             <p className="text-xs text-gray-500 mt-1 italic">
@@ -1334,8 +1351,8 @@ const ClinicalTodayPatients = () => {
                     
                     <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="text-xs text-blue-800">
-                        <strong>Note:</strong> Only one doctor can be assigned to each room. Rooms already assigned to other doctors are shown but disabled.
-                        You can use an empty room for walk-ins; any patients already tied to that room for today will be assigned to you when you confirm.
+                        <strong>Note:</strong> Rooms with a capacity of 1 can only be selected by one doctor. Shared rooms (capacity 2+) allow multiple doctors and show all today's patients in that room to everyone assigned to it.
+                        Any patients already tied to an empty room for today will be assigned to you when you confirm.
                       </p>
                     </div>
                   </div>
@@ -1459,217 +1476,5 @@ const ClinicalTodayPatients = () => {
   );
 };
 
-// Admin Component: Manage Doctor Room Assignments
-const AdminDoctorRoomManager = ({ refetch, refetchRooms }) => {
-  const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [selectedNewRoom, setSelectedNewRoom] = useState('');
-  const [showChangeModal, setShowChangeModal] = useState(false);
-  
-  const { data: doctorsData, isLoading: isLoadingDoctors, refetch: refetchDoctors } = useGetDoctorsQuery({ page: 1, limit: 100 });
-  const { data: roomsData } = useGetAvailableRoomsQuery(undefined);
-  const { data: allRoomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
-  const [changeDoctorRoom, { isLoading: isChangingRoom }] = useChangeDoctorRoomMutation();
-  
-  const doctors = doctorsData?.data?.users || [];
-  const occupiedRooms = roomsData?.data?.occupied_rooms || {};
-  const availableRooms = (allRoomsData?.data?.rooms || []).filter(room => room.is_active);
-  
-  // Get doctors with their current room assignments
-  const doctorsWithRooms = doctors.map(doctor => {
-    const roomAssignment = Object.entries(occupiedRooms).find(
-      ([room, info]) => info.doctor_id === doctor.id
-    );
-    return {
-      ...doctor,
-      current_room: roomAssignment ? roomAssignment[0] : null,
-      room_info: roomAssignment ? roomAssignment[1] : null,
-    };
-  });
-  
-  const handleChangeRoom = async () => {
-    if (!selectedDoctor || !selectedNewRoom) {
-      toast.warning('Please select a doctor and a new room');
-      return;
-    }
-    
-    if (selectedNewRoom === selectedDoctor.current_room) {
-      toast.warning('Please select a different room');
-      return;
-    }
-    
-    try {
-      const result = await changeDoctorRoom({
-        doctorId: selectedDoctor.id,
-        new_room: selectedNewRoom,
-      }).unwrap();
-      
-      toast.success(result.message || `Room changed successfully. ${result.data.patients_assigned} patient(s) reassigned.`);
-      setShowChangeModal(false);
-      setSelectedDoctor(null);
-      setSelectedNewRoom('');
-      
-      // Refetch data to update the UI
-      refetch();
-      refetchRooms();
-      refetchDoctors();
-    } catch (error) {
-      console.error('Failed to change doctor room:', error);
-      toast.error(error?.data?.message || 'Failed to change doctor room');
-    }
-  };
-  
-  return (
-    <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200 shadow-lg mb-6">
-      <div className="p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center">
-              <FiShield className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-800">Doctor Room Management</h3>
-              <p className="text-sm text-gray-600">Change doctor room assignments (Admin only)</p>
-            </div>
-          </div>
-        </div>
-        
-        {isLoadingDoctors ? (
-          <div className="text-center py-4">
-            <div className="inline-block w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-sm text-gray-600 mt-2">Loading doctors...</p>
-          </div>
-        ) : doctorsWithRooms.length === 0 ? (
-          <p className="text-sm text-gray-600 text-center py-4">No doctors found</p>
-        ) : (
-          <div className="space-y-3">
-            {doctorsWithRooms.map((doctor) => (
-              <div
-                key={doctor.id}
-                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-indigo-500 rounded-full flex items-center justify-center text-white font-semibold">
-                      {doctor.name?.charAt(0) || 'D'}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-800">{doctor.name}</p>
-                      <p className="text-xs text-gray-500">{doctor.role}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    {doctor.current_room ? (
-                      <>
-                        <p className="text-sm font-medium text-gray-700">Current Room</p>
-                        <p className="text-lg font-bold text-purple-600">{doctor.current_room}</p>
-                      </>
-                    ) : (
-                      <p className="text-sm text-gray-500">No room assigned</p>
-                    )}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedDoctor(doctor);
-                      setSelectedNewRoom('');
-                      setShowChangeModal(true);
-                    }}
-                    className="bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100"
-                  >
-                    <FiRepeat className="w-4 h-4 mr-1" />
-                    Change Room
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      
-      {/* Change Room Modal */}
-      {showChangeModal && selectedDoctor && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-              Change Room for Dr. {selectedDoctor.name}
-            </h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Current Room
-                </label>
-                <p className="text-lg font-semibold text-purple-600">
-                  {selectedDoctor.current_room || 'No room assigned'}
-                </p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  New Room <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={selectedNewRoom}
-                  onChange={(e) => setSelectedNewRoom(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  disabled={isChangingRoom}
-                >
-                  <option value="">Select new room...</option>
-                  {availableRooms
-                    .filter(room => room.room_number !== selectedDoctor.current_room)
-                    .map(room => {
-                      const isOccupied = Object.keys(occupiedRooms).includes(room.room_number);
-                      return (
-                        <option
-                          key={room.room_number}
-                          value={room.room_number}
-                          disabled={isOccupied}
-                        >
-                          {room.room_number}
-                          {isOccupied ? ` (Occupied by ${occupiedRooms[room.room_number]?.doctor_name || 'another doctor'})` : ''}
-                        </option>
-                      );
-                    })}
-                </select>
-              </div>
-              
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <p className="text-xs text-yellow-800">
-                  <strong>⚠️ Important:</strong> When you change a doctor's room, all patients in that room will automatically be reassigned to the newly assigned doctor.
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex gap-3 mt-6">
-              <Button
-                onClick={handleChangeRoom}
-                disabled={!selectedNewRoom || isChangingRoom || selectedNewRoom === selectedDoctor.current_room}
-                loading={isChangingRoom}
-                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
-              >
-                Change Room
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowChangeModal(false);
-                  setSelectedDoctor(null);
-                  setSelectedNewRoom('');
-                }}
-                variant="outline"
-                disabled={isChangingRoom}
-                className="px-4 border-gray-300 text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </Card>
-  );
-};
 
 export default ClinicalTodayPatients;
