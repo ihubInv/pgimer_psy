@@ -18,7 +18,7 @@ import Table from '../../components/Table';
 import Pagination from '../../components/Pagination';
 import Badge from '../../components/Badge';
 import ExportDateRangeModal from '../../components/ExportDateRangeModal';
-import { isAdmin, isMWO, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM } from '../../utils/constants';
+import { isAdmin, isMWO, PATIENT_REGISTRATION_FORM, CLINICAL_PROFORMA_FORM, ADL_FILE_FORM, PRESCRIPTION_FORM, isJuniorResidentUser, isSeniorResidentUser } from '../../utils/constants';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
@@ -37,6 +37,12 @@ const PatientsPage = () => {
   useEffect(() => {
     setPage(1);
   }, [search, patientType]);
+
+  const patientsTabTitle = isJuniorResidentUser(user)
+    ? 'My Patients'
+    : isSeniorResidentUser(user)
+      ? 'Total Patients'
+      : 'Patients';
 
   // Fetch patients - use server-side pagination when not searching, client-side when searching
   const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
@@ -2928,6 +2934,14 @@ const PatientsPage = () => {
         {/* Header Section */}
         {/* Main Content Card */}
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
+          <div className="mb-4 px-1">
+            <h1 className="text-2xl font-bold text-gray-900">{patientsTabTitle}</h1>
+            {isJuniorResidentUser(user) && (
+              <p className="text-sm text-gray-600 mt-1">
+                Patients assigned to you when you select your room for the day.
+              </p>
+            )}
+          </div>
           {/* Patient type tabs */}
           <div className="mb-6">
             <div className="flex gap-2 border-b border-gray-200">

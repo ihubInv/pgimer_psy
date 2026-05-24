@@ -13,10 +13,16 @@ export const RESIDENT_SUB_ROLES = {
 export const VALID_RESIDENT_SUB_ROLES = Object.values(RESIDENT_SUB_ROLES);
 
 export const getResidentSubRoleLabel = (subRole) => {
-  if (subRole === RESIDENT_SUB_ROLES.JUNIOR) return 'Junior Resident';
-  if (subRole === RESIDENT_SUB_ROLES.SENIOR) return 'Senior Resident';
-  return subRole || 'N/A';
+    if (subRole === RESIDENT_SUB_ROLES.JUNIOR) return 'Junior Resident';
+    if (subRole === RESIDENT_SUB_ROLES.SENIOR) return 'Senior Resident';
+    return subRole || 'N/A';
 };
+
+export const isJuniorResidentUser = (user) =>
+  user?.role === USER_ROLES.RESIDENT && user?.sub_role === RESIDENT_SUB_ROLES.JUNIOR;
+
+export const isSeniorResidentUser = (user) =>
+  user?.role === USER_ROLES.RESIDENT && user?.sub_role === RESIDENT_SUB_ROLES.SENIOR;
 
 // Helper function to get display name for a role
 export const getRoleDisplayName = (role) => {

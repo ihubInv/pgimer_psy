@@ -772,6 +772,19 @@ class Patient {
         params.push(filters.assigned_room);
       }
 
+      if (filters.search && String(filters.search).trim().length >= 2) {
+        const searchParam = `$${idx++}`;
+        const searchPattern = `%${String(filters.search).trim()}%`;
+        where.push(`(
+          p.name ILIKE ${searchParam}
+          OR p.cr_no ILIKE ${searchParam}
+          OR p.psy_no ILIKE ${searchParam}
+          OR p.adl_no ILIKE ${searchParam}
+          OR p.contact_number ILIKE ${searchParam}
+        )`);
+        params.push(searchPattern);
+      }
+
       // "My Patients" filter: keep patients linked to a specific doctor.
       // Linked = master row's assigned_doctor_id matches, OR any visit's assigned_doctor_id matches,
       // OR any clinical proforma's assigned_doctor / filled_by matches.

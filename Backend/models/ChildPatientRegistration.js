@@ -441,6 +441,29 @@ class ChildPatientRegistration {
         params.push(filters.treating_doctor_id);
       }
 
+      // Junior resident "my patients": doctor-linked OR in doctor's selected room today
+      if (filters.junior_my_patients?.doctor_id) {
+        const doctorParam = `$${idx++}`;
+        params.push(filters.junior_my_patients.doctor_id);
+        const parts = [
+          `EXISTS (
+            SELECT 1 FROM followup_visits fv
+            WHERE fv.child_patient_id = cpr.id AND fv.assigned_doctor_id = ${doctorParam}
+          )`,
+          `EXISTS (
+            SELECT 1 FROM child_clinical_proforma ccp
+            WHERE ccp.child_patient_id = cpr.id
+              AND (ccp.assigned_doctor = ${doctorParam} OR ccp.filled_by = ${doctorParam})
+          )`,
+        ];
+        if (filters.junior_my_patients.room) {
+          const roomParam = `$${idx++}`;
+          params.push(filters.junior_my_patients.room);
+          parts.push(`TRIM(COALESCE(cpr.assigned_room::text, '')) = TRIM(${roomParam}::text)`);
+        }
+        where.push(`(${parts.join(' OR ')})`);
+      }
+
       if (filters.date) {
         // For "Today's Patients" view: Include child patients that were either:
         // 1. Created today (in IST), OR

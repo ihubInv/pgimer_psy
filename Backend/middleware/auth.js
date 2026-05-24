@@ -53,7 +53,7 @@ const authenticateToken = async (req, res, next) => {
         }
 
         const userResult = await db.query(
-          'SELECT id, name, role, email, is_active FROM users WHERE id = $1',
+          'SELECT id, name, role, sub_role, email, is_active FROM users WHERE id = $1',
           [mobileTokenRecord.user_id]
         );
 
@@ -200,7 +200,7 @@ const authenticateToken = async (req, res, next) => {
     let userResult;
     try {
       userResult = await db.query(
-      'SELECT id, name, role, email, is_active FROM users WHERE id = $1 AND email = $2',
+      'SELECT id, name, role, sub_role, email, is_active FROM users WHERE id = $1 AND email = $2',
       [decoded.userId, decoded.email]
     );
     } catch (dbError) {
@@ -329,7 +329,7 @@ const optionalAuth = async (req, res, next) => {
       try {
         const decoded = verifyAccessToken(token);
         const userResult = await db.query(
-          'SELECT id, name, role, email FROM users WHERE id = $1 AND email = $2',
+          'SELECT id, name, role, sub_role, email FROM users WHERE id = $1 AND email = $2',
           [decoded.userId, decoded.email]
         );
 

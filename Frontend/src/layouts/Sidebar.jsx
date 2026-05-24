@@ -21,7 +21,7 @@ import {
   FiMapPin,
 } from 'react-icons/fi';
 import { selectCurrentUser, logout, updateUser } from '../features/auth/authSlice';
-import { isMWO, USER_ROLES, getResidentSubRoleLabel } from '../utils/constants';
+import { isMWO, USER_ROLES, getResidentSubRoleLabel, isJuniorResidentUser, isSeniorResidentUser } from '../utils/constants';
 import { apiSlice } from '../app/api/apiSlice';
 import { useSession } from '../contexts/SessionContext';
 import { useGetProfileQuery } from '../features/auth/authApiSlice';
@@ -281,9 +281,19 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
     return itemRoles.includes(userRole);
   };
 
-  const filteredNavigation = navigation.filter((item) =>
-    hasAccess(item.roles, user?.role)
-  );
+  const filteredNavigation = navigation
+    .filter((item) => hasAccess(item.roles, user?.role))
+    .map((item) => {
+      if (item.to === '/patients') {
+        if (isJuniorResidentUser(user)) {
+          return { ...item, name: 'My Patients' };
+        }
+        if (isSeniorResidentUser(user)) {
+          return { ...item, name: 'Total Patients' };
+        }
+      }
+      return item;
+    });
 
   return (
     <>

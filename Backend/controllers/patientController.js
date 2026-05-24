@@ -660,6 +660,10 @@ class PatientController {
       const limit = parseInt(req.query.limit) || 10;
       const filters = {};
 
+      const isJuniorResident =
+        req.user?.role === 'Resident' && req.user?.sub_role === 'Junior Resident';
+      const treatingDoctorId = isJuniorResident ? req.user?.id : null;
+
       // If id is provided, redirect to getPatientById for better performance
       if (req.query.id) {
         // getPatientById expects id in req.params, so we need to set it
@@ -675,13 +679,20 @@ class PatientController {
       const useChildDataset = wantsChildType;
 
       // Check if search parameter is provided.
-      // Child dataset does not use Patient.search (adult table only).
+      // Junior residents: search must stay scoped to their assigned patients (server-side).
       if (req.query.search && req.query.search.trim().length >= 2 && !useChildDataset) {
-        const result = await Patient.search(req.query.search.trim(), page, limit);
-        return res.json({
-          success: true,
-          data: result
-        });
+        if (treatingDoctorId) {
+          filters.search = req.query.search.trim();
+          filters.treating_doctor_id = treatingDoctorId;
+        } else {
+          const result = await Patient.search(req.query.search.trim(), page, limit);
+          return res.json({
+            success: true,
+            data: result
+          });
+        }
+      } else if (treatingDoctorId) {
+        filters.treating_doctor_id = treatingDoctorId;
       }
 
       // Apply filters
@@ -710,6 +721,33 @@ class PatientController {
         const childFilters = {};
         if (filters.assigned_room) childFilters.assigned_room = filters.assigned_room;
         if (filters.date) childFilters.date = filters.date;
+        if (treatingDoctorId) {
+          let doctorRoom = null;
+          try {
+            const db = require('../config/database');
+            const roomRes = await db.query(
+              'SELECT current_room, room_assignment_time FROM users WHERE id = $1',
+              [treatingDoctorId]
+            );
+            const roomRow = roomRes.rows[0];
+            if (roomRow?.current_room && roomRow?.room_assignment_time) {
+              const todayRes = await db.query('SELECT CURRENT_DATE AS today');
+              const assignedTodayRes = await db.query(
+                `SELECT DATE(($1::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date AS ok`,
+                [roomRow.room_assignment_time, todayRes.rows[0].today]
+              );
+              if (assignedTodayRes.rows[0]?.ok) {
+                doctorRoom = roomRow.current_room;
+              }
+            }
+          } catch (roomErr) {
+            console.warn('[getAllPatients] Could not resolve junior resident room:', roomErr.message);
+          }
+          childFilters.junior_my_patients = {
+            doctor_id: treatingDoctorId,
+            room: doctorRoom,
+          };
+        }
 
         const childResult = await ChildPatientRegistration.findAll(page, limit, childFilters);
         const childPatients = childResult.child_patients || [];
