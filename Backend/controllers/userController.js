@@ -625,8 +625,9 @@ class UserController {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const role = req.query.role || null;
+      const search = req.query.search || null;
 
-      const result = await User.findAll(page, limit, role);
+      const result = await User.findAll(page, limit, role, search);
 
       res.json({
         success: true,

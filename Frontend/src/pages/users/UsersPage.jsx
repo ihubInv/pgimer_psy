@@ -80,16 +80,8 @@ const UsersPage = () => {
     return map[role] || 'default';
   };
 
-  // Filter users based on search
-  const filteredUsers = data?.data?.users?.filter(user => {
-    if (!search.trim()) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      user.name?.toLowerCase().includes(searchLower) ||
-      user.email?.toLowerCase().includes(searchLower) ||
-      user.role?.toLowerCase().includes(searchLower)
-    );
-  }) || [];
+  // Users returned from API (search is applied server-side)
+  const filteredUsers = data?.data?.users || [];
 
   const columns = [
     {

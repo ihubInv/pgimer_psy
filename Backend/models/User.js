@@ -133,27 +133,51 @@ class User {
   }
 
   // Get all users with pagination
-  static async findAll(page = 1, limit = 10, role = null) {
+  static async findAll(page = 1, limit = 10, role = null, search = null) {
     try {
       const offset = (page - 1) * limit;
       let query = 'SELECT id, name, role, sub_role, email, mobile, is_active, two_factor_enabled, last_login, created_at FROM users';
       let countQuery = 'SELECT COUNT(*) FROM users';
       const params = [];
+      const where = [];
       let paramCount = 0;
 
       if (role) {
         paramCount++;
-        query += ` WHERE role = $${paramCount}`;
-        countQuery += ` WHERE role = $${paramCount}`;
+        where.push(`role = $${paramCount}`);
         params.push(role);
       }
 
-      query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-      params.push(limit, offset);
+      if (search && String(search).trim()) {
+        paramCount++;
+        const searchParam = `%${String(search).trim()}%`;
+        where.push(`(
+          name ILIKE $${paramCount}
+          OR email ILIKE $${paramCount}
+          OR role ILIKE $${paramCount}
+          OR sub_role ILIKE $${paramCount}
+        )`);
+        params.push(searchParam);
+      }
+
+      if (where.length > 0) {
+        const clause = ` WHERE ${where.join(' AND ')}`;
+        query += clause;
+        countQuery += clause;
+      }
+
+      paramCount++;
+      query += ` ORDER BY created_at DESC LIMIT $${paramCount}`;
+      params.push(limit);
+      paramCount++;
+      query += ` OFFSET $${paramCount}`;
+      params.push(offset);
+
+      const countParams = params.slice(0, params.length - 2);
 
       const [usersResult, countResult] = await Promise.all([
         db.query(query, params),
-        db.query(countQuery, role ? [role] : [])
+        db.query(countQuery, countParams)
       ]);
 
       const users = usersResult.rows.map(row => new User(row));
