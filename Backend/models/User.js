@@ -9,6 +9,7 @@ class User {
     this.id = data.id;
     this.name = data.name;
     this.role = data.role;
+    this.sub_role = data.sub_role || null;
     this.email = data.email;
     this.mobile = data.mobile;
     this.password_hash = data.password_hash;
@@ -30,7 +31,7 @@ class User {
   // SECURITY FIX #2.11: Password is optional - user will set it via secure setup link
   static async create(userData) {
     try {
-      const { name, role, email, password, mobile } = userData;
+      const { name, role, email, password, mobile, sub_role } = userData;
       
       // Normalize email for comparison only (lowercase, preserves dots and plus signs)
       // Store the original email as entered by the user
@@ -70,10 +71,10 @@ class User {
       // Insert user - store email exactly as entered (lowercase, but with dots/plus preserved)
       // password_hash can be NULL if user needs to set password via setup link
       const result = await db.query(
-        `INSERT INTO users (name, role, email, password_hash, mobile) 
-         VALUES ($1, $2, $3, $4, $5) 
-         RETURNING id, name, role, email, mobile, created_at`,
-        [name, role, emailToStore, password_hash, mobile]
+        `INSERT INTO users (name, role, sub_role, email, password_hash, mobile) 
+         VALUES ($1, $2, $3, $4, $5, $6) 
+         RETURNING id, name, role, sub_role, email, mobile, created_at`,
+        [name, role, sub_role ?? null, emailToStore, password_hash, mobile]
       );
 
       return new User(result.rows[0]);
@@ -135,7 +136,7 @@ class User {
   static async findAll(page = 1, limit = 10, role = null) {
     try {
       const offset = (page - 1) * limit;
-      let query = 'SELECT id, name, role, email, mobile, is_active, two_factor_enabled, last_login, created_at FROM users';
+      let query = 'SELECT id, name, role, sub_role, email, mobile, is_active, two_factor_enabled, last_login, created_at FROM users';
       let countQuery = 'SELECT COUNT(*) FROM users';
       const params = [];
       let paramCount = 0;
@@ -175,7 +176,7 @@ class User {
   // Update user
   async update(updateData) {
     try {
-      const allowedFields = ['name', 'role', 'email', 'mobile'];
+      const allowedFields = ['name', 'role', 'sub_role', 'email', 'mobile'];
       const updates = [];
       const values = [];
       let paramCount = 0;
@@ -196,10 +197,10 @@ class User {
       }
 
       for (const [key, value] of Object.entries(updateData)) {
-        if (allowedFields.includes(key) && value !== undefined) {
+        if (allowedFields.includes(key) && (value !== undefined || key === 'sub_role')) {
           paramCount++;
           updates.push(`${key} = $${paramCount}`);
-          values.push(value);
+          values.push(value ?? null);
         }
       }
 
@@ -213,7 +214,7 @@ class User {
       const result = await db.query(
         `UPDATE users SET ${updates.join(', ')} 
          WHERE id = $${paramCount} 
-         RETURNING id, name, role, email, mobile, created_at`,
+         RETURNING id, name, role, sub_role, email, mobile, created_at`,
         values
       );
 
@@ -522,7 +523,7 @@ class User {
 
   // Convert to JSON (exclude sensitive data)
   toJSON() {
-    return {
+    const json = {
       id: this.id,
       name: this.name,
       role: this.role,
@@ -535,6 +536,10 @@ class User {
       room_assignment_time: this.room_assignment_time,
       created_at: this.created_at
     };
+    if (this.role === 'Resident') {
+      json.sub_role = this.sub_role ?? null;
+    }
+    return json;
   }
 }
 

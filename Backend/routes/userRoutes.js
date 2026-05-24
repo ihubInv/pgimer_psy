@@ -5,6 +5,7 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const {
   validateUserRegistration,
   validateUserLogin,
+  validateUserUpdate,
   validateId,
   validatePagination
 } = require('../middleware/validation');
@@ -1723,7 +1724,7 @@ router.get('/:id', authenticateToken, requireAdmin, validateId, UserController.g
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id', authenticateToken, requireAdmin, validateId, UserController.updateUserById);
+router.put('/:id', authenticateToken, requireAdmin, validateId, validateUserUpdate, UserController.updateUserById);
 
 /**
  * @swagger

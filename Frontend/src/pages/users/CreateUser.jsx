@@ -15,7 +15,7 @@ import Card from '../../components/Card';
 import { IconInput } from '../../components/IconInput';
 import Select from '../../components/Select';
 import Button from '../../components/Button';
-import { USER_ROLES, isAdmin } from '../../utils/constants';
+import { USER_ROLES, VALID_RESIDENT_SUB_ROLES, getResidentSubRoleLabel, isAdmin } from '../../utils/constants';
 
 const CreateUser = ({ editMode = false, existingUser = null, userId = null }) => {
   const navigate = useNavigate();
@@ -40,6 +40,7 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
     email: '',
     mobile: '',
     role: '',
+    sub_role: '',
     // SECURITY FIX #2.11: Password fields removed - user will set password via secure setup link
   });
 
@@ -53,6 +54,7 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
         email: currentUserData.email || '',
         mobile: currentUserData.mobile || '',
         role: currentUserData.role || '',
+        sub_role: currentUserData.sub_role || '',
         // SECURITY FIX #2.11: Password fields removed
       });
     }
@@ -60,7 +62,13 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === 'role' && value !== USER_ROLES.RESIDENT) {
+        next.sub_role = '';
+      }
+      return next;
+    });
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: '' }));
     }
@@ -92,6 +100,10 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
       newErrors.role = 'Role is required';
     }
 
+    if (formData.role === USER_ROLES.RESIDENT && !formData.sub_role) {
+      newErrors.sub_role = 'Sub-role is required for Resident';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -113,6 +125,9 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
           mobile: formData.mobile.trim(),
           role: formData.role,
         };
+        if (formData.role === USER_ROLES.RESIDENT) {
+          payload.sub_role = formData.sub_role;
+        }
         await updateUser(payload).unwrap();
         toast.success('User updated successfully!');
       } else {
@@ -123,6 +138,9 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
           mobile: formData.mobile.trim(),
           role: formData.role,
         };
+        if (formData.role === USER_ROLES.RESIDENT) {
+          payload.sub_role = formData.sub_role;
+        }
         await createUser(payload).unwrap();
         toast.success('User created successfully! Password setup link has been sent to the user\'s email.');
       }
@@ -160,6 +178,13 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
     value,
     label: value,
   }));
+
+  const subRoleOptions = VALID_RESIDENT_SUB_ROLES.map((value) => ({
+    value,
+    label: getResidentSubRoleLabel(value),
+  }));
+
+  const shouldShowSubRole = formData.role === USER_ROLES.RESIDENT;
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -252,6 +277,24 @@ const CreateUser = ({ editMode = false, existingUser = null, userId = null }) =>
                         />
                       </div>
                     </div>
+
+                    {shouldShowSubRole && (
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-teal-500/5 rounded-xl"></div>
+                        <div className="relative">
+                          <Select
+                            label="Resident Sub-Role"
+                            name="sub_role"
+                            value={formData.sub_role}
+                            onChange={handleChange}
+                            options={subRoleOptions}
+                            error={errors.sub_role}
+                            required
+                            className="h-14"
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     <div className="relative">
                       <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>

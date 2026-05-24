@@ -5,6 +5,19 @@ export const USER_ROLES = {
   MWO: 'Psychiatric Welfare Officer',
 };
 
+export const RESIDENT_SUB_ROLES = {
+  JUNIOR: 'Junior Resident',
+  SENIOR: 'Senior Resident',
+};
+
+export const VALID_RESIDENT_SUB_ROLES = Object.values(RESIDENT_SUB_ROLES);
+
+export const getResidentSubRoleLabel = (subRole) => {
+  if (subRole === RESIDENT_SUB_ROLES.JUNIOR) return 'Junior Resident';
+  if (subRole === RESIDENT_SUB_ROLES.SENIOR) return 'Senior Resident';
+  return subRole || 'N/A';
+};
+
 // Helper function to get display name for a role
 export const getRoleDisplayName = (role) => {
   if (!role) return 'N/A';

@@ -14,13 +14,40 @@ const {
 const { isMobileAppClient } = require('../utils/mobileClient');
 const db = require('../config/database');
 
+const VALID_RESIDENT_SUB_ROLES = ['Junior Resident', 'Senior Resident'];
+
+function normalizeSubRoleByRole(role, subRole) {
+  if (role === 'Resident') {
+    const trimmed = subRole != null ? String(subRole).trim() : '';
+    if (!trimmed) {
+      return { error: 'Sub-role is required for Resident (Junior Resident or Senior Resident)' };
+    }
+    if (!VALID_RESIDENT_SUB_ROLES.includes(trimmed)) {
+      return { error: 'Sub-role must be Junior Resident or Senior Resident' };
+    }
+    return { value: trimmed };
+  }
+  if (subRole !== undefined && subRole !== null && String(subRole).trim() !== '') {
+    return { error: 'Sub-role is only allowed for Resident role' };
+  }
+  return { value: null };
+}
+
 class UserController {
   // Register a new user
   // SECURITY FIX #2.11: Secure user onboarding - admin creates user without password
   // User receives secure password setup link via email
   static async register(req, res) {
     try {
-      const { name, role, email, mobile } = req.body;
+      const { name, role, email, mobile, sub_role } = req.body;
+
+      const normalizedSubRole = normalizeSubRoleByRole(role, sub_role);
+      if (normalizedSubRole.error) {
+        return res.status(400).json({
+          success: false,
+          message: normalizedSubRole.error
+        });
+      }
 
       // SECURITY FIX #2.11: Create user without password - user will set it via secure setup link
       const user = await User.create({
@@ -28,6 +55,7 @@ class UserController {
         role,
         email,
         mobile,
+        sub_role: normalizedSubRole.value,
         // password is NOT included - user must set it via secure setup link
       });
 
@@ -656,14 +684,31 @@ class UserController {
         });
       }
 
-      const { name, role, email, mobile } = req.body;
+      const { name, role, email, mobile, sub_role } = req.body;
       const updateData = {};
+
+      const effectiveRole = role ?? user.role;
+      const subRoleInput = sub_role !== undefined
+        ? sub_role
+        : (effectiveRole === 'Resident' ? user.sub_role : null);
+
+      const normalizedSubRole = normalizeSubRoleByRole(effectiveRole, subRoleInput);
+      if (normalizedSubRole.error) {
+        return res.status(400).json({
+          success: false,
+          message: normalizedSubRole.error
+        });
+      }
 
       if (name) updateData.name = name;
       if (role) updateData.role = role;
       if (email) updateData.email = email;
       if (mobile !== undefined && mobile !== null && String(mobile).trim() !== '') {
         updateData.mobile = String(mobile).trim();
+      }
+
+      if (role || sub_role !== undefined || effectiveRole === 'Resident') {
+        updateData.sub_role = normalizedSubRole.value;
       }
 
       await user.update(updateData);
@@ -1876,6 +1921,9 @@ class UserController {
         two_factor_enabled: userResponse.two_factor_enabled,
         created_at: userResponse.created_at,
       };
+      if (userResponse.role === 'Resident') {
+        userPayload.sub_role = userResponse.sub_role ?? null;
+      }
 
       if (mobile) {
         // Mobile: opaque DB-backed token only. Server can revoke instantly,

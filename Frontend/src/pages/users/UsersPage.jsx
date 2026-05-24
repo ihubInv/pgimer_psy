@@ -136,9 +136,13 @@ const UsersPage = () => {
           'Resident': 'bg-gradient-to-r from-cyan-100 to-teal-100 text-cyan-800 border-cyan-200',
           'Psychiatric Welfare Officer': 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-200',
         };
+        const roleLabel =
+          row.role === 'Resident' && row.sub_role
+            ? row.sub_role
+            : row.role;
         return (
           <Badge className={roleColors[row.role] || 'bg-gray-100 text-gray-800 border-gray-200'}>
-            {row.role}
+            {roleLabel}
           </Badge>
         );
       },

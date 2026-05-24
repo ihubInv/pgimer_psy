@@ -24,7 +24,7 @@ import Modal from '../components/Modal';
 import { formatDate } from '../utils/formatters';
 import { validatePassword, getPasswordRequirements } from '../utils/passwordValidation';
 import { encryptPasswordForTransmission } from '../utils/passwordEncryption';
-import { isAdmin } from '../utils/constants';
+import { isAdmin, USER_ROLES, getResidentSubRoleLabel } from '../utils/constants';
 
 const Profile = () => {
   const user = useSelector(selectCurrentUser);
@@ -50,8 +50,12 @@ const Profile = () => {
         name: profileData.data.user.name || '',
         email: profileData.data.user.email || '',
       });
+      const profileUser = profileData.data.user;
+      if (profileUser.sub_role && profileUser.role === USER_ROLES.RESIDENT) {
+        dispatch(updateAuthUser({ sub_role: profileUser.sub_role }));
+      }
     }
-  }, [profileData]);
+  }, [profileData, dispatch]);
   // Password change workflow state
   const [passwordChangeStep, setPasswordChangeStep] = useState(1); // 1: current password, 2: OTP, 3: new password
   const [passwordForm, setPasswordForm] = useState({
@@ -416,6 +420,25 @@ const Profile = () => {
                     {profile.role}
                   </Badge>
                 </div>
+
+                {profile.role === USER_ROLES.RESIDENT && (
+                  <div className="bg-gradient-to-br from-cyan-50 to-teal-50 rounded-xl p-5 border border-cyan-200/50">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-cyan-100 rounded-lg">
+                        <FiShield className="w-4 h-4 text-cyan-600" />
+                      </div>
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Resident Sub-Role</label>
+                    </div>
+                    <Badge className="bg-gradient-to-r from-cyan-100 to-teal-100 text-cyan-800 border-cyan-200 font-semibold">
+                      {getResidentSubRoleLabel(profile.sub_role)}
+                    </Badge>
+                    {isAdmin(user?.role) && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        To change sub-role, edit this user from the Users page.
+                      </p>
+                    )}
+                  </div>
+                )}
                 
                 <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl p-5 border border-emerald-200/50">
                   <div className="flex items-center gap-3 mb-3">

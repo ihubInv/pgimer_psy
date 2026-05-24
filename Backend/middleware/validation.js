@@ -58,6 +58,85 @@ const validateUserRegistration = [
   body('role')
     .isIn(['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'])
     .withMessage('Role must be one of: Admin, Faculty, Resident, Psychiatric Welfare Officer'),
+  body('sub_role')
+    .optional({ nullable: true })
+    .custom((value, { req }) => {
+      const role = req.body?.role;
+      const validSubRoles = ['Junior Resident', 'Senior Resident'];
+      if (role === 'Resident') {
+        if (value === undefined || value === null || String(value).trim() === '') {
+          throw new Error('Sub-role is required for Resident (Junior Resident or Senior Resident)');
+        }
+        if (!validSubRoles.includes(String(value).trim())) {
+          throw new Error('Sub-role must be Junior Resident or Senior Resident');
+        }
+      } else if (value !== undefined && value !== null && String(value).trim() !== '') {
+        throw new Error('Sub-role is only allowed for Resident role');
+      }
+      return true;
+    }),
+  handleValidationErrors
+];
+
+const validateUserUpdate = [
+  body('name')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Name cannot be empty')
+    .isLength({ min: 2, max: 255 })
+    .withMessage('Name must be between 2 and 255 characters'),
+  body('email')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Email cannot be empty')
+    .custom((value) => {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed.length < 5) {
+        throw new Error('Email is too short');
+      }
+      const atIndex = trimmed.indexOf('@');
+      if (atIndex <= 0 || atIndex >= trimmed.length - 4) {
+        throw new Error('Please enter a valid email address');
+      }
+      const localPart = trimmed.substring(0, atIndex);
+      const domainPart = trimmed.substring(atIndex + 1);
+      if (!localPart || localPart.includes(' ') || !domainPart || domainPart.includes(' ')) {
+        throw new Error('Please enter a valid email address');
+      }
+      if (!domainPart.includes('.')) {
+        throw new Error('Email domain must include a dot (e.g., example.com)');
+      }
+      return true;
+    })
+    .customSanitizer((value) => (value ? value.trim().toLowerCase() : value)),
+  body('mobile')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Mobile cannot be empty'),
+  body('role')
+    .optional()
+    .isIn(['Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'])
+    .withMessage('Role must be one of: Admin, Faculty, Resident, Psychiatric Welfare Officer'),
+  body('sub_role')
+    .optional({ nullable: true })
+    .custom((value, { req }) => {
+      const role = req.body?.role;
+      const validSubRoles = ['Junior Resident', 'Senior Resident'];
+      if (role === 'Resident') {
+        if (value === undefined || value === null || String(value).trim() === '') {
+          throw new Error('Sub-role is required for Resident (Junior Resident or Senior Resident)');
+        }
+        if (!validSubRoles.includes(String(value).trim())) {
+          throw new Error('Sub-role must be Junior Resident or Senior Resident');
+        }
+      } else if (role && value !== undefined && value !== null && String(value).trim() !== '') {
+        throw new Error('Sub-role is only allowed for Resident role');
+      }
+      return true;
+    }),
   handleValidationErrors
 ];
 
@@ -575,6 +654,7 @@ const validatePagination = [
 module.exports = {
   handleValidationErrors,
   validateUserRegistration,
+  validateUserUpdate,
   validateUserLogin,
   validatePatient,
   validatePatientRegistration,

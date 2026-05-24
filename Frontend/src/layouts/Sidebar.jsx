@@ -21,7 +21,7 @@ import {
   FiMapPin,
 } from 'react-icons/fi';
 import { selectCurrentUser, logout, updateUser } from '../features/auth/authSlice';
-import { isMWO } from '../utils/constants';
+import { isMWO, USER_ROLES, getResidentSubRoleLabel } from '../utils/constants';
 import { apiSlice } from '../app/api/apiSlice';
 import { useSession } from '../contexts/SessionContext';
 import { useGetProfileQuery } from '../features/auth/authApiSlice';
@@ -169,15 +169,29 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
   const [searchParams] = useSearchParams();
   const { handleLogout: handleSessionLogout } = useSession();
   
-  // Fetch profile if role is missing (fallback)
+  const needsProfileFetch =
+    user && (!user.role || (user.role === USER_ROLES.RESIDENT && !user.sub_role));
+
   const { data: profileData } = useGetProfileQuery(undefined, {
-    skip: !user || !!user?.role, // Skip if user doesn't exist or role is already present
+    skip: !needsProfileFetch,
   });
 
-  // Update user with role from profile if missing
+  // Sync role/sub_role from profile when missing in auth state
   useEffect(() => {
-    if (user && !user.role && profileData?.data?.user?.role) {
-      dispatch(updateUser({ role: profileData.data.user.role }));
+    if (user && profileData?.data?.user) {
+      const profileUser = profileData.data.user;
+      const updates = {};
+      if (!user.role && profileUser.role) updates.role = profileUser.role;
+      if (
+        (user.role === USER_ROLES.RESIDENT || profileUser.role === USER_ROLES.RESIDENT) &&
+        profileUser.sub_role &&
+        user.sub_role !== profileUser.sub_role
+      ) {
+        updates.sub_role = profileUser.sub_role;
+      }
+      if (Object.keys(updates).length > 0) {
+        dispatch(updateUser(updates));
+      }
     }
   }, [user, profileData, dispatch]);
 
@@ -447,7 +461,13 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                   ? 'border-primary-500 bg-primary-50/50 shadow-lg shadow-primary-500/20' 
                   : 'border-gray-200'
               }`}
-              title={isMinimized ? 'Profile Settings' : ''}
+              title={
+                isMinimized
+                  ? user?.role === USER_ROLES.RESIDENT && user?.sub_role
+                    ? getResidentSubRoleLabel(user.sub_role)
+                    : user?.role
+                  : ''
+              }
             >
               <div className={`flex items-center ${isMinimized ? 'justify-center' : 'space-x-3'}`}>
                 <div className="flex-shrink-0">
@@ -459,9 +479,17 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{user?.name}</p>
                     <p className="text-xs text-gray-600 truncate">{user?.email}</p>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700 mt-1">
-                      {user?.role}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1 mt-1">
+                      {user?.role === USER_ROLES.RESIDENT && user?.sub_role ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">
+                          {getResidentSubRoleLabel(user.sub_role)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
+                          {user?.role}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
