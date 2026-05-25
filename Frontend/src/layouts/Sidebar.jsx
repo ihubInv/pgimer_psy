@@ -285,11 +285,8 @@ const Sidebar = ({ isOpen, onClose, isMinimized, onToggleMinimize }) => {
     .filter((item) => hasAccess(item.roles, user?.role))
     .map((item) => {
       if (item.to === '/patients') {
-        if (isJuniorResidentUser(user)) {
+        if (isJuniorResidentUser(user) || isSeniorResidentUser(user)) {
           return { ...item, name: 'My Patients' };
-        }
-        if (isSeniorResidentUser(user)) {
-          return { ...item, name: 'Total Patients' };
         }
       }
       return item;

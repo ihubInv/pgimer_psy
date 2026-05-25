@@ -730,7 +730,10 @@ class PatientController {
 
       const isJuniorResident =
         req.user?.role === 'Resident' && req.user?.sub_role === 'Junior Resident';
-      const treatingDoctorId = isJuniorResident ? req.user?.id : null;
+      const isSeniorResident =
+        req.user?.role === 'Resident' && req.user?.sub_role === 'Senior Resident';
+      const treatingDoctorId =
+        isJuniorResident || isSeniorResident ? req.user?.id : null;
       const forReferralPick =
         (req.query.for_referral === 'true' || req.query.for_referral === '1') &&
         PatientController._canReferPatients(req.user);
@@ -769,8 +772,10 @@ class PatientController {
       }
 
       const forTodayList = Boolean(filters.date);
-      const juniorScope = scopedDoctorId
-        ? await PatientController._resolveJuniorResidentListScope(scopedDoctorId, forTodayList)
+      const residentScope = scopedDoctorId
+        ? isJuniorResident
+          ? await PatientController._resolveJuniorResidentListScope(scopedDoctorId, forTodayList)
+          : { treating_doctor_id: scopedDoctorId }
         : {};
 
       // Check if search parameter is provided.
@@ -778,7 +783,7 @@ class PatientController {
       if (req.query.search && req.query.search.trim().length >= 2 && !useChildDataset) {
         if (scopedDoctorId) {
           filters.search = req.query.search.trim();
-          Object.assign(filters, juniorScope);
+          Object.assign(filters, residentScope);
         } else {
           const result = await Patient.search(req.query.search.trim(), page, limit);
           return res.json({
@@ -787,7 +792,7 @@ class PatientController {
           });
         }
       } else if (scopedDoctorId) {
-        Object.assign(filters, juniorScope);
+        Object.assign(filters, residentScope);
       }
 
       // Unified patient list scoped by requested `patient_type`:
@@ -800,8 +805,8 @@ class PatientController {
         if (filters.assigned_room) childFilters.assigned_room = filters.assigned_room;
         if (filters.date) childFilters.date = filters.date;
         if (unassignedOnly) childFilters.unassigned_only = true;
-        if (scopedDoctorId && juniorScope.junior_my_patients) {
-          childFilters.junior_my_patients = juniorScope.junior_my_patients;
+        if (scopedDoctorId && residentScope.junior_my_patients) {
+          childFilters.junior_my_patients = residentScope.junior_my_patients;
         } else if (scopedDoctorId) {
           childFilters.treating_doctor_id = scopedDoctorId;
         }

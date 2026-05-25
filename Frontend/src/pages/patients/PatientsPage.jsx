@@ -72,10 +72,9 @@ const PatientsPage = () => {
     setPage(1);
   }, [referralSubView, unassignedSubView]);
 
-  const patientsTabTitle = isJuniorResidentUser(user)
-    ? 'My Patients'
-    : isSeniorResidentUser(user)
-      ? 'Total Patients'
+  const patientsTabTitle =
+    isJuniorResidentUser(user) || isSeniorResidentUser(user)
+      ? 'My Patients'
       : 'Patients';
 
   // Fetch patients - use server-side pagination when not searching, client-side when searching
@@ -3229,6 +3228,11 @@ const PatientsPage = () => {
                 Patients assigned to you when you select your room for the day.
               </p>
             )}
+            {isSeniorResidentUser(user) && !isReferredTab && !isUnassignedTab && (
+              <p className="text-sm text-gray-600 mt-1">
+                Patients linked to you through room assignment, walk-in clinical proforma, or visits.
+              </p>
+            )}
             {isReferredTab && (
               <p className="text-sm text-gray-600 mt-1">
                 {referralSubView === 'by_me'
@@ -3236,7 +3240,7 @@ const PatientsPage = () => {
                   : 'Patients referred to you by other doctors. Open a patient to mark as seen.'}
               </p>
             )}
-            {isUnassignedTab && (
+            {/* {isUnassignedTab && (
               <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950">
                 <p className="font-medium text-amber-900">What is this tab?</p>
                 <p className="mt-1 text-amber-800/95">
@@ -3254,7 +3258,7 @@ const PatientsPage = () => {
                   )}
                 </p>
               </div>
-            )}
+            )} */}
           </div>
           {/* Patient type tabs */}
           <div className="mb-6">
