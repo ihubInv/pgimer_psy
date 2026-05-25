@@ -773,10 +773,31 @@ class PatientController {
 
       const forTodayList = Boolean(filters.date);
       const residentScope = scopedDoctorId
-        ? isJuniorResident
+        ? isJuniorResident || (isSeniorResident && forTodayList)
           ? await PatientController._resolveJuniorResidentListScope(scopedDoctorId, forTodayList)
           : { treating_doctor_id: scopedDoctorId }
         : {};
+
+      // Today's Patients: JR/SR must select today's room before the list is populated
+      if (
+        forTodayList &&
+        scopedDoctorId &&
+        (isJuniorResident || isSeniorResident) &&
+        !residentScope.junior_my_patients?.room
+      ) {
+        return res.json({
+          success: true,
+          data: {
+            patients: [],
+            pagination: {
+              page,
+              limit,
+              total: 0,
+              totalPages: 0,
+            },
+          },
+        });
+      }
 
       // Check if search parameter is provided.
       // Junior residents: search must stay scoped to their assigned patients (server-side).

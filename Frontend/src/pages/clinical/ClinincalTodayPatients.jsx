@@ -980,24 +980,12 @@ const ClinicalTodayPatients = () => {
       return true;
     }
     
-    // Only allow JR/SR to see patients assigned to them
+    // JR/SR: require today's room selection before any patient appears in the list
     if (isJrSr(currentUser.role)) {
       const currentUserId = parseInt(currentUser.id, 10);
-
-      // Prefer direct field; fallback to latest assignment fields if present
-      if (p.assigned_doctor_id) {
-        const patientDoctorId = parseInt(p.assigned_doctor_id, 10);
-        if (!isNaN(patientDoctorId) && patientDoctorId === currentUserId) {
-          return true;
-      }
-      }
-
-      if (p.assigned_doctor) {
-        const patientDoctorId = String(p.assigned_doctor);
-        const currentUserIdStr = String(currentUser.id);
-        if (patientDoctorId === currentUserIdStr) {
-          return true;
-      }
+      const doctorRoom = effectiveRoomData?.data?.current_room?.trim?.() || effectiveRoomData?.data?.current_room;
+      if (!doctorRoom) {
+        return false;
       }
 
       const targetDate = toISTDateString(selectedDate || new Date());
@@ -1006,9 +994,26 @@ const ClinicalTodayPatients = () => {
       const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
       const updatedToday = patientUpdatedDate && patientUpdatedDate === targetDate;
 
-      const doctorRoom = effectiveRoomData?.data?.current_room?.trim?.() || effectiveRoomData?.data?.current_room;
       const patientRoom = p.assigned_room?.trim?.() || p.assigned_room;
       const inMyRoom = doctorRoom && patientRoom && patientRoom === doctorRoom;
+
+      // Assigned to this doctor: show when in today's room or has a visit today
+      if (p.assigned_doctor_id) {
+        const patientDoctorId = parseInt(p.assigned_doctor_id, 10);
+        if (!isNaN(patientDoctorId) && patientDoctorId === currentUserId) {
+          if (p.has_visit_today === true || inMyRoom) {
+            return true;
+          }
+        }
+      }
+
+      if (p.assigned_doctor) {
+        const patientDoctorId = String(p.assigned_doctor);
+        const currentUserIdStr = String(currentUser.id);
+        if (patientDoctorId === currentUserIdStr && (p.has_visit_today === true || inMyRoom)) {
+          return true;
+        }
+      }
 
       // Shared-room exception: if I am in a shared room (capacity > 1) and this patient is in my
       // room today and assigned to a colleague, still show the patient (shared consultation queue).
