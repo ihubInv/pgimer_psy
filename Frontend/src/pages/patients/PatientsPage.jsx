@@ -35,7 +35,6 @@ import {
   PRESCRIPTION_FORM,
   isJuniorResidentUser,
   isSeniorResidentUser,
-  isFacultyUser,
   canReferPatients,
   canSeeUnassignedPatientsTab,
   canSeeTotalPatientsTab,
@@ -3453,7 +3452,7 @@ const PatientsPage = () => {
                 Patients linked to you through room assignment, walk-in clinical proforma, or visits.
               </p>
             )}
-            {isTotalPatientsTab && isFacultyUser(user) && (
+            {isTotalPatientsTab && canSeeTotalPatientsTab(user) && (
               <p className="text-sm text-gray-600 mt-1">
                 All registered patients in the department. Use Adult / Child below to switch lists.
               </p>

@@ -735,7 +735,7 @@ class PatientController {
       const isFaculty = req.user?.role === 'Faculty';
       const viewAllPatients =
         (req.query.all_patients === 'true' || req.query.all_patients === '1') &&
-        isFaculty;
+        (isFaculty || isSeniorResident);
       const treatingDoctorId =
         isJuniorResident || (isSeniorResident && !viewAllPatients) ? req.user?.id : null;
       const forReferralPick =
