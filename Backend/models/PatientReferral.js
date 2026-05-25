@@ -84,6 +84,21 @@ class PatientReferral {
     return result.rows[0] ? new PatientReferral(result.rows[0]) : null;
   }
 
+  /** Active referral where this doctor is the recipient (pending or seen). */
+  static async hasActiveReferralForDoctor(patientId, patientType, doctorId) {
+    if (!patientId || !doctorId) return false;
+    const result = await db.query(
+      `SELECT id FROM patient_referrals
+       WHERE patient_id = $1
+         AND patient_type = $2
+         AND referred_to_doctor_id = $3
+         AND status IN ('pending', 'seen')
+       LIMIT 1`,
+      [patientId, patientType || 'adult', doctorId]
+    );
+    return Boolean(result.rows[0]);
+  }
+
   static async findPendingDuplicate(patientId, patientType, referredToDoctorId) {
     const result = await db.query(
       `SELECT id FROM patient_referrals

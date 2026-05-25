@@ -24,6 +24,7 @@ import {
   DOCTOR_DECISION,
   CASE_SEVERITY,
   canFillClinicalProforma,
+  canFillClinicalProformaForReferral,
 } from '../../utils/constants';
 import { normalizeArrayField } from '../../utils/clinicalMultiSelectArray';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -469,14 +470,17 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   const [errors, setErrors] = useState({});
   const currentUser = useSelector(selectCurrentUser);
 
+  const fromReferred = searchParams.get('from') === 'referred';
+
   useEffect(() => {
     if (propInitialData) return;
     if (canFillClinicalProforma(currentUser)) return;
+    if (fromReferred && canFillClinicalProformaForReferral(currentUser)) return;
     toast.error(
-      'Walk-in Clinical Proforma is filled by Senior Residents. Junior Residents use Out-Patient Intake Record.'
+      'Walk-in Clinical Proforma is filled by Senior Residents. Junior Residents may fill it for patients referred to them.'
     );
     navigate(-1);
-  }, [currentUser, propInitialData, navigate]);
+  }, [currentUser, propInitialData, navigate, fromReferred]);
   
   // Ref to track the latest formData to ensure we always use current values in submit
   const formDataRef = useRef(formData);

@@ -59,6 +59,28 @@ export const canFillIntakeRecord = (user) => {
   );
 };
 
+/** Referred Patients tab: JR and SR may create/update intake (SR also handles clinical). */
+export const canFillIntakeRecordForReferral = (user) => {
+  if (!user?.role) return false;
+  if (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.FACULTY) return true;
+  return (
+    user.role === USER_ROLES.RESIDENT &&
+    (user.sub_role === RESIDENT_SUB_ROLES.JUNIOR ||
+      user.sub_role === RESIDENT_SUB_ROLES.SENIOR)
+  );
+};
+
+/** Referred Patients tab: JR and SR may create/update clinical proforma. */
+export const canFillClinicalProformaForReferral = (user) => {
+  if (!user?.role) return false;
+  if (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.FACULTY) return true;
+  return (
+    user.role === USER_ROLES.RESIDENT &&
+    (user.sub_role === RESIDENT_SUB_ROLES.JUNIOR ||
+      user.sub_role === RESIDENT_SUB_ROLES.SENIOR)
+  );
+};
+
 // Helper function to get display name for a role
 export const getRoleDisplayName = (role) => {
   if (!role) return 'N/A';

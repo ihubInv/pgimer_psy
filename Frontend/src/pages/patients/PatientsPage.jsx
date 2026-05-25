@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
   FiPlus, FiSearch, FiTrash2, FiEye,  FiEdit, FiUsers, 
    FiDownload,  FiClock, FiPrinter,
-  FiHeart, FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle
+  FiHeart, FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle, FiClipboard
 } from 'react-icons/fi';
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
 import {
@@ -38,16 +38,35 @@ import {
   canReferPatients,
   canSeeUnassignedPatientsTab,
   getResidentSubRoleLabel,
+  canFillClinicalProforma,
+  canFillIntakeRecord,
+  canFillClinicalProformaForReferral,
+  canFillIntakeRecordForReferral,
 } from '../../utils/constants';
+import { clinicalApiSlice } from '../../features/clinical/clinicalApiSlice';
+import { childClinicalApiSlice } from '../../features/clinical/childClinicalApiSlice';
+import { adlApiSlice } from '../../features/adl/adlApiSlice';
 import ReferPatientModal from '../../components/ReferPatientModal';
 import BulkReferPatientsModal from '../../components/BulkReferPatientsModal';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
 
+const toISTDateString = (dateInput) => {
+  if (!dateInput) return '';
+  try {
+    const d = new Date(dateInput);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  } catch {
+    return '';
+  }
+};
+
 const PatientsPage = () => {
   const user = useSelector(selectCurrentUser);
   const token = useSelector(selectCurrentToken);
+  const dispatch = useDispatch();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -268,6 +287,105 @@ const PatientsPage = () => {
       toast.error(err?.data?.message || 'Failed to complete referral');
     }
   };
+
+  const markReferredSeenIfNeeded = useCallback(
+    async (row) => {
+      if (referralSubView === 'to_me' && row.referral_id) {
+        try {
+          await markReferralSeen(row.referral_id).unwrap();
+        } catch {
+          /* non-blocking */
+        }
+      }
+    },
+    [referralSubView, markReferralSeen]
+  );
+
+  const handleReferredClinicalProforma = useCallback(
+    async (row) => {
+      const patientId = row?.id;
+      if (!patientId) {
+        toast.error('Invalid patient ID');
+        return;
+      }
+      await markReferredSeenIfNeeded(row);
+
+      if (row.patient_type === 'child') {
+        try {
+          const result = await dispatch(
+            childClinicalApiSlice.endpoints.getChildClinicalProformasByChildPatientId.initiate(
+              patientId
+            )
+          ).unwrap();
+          const proformas = result?.data?.proformas || [];
+          const latest = proformas[0];
+          if (latest?.id) {
+            navigate(`/child-clinical-proformas/${latest.id}/edit?from=referred`);
+          } else {
+            navigate(`/child-clinical-proformas/new?child_patient_id=${patientId}&from=referred`);
+          }
+        } catch {
+          navigate(`/child-clinical-proformas/new?child_patient_id=${patientId}&from=referred`);
+        }
+        return;
+      }
+
+      try {
+        const result = await dispatch(
+          clinicalApiSlice.endpoints.getClinicalProformaByPatientId.initiate(patientId)
+        ).unwrap();
+        const proformas = clinicalProformaRecordsOnly(
+          result?.data?.proformas || result?.data || []
+        );
+        const today = toISTDateString(new Date());
+        const todayProforma = proformas.find(
+          (p) => toISTDateString(p.visit_date || p.created_at) === today
+        );
+        const target = todayProforma || proformas[0];
+        if (target?.id) {
+          navigate(`/clinical/${target.id}/edit?from=referred`);
+        } else {
+          navigate(`/clinical/new?patient_id=${patientId}&from=referred`);
+        }
+      } catch {
+        navigate(`/clinical/new?patient_id=${patientId}&from=referred`);
+      }
+    },
+    [dispatch, navigate, markReferredSeenIfNeeded]
+  );
+
+  const handleReferredIntakeRecord = useCallback(
+    async (row) => {
+      const patientId = row?.id;
+      if (!patientId) {
+        toast.error('Invalid patient ID');
+        return;
+      }
+      await markReferredSeenIfNeeded(row);
+
+      if (row.patient_type === 'child') {
+        navigate(`/child-patient/${patientId}?mode=edit&from=referred`);
+        return;
+      }
+
+      try {
+        const result = await dispatch(
+          adlApiSlice.endpoints.getADLFileByPatientId.initiate(patientId)
+        ).unwrap();
+        const files =
+          result?.data?.adlFiles || result?.data?.files || result?.data || [];
+        const list = Array.isArray(files) ? files : [];
+        if (list.length > 0 && list[0]?.id) {
+          navigate(`/adl/patient/${patientId}?from=referred`);
+        } else {
+          navigate(`/adl/new?patient_id=${patientId}&from=referred`);
+        }
+      } catch {
+        navigate(`/adl/new?patient_id=${patientId}&from=referred`);
+      }
+    },
+    [dispatch, navigate, markReferredSeenIfNeeded]
+  );
 
   const handleDelete = async (id, patientTypeParam) => {
     if (!id) {
@@ -2894,6 +3012,88 @@ const PatientsPage = () => {
         );
       }
 
+      if (isReferredTab) {
+        const showReferredClinical = canFillClinicalProformaForReferral(user);
+        const showReferredIntake = canFillIntakeRecordForReferral(user);
+        const referralCompleted =
+          (row.referral_status || '').toLowerCase() === 'completed';
+
+        const referredBtnBase =
+          'w-full h-9 flex items-center justify-center gap-1 px-1.5 text-[11px] sm:text-xs font-medium rounded-lg shadow-sm';
+
+        return (
+          <div className="grid grid-cols-2 gap-2 w-[15.75rem] sm:w-[17.5rem]">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                referralSubView === 'to_me' ? handleViewReferred(row) : handleView(row)
+              }
+              className={`${referredBtnBase} bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300`}
+              title="View patient details"
+            >
+              <FiEye className="w-3.5 h-3.5 shrink-0" />
+              <span>View Details</span>
+            </Button>
+            {showReferredClinical ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleReferredClinicalProforma(row)}
+                className={`${referredBtnBase} bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100 hover:border-blue-300`}
+                title="Create or edit walk-in clinical proforma"
+              >
+                <FiFileText className="w-3.5 h-3.5 shrink-0" />
+                <span>Clinical Proforma</span>
+              </Button>
+            ) : (
+              <div className="h-9" aria-hidden />
+            )}
+            {showReferredIntake ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleReferredIntakeRecord(row)}
+                className={`${referredBtnBase} bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100 hover:border-purple-300`}
+                title="Create or edit out-patient intake record"
+              >
+                <FiClipboard className="w-3.5 h-3.5 shrink-0" />
+                <span>Intake Record</span>
+              </Button>
+            ) : (
+              <div className="h-9" aria-hidden />
+            )}
+            {row.referral_id ? (
+              referralCompleted ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  className={`${referredBtnBase} bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed`}
+                  title="Referral already completed"
+                >
+                  <FiCheckCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Completed</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCompleteReferral(row)}
+                  className={`${referredBtnBase} bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-300`}
+                  title="Mark referral as completed"
+                >
+                  <FiCheckCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Complete</span>
+                </Button>
+              )
+            ) : (
+              <div className="h-9" aria-hidden />
+            )}
+          </div>
+        );
+      }
+
       return (
         <div className="flex gap-2">
           <Button
@@ -2953,17 +3153,6 @@ const PatientsPage = () => {
               <FiUserPlus className="w-4 h-4 text-sky-700" />
             </Button>
           )}
-          {isReferredTab && row.referral_status !== 'completed' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleCompleteReferral(row)}
-              className="h-9 w-9 p-0 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title="Mark referral completed"
-            >
-              <FiCheckCircle className="w-4 h-4 text-emerald-700" />
-            </Button>
-          )}
           {isAdmin(user?.role) && patientId && (
             <Button
               variant="ghost"
@@ -2992,6 +3181,8 @@ const PatientsPage = () => {
       handlePrint,
       handleExport,
       handleCompleteReferral,
+      handleReferredClinicalProforma,
+      handleReferredIntakeRecord,
       handleDelete,
     ]
   );
@@ -3166,35 +3357,39 @@ const PatientsPage = () => {
     //     )
     //   ),
     // },
-    {
-      header: (
-        <div className="flex items-center gap-2">
-          <FiFileText className="w-4 h-4 text-primary-600" />
-          <span className="font-semibold">
-            {isReferredTab
-              ? 'PSY / CGC No'
-              : isUnassignedTab
-                ? unassignedSubView === 'child'
-                  ? 'CGC No'
-                  : 'PSY No'
-                : patientType === 'child'
-                  ? 'CGC No'
-                  : 'PSY No'}
-          </span>
-        </div>
-      ),
-      accessor: 'psy_no',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-r from-orange-100 to-yellow-100 rounded-lg flex items-center justify-center">
-            <FiFileText className="w-4 h-4 text-orange-600" />
-          </div>
-          <span className="font-medium text-gray-900">
-            {row.patient_type === 'child' ? (row.special_clinic_no || 'N/A') : (row.psy_no || 'N/A')}
-          </span>
-        </div>
-      ),
-    },
+    ...(!isReferredTab
+      ? [
+          {
+            header: (
+              <div className="flex items-center gap-2">
+                <FiFileText className="w-4 h-4 text-primary-600" />
+                <span className="font-semibold">
+                  {isUnassignedTab
+                    ? unassignedSubView === 'child'
+                      ? 'CGC No'
+                      : 'PSY No'
+                    : patientType === 'child'
+                      ? 'CGC No'
+                      : 'PSY No'}
+                </span>
+              </div>
+            ),
+            accessor: 'psy_no',
+            render: (row) => (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-gradient-to-r from-orange-100 to-yellow-100 rounded-lg flex items-center justify-center">
+                  <FiFileText className="w-4 h-4 text-orange-600" />
+                </div>
+                <span className="font-medium text-gray-900">
+                  {row.patient_type === 'child'
+                    ? row.special_clinic_no || 'N/A'
+                    : row.psy_no || 'N/A'}
+                </span>
+              </div>
+            ),
+          },
+        ]
+      : []),
     {
       header: (
         <div className="flex items-center gap-2">
@@ -3236,8 +3431,8 @@ const PatientsPage = () => {
             {isReferredTab && (
               <p className="text-sm text-gray-600 mt-1">
                 {referralSubView === 'by_me'
-                  ? 'Patients you referred to other doctors — only your referrals are listed here.'
-                  : 'Patients referred to you by other doctors. Open a patient to mark as seen.'}
+                  ? 'Patients you referred to other doctors. Actions: View Details, Clinical Proforma, Intake Record, and Complete (bottom-right).'
+                  : 'Patients referred to you. Actions: View Details, Clinical Proforma, Intake Record, and Complete (bottom-right).'}
               </p>
             )}
             {/* {isUnassignedTab && (
