@@ -18,10 +18,22 @@ import AdminDoctorRoomManager from '../../components/AdminDoctorRoomManager';
 // Removed RoomSelectionModal - using inline card instead
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
-import { isAdmin, isMWO, isJrSr, isSR, isJR } from '../../utils/constants';
+import {
+  isAdmin,
+  isMWO,
+  isJrSr,
+  canFillClinicalProforma,
+  canFillIntakeRecord,
+  isJuniorResidentUser,
+  isSeniorResidentUser,
+} from '../../utils/constants';
 
 // listContext: 'new' = New Patients sub-tab (strip returning-patient-only actions); 'existing' = full actions
 const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availableRooms = [], listContext = 'existing' }) => {
+  const currentUser = useSelector(selectCurrentUser);
+  const mayFillClinicalProforma = canFillClinicalProforma(currentUser);
+  const mayFillIntakeRecord = canFillIntakeRecord(currentUser);
+
   // Get patient ID safely - use 0 if invalid to satisfy hook rules (skip will prevent API call)
   const patientId = patient?.id || 0;
   const isValidPatient = Boolean(patient && patient.id);
@@ -352,7 +364,7 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
                 Change Room, and Mark as Completed (regardless of whether today's clinical
                 proforma has been filled). Do not show Clinical Proforma or Intake Record there.
             */}
-            {listContext !== 'existing' && (
+            {listContext !== 'existing' && mayFillClinicalProforma && (
               ((!hasPastHistory || hasProformaToday) ||
               (listContext === 'new' && hasPastHistory && !hasProformaToday)
             ) && (() => {
@@ -427,8 +439,8 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
               }
             })()}
             
-            {/* Intake Record — hidden on Existing Patients tab (same as Clinical Proforma) */}
-            {listContext !== 'existing' && (
+            {/* Intake Record — Junior Resident (ADL); hidden on Existing Patients tab */}
+            {listContext !== 'existing' && mayFillIntakeRecord && (
             <Button
               variant="outline"
               size="sm"
@@ -566,7 +578,7 @@ const ClinicalTodayPatients = () => {
   };
   
   // Check if user is a doctor (Faculty, Admin, or Resident)
-  const isDoctor = currentUser && (isAdmin(currentUser.role) || isSR(currentUser.role) || isJR(currentUser.role));
+  const isDoctor = currentUser && (isAdmin(currentUser.role) || isJrSr(currentUser.role));
   
   // Get current room assignment - with polling to auto-refresh when new day starts
   const { data: myRoomData, isLoading: isLoadingRoom, refetch: refetchMyRoom } = useGetMyRoomQuery(undefined, {
@@ -1185,6 +1197,21 @@ const ClinicalTodayPatients = () => {
                       </div>
                     )}
                   </div>
+                  {(isJuniorResidentUser(currentUser) || isSeniorResidentUser(currentUser)) && (
+                    <p className="text-sm text-gray-600 max-w-3xl">
+                      {isSeniorResidentUser(currentUser) ? (
+                        <>
+                          As <strong>Senior Resident</strong>, use <strong>Clinical Proforma</strong> for walk-in assessment.
+                          Intake Record is completed by the Junior Resident in your room.
+                        </>
+                      ) : (
+                        <>
+                          As <strong>Junior Resident</strong>, use <strong>Intake Record</strong> for the detailed work-up.
+                          Walk-in <strong>Clinical Proforma</strong> is completed by the Senior Resident in your room.
+                        </>
+                      )}
+                    </p>
+                  )}
                   {/* New vs Existing sub-tabs (underline style, matches Adult/Child Patients tabs) */}
                   <div
                     className="flex gap-2 border-b border-gray-200 -mx-6 px-6"

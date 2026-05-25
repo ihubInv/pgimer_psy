@@ -18,7 +18,13 @@ import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
 import { useGetPatientFilesQuery, useUpdatePatientFilesMutation, useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
-import { CLINICAL_PROFORMA_FORM, VISIT_TYPES, DOCTOR_DECISION, CASE_SEVERITY } from '../../utils/constants';
+import {
+  CLINICAL_PROFORMA_FORM,
+  VISIT_TYPES,
+  DOCTOR_DECISION,
+  CASE_SEVERITY,
+  canFillClinicalProforma,
+} from '../../utils/constants';
 import { normalizeArrayField } from '../../utils/clinicalMultiSelectArray';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import Card from '../../components/Card';
@@ -462,6 +468,15 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   const [formData, setFormData] = useState(initialFormDataWithFollowUp);
   const [errors, setErrors] = useState({});
   const currentUser = useSelector(selectCurrentUser);
+
+  useEffect(() => {
+    if (propInitialData) return;
+    if (canFillClinicalProforma(currentUser)) return;
+    toast.error(
+      'Walk-in Clinical Proforma is filled by Senior Residents. Junior Residents use Out-Patient Intake Record.'
+    );
+    navigate(-1);
+  }, [currentUser, propInitialData, navigate]);
   
   // Ref to track the latest formData to ensure we always use current values in submit
   const formDataRef = useRef(formData);

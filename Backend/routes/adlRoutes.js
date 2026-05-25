@@ -1,7 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const ADLController = require('../controllers/adlController');
-const { authenticateToken, requireDoctor, requireAdmin } = require('../middleware/auth');
+const {
+  authenticateToken,
+  requireDoctor,
+  requireAdmin,
+  requireIntakeRecordWriter,
+} = require('../middleware/auth');
 const {
   validateId,
   validatePagination
@@ -770,7 +775,7 @@ router.get('/', authenticateToken, validatePagination, ADLController.getAllADLFi
  *       500:
  *         description: Server error
  */
-router.post('/', authenticateToken, ADLController.createADLFile);
+router.post('/', authenticateToken, requireIntakeRecordWriter, ADLController.createADLFile);
 
 /**
  * @swagger
@@ -898,7 +903,7 @@ router.get('/:id', authenticateToken, validateId, ADLController.getADLFileById);
  *       500:
  *         description: Server error
  */
-router.put('/:id', authenticateToken, validateId, ADLController.updateADLFile);
+router.put('/:id', authenticateToken, requireIntakeRecordWriter, validateId, ADLController.updateADLFile);
 
 /**
  * @swagger

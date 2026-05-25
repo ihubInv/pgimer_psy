@@ -23,7 +23,7 @@ import { useGetChildClinicalProformasByChildPatientIdQuery } from '../../feature
 import {
   MARITAL_STATUS, FAMILY_TYPE_OPTIONS, LOCALITY_OPTIONS, RELIGION_OPTIONS, SEX_OPTIONS,
   AGE_GROUP_OPTIONS, OCCUPATION_OPTIONS, EDUCATION_OPTIONS,
-  MOBILITY_OPTIONS, REFERRED_BY_OPTIONS, UNIT_DAYS_OPTIONS, HEAD_RELATIONSHIP_OPTIONS, CATEGORY_OPTIONS,  isAdmin, isMWO, isJrSr, isSR, isJR
+  MOBILITY_OPTIONS, REFERRED_BY_OPTIONS, UNIT_DAYS_OPTIONS, HEAD_RELATIONSHIP_OPTIONS, CATEGORY_OPTIONS,  isAdmin, isMWO, isJrSr, isSR, isJR,
 } from '../../utils/constants';
 import EditClinicalProforma from '../clinical/EditClinicalProforma';
 import EditChildClinicalProforma from '../clinical/EditChildClinicalProforma';
@@ -2773,14 +2773,29 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   }, [patientProformas.length, selectedProforma?.doctor_decision]);
 
   const hasAdlFiles = patientAdlFiles.length > 0 || selectedProforma?.adl_file_id;
-  const canViewADLFile = canViewAllSections && hasAdlFiles;
+  const proformaMarkedComplex =
+    currentDoctorDecision === 'complex_case' ||
+    currentVisitProforma?.doctor_decision === 'complex_case' ||
+    firstVisitProforma?.doctor_decision === 'complex_case' ||
+    selectedProforma?.doctor_decision === 'complex_case' ||
+    patientProformas.some((p) => p.doctor_decision === 'complex_case');
+  // Same visibility as Walk-in Clinical Proforma — not gated on proforma filled or ADL existing
+  const canViewADLFile = canViewAllSections;
+  const activeClinicalProformaId =
+    selectedProforma?.id?.toString() ||
+    currentVisitProforma?.id?.toString() ||
+    firstVisitProforma?.id?.toString() ||
+    '';
   const isSelectedComplexCase = selectedProforma?.doctor_decision === 'complex_case' && selectedProforma?.adl_file_id;
 
-  // Removed auto-expand logic - cards now default to collapsed (false)
-  // ADL and Prescription cards will remain collapsed by default
-
-  
-
+  useEffect(() => {
+    if (isEdit && canViewADLFile) {
+      setExpandedCards((prev) => ({ ...prev, adl: true }));
+    }
+    if (autoFillAdlData) {
+      setExpandedCards((prev) => ({ ...prev, adl: true }));
+    }
+  }, [isEdit, canViewADLFile, autoFillAdlData]);
 
   const [formData, setFormData] = useState(() => {
     // Helper to safely get value
@@ -5021,7 +5036,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         </Card>
       )}
 
-      {/* Card 2: Deatail Work-Up File - Show only if case is complex OR ADL file exists */}
+      {/* Card 2: Out Patient Intake Record — always visible for clinical roles (independent of proforma) */}
       {canViewADLFile && (
         <Card className="shadow-lg border-0 bg-white">
           <div
@@ -5040,8 +5055,12 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                   {patientAdlFiles.length > 0
                     ? `${patientAdlFiles.length} file${patientAdlFiles.length > 1 ? 's' : ''} found`
                     : selectedProforma?.adl_file_id
-                      ? 'Out Patient Intake Record  linked to proforma'
-                      : 'No Out Patient Intake Record files'}
+                      ? 'Out Patient Intake Record linked to proforma'
+                      : proformaMarkedComplex
+                        ? 'Complex case — complete Out Patient Intake Record'
+                        : isEdit || isCreateMode
+                          ? 'Not yet filled — create Out Patient Intake Record'
+                          : 'No Out Patient Intake Record files'}
                 </p>
               </div>
             </div>
@@ -5088,7 +5107,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         adlFileId={file.id || file.adl_file_id || file.adlFileId}
                         isEmbedded={true}
                         patientId={patient?.id?.toString()}
-                        clinicalProformaId={file.clinical_proforma_id?.toString() || selectedProforma?.id?.toString()}
+                        clinicalProformaId={file.clinical_proforma_id?.toString() || activeClinicalProformaId}
                       />
                     );
                   })}
@@ -5099,15 +5118,15 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                   adlFileId={selectedProforma.adl_file_id}
                   isEmbedded={true}
                   patientId={patient?.id?.toString()}
-                  clinicalProformaId={selectedProforma?.id?.toString()}
+                  clinicalProformaId={activeClinicalProformaId}
                 />
               ) : (
                 <EditADL
                   isEmbedded={true}
                   patientId={patient?.id?.toString()}
-                  clinicalProformaId={selectedProforma?.id?.toString()}
+                  clinicalProformaId={activeClinicalProformaId}
                   initialAdlData={autoFillAdlData}
-                  key={autoFillAdlData ? `adl-auto-fill-${Date.now()}` : `adl-new-${patient?.id}`}
+                  key={autoFillAdlData ? `adl-auto-fill-${Date.now()}` : `adl-new-${patient?.id}-${activeClinicalProformaId}`}
                 />
               )}
             </div>

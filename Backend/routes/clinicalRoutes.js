@@ -1,7 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const ClinicalController = require('../controllers/clinicalController');
-const { authenticateToken, requireDoctor, requireAdmin, authorizeRoles } = require('../middleware/auth');
+const {
+  authenticateToken,
+  requireDoctor,
+  requireAdmin,
+  authorizeRoles,
+  requireClinicalProformaWriter,
+} = require('../middleware/auth');
 const ClinicalOptionsController = require('../controllers/clinicalOptionsController');
 const {
   validateClinicalProforma,
@@ -907,7 +913,14 @@ const {
  *                   description: Detailed error message
  */
 // Psychiatric Welfare Officer can only create new patients, not clinical proformas for existing patients
-router.post('/', authenticateToken, authorizeRoles('Admin', 'Faculty', 'Resident','Psychiatric Welfare Officer'), validateClinicalProforma, ClinicalController.createClinicalProforma);
+router.post(
+  '/',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'),
+  requireClinicalProformaWriter,
+  validateClinicalProforma,
+  ClinicalController.createClinicalProforma
+);
 
 /**
  * @swagger
@@ -1420,7 +1433,14 @@ router.get('/:id', authenticateToken, validateId, ClinicalController.getClinical
  *       500:
  *         description: Server error
  */
-router.put('/:id', authenticateToken, validateId, ClinicalController.updateClinicalProforma);
+router.put(
+  '/:id',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident', 'Psychiatric Welfare Officer'),
+  requireClinicalProformaWriter,
+  validateId,
+  ClinicalController.updateClinicalProforma
+);
 
 /**
  * @swagger

@@ -6,7 +6,7 @@ import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice
 import { useGetPatientFilesQuery, useUpdatePatientFilesMutation, useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
-import { ADL_FILE_FORM } from '../../utils/constants';
+import { ADL_FILE_FORM, canFillIntakeRecord } from '../../utils/constants';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
 import Select from '../../components/Select';
@@ -143,6 +143,15 @@ const EditADL = ({
   const [updateADLFile, { isLoading: isUpdating }] = useUpdateADLFileMutation();
   const [createADLFile, { isLoading: isCreating }] = useCreateADLFileMutation();
   const currentUser = useSelector(selectCurrentUser);
+
+  useEffect(() => {
+    if (readOnly || isEmbedded) return;
+    if (canFillIntakeRecord(currentUser)) return;
+    toast.error(
+      'Out-Patient Intake Record is filled by Junior Residents. Senior Residents use Walk-in Clinical Proforma.'
+    );
+    navigate(-1);
+  }, [currentUser, readOnly, isEmbedded, navigate]);
 
   // Determine if this is create or update mode
   // Update mode: 

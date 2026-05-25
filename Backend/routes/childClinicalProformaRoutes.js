@@ -2,7 +2,11 @@
 const express = require('express');
 const router = express.Router();
 const ChildClinicalProformaController = require('../controllers/childClinicalProformaController');
-const { authenticateToken, authorizeRoles } = require('../middleware/auth');
+const {
+  authenticateToken,
+  authorizeRoles,
+  requireClinicalProformaWriter,
+} = require('../middleware/auth');
 const { validatePagination, validateId, validateChildPatientId } = require('../middleware/validation');
 
 // Create child clinical proforma
@@ -10,6 +14,7 @@ router.post(
   '/',
   authenticateToken,
   authorizeRoles('Admin', 'Faculty', 'Resident'),
+  requireClinicalProformaWriter,
   ChildClinicalProformaController.createChildClinicalProforma
 );
 
@@ -45,6 +50,7 @@ router.put(
   '/:id',
   authenticateToken,
   authorizeRoles('Admin', 'Faculty', 'Resident'),
+  requireClinicalProformaWriter,
   validateId,
   ChildClinicalProformaController.updateChildClinicalProforma
 );

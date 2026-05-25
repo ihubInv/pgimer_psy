@@ -37,6 +37,28 @@ export const canReferPatients = (user) => {
 /** Admin, Faculty, Junior/Senior Resident — unassigned patients oversight tab */
 export const canSeeUnassignedPatientsTab = (user) => canReferPatients(user);
 
+/**
+ * Walk-in Clinical Proforma: Senior Resident (and Faculty/Admin for oversight).
+ */
+export const canFillClinicalProforma = (user) => {
+  if (!user?.role) return false;
+  if (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.FACULTY) return true;
+  return (
+    user.role === USER_ROLES.RESIDENT && user.sub_role === RESIDENT_SUB_ROLES.SENIOR
+  );
+};
+
+/**
+ * Out-Patient Intake Record (ADL): Junior Resident (and Faculty/Admin for oversight).
+ */
+export const canFillIntakeRecord = (user) => {
+  if (!user?.role) return false;
+  if (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.FACULTY) return true;
+  return (
+    user.role === USER_ROLES.RESIDENT && user.sub_role === RESIDENT_SUB_ROLES.JUNIOR
+  );
+};
+
 // Helper function to get display name for a role
 export const getRoleDisplayName = (role) => {
   if (!role) return 'N/A';

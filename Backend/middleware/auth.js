@@ -319,6 +319,43 @@ const requireMWO = authorizeRoles('Psychiatric Welfare Officer');
 const requireDoctor = authorizeRoles('Faculty', 'Resident');
 const requireMWOOrDoctor = authorizeRoles('Psychiatric Welfare Officer', 'Faculty', 'Resident');
 
+const {
+  canFillClinicalProforma,
+  canFillIntakeRecord,
+} = require('../utils/residentFormAccess');
+
+/** Walk-in Clinical Proforma — Senior Resident, Faculty, or Admin only */
+const requireClinicalProformaWriter = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+  if (!canFillClinicalProforma(req.user)) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Walk-in Clinical Proforma must be filled by a Senior Resident. Junior Residents fill the Out-Patient Intake Record.',
+      code: 'SENIOR_RESIDENT_CLINICAL_PROFORMA_REQUIRED',
+    });
+  }
+  next();
+};
+
+/** Out-Patient Intake Record (ADL) — Junior Resident, Faculty, or Admin only */
+const requireIntakeRecordWriter = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+  if (!canFillIntakeRecord(req.user)) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Out-Patient Intake Record must be filled by a Junior Resident. Senior Residents fill the Walk-in Clinical Proforma.',
+      code: 'JUNIOR_RESIDENT_INTAKE_REQUIRED',
+    });
+  }
+  next();
+};
+
 // Optional authentication (for public endpoints that can benefit from user context)
 const optionalAuth = async (req, res, next) => {
   try {
@@ -355,5 +392,7 @@ module.exports = {
   requireMWO,
   requireDoctor,
   requireMWOOrDoctor,
+  requireClinicalProformaWriter,
+  requireIntakeRecordWriter,
   optionalAuth
 };
