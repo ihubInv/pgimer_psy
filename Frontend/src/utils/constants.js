@@ -24,6 +24,8 @@ export const isJuniorResidentUser = (user) =>
 export const isSeniorResidentUser = (user) =>
   user?.role === USER_ROLES.RESIDENT && user?.sub_role === RESIDENT_SUB_ROLES.SENIOR;
 
+export const isFacultyUser = (user) => user?.role === USER_ROLES.FACULTY;
+
 /** Faculty, Resident, or Admin — can refer patients to another doctor */
 export const canReferPatients = (user) => {
   if (!user?.role) return false;
@@ -37,8 +39,8 @@ export const canReferPatients = (user) => {
 /** Admin, Faculty, Junior/Senior Resident — unassigned patients oversight tab */
 export const canSeeUnassignedPatientsTab = (user) => canReferPatients(user);
 
-/** Senior Resident only — full department patient list (not scoped to My Patients) */
-export const canSeeTotalPatientsTab = (user) => isSeniorResidentUser(user);
+/** Faculty only — full department list tab (before Unassigned Patient) */
+export const canSeeTotalPatientsTab = (user) => isFacultyUser(user);
 
 /**
  * Walk-in Clinical Proforma: Senior Resident (and Faculty/Admin for oversight).

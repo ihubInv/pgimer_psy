@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import Modal from './Modal';
 import Button from './Button';
 import Select from './Select';
-import DatePicker from './CustomDatePicker';
+import CustomDateTimePicker from './CustomDateTimePicker';
 import { useGetAvailableRoomsQuery, useSelectRoomMutation, useGetMyRoomQuery, roomsApiSlice } from '../features/rooms/roomsApiSlice';
 import { useDispatch } from 'react-redux';
 import { isAdmin, isSR, isJR } from '../utils/constants';
@@ -60,6 +60,12 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
     }
   }, [isOpen, myRoomData]);
 
+  useEffect(() => {
+    if (isOpen) {
+      setAssignmentTime(formatLocalDateTime(new Date()));
+    }
+  }, [isOpen]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -68,16 +74,11 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
       return;
     }
 
-    if (!assignmentTime) {
-      toast.error('Please select assignment time');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const result = await selectRoom({
         room_number: selectedRoom,
-        assignment_time: new Date(assignmentTime).toISOString(),
+        assignment_time: new Date().toISOString(),
       }).unwrap();
 
       toast.success(result.message || `Room ${selectedRoom} selected successfully!`);
@@ -218,20 +219,14 @@ const RoomSelectionModal = ({ isOpen, onClose, currentUser }) => {
             )}
           </div>
 
-          {/* Assignment Time */}
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-              <FiClock className="w-4 h-4 text-primary-600" />
-              What time did you start sitting in this room? <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="datetime-local"
-              value={assignmentTime}
-              onChange={(e) => setAssignmentTime(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white/60 backdrop-blur-md"
-              required
-            />
-          </div>
+          <CustomDateTimePicker
+            label="What time did you start sitting in this room?"
+            icon={FiClock}
+            value={assignmentTime}
+            onChange={() => {}}
+            required
+            disabled
+          />
 
           {/* Current Room Info */}
           {myRoomData?.data?.current_room && (

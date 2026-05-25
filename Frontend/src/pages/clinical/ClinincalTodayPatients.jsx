@@ -15,6 +15,7 @@ import Button from '../../components/Button';
 import Select from '../../components/Select';
 import SearchExistingPatientModal from '../../components/SearchExistingPatientModal';
 import AdminDoctorRoomManager from '../../components/AdminDoctorRoomManager';
+import CustomDateTimePicker from '../../components/CustomDateTimePicker';
 // Removed RoomSelectionModal - using inline card instead
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
@@ -722,16 +723,11 @@ const ClinicalTodayPatients = () => {
       return;
     }
     
-    if (!assignmentTime) {
-      toast.error('Please select assignment time');
-      return;
-    }
-    
     setIsSubmitting(true);
     try {
       const result = await selectRoom({
         room_number: selectedRoom,
-        assignment_time: new Date(assignmentTime).toISOString(),
+        assignment_time: new Date().toISOString(),
       }).unwrap();
       
       toast.success(result.message || `Room ${selectedRoom} selected successfully!`);
@@ -889,6 +885,13 @@ const ClinicalTodayPatients = () => {
   // - Only when there are no patients in today's list yet
   //   (once patients appear, we hide the room selector to avoid duplicate context)
   const showRoomSelectionCard = isDoctor && !isLoadingRoom && !effectiveRoomData?.data?.current_room;
+
+  // Room selection: always use current date/time (field is read-only)
+  useEffect(() => {
+    if (showRoomSelectionCard) {
+      setAssignmentTime(formatLocalDateTime(new Date()));
+    }
+  }, [showRoomSelectionCard]);
 
   const filterTodayPatients = (patients) => {
     if (!Array.isArray(patients)) return [];
@@ -1357,19 +1360,14 @@ const ClinicalTodayPatients = () => {
                         )}
                       </div>
                       
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                          <FiClock className="w-4 h-4 text-blue-600" />
-                          What time did you start sitting in this room? <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={assignmentTime}
-                          onChange={(e) => setAssignmentTime(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                          required
-                        />
-                      </div>
+                      <CustomDateTimePicker
+                        label="What time did you start sitting in this room?"
+                        icon={FiClock}
+                        value={assignmentTime}
+                        onChange={() => {}}
+                        required
+                        disabled
+                      />
                       
                       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                         <Button
