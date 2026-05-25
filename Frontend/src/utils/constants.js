@@ -37,6 +37,9 @@ export const canReferPatients = (user) => {
 /** Admin, Faculty, Junior/Senior Resident — unassigned patients oversight tab */
 export const canSeeUnassignedPatientsTab = (user) => canReferPatients(user);
 
+/** Senior Resident only — full department patient list (not scoped to My Patients) */
+export const canSeeTotalPatientsTab = (user) => isSeniorResidentUser(user);
+
 /**
  * Walk-in Clinical Proforma: Senior Resident (and Faculty/Admin for oversight).
  */

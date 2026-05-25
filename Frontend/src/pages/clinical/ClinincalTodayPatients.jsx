@@ -1193,7 +1193,9 @@ const ClinicalTodayPatients = () => {
                   <div className="flex flex-wrap items-center gap-3">
                     <h3 className="text-lg font-semibold text-gray-900">Today&apos;s Patients</h3>
                     <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
-                      Total {filteredPatients.length}
+                      {showRoomSelectionCard
+                        ? 'Select room below to see patients'
+                        : `Total ${filteredPatients.length}`}
                     </span>
                     {isDoctor && effectiveRoomData?.data?.current_room && (
                       <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg border border-blue-200">
@@ -1393,8 +1395,8 @@ const ClinicalTodayPatients = () => {
             </div>
           )}
 
-          {/* Patients list or empty state */}
-          {filteredPatients.length === 0 ? (
+          {/* Patients list or empty state — hidden until today's room is selected (JR/SR) */}
+          {!showRoomSelectionCard && filteredPatients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
                 <FiUsers className="w-12 h-12 text-gray-400" />
@@ -1407,7 +1409,7 @@ const ClinicalTodayPatients = () => {
                 }
               </p>
             </div>
-          ) : patientsForActiveSubTab.length === 0 ? (
+          ) : !showRoomSelectionCard && patientsForActiveSubTab.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-4">
               <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-4">
                 <FiUsers className="w-10 h-10 text-gray-400" />
@@ -1441,7 +1443,7 @@ const ClinicalTodayPatients = () => {
                 </button>
               )}
             </div>
-          ) : (
+          ) : !showRoomSelectionCard ? (
             <div className="p-4 sm:p-5 space-y-3" role="tabpanel">
               {patientsForActiveSubTab.map((patient) => (
                 <PatientRow
@@ -1455,7 +1457,7 @@ const ClinicalTodayPatients = () => {
                 />
               ))}
             </div>
-          )}
+          ) : null}
 
           {/* Patient count info - reflects active sub-tab */}
           {filteredPatients.length > 0 && patientsForActiveSubTab.length > 0 && (

@@ -732,12 +732,16 @@ class PatientController {
         req.user?.role === 'Resident' && req.user?.sub_role === 'Junior Resident';
       const isSeniorResident =
         req.user?.role === 'Resident' && req.user?.sub_role === 'Senior Resident';
+      const viewAllPatients =
+        (req.query.all_patients === 'true' || req.query.all_patients === '1') &&
+        isSeniorResident;
       const treatingDoctorId =
-        isJuniorResident || isSeniorResident ? req.user?.id : null;
+        isJuniorResident || (isSeniorResident && !viewAllPatients) ? req.user?.id : null;
       const forReferralPick =
         (req.query.for_referral === 'true' || req.query.for_referral === '1') &&
         PatientController._canReferPatients(req.user);
-      const scopedDoctorId = unassignedOnly || forReferralPick ? null : treatingDoctorId;
+      const scopedDoctorId =
+        unassignedOnly || forReferralPick || viewAllPatients ? null : treatingDoctorId;
 
       // If id is provided, redirect to getPatientById for better performance
       if (req.query.id) {

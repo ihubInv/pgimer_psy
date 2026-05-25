@@ -37,6 +37,7 @@ import {
   isSeniorResidentUser,
   canReferPatients,
   canSeeUnassignedPatientsTab,
+  canSeeTotalPatientsTab,
   getResidentSubRoleLabel,
   canFillClinicalProforma,
   canFillIntakeRecord,
@@ -75,24 +76,27 @@ const PatientsPage = () => {
   const [patientType, setPatientType] = useState('adult');
   const [referralSubView, setReferralSubView] = useState('to_me'); // to_me | by_me
   const [unassignedSubView, setUnassignedSubView] = useState('adult'); // adult | child
+  const [totalSubView, setTotalSubView] = useState('adult'); // adult | child (Total Patients tab)
   const [referModalPatient, setReferModalPatient] = useState(null);
   const [bulkReferModalOpen, setBulkReferModalOpen] = useState(false);
   const [assigningPatientId, setAssigningPatientId] = useState(null);
 
   const isReferredTab = patientType === 'referred';
   const isUnassignedTab = patientType === 'unassigned';
+  const isTotalPatientsTab = patientType === 'total';
 
   // Reset page to 1 when search changes
   useEffect(() => {
     setPage(1);
-  }, [search, patientType, referralSubView, unassignedSubView]);
+  }, [search, patientType, referralSubView, unassignedSubView, totalSubView]);
 
   useEffect(() => {
     setPage(1);
-  }, [referralSubView, unassignedSubView]);
+  }, [referralSubView, unassignedSubView, totalSubView]);
 
-  const patientsTabTitle =
-    isJuniorResidentUser(user) || isSeniorResidentUser(user)
+  const patientsTabTitle = isTotalPatientsTab
+    ? 'Total Patients'
+    : isJuniorResidentUser(user) || isSeniorResidentUser(user)
       ? 'My Patients'
       : 'Patients';
 
@@ -116,12 +120,20 @@ const PatientsPage = () => {
             patient_type: unassignedSubView,
             unassigned_only: true,
           }
-        : {
-            page: search.trim() ? 1 : page,
-            limit: fetchLimit,
-            search: search.trim() || undefined,
-            patient_type: patientType,
-          },
+        : isTotalPatientsTab
+          ? {
+              page: search.trim() ? 1 : page,
+              limit: fetchLimit,
+              search: search.trim() || undefined,
+              patient_type: totalSubView,
+              all_patients: true,
+            }
+          : {
+              page: search.trim() ? 1 : page,
+              limit: fetchLimit,
+              search: search.trim() || undefined,
+              patient_type: patientType,
+            },
     {
       refetchOnMountOrArgChange: true,
     }
@@ -3368,9 +3380,13 @@ const PatientsPage = () => {
                     ? unassignedSubView === 'child'
                       ? 'CGC No'
                       : 'PSY No'
-                    : patientType === 'child'
-                      ? 'CGC No'
-                      : 'PSY No'}
+                    : isTotalPatientsTab
+                      ? totalSubView === 'child'
+                        ? 'CGC No'
+                        : 'PSY No'
+                      : patientType === 'child'
+                        ? 'CGC No'
+                        : 'PSY No'}
                 </span>
               </div>
             ),
@@ -3404,7 +3420,9 @@ const PatientsPage = () => {
       patientType,
       isReferredTab,
       isUnassignedTab,
+      isTotalPatientsTab,
       unassignedSubView,
+      totalSubView,
       referralSubView,
       renderPatientActions,
     ]
@@ -3418,14 +3436,25 @@ const PatientsPage = () => {
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
           <div className="mb-4 px-1">
             <h1 className="text-2xl font-bold text-gray-900">{patientsTabTitle}</h1>
-            {isJuniorResidentUser(user) && !isReferredTab && !isUnassignedTab && (
+            {isJuniorResidentUser(user) &&
+              !isReferredTab &&
+              !isUnassignedTab &&
+              !isTotalPatientsTab && (
               <p className="text-sm text-gray-600 mt-1">
                 Patients assigned to you when you select your room for the day.
               </p>
             )}
-            {isSeniorResidentUser(user) && !isReferredTab && !isUnassignedTab && (
+            {isSeniorResidentUser(user) &&
+              !isReferredTab &&
+              !isUnassignedTab &&
+              !isTotalPatientsTab && (
               <p className="text-sm text-gray-600 mt-1">
                 Patients linked to you through room assignment, walk-in clinical proforma, or visits.
+              </p>
+            )}
+            {isTotalPatientsTab && (
+              <p className="text-sm text-gray-600 mt-1">
+                All registered patients in the department (not limited to your assigned list).
               </p>
             )}
             {isReferredTab && (
@@ -3499,6 +3528,23 @@ const PatientsPage = () => {
                   Referred Patients
                 </button>
               )}
+              {canSeeTotalPatientsTab(user) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPatientType('total');
+                    setTotalSubView('adult');
+                  }}
+                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                    patientType === 'total'
+                      ? 'border-primary-600 text-primary-600 bg-primary-50'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                  aria-current={patientType === 'total' ? 'page' : undefined}
+                >
+                  Total Patients
+                </button>
+              )}
               {canSeeUnassignedPatientsTab(user) && (
                 <button
                   type="button"
@@ -3548,9 +3594,13 @@ const PatientsPage = () => {
                         ? unassignedSubView === 'child'
                           ? 'Search by CR No, Child Name, CGC No, Room...'
                           : 'Search by CR No, Patient Name, PSY No, Room...'
-                        : patientType === 'child'
-                          ? 'Search by CR No, Child Name, CGC No...'
-                          : 'Search by CR No, Patient Name, PSY No...'
+                        : isTotalPatientsTab
+                          ? totalSubView === 'child'
+                            ? 'Search by CR No, Child Name, CGC No...'
+                            : 'Search by CR No, Patient Name, PSY No, Doctor...'
+                          : patientType === 'child'
+                            ? 'Search by CR No, Child Name, CGC No...'
+                            : 'Search by CR No, Patient Name, PSY No...'
                   }
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -3579,10 +3629,18 @@ const PatientsPage = () => {
                     </Button>
                   )}
                   {!isReferredTab && !isUnassignedTab && (
-                  <Link to={patientType === 'child' ? '/child-patient/new' : '/patients/new'}>
+                  <Link
+                    to={
+                      (isTotalPatientsTab ? totalSubView : patientType) === 'child'
+                        ? '/child-patient/new'
+                        : '/patients/new'
+                    }
+                  >
                     <Button className="bg-gradient-to-r h-12 px-5 from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap">
                       <FiPlus className="mr-2" />
-                      {patientType === 'child' ? 'Add Child Patient' : 'Add Patient'}
+                      {(isTotalPatientsTab ? totalSubView : patientType) === 'child'
+                        ? 'Add Child Patient'
+                        : 'Add Patient'}
                     </Button>
                   </Link>
                   )}
@@ -3623,6 +3681,32 @@ const PatientsPage = () => {
                   }`}
                 >
                   My Referrals
+                </button>
+              </div>
+            )}
+            {isTotalPatientsTab && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTotalSubView('adult')}
+                  className={`px-4 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                    totalSubView === 'adult'
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  Adult Patients
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTotalSubView('child')}
+                  className={`px-4 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                    totalSubView === 'child'
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  Child Patients
                 </button>
               </div>
             )}
@@ -3673,11 +3757,15 @@ const PatientsPage = () => {
               <p className="text-xl font-semibold text-gray-700 mb-2">No patients found</p>
               <p className="text-gray-500 text-center max-w-md">
                 {search 
-                  ? `No patients match your search "${search}". Try searching by ${isUnassignedTab ? (unassignedSubView === 'child' ? 'CR No, Child Name, CGC No, or Room' : 'CR No, Patient Name, PSY No, or Room') : patientType === 'child' ? 'CR No, Child Name, CGC No' : 'CR No, Patient Name, PSY No, Doctor Name, or Doctor Role'}.`
+                  ? `No patients match your search "${search}". Try searching by ${isUnassignedTab ? (unassignedSubView === 'child' ? 'CR No, Child Name, CGC No, or Room' : 'CR No, Patient Name, PSY No, or Room') : isTotalPatientsTab ? (totalSubView === 'child' ? 'CR No, Child Name, or CGC No' : 'CR No, Patient Name, PSY No, or Doctor') : patientType === 'child' ? 'CR No, Child Name, CGC No' : 'CR No, Patient Name, PSY No, Doctor Name, or Doctor Role'}.`
                   : isUnassignedTab
                     ? unassignedSubView === 'child'
                       ? 'No unassigned child patients found. All child registrations are linked to a treating doctor.'
                       : 'No unassigned adult patients found. All registered adults are linked to a treating doctor.'
+                    : isTotalPatientsTab
+                      ? totalSubView === 'child'
+                        ? 'No child patients registered in the system yet.'
+                        : 'No adult patients registered in the system yet.'
                     : allPatients?.length === 0
                       ? `There are no ${patientType} patients in the system yet.`
                       : 'No patients match the current filters. Try adjusting your search criteria.'}
