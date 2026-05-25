@@ -994,8 +994,9 @@ const ClinicalTodayPatients = () => {
       const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
       const updatedToday = patientUpdatedDate && patientUpdatedDate === targetDate;
 
-      const doctorRoom = effectiveRoomData?.data?.current_room;
-      const inMyRoom = doctorRoom && p.assigned_room && p.assigned_room === doctorRoom;
+      const doctorRoom = effectiveRoomData?.data?.current_room?.trim?.() || effectiveRoomData?.data?.current_room;
+      const patientRoom = p.assigned_room?.trim?.() || p.assigned_room;
+      const inMyRoom = doctorRoom && patientRoom && patientRoom === doctorRoom;
 
       // Shared-room exception: if I am in a shared room (capacity > 1) and this patient is in my
       // room today and assigned to a colleague, still show the patient (shared consultation queue).

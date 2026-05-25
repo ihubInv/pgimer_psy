@@ -785,10 +785,30 @@ class Patient {
         params.push(searchPattern);
       }
 
-      // "My Patients" filter: keep patients linked to a specific doctor.
-      // Linked = master row's assigned_doctor_id matches, OR any visit's assigned_doctor_id matches,
-      // OR any clinical proforma's assigned_doctor / filled_by matches.
-      if (filters.treating_doctor_id) {
+      // Junior resident "my patients": doctor-linked OR in doctor's selected room today
+      if (filters.junior_my_patients?.doctor_id) {
+        const doctorParam = `$${idx++}`;
+        params.push(filters.junior_my_patients.doctor_id);
+        const parts = [
+          `p.assigned_doctor_id = ${doctorParam}`,
+          `EXISTS (
+            SELECT 1 FROM patient_visits pv
+            WHERE pv.patient_id = p.id AND pv.assigned_doctor_id = ${doctorParam}
+          )`,
+          `EXISTS (
+            SELECT 1 FROM clinical_proforma cp
+            WHERE cp.patient_id = p.id
+              AND (cp.assigned_doctor = ${doctorParam} OR cp.filled_by = ${doctorParam})
+          )`,
+        ];
+        if (filters.junior_my_patients.room) {
+          const roomParam = `$${idx++}`;
+          params.push(filters.junior_my_patients.room);
+          parts.push(`TRIM(COALESCE(p.assigned_room::text, '')) = TRIM(${roomParam}::text)`);
+        }
+        where.push(`(${parts.join(' OR ')})`);
+      } else if (filters.treating_doctor_id) {
+        // "My Patients" filter: keep patients linked to a specific doctor.
         const doctorParam = `$${idx++}`;
         where.push(`(
           p.assigned_doctor_id = ${doctorParam}

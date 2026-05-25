@@ -794,6 +794,90 @@ async function hasRoomToday(doctorId) {
   }
 }
 
+/**
+ * When PWO registers a patient to a room that already has a doctor today,
+ * assign the patient (and today's visit) to the first doctor in that room.
+ * Mirrors the bulk assign in selectRoom but for a single new registration.
+ */
+async function assignNewPatientToRoomDoctor(patientId, roomNumber) {
+  if (!patientId || !roomNumber || String(roomNumber).trim() === '') {
+    return { assigned: false };
+  }
+
+  const room = String(roomNumber).trim();
+  const doctors = await getDoctorsInRoomToday(room);
+  if (doctors.length === 0) {
+    return { assigned: false, reason: 'no_doctor_in_room' };
+  }
+
+  const doctor = doctors[0];
+  const todayResult = await db.query('SELECT CURRENT_DATE as today');
+  const todayDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+
+  const doctorResult = await db.query('SELECT id, name, role FROM users WHERE id = $1', [doctor.id]);
+  if (doctorResult.rows.length === 0) {
+    return { assigned: false, reason: 'doctor_not_found' };
+  }
+
+  const doctorInfo = doctorResult.rows[0];
+  const assignmentTime = new Date().toISOString();
+
+  await db.query(
+    `UPDATE registered_patient
+     SET assigned_doctor_id = $1,
+         assigned_doctor_name = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $3
+       AND TRIM(COALESCE(assigned_room::text, '')) = TRIM($4::text)`,
+    [doctorInfo.id, doctorInfo.name, patientId, room]
+  );
+
+  const visitCheck = await db.query(
+    `SELECT id FROM patient_visits WHERE patient_id = $1 AND DATE(visit_date) = $2::date`,
+    [patientId, todayDate]
+  );
+
+  if (visitCheck.rows.length === 0) {
+    const visitCountResult = await db.query(
+      `SELECT COUNT(*) as count FROM patient_visits WHERE patient_id = $1`,
+      [patientId]
+    );
+    const visitCount = parseInt(visitCountResult.rows[0]?.count || 0, 10);
+    const visitType = visitCount === 0 ? 'first_visit' : 'follow_up';
+
+    await db.query(
+      `INSERT INTO patient_visits
+       (patient_id, visit_date, visit_type, has_file, assigned_doctor_id, room_no, visit_status, notes)
+       VALUES ($1, $2, $3, false, $4, $5, 'scheduled', $6)`,
+      [
+        patientId,
+        todayDate,
+        visitType,
+        doctorInfo.id,
+        room,
+        `Auto-assigned to ${doctorInfo.name} on PWO registration at ${assignmentTime}`,
+      ]
+    );
+  } else {
+    await db.query(
+      `UPDATE patient_visits
+       SET assigned_doctor_id = $1, room_no = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE patient_id = $3 AND DATE(visit_date) = $4`,
+      [doctorInfo.id, room, patientId, todayDate]
+    );
+  }
+
+  console.log(
+    `[assignNewPatientToRoomDoctor] Patient ${patientId} → doctor ${doctorInfo.id} (${doctorInfo.name}) in room ${room}`
+  );
+
+  return {
+    assigned: true,
+    doctor_id: doctorInfo.id,
+    doctor_name: doctorInfo.name,
+  };
+}
+
 module.exports = {
   getAvailableRooms,
   getOccupiedRooms,
@@ -801,6 +885,7 @@ module.exports = {
   getTodayRoomDistribution,
   // autoAssignRoom - DEPRECATED: Room selection is now mandatory, no auto-assignment
   assignPatientsToDoctor,
+  assignNewPatientToRoomDoctor,
   // Capacity-aware helpers (new)
   getDoctorsInRoomToday,
   getRoomDoctorCapacity,

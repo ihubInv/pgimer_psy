@@ -26,6 +26,41 @@ class PatientController {
     return patientData;
   }
 
+  /** Junior residents: today's list includes patients in their selected room (same as child list). */
+  static async _resolveJuniorResidentListScope(doctorId, forTodayList) {
+    if (!doctorId) return {};
+    if (!forTodayList) {
+      return { treating_doctor_id: doctorId };
+    }
+    let doctorRoom = null;
+    try {
+      const db = require('../config/database');
+      const roomRes = await db.query(
+        'SELECT current_room, room_assignment_time FROM users WHERE id = $1',
+        [doctorId]
+      );
+      const roomRow = roomRes.rows[0];
+      if (roomRow?.current_room && roomRow?.room_assignment_time) {
+        const todayRes = await db.query('SELECT CURRENT_DATE AS today');
+        const assignedTodayRes = await db.query(
+          `SELECT DATE(($1::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date AS ok`,
+          [roomRow.room_assignment_time, todayRes.rows[0].today]
+        );
+        if (assignedTodayRes.rows[0]?.ok) {
+          doctorRoom = roomRow.current_room;
+        }
+      }
+    } catch (roomErr) {
+      console.warn('[getAllPatients] Could not resolve junior resident room:', roomErr.message);
+    }
+    return {
+      junior_my_patients: {
+        doctor_id: doctorId,
+        room: doctorRoom,
+      },
+    };
+  }
+
   static async getPatientStats(req, res) {
     try {
       // Combined adult + child counts. Department gating removed.
@@ -522,6 +557,24 @@ class PatientController {
       console.log(`[patientController] Final assigned_room value before Patient.create: "${patientData.assigned_room}"`);
       
       const patient = await Patient.create(patientData);
+
+      // If a doctor already selected this room today, link the new patient to them immediately
+      // (PWO registration after room selection — assignPatientsToDoctor only runs on selectRoom)
+      if (patientData.assigned_room && patient?.id) {
+        try {
+          const { assignNewPatientToRoomDoctor } = require('../utils/roomAssignment');
+          const linkResult = await assignNewPatientToRoomDoctor(patient.id, patientData.assigned_room);
+          if (linkResult.assigned) {
+            patient.assigned_doctor_id = linkResult.doctor_id;
+            patient.assigned_doctor_name = linkResult.doctor_name;
+            console.log(
+              `[patientController] Linked new patient ${patient.id} to room doctor ${linkResult.doctor_id}`
+            );
+          }
+        } catch (linkErr) {
+          console.error('[patientController] Room doctor link failed (non-fatal):', linkErr.message);
+        }
+      }
       
       // Verify that assigned_room was saved correctly
       if (patientData.assigned_room) {
@@ -687,23 +740,6 @@ class PatientController {
       const wantsChildType = requestedPatientType === 'child';
       const useChildDataset = wantsChildType;
 
-      // Check if search parameter is provided.
-      // Junior residents: search must stay scoped to their assigned patients (server-side).
-      if (req.query.search && req.query.search.trim().length >= 2 && !useChildDataset) {
-        if (scopedDoctorId) {
-          filters.search = req.query.search.trim();
-          filters.treating_doctor_id = scopedDoctorId;
-        } else {
-          const result = await Patient.search(req.query.search.trim(), page, limit);
-          return res.json({
-            success: true,
-            data: result
-          });
-        }
-      } else if (scopedDoctorId) {
-        filters.treating_doctor_id = scopedDoctorId;
-      }
-
       // Apply filters
       if (req.query.sex) filters.sex = req.query.sex;
       // if (req.query.case_complexity) filters.case_complexity = req.query.case_complexity;
@@ -721,6 +757,28 @@ class PatientController {
         }
       }
 
+      const forTodayList = Boolean(filters.date);
+      const juniorScope = scopedDoctorId
+        ? await PatientController._resolveJuniorResidentListScope(scopedDoctorId, forTodayList)
+        : {};
+
+      // Check if search parameter is provided.
+      // Junior residents: search must stay scoped to their assigned patients (server-side).
+      if (req.query.search && req.query.search.trim().length >= 2 && !useChildDataset) {
+        if (scopedDoctorId) {
+          filters.search = req.query.search.trim();
+          Object.assign(filters, juniorScope);
+        } else {
+          const result = await Patient.search(req.query.search.trim(), page, limit);
+          return res.json({
+            success: true,
+            data: result
+          });
+        }
+      } else if (scopedDoctorId) {
+        Object.assign(filters, juniorScope);
+      }
+
       // Unified patient list scoped by requested `patient_type`:
       // - `patient_type=child` returns child registrations.
       // - otherwise returns adult patients.
@@ -730,32 +788,10 @@ class PatientController {
         const childFilters = {};
         if (filters.assigned_room) childFilters.assigned_room = filters.assigned_room;
         if (filters.date) childFilters.date = filters.date;
-        if (scopedDoctorId) {
-          let doctorRoom = null;
-          try {
-            const db = require('../config/database');
-            const roomRes = await db.query(
-              'SELECT current_room, room_assignment_time FROM users WHERE id = $1',
-              [scopedDoctorId]
-            );
-            const roomRow = roomRes.rows[0];
-            if (roomRow?.current_room && roomRow?.room_assignment_time) {
-              const todayRes = await db.query('SELECT CURRENT_DATE AS today');
-              const assignedTodayRes = await db.query(
-                `SELECT DATE(($1::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date AS ok`,
-                [roomRow.room_assignment_time, todayRes.rows[0].today]
-              );
-              if (assignedTodayRes.rows[0]?.ok) {
-                doctorRoom = roomRow.current_room;
-              }
-            }
-          } catch (roomErr) {
-            console.warn('[getAllPatients] Could not resolve junior resident room:', roomErr.message);
-          }
-          childFilters.junior_my_patients = {
-            doctor_id: scopedDoctorId,
-            room: doctorRoom,
-          };
+        if (scopedDoctorId && juniorScope.junior_my_patients) {
+          childFilters.junior_my_patients = juniorScope.junior_my_patients;
+        } else if (scopedDoctorId) {
+          childFilters.treating_doctor_id = scopedDoctorId;
         }
 
         const childResult = await ChildPatientRegistration.findAll(page, limit, childFilters);
