@@ -718,13 +718,23 @@ class PatientController {
         return PatientController.getReferredPatientsList(req, res);
       }
 
+      const unassignedOnly =
+        req.query.unassigned_only === 'true' || req.query.unassigned_only === '1';
+      const canViewUnassigned = ['Admin', 'Faculty', 'Resident'].includes(req.user?.role);
+      if (unassignedOnly && !canViewUnassigned) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Unassigned patients list is for doctors and administrators only.',
+        });
+      }
+
       const isJuniorResident =
         req.user?.role === 'Resident' && req.user?.sub_role === 'Junior Resident';
       const treatingDoctorId = isJuniorResident ? req.user?.id : null;
       const forReferralPick =
         (req.query.for_referral === 'true' || req.query.for_referral === '1') &&
         PatientController._canReferPatients(req.user);
-      const scopedDoctorId = forReferralPick ? null : treatingDoctorId;
+      const scopedDoctorId = unassignedOnly || forReferralPick ? null : treatingDoctorId;
 
       // If id is provided, redirect to getPatientById for better performance
       if (req.query.id) {
@@ -746,6 +756,7 @@ class PatientController {
       if (req.query.has_adl_file !== undefined) filters.has_adl_file = req.query.has_adl_file === 'true';
       if (req.query.file_status) filters.file_status = req.query.file_status;
       if (req.query.assigned_room) filters.assigned_room = req.query.assigned_room;
+      if (unassignedOnly) filters.unassigned_only = true;
       
       // Filter by registration date (for Today's Patients view)
       // When date is provided, filter patients created on that specific date
@@ -788,6 +799,7 @@ class PatientController {
         const childFilters = {};
         if (filters.assigned_room) childFilters.assigned_room = filters.assigned_room;
         if (filters.date) childFilters.date = filters.date;
+        if (unassignedOnly) childFilters.unassigned_only = true;
         if (scopedDoctorId && juniorScope.junior_my_patients) {
           childFilters.junior_my_patients = juniorScope.junior_my_patients;
         } else if (scopedDoctorId) {
@@ -2962,6 +2974,82 @@ class PatientController {
         success: false,
         message: 'Failed to change patient room',
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  static async addPatientToMyList(req, res) {
+    try {
+      const patientIdInt = parseInt(req.params.id, 10);
+      if (isNaN(patientIdInt) || patientIdInt <= 0) {
+        return res.status(400).json({ success: false, message: 'Invalid patient ID' });
+      }
+
+      const allowedRoles = ['Admin', 'Faculty', 'Resident'];
+      if (!allowedRoles.includes(req.user?.role)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only doctors and administrators can add patients to their list',
+        });
+      }
+
+      const isChild =
+        String(req.body?.patient_type || req.query?.patient_type || '').trim().toLowerCase() ===
+        'child';
+
+      const {
+        assignPatientToDoctorById,
+        assignChildPatientToDoctorById,
+      } = require('../utils/roomAssignment');
+
+      const result = isChild
+        ? await assignChildPatientToDoctorById(patientIdInt, req.user.id)
+        : await assignPatientToDoctorById(patientIdInt, req.user.id);
+
+      if (!result.success) {
+        const status =
+          result.code === 'NOT_FOUND'
+            ? 404
+            : result.code === 'ALREADY_ASSIGNED'
+              ? 409
+              : 400;
+        return res.status(status).json({ success: false, message: result.message, code: result.code });
+      }
+
+      if (isChild) {
+        const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+        const child = await ChildPatientRegistration.findById(patientIdInt);
+        return res.status(200).json({
+          success: true,
+          message: `${result.patient_name || child?.child_name || 'Child patient'} added to your patient list`,
+          data: {
+            patient_type: 'child',
+            patient: child ? child.toJSON() : null,
+            assigned_doctor_id: result.doctor_id,
+            assigned_doctor_name: result.doctor_name,
+            assigned_room: result.room,
+          },
+        });
+      }
+
+      const patient = await Patient.findById(patientIdInt);
+      return res.status(200).json({
+        success: true,
+        message: `${patient?.name || 'Patient'} added to your patient list`,
+        data: {
+          patient_type: 'adult',
+          patient: patient ? patient.toJSON() : null,
+          assigned_doctor_id: result.doctor_id,
+          assigned_doctor_name: result.doctor_name,
+          assigned_room: result.room,
+        },
+      });
+    } catch (error) {
+      console.error('[addPatientToMyList] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to add patient to your list',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       });
     }
   }

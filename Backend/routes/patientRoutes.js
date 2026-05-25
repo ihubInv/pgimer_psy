@@ -793,6 +793,14 @@ router.post('/:id/visits/complete', authenticateToken, authorizeRoles('Admin', '
 router.post('/:id/change-room', authenticateToken, authorizeRoles('Admin', 'Faculty', 'Resident'), validateId, PatientController.changePatientRoom);
 
 router.post(
+  '/:id/add-to-my-list',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident'),
+  validateId,
+  PatientController.addPatientToMyList
+);
+
+router.post(
   '/:id/refer',
   authenticateToken,
   authorizeRoles('Admin', 'Faculty', 'Resident'),

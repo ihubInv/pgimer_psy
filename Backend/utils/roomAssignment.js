@@ -878,6 +878,248 @@ async function assignNewPatientToRoomDoctor(patientId, roomNumber) {
   };
 }
 
+/**
+ * Assign a single unassigned adult patient to a specific doctor (manual "Add to my list").
+ */
+async function assignPatientToDoctorById(patientId, doctorId) {
+  const patientIdInt = parseInt(patientId, 10);
+  const doctorIdInt = parseInt(doctorId, 10);
+  if (isNaN(patientIdInt) || isNaN(doctorIdInt)) {
+    throw new Error('Invalid patient or doctor ID');
+  }
+
+  const patientResult = await db.query(
+    `SELECT id, name, assigned_room, assigned_doctor_id, assigned_doctor_name
+     FROM registered_patient WHERE id = $1`,
+    [patientIdInt]
+  );
+  if (patientResult.rows.length === 0) {
+    return { success: false, code: 'NOT_FOUND', message: 'Patient not found' };
+  }
+
+  const patient = patientResult.rows[0];
+  if (patient.assigned_doctor_id != null) {
+    return {
+      success: false,
+      code: 'ALREADY_ASSIGNED',
+      message: patient.assigned_doctor_name
+        ? `Patient is already assigned to ${patient.assigned_doctor_name}`
+        : 'Patient is already assigned to a doctor',
+    };
+  }
+
+  const doctorResult = await db.query(
+    'SELECT id, name, role FROM users WHERE id = $1',
+    [doctorIdInt]
+  );
+  if (doctorResult.rows.length === 0) {
+    return { success: false, code: 'DOCTOR_NOT_FOUND', message: 'Doctor not found' };
+  }
+
+  const doctorInfo = doctorResult.rows[0];
+  const allowedRoles = ['Admin', 'Faculty', 'Resident'];
+  if (!allowedRoles.includes(doctorInfo.role)) {
+    return { success: false, code: 'INVALID_DOCTOR', message: 'Only clinical staff can claim patients' };
+  }
+
+  const roomStatus = await hasRoomToday(doctorIdInt);
+  const patientRoom =
+    patient.assigned_room && String(patient.assigned_room).trim() !== ''
+      ? String(patient.assigned_room).trim()
+      : null;
+  const roomToUse = patientRoom || roomStatus.room || null;
+
+  const todayResult = await db.query('SELECT CURRENT_DATE as today');
+  const todayDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+  const assignmentTime = new Date().toISOString();
+
+  if (roomToUse) {
+    await db.query(
+      `UPDATE registered_patient
+       SET assigned_doctor_id = $1,
+           assigned_doctor_name = $2,
+           assigned_room = $3,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [doctorInfo.id, doctorInfo.name, roomToUse, patientIdInt]
+    );
+  } else {
+    await db.query(
+      `UPDATE registered_patient
+       SET assigned_doctor_id = $1,
+           assigned_doctor_name = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3`,
+      [doctorInfo.id, doctorInfo.name, patientIdInt]
+    );
+  }
+
+  const visitCheck = await db.query(
+    `SELECT id FROM patient_visits WHERE patient_id = $1 AND DATE(visit_date) = $2::date`,
+    [patientIdInt, todayDate]
+  );
+
+  if (visitCheck.rows.length === 0) {
+    const visitCountResult = await db.query(
+      `SELECT COUNT(*) as count FROM patient_visits WHERE patient_id = $1`,
+      [patientIdInt]
+    );
+    const visitCount = parseInt(visitCountResult.rows[0]?.count || 0, 10);
+    const visitType = visitCount === 0 ? 'first_visit' : 'follow_up';
+
+    await db.query(
+      `INSERT INTO patient_visits
+       (patient_id, visit_date, visit_type, has_file, assigned_doctor_id, room_no, visit_status, notes)
+       VALUES ($1, $2, $3, false, $4, $5, 'scheduled', $6)`,
+      [
+        patientIdInt,
+        todayDate,
+        visitType,
+        doctorInfo.id,
+        roomToUse,
+        `Added to ${doctorInfo.name}'s patient list at ${assignmentTime}`,
+      ]
+    );
+  } else {
+    await db.query(
+      `UPDATE patient_visits
+       SET assigned_doctor_id = $1,
+           room_no = COALESCE($2, room_no),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE patient_id = $3 AND DATE(visit_date) = $4`,
+      [doctorInfo.id, roomToUse, patientIdInt, todayDate]
+    );
+  }
+
+  console.log(
+    `[assignPatientToDoctorById] Patient ${patientIdInt} → doctor ${doctorInfo.id} (${doctorInfo.name})`
+  );
+
+  return {
+    success: true,
+    doctor_id: doctorInfo.id,
+    doctor_name: doctorInfo.name,
+    room: roomToUse,
+  };
+}
+
+/**
+ * Link an unassigned child patient to a doctor via follow-up visit (child has no assigned_doctor_id column).
+ */
+async function assignChildPatientToDoctorById(childPatientId, doctorId) {
+  const childId = parseInt(childPatientId, 10);
+  const doctorIdInt = parseInt(doctorId, 10);
+  if (isNaN(childId) || isNaN(doctorIdInt)) {
+    throw new Error('Invalid child patient or doctor ID');
+  }
+
+  const childResult = await db.query(
+    `SELECT id, child_name, assigned_room FROM child_patient_registrations WHERE id = $1`,
+    [childId]
+  );
+  if (childResult.rows.length === 0) {
+    return { success: false, code: 'NOT_FOUND', message: 'Child patient not found' };
+  }
+
+  const child = childResult.rows[0];
+  const alreadyLinked = await db.query(
+    `SELECT 1 FROM followup_visits fv
+     WHERE fv.child_patient_id = $1 AND fv.assigned_doctor_id IS NOT NULL
+     LIMIT 1`,
+    [childId]
+  );
+  if (alreadyLinked.rows.length > 0) {
+    return {
+      success: false,
+      code: 'ALREADY_ASSIGNED',
+      message: 'Child patient is already linked to a treating doctor',
+    };
+  }
+
+  const proformaLinked = await db.query(
+    `SELECT 1 FROM child_clinical_proforma ccp
+     WHERE ccp.child_patient_id = $1
+       AND (ccp.assigned_doctor IS NOT NULL OR ccp.filled_by IS NOT NULL)
+     LIMIT 1`,
+    [childId]
+  );
+  if (proformaLinked.rows.length > 0) {
+    return {
+      success: false,
+      code: 'ALREADY_ASSIGNED',
+      message: 'Child patient is already linked via clinical proforma',
+    };
+  }
+
+  const doctorResult = await db.query('SELECT id, name, role FROM users WHERE id = $1', [doctorIdInt]);
+  if (doctorResult.rows.length === 0) {
+    return { success: false, code: 'DOCTOR_NOT_FOUND', message: 'Doctor not found' };
+  }
+  const doctorInfo = doctorResult.rows[0];
+
+  const roomStatus = await hasRoomToday(doctorIdInt);
+  const childRoom =
+    child.assigned_room && String(child.assigned_room).trim() !== ''
+      ? String(child.assigned_room).trim()
+      : null;
+  const roomToUse = childRoom || roomStatus.room || null;
+
+  const todayResult = await db.query('SELECT CURRENT_DATE as today');
+  const todayDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+
+  const existingToday = await db.query(
+    `SELECT id FROM followup_visits WHERE child_patient_id = $1 AND DATE(visit_date) = $2::date LIMIT 1`,
+    [childId, todayDate]
+  );
+
+  if (existingToday.rows.length > 0) {
+    await db.query(
+      `UPDATE followup_visits
+       SET assigned_doctor_id = $1, filled_by = $1, room_no = COALESCE($2, room_no), updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3`,
+      [doctorInfo.id, roomToUse, existingToday.rows[0].id]
+    );
+  } else {
+    await db.query(
+      `INSERT INTO followup_visits
+       (child_patient_id, visit_date, clinical_assessment, filled_by, assigned_doctor_id, room_no, visit_status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')`,
+      [
+        childId,
+        todayDate,
+        `Added to ${doctorInfo.name}'s patient list`,
+        doctorInfo.id,
+        doctorInfo.id,
+        roomToUse,
+      ]
+    );
+  }
+
+  if (roomToUse) {
+    await db.query(
+      `UPDATE child_patient_registrations SET assigned_room = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [roomToUse, childId]
+    );
+  } else {
+    await db.query(
+      `UPDATE child_patient_registrations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [childId]
+    );
+  }
+
+  console.log(
+    `[assignChildPatientToDoctorById] Child ${childId} → doctor ${doctorInfo.id} (${doctorInfo.name})`
+  );
+
+  return {
+    success: true,
+    doctor_id: doctorInfo.id,
+    doctor_name: doctorInfo.name,
+    room: roomToUse,
+    patient_name: child.child_name,
+  };
+}
+
 module.exports = {
   getAvailableRooms,
   getOccupiedRooms,
@@ -886,6 +1128,8 @@ module.exports = {
   // autoAssignRoom - DEPRECATED: Room selection is now mandatory, no auto-assignment
   assignPatientsToDoctor,
   assignNewPatientToRoomDoctor,
+  assignPatientToDoctorById,
+  assignChildPatientToDoctorById,
   // Capacity-aware helpers (new)
   getDoctorsInRoomToday,
   getRoomDoctorCapacity,

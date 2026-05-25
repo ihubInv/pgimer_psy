@@ -15,6 +15,9 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         if (arg?.date) {
           tags.push({ type: 'Patient', id: `LIST-${arg.date}` });
         }
+        if (arg?.unassigned_only) {
+          tags.push({ type: 'Patient', id: 'UNASSIGNED' });
+        }
         return tags;
       },
       // Keep unused data for 60 seconds to reduce refetches
@@ -270,6 +273,19 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         'Patient', // Invalidate all patient queries to refresh both doctors' lists
       ],
     }),
+    addPatientToMyList: builder.mutation({
+      query: ({ patientId, patient_type }) => ({
+        url: `/patients/${patientId}/add-to-my-list`,
+        method: 'POST',
+        body: patient_type ? { patient_type } : undefined,
+      }),
+      invalidatesTags: (result, error, patientId) => [
+        { type: 'Patient', id: patientId },
+        { type: 'Patient', id: 'LIST' },
+        { type: 'Patient', id: 'UNASSIGNED' },
+        'Patient',
+      ],
+    }),
     uploadPatientFiles: builder.mutation({
       queryFn: async ({ patientId, files }, _queryApi, _extraOptions, fetchWithBQ) => {
         const formData = new FormData();
@@ -486,6 +502,7 @@ export const {
   useGetPatientVisitHistoryQuery,
   useMarkVisitCompletedMutation,
   useChangePatientRoomMutation,
+  useAddPatientToMyListMutation,
   useUploadPatientFilesMutation,
   useGetPatientFilesQuery,
   useDeletePatientFileMutation,

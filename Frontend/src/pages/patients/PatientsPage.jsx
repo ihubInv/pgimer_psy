@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
@@ -15,6 +15,7 @@ import {
   useGetPatientByIdQuery,
   useMarkReferralSeenMutation,
   useCompleteReferralMutation,
+  useAddPatientToMyListMutation,
 } from '../../features/patients/patientsApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { formatPatientsForExport, exportData } from '../../utils/exportUtils';
@@ -35,6 +36,7 @@ import {
   isJuniorResidentUser,
   isSeniorResidentUser,
   canReferPatients,
+  canSeeUnassignedPatientsTab,
   getResidentSubRoleLabel,
 } from '../../utils/constants';
 import ReferPatientModal from '../../components/ReferPatientModal';
@@ -53,19 +55,22 @@ const PatientsPage = () => {
   const limit = 10;
   const [patientType, setPatientType] = useState('adult');
   const [referralSubView, setReferralSubView] = useState('to_me'); // to_me | by_me
+  const [unassignedSubView, setUnassignedSubView] = useState('adult'); // adult | child
   const [referModalPatient, setReferModalPatient] = useState(null);
   const [bulkReferModalOpen, setBulkReferModalOpen] = useState(false);
+  const [assigningPatientId, setAssigningPatientId] = useState(null);
 
   const isReferredTab = patientType === 'referred';
+  const isUnassignedTab = patientType === 'unassigned';
 
   // Reset page to 1 when search changes
   useEffect(() => {
     setPage(1);
-  }, [search, patientType, referralSubView]);
+  }, [search, patientType, referralSubView, unassignedSubView]);
 
   useEffect(() => {
     setPage(1);
-  }, [referralSubView]);
+  }, [referralSubView, unassignedSubView]);
 
   const patientsTabTitle = isJuniorResidentUser(user)
     ? 'My Patients'
@@ -85,12 +90,20 @@ const PatientsPage = () => {
           search: search.trim() || undefined,
           referral_view: referralSubView === 'by_me' ? 'referred_by_me' : 'referred_to_me',
         }
-      : {
-          page: search.trim() ? 1 : page,
-          limit: fetchLimit,
-          search: search.trim() || undefined,
-          patient_type: patientType,
-        },
+      : isUnassignedTab
+        ? {
+            page: search.trim() ? 1 : page,
+            limit: fetchLimit,
+            search: search.trim() || undefined,
+            patient_type: unassignedSubView,
+            unassigned_only: true,
+          }
+        : {
+            page: search.trim() ? 1 : page,
+            limit: fetchLimit,
+            search: search.trim() || undefined,
+            patient_type: patientType,
+          },
     {
       refetchOnMountOrArgChange: true,
     }
@@ -98,6 +111,7 @@ const PatientsPage = () => {
 
   const [markReferralSeen] = useMarkReferralSeenMutation();
   const [completeReferral] = useCompleteReferralMutation();
+  const [addPatientToMyList, { isLoading: isAddingToMyList }] = useAddPatientToMyListMutation();
 
   const currentIsLoading = isLoading;
   const currentIsFetching = isFetching;
@@ -127,6 +141,7 @@ const PatientsPage = () => {
         patient.special_clinic_no?.toLowerCase().includes(searchLower) ||
         patient.assigned_doctor_name?.toLowerCase().includes(searchLower) ||
         patient.assigned_doctor_role?.toLowerCase().includes(searchLower) ||
+        patient.assigned_room?.toLowerCase().includes(searchLower) ||
         (isReferredTab && (
           patient.referred_by_name?.toLowerCase().includes(searchLower) ||
           patient.referred_to_name?.toLowerCase().includes(searchLower) ||
@@ -153,6 +168,7 @@ const PatientsPage = () => {
           patient.special_clinic_no?.toLowerCase().includes(searchLower) ||
           patient.assigned_doctor_name?.toLowerCase().includes(searchLower) ||
           patient.assigned_doctor_role?.toLowerCase().includes(searchLower) ||
+          patient.assigned_room?.toLowerCase().includes(searchLower) ||
           (isReferredTab && (
             patient.referred_by_name?.toLowerCase().includes(searchLower) ||
             patient.referred_to_name?.toLowerCase().includes(searchLower) ||
@@ -215,6 +231,30 @@ const PatientsPage = () => {
       }
     }
     handleView(row);
+  };
+
+  const handleAddToMyList = async (row) => {
+    const patientId = row?.id;
+    if (!patientId) {
+      toast.error('Invalid patient ID');
+      return;
+    }
+    const confirmed = window.confirm(
+      `Add "${row.name || 'this patient'}" to your patient list? They will be removed from the Unassigned list.`
+    );
+    if (!confirmed) return;
+
+    setAssigningPatientId(patientId);
+    try {
+      const pt = row.patient_type === 'child' ? 'child' : 'adult';
+      const result = await addPatientToMyList({ patientId, patient_type: pt }).unwrap();
+      toast.success(result.message || 'Patient added to your list');
+      refetch();
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to add patient to your list');
+    } finally {
+      setAssigningPatientId(null);
+    }
   };
 
   const handleCompleteReferral = async (row) => {
@@ -2833,7 +2873,132 @@ const PatientsPage = () => {
     `;
   };
 
-  const columns = [
+  /** Unassigned tab: only "Add to my list". Other tabs: full action toolbar. */
+  const renderPatientActions = useCallback(
+    (row) => {
+      const patientId = row.id;
+
+      if (patientType === 'unassigned') {
+        const isAssigning = assigningPatientId === patientId && isAddingToMyList;
+        return (
+          <Button
+            type="button"
+            size="sm"
+            disabled={isAssigning}
+            onClick={() => handleAddToMyList(row)}
+            className="h-9 px-4 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white shadow-sm whitespace-nowrap"
+            title="Assign this patient to you and add to My Patients"
+          >
+            <FiUserPlus className="w-4 h-4 mr-1.5 shrink-0" />
+            {isAssigning ? 'Adding…' : 'Add to my list'}
+          </Button>
+        );
+      }
+
+      return (
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              isReferredTab && referralSubView === 'to_me'
+                ? handleViewReferred(row)
+                : handleView(row)
+            }
+            className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+            title={`View Details for Patient ID: ${patientId || 'N/A'}`}
+          >
+            <FiEye className="w-4 h-4 text-blue-600" />
+          </Button>
+          {!isReferredTab && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleEdit(row)}
+              className="h-9 w-9 p-0 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border border-green-200 hover:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+              title="Edit Patient"
+            >
+              <FiEdit className="w-4 h-4 text-green-600" />
+            </Button>
+          )}
+          {!isReferredTab && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handlePrint(patientId)}
+              className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+              title="Print Patient Details"
+            >
+              <FiPrinter className="w-4 h-4 text-purple-600" />
+            </Button>
+          )}
+          {!isReferredTab && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleExport(patientId)}
+              className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+              title="Export Patient"
+            >
+              <BsFileEarmarkExcelFill className="w-4 h-4 text-green-600" />
+            </Button>
+          )}
+          {canReferPatients(user) && !isReferredTab && patientId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setReferModalPatient(row)}
+              className="h-9 w-9 p-0 bg-gradient-to-r from-sky-50 to-cyan-50 hover:from-sky-100 hover:to-cyan-100 border border-sky-200 hover:border-sky-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+              title="Refer Patient to Doctor"
+            >
+              <FiUserPlus className="w-4 h-4 text-sky-700" />
+            </Button>
+          )}
+          {isReferredTab && row.referral_status !== 'completed' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleCompleteReferral(row)}
+              className="h-9 w-9 p-0 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+              title="Mark referral completed"
+            >
+              <FiCheckCircle className="w-4 h-4 text-emerald-700" />
+            </Button>
+          )}
+          {isAdmin(user?.role) && patientId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 p-0 bg-gradient-to-r from-red-50 to-rose-50 hover:from-red-100 hover:to-rose-100 border border-red-200 hover:border-red-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
+              title={`Delete ${row.patient_type === 'child' ? 'Child Patient' : 'Patient'} (Admin Only)`}
+              onClick={() => handleDelete(patientId, row.patient_type || 'adult')}
+            >
+              <FiTrash2 className="w-4 h-4 text-red-600" />
+            </Button>
+          )}
+        </div>
+      );
+    },
+    [
+      patientType,
+      isReferredTab,
+      referralSubView,
+      assigningPatientId,
+      isAddingToMyList,
+      user,
+      handleAddToMyList,
+      handleView,
+      handleViewReferred,
+      handleEdit,
+      handlePrint,
+      handleExport,
+      handleCompleteReferral,
+      handleDelete,
+    ]
+  );
+
+  const columns = useMemo(
+    () => [
     {
       header: (
         <div className="flex items-center gap-2">
@@ -2955,6 +3120,23 @@ const PatientsPage = () => {
           },
         ]
       : []),
+    ...(isUnassignedTab
+      ? [
+          {
+            header: (
+              <div className="flex items-center gap-2">
+                <FiShield className="w-4 h-4 text-amber-600" />
+                <span className="font-semibold">Room</span>
+              </div>
+            ),
+            render: (row) => (
+              <span className="font-medium text-gray-900">
+                {row.assigned_room?.trim() ? row.assigned_room : '—'}
+              </span>
+            ),
+          },
+        ]
+      : []),
     // {
     //   header: (
     //     <div className="flex items-center gap-2">
@@ -2990,7 +3172,15 @@ const PatientsPage = () => {
         <div className="flex items-center gap-2">
           <FiFileText className="w-4 h-4 text-primary-600" />
           <span className="font-semibold">
-            {isReferredTab ? 'PSY / CGC No' : patientType === 'child' ? 'CGC No' : 'PSY No'}
+            {isReferredTab
+              ? 'PSY / CGC No'
+              : isUnassignedTab
+                ? unassignedSubView === 'child'
+                  ? 'CGC No'
+                  : 'PSY No'
+                : patientType === 'child'
+                  ? 'CGC No'
+                  : 'PSY No'}
           </span>
         </div>
       ),
@@ -3010,107 +3200,21 @@ const PatientsPage = () => {
       header: (
         <div className="flex items-center gap-2">
           {/* <FiMoreVertical className="w-4 h-4 text-primary-600" /> */}
-          <span className="font-semibold ml-12">Actions</span>
+          <span className="font-semibold ml-12">{isUnassignedTab ? 'Action' : 'Actions'}</span>
         </div>
       ),
-      render: (row) => {
-        const patientId = row.id
-        // getPatientId(row);
-        return (
-        <div className="flex gap-2">
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => (
-                isReferredTab && referralSubView === 'to_me'
-                  ? handleViewReferred(row)
-                  : handleView(row)
-              )}
-              className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title={`View Details for Patient ID: ${patientId || 'N/A'}`}
-            >
-              <FiEye className="w-4 h-4 text-blue-600" />
-            </Button>
-            {!isReferredTab && (
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => handleEdit(row)}
-              className="h-9 w-9 p-0 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border border-green-200 hover:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title="Edit Patient"
-            >
-              <FiEdit className="w-4 h-4 text-green-600" />
-            </Button>
-            )}
-            {!isReferredTab && (
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => handlePrint(patientId)}
-              className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title="Print Patient Details"
-            >
-              <FiPrinter className="w-4 h-4 text-purple-600" />
-             
-            </Button>
-            )}
-            {!isReferredTab && (
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => handleExport(patientId)}
-              className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title="Export  Patient"
-            >
-              <BsFileEarmarkExcelFill className="w-4 h-4 text-green-600" />
-            </Button>
-            )}
-            {canReferPatients(user) && !isReferredTab && patientId && (
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => setReferModalPatient(row)}
-                className="h-9 w-9 p-0 bg-gradient-to-r from-sky-50 to-cyan-50 hover:from-sky-100 hover:to-cyan-100 border border-sky-200 hover:border-sky-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Refer Patient to Doctor"
-              >
-                <FiUserPlus className="w-4 h-4 text-sky-700" />
-              </Button>
-            )}
-            {isReferredTab && row.referral_status !== 'completed' && (
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => handleCompleteReferral(row)}
-                className="h-9 w-9 p-0 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Mark referral completed"
-              >
-                <FiCheckCircle className="w-4 h-4 text-emerald-700" />
-              </Button>
-            )}
-            {/* Show Delete button only for Admin - Full authority to delete any patient */}
-            {isAdmin(user?.role) && patientId && (
-              <Button 
-                variant="ghost" 
-                size="sm"
-                className="h-9 w-9 p-0 bg-gradient-to-r from-red-50 to-rose-50 hover:from-red-100 hover:to-rose-100 border border-red-200 hover:border-red-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title={`Delete ${row.patient_type === 'child' ? 'Child Patient' : 'Patient'} (Admin Only)`}
-                onClick={() => {
-                  console.log('[PatientsPage] Admin delete button clicked:', { 
-                    patientId, 
-                    patientType: row.patient_type || 'adult',
-                    userRole: user?.role 
-                  });
-                  handleDelete(patientId, row.patient_type || 'adult');
-                }}
-              >
-                <FiTrash2 className="w-4 h-4 text-red-600" />
-              </Button>
-            )}
-        </div>
-        );
-      },
+      render: renderPatientActions,
     },
-  ];
+  ],
+    [
+      patientType,
+      isReferredTab,
+      isUnassignedTab,
+      unassignedSubView,
+      referralSubView,
+      renderPatientActions,
+    ]
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -3120,7 +3224,7 @@ const PatientsPage = () => {
         <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
           <div className="mb-4 px-1">
             <h1 className="text-2xl font-bold text-gray-900">{patientsTabTitle}</h1>
-            {isJuniorResidentUser(user) && !isReferredTab && (
+            {isJuniorResidentUser(user) && !isReferredTab && !isUnassignedTab && (
               <p className="text-sm text-gray-600 mt-1">
                 Patients assigned to you when you select your room for the day.
               </p>
@@ -3131,6 +3235,25 @@ const PatientsPage = () => {
                   ? 'Patients you referred to other doctors — only your referrals are listed here.'
                   : 'Patients referred to you by other doctors. Open a patient to mark as seen.'}
               </p>
+            )}
+            {isUnassignedTab && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950">
+                <p className="font-medium text-amber-900">What is this tab?</p>
+                <p className="mt-1 text-amber-800/95">
+                  {unassignedSubView === 'child' ? (
+                    <>
+                      Child patients <strong>not linked to any treating doctor</strong> yet (no follow-up visit or clinical proforma tied to a doctor).
+                      Use <strong>Add to my list</strong> to assign them to yourself; they will leave this list and appear under Child Patients in your patient list.
+                    </>
+                  ) : (
+                    <>
+                      Adult patients <strong>not linked to any treating doctor</strong> yet (no assigned doctor on their record).
+                      They often appear here after PWO registration before a doctor selects today&apos;s room.
+                      Use <strong>Add to my list</strong> to assign them to yourself; they will leave this list and appear under Adult Patients in your patient list.
+                    </>
+                  )}
+                </p>
+              </div>
             )}
           </div>
           {/* Patient type tabs */}
@@ -3177,6 +3300,23 @@ const PatientsPage = () => {
                   Referred Patients
                 </button>
               )}
+              {canSeeUnassignedPatientsTab(user) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPatientType('unassigned');
+                    setUnassignedSubView('adult');
+                  }}
+                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                    patientType === 'unassigned'
+                      ? 'border-primary-600 text-primary-600 bg-primary-50'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                  aria-current={patientType === 'unassigned' ? 'page' : undefined}
+                >
+                  Unassigned Patient
+                </button>
+              )}
             </div>
           </div>
 
@@ -3205,9 +3345,13 @@ const PatientsPage = () => {
                   placeholder={
                     isReferredTab
                       ? 'Search by CR No, patient name, referrer, reason...'
-                      : patientType === 'child'
-                        ? 'Search by CR No, Child Name, CGC No...'
-                        : 'Search by CR No, Patient Name, PSY No...'
+                      : isUnassignedTab
+                        ? unassignedSubView === 'child'
+                          ? 'Search by CR No, Child Name, CGC No, Room...'
+                          : 'Search by CR No, Patient Name, PSY No, Room...'
+                        : patientType === 'child'
+                          ? 'Search by CR No, Child Name, CGC No...'
+                          : 'Search by CR No, Patient Name, PSY No...'
                   }
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -3235,7 +3379,7 @@ const PatientsPage = () => {
                       Refer Patient(s)
                     </Button>
                   )}
-                  {!isReferredTab && (
+                  {!isReferredTab && !isUnassignedTab && (
                   <Link to={patientType === 'child' ? '/child-patient/new' : '/patients/new'}>
                     <Button className="bg-gradient-to-r h-12 px-5 from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap">
                       <FiPlus className="mr-2" />
@@ -3283,6 +3427,32 @@ const PatientsPage = () => {
                 </button>
               </div>
             )}
+            {isUnassignedTab && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUnassignedSubView('adult')}
+                  className={`px-4 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                    unassignedSubView === 'adult'
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  Adult Unassigned Patient
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUnassignedSubView('child')}
+                  className={`px-4 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                    unassignedSubView === 'child'
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  Child Unassigned Patient
+                </button>
+              </div>
+            )}
           </div>
 
           {(currentIsLoading || currentIsFetching) ? (
@@ -3304,10 +3474,14 @@ const PatientsPage = () => {
               <p className="text-xl font-semibold text-gray-700 mb-2">No patients found</p>
               <p className="text-gray-500 text-center max-w-md">
                 {search 
-                  ? `No patients match your search "${search}". Try searching by ${patientType === 'child' ? 'CR No, Child Name, CGC No' : 'CR No, Patient Name, PSY No, Doctor Name, or Doctor Role'}.`
-                  : allPatients?.length === 0
-                    ? `There are no ${patientType} patients in the system yet.`
-                    : 'No patients match the current filters. Try adjusting your search criteria.'}
+                  ? `No patients match your search "${search}". Try searching by ${isUnassignedTab ? (unassignedSubView === 'child' ? 'CR No, Child Name, CGC No, or Room' : 'CR No, Patient Name, PSY No, or Room') : patientType === 'child' ? 'CR No, Child Name, CGC No' : 'CR No, Patient Name, PSY No, Doctor Name, or Doctor Role'}.`
+                  : isUnassignedTab
+                    ? unassignedSubView === 'child'
+                      ? 'No unassigned child patients found. All child registrations are linked to a treating doctor.'
+                      : 'No unassigned adult patients found. All registered adults are linked to a treating doctor.'
+                    : allPatients?.length === 0
+                      ? `There are no ${patientType} patients in the system yet.`
+                      : 'No patients match the current filters. Try adjusting your search criteria.'}
               </p>
               {search && (
                 <Button
@@ -3331,7 +3505,7 @@ const PatientsPage = () => {
                       Refer Existing Patient(s)
                     </Button>
                   )}
-                  {!isReferredTab && (
+                  {!isReferredTab && !isUnassignedTab && (
                     <Link to={patientType === 'child' ? '/child-patient/new' : '/patients/new'}>
                       <Button variant="outline" className="border-2 border-primary-200">
                         <FiPlus className="mr-2" />
@@ -3358,6 +3532,7 @@ const PatientsPage = () => {
               
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                 <Table
+                  key={isUnassignedTab ? `unassigned-${unassignedSubView}` : patientType}
                   columns={columns}
                   data={filteredPatients}
                   loading={isLoading}

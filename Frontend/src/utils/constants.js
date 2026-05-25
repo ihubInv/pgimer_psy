@@ -34,6 +34,9 @@ export const canReferPatients = (user) => {
   );
 };
 
+/** Admin, Faculty, Junior/Senior Resident — unassigned patients oversight tab */
+export const canSeeUnassignedPatientsTab = (user) => canReferPatients(user);
+
 // Helper function to get display name for a role
 export const getRoleDisplayName = (role) => {
   if (!role) return 'N/A';

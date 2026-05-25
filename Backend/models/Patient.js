@@ -772,6 +772,10 @@ class Patient {
         params.push(filters.assigned_room);
       }
 
+      if (filters.unassigned_only) {
+        where.push(`p.assigned_doctor_id IS NULL`);
+      }
+
       if (filters.search && String(filters.search).trim().length >= 2) {
         const searchParam = `$${idx++}`;
         const searchPattern = `%${String(filters.search).trim()}%`;

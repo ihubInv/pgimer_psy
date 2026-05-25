@@ -421,6 +421,20 @@ class ChildPatientRegistration {
         idx++;
       }
 
+      if (filters.unassigned_only) {
+        where.push(`(
+          NOT EXISTS (
+            SELECT 1 FROM followup_visits fv
+            WHERE fv.child_patient_id = cpr.id AND fv.assigned_doctor_id IS NOT NULL
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM child_clinical_proforma ccp
+            WHERE ccp.child_patient_id = cpr.id
+              AND (ccp.assigned_doctor IS NOT NULL OR ccp.filled_by IS NOT NULL)
+          )
+        )`);
+      }
+
       // "My Patients" filter for child registrations:
       // include child if any follow-up visit OR child clinical proforma is by this doctor.
       // (child_patient_registrations has no direct assigned_doctor_id column, so we rely on
