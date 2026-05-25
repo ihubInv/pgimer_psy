@@ -36,8 +36,11 @@ export const canReferPatients = (user) => {
   );
 };
 
-/** Admin, Faculty, Junior/Senior Resident — unassigned patients oversight tab */
-export const canSeeUnassignedPatientsTab = (user) => canReferPatients(user);
+/** Admin and Residents only — unassigned patients oversight tab (not shown to Faculty) */
+export const canSeeUnassignedPatientsTab = (user) => {
+  if (!user?.role) return false;
+  return user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.RESIDENT;
+};
 
 /** Senior Resident only — full department list tab (parallel to Unassigned Patient) */
 export const canSeeTotalPatientsTab = (user) => isSeniorResidentUser(user);
