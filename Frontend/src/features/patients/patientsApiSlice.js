@@ -290,10 +290,13 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
       ],
     }),
     addPatientToMyList: builder.mutation({
-      query: ({ patientId, patient_type }) => ({
+      query: ({ patientId, patient_type, doctor_id }) => ({
         url: `/patients/${patientId}/add-to-my-list`,
         method: 'POST',
-        body: patient_type ? { patient_type } : undefined,
+        body: {
+          ...(patient_type ? { patient_type } : {}),
+          ...(doctor_id != null && doctor_id !== '' ? { doctor_id } : {}),
+        },
       }),
       invalidatesTags: (result, error, patientId) => [
         { type: 'Patient', id: patientId },

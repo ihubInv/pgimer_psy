@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
   FiPlus, FiSearch, FiTrash2, FiEye,  FiEdit, FiUsers, 
    FiDownload,
-  FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle, FiClipboard
+  FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle, FiClipboard, FiChevronDown
 } from 'react-icons/fi';
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
 import {
@@ -46,6 +46,7 @@ import {
 import { clinicalApiSlice } from '../../features/clinical/clinicalApiSlice';
 import { childClinicalApiSlice } from '../../features/clinical/childClinicalApiSlice';
 import { adlApiSlice } from '../../features/adl/adlApiSlice';
+import { useGetDoctorsQuery } from '../../features/users/usersApiSlice';
 import ReferPatientModal from '../../components/ReferPatientModal';
 import BulkReferPatientsModal from '../../components/BulkReferPatientsModal';
 import PatientListFilters, {
@@ -83,10 +84,36 @@ const PatientsPage = () => {
   const [referModalPatient, setReferModalPatient] = useState(null);
   const [bulkReferModalOpen, setBulkReferModalOpen] = useState(false);
   const [assigningPatientId, setAssigningPatientId] = useState(null);
+  const [assignDoctorDropdownPatientId, setAssignDoctorDropdownPatientId] = useState(null);
+  const [selectedAssignDoctorId, setSelectedAssignDoctorId] = useState('');
+  const assignDoctorDropdownRef = useRef(null);
   const [listFilters, setListFilters] = useState(PATIENT_LIST_EMPTY_FILTERS);
 
-  const isReferredTab = patientType === 'referred';
   const isUnassignedTab = patientType === 'unassigned';
+  const isAdminUser = isAdmin(user?.role);
+
+  const { data: residentsData, isLoading: isLoadingResidents } = useGetDoctorsQuery(
+    { page: 1, limit: 200 },
+    { skip: !isAdminUser || !isUnassignedTab }
+  );
+
+  const residentDoctors = useMemo(() => {
+    return (residentsData?.data?.users || [])
+      .filter(
+        (d) =>
+          d.role === 'Resident' &&
+          d.is_active !== false &&
+          (d.sub_role === 'Junior Resident' || d.sub_role === 'Senior Resident')
+      )
+      .sort((a, b) => {
+        const subOrder = (s) => (s === 'Senior Resident' ? 0 : 1);
+        const bySub = subOrder(a.sub_role) - subOrder(b.sub_role);
+        if (bySub !== 0) return bySub;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+  }, [residentsData]);
+
+  const isReferredTab = patientType === 'referred';
   const isTotalPatientsTab = patientType === 'total';
 
   // Reset page to 1 when search changes
@@ -130,13 +157,15 @@ const PatientsPage = () => {
               ? 'My Patients'
               : 'Patients';
 
-  // Fetch patients - use server-side pagination when not searching, client-side when searching
-  const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
+  // Global patient search uses a larger fetch + client filter; tab-scoped lists search on the server.
+  const useServerListSearch =
+    isUnassignedTab || isTotalPatientsTab || isReferredTab;
+  const fetchLimit = search.trim() && !useServerListSearch ? 100 : limit;
 
   // Unified patient list. Backend scopes adult/child by `patient_type` query.
   const patientsQueryArgs = useMemo(() => {
     const base = {
-      page: search.trim() ? 1 : page,
+      page: search.trim() && !useServerListSearch ? 1 : page,
       limit: fetchLimit,
       search: search.trim() || undefined,
       ...listFilterParams,
@@ -177,6 +206,7 @@ const PatientsPage = () => {
     unassignedSubView,
     totalSubView,
     patientType,
+    useServerListSearch,
   ]);
 
   const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery(patientsQueryArgs, {
@@ -195,14 +225,16 @@ const PatientsPage = () => {
   // `patient_type` ('adult' | 'child') so downstream UI checks keep working.
   const allPatients = data?.data?.patients || [];
 
-  // Client-side filtering by all fields including doctor name (only when searching)
+  // Client-side filtering only for unscoped global search; tab lists use server-side search.
   const filteredPatients = allPatients ? (() => {
     if (!search.trim()) {
-      // No search - use server-side paginated results directly
       return allPatients;
     }
 
-    // When searching, filter client-side
+    if (useServerListSearch) {
+      return allPatients;
+    }
+
     const searchLower = search.trim().toLowerCase();
     
     // Filter by all searchable fields including doctor name
@@ -230,31 +262,33 @@ const PatientsPage = () => {
     return filtered.slice(startIndex, startIndex + limit);
   })() : [];
 
-  // Calculate total pages for filtered results
-  const totalFiltered = search.trim() 
-    ? (allPatients?.filter(patient => {
-        const searchLower = search.trim().toLowerCase();
-        return (
-          patient.name?.toLowerCase().includes(searchLower) ||
-          patient.cr_no?.toLowerCase().includes(searchLower) ||
-          patient.psy_no?.toLowerCase().includes(searchLower) ||
-          patient.adl_no?.toLowerCase().includes(searchLower) ||
-          patient.special_clinic_no?.toLowerCase().includes(searchLower) ||
-          patient.assigned_doctor_name?.toLowerCase().includes(searchLower) ||
-          patient.assigned_doctor_role?.toLowerCase().includes(searchLower) ||
-          patient.assigned_room?.toLowerCase().includes(searchLower) ||
-          (isReferredTab && (
-            patient.referred_by_name?.toLowerCase().includes(searchLower) ||
-            patient.referred_to_name?.toLowerCase().includes(searchLower) ||
-            patient.referral_reason?.toLowerCase().includes(searchLower) ||
-            patient.referral_status?.toLowerCase().includes(searchLower)
-          ))
-        );
-      }).length || 0)
+  const totalFiltered = search.trim()
+    ? useServerListSearch
+      ? (data?.data?.pagination?.total ?? allPatients.length)
+      : (allPatients?.filter((patient) => {
+          const searchLower = search.trim().toLowerCase();
+          return (
+            patient.name?.toLowerCase().includes(searchLower) ||
+            patient.cr_no?.toLowerCase().includes(searchLower) ||
+            patient.psy_no?.toLowerCase().includes(searchLower) ||
+            patient.adl_no?.toLowerCase().includes(searchLower) ||
+            patient.special_clinic_no?.toLowerCase().includes(searchLower) ||
+            patient.assigned_doctor_name?.toLowerCase().includes(searchLower) ||
+            patient.assigned_doctor_role?.toLowerCase().includes(searchLower) ||
+            patient.assigned_room?.toLowerCase().includes(searchLower) ||
+            (isReferredTab &&
+              (patient.referred_by_name?.toLowerCase().includes(searchLower) ||
+                patient.referred_to_name?.toLowerCase().includes(searchLower) ||
+                patient.referral_reason?.toLowerCase().includes(searchLower) ||
+                patient.referral_status?.toLowerCase().includes(searchLower)))
+          );
+        }).length || 0)
     : (data?.data?.pagination?.total || 0);
 
   const totalPages = search.trim()
-    ? Math.ceil(totalFiltered / limit)
+    ? useServerListSearch
+      ? (data?.data?.pagination?.pages || Math.ceil(totalFiltered / limit) || 1)
+      : Math.ceil(totalFiltered / limit)
     : (data?.data?.pagination?.pages || 1);
  
   const [deletePatient] = useDeletePatientMutation();
@@ -330,6 +364,58 @@ const PatientsPage = () => {
       setAssigningPatientId(null);
     }
   };
+
+  const handleAddToDoctorList = async (row, doctorId) => {
+    const patientId = row?.id;
+    if (!patientId) {
+      toast.error('Invalid patient ID');
+      return;
+    }
+    if (!doctorId) {
+      toast.warning('Please select a resident doctor');
+      return;
+    }
+    const doctor = residentDoctors.find((d) => String(d.id) === String(doctorId));
+    const pt = row.patient_type === 'child' ? 'child' : 'adult';
+    const listLabel = pt === 'child' ? 'child' : 'adult';
+    const subLabel = doctor?.sub_role ? getResidentSubRoleLabel(doctor.sub_role) : '';
+    const confirmed = window.confirm(
+      `Add "${row.name || 'this patient'}" to Dr. ${doctor?.name || 'selected doctor'}${subLabel ? ` (${subLabel})` : ''}'s ${listLabel} patient list? They will be removed from the Unassigned list.`
+    );
+    if (!confirmed) return;
+
+    setAssigningPatientId(patientId);
+    try {
+      const result = await addPatientToMyList({
+        patientId,
+        patient_type: pt,
+        doctor_id: parseInt(doctorId, 10),
+      }).unwrap();
+      toast.success(result.message || 'Patient added to doctor list');
+      setAssignDoctorDropdownPatientId(null);
+      setSelectedAssignDoctorId('');
+      refetch();
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to add patient to doctor list');
+    } finally {
+      setAssigningPatientId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!assignDoctorDropdownPatientId) return undefined;
+    const handleClickOutside = (event) => {
+      if (
+        assignDoctorDropdownRef.current &&
+        !assignDoctorDropdownRef.current.contains(event.target)
+      ) {
+        setAssignDoctorDropdownPatientId(null);
+        setSelectedAssignDoctorId('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [assignDoctorDropdownPatientId]);
 
   const handleCompleteReferral = async (row) => {
     if (!row.referral_id) return;
@@ -3053,6 +3139,93 @@ const PatientsPage = () => {
 
       if (patientType === 'unassigned') {
         const isAssigning = assigningPatientId === patientId && isAddingToMyList;
+        const dropdownOpen = assignDoctorDropdownPatientId === patientId;
+
+        if (isAdminUser) {
+          return (
+            <div
+              className="relative min-w-[12rem]"
+              ref={dropdownOpen ? assignDoctorDropdownRef : null}
+            >
+              <Button
+                type="button"
+                size="sm"
+                disabled={isAssigning}
+                onClick={() => {
+                  if (dropdownOpen) {
+                    setAssignDoctorDropdownPatientId(null);
+                    setSelectedAssignDoctorId('');
+                  } else {
+                    setAssignDoctorDropdownPatientId(patientId);
+                    setSelectedAssignDoctorId('');
+                  }
+                }}
+                className="h-9 px-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white shadow-sm whitespace-nowrap inline-flex items-center gap-1.5"
+                title="Assign this patient to a resident doctor's list"
+              >
+                <FiUserPlus className="w-4 h-4 shrink-0" />
+                {isAssigning ? 'Adding…' : 'Add to the doctor list'}
+                <FiChevronDown
+                  className={`w-4 h-4 shrink-0 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}
+                />
+              </Button>
+              {dropdownOpen && (
+                <div className="absolute z-[80] right-0 mt-1 w-72 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl p-3">
+                  <p className="text-xs font-semibold text-gray-700 mb-2">
+                    Select resident (Junior or Senior)
+                  </p>
+                  {isLoadingResidents ? (
+                    <p className="text-sm text-gray-500 py-2">Loading doctors…</p>
+                  ) : residentDoctors.length === 0 ? (
+                    <p className="text-sm text-amber-700 py-2">No active residents found.</p>
+                  ) : (
+                    <>
+                      <select
+                        value={selectedAssignDoctorId}
+                        onChange={(e) => setSelectedAssignDoctorId(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500"
+                        disabled={isAssigning}
+                      >
+                        <option value="">Choose doctor…</option>
+                        {residentDoctors.map((doc) => (
+                          <option key={doc.id} value={String(doc.id)}>
+                            {doc.name} — {getResidentSubRoleLabel(doc.sub_role)}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          type="button"
+                          disabled={!selectedAssignDoctorId || isAssigning}
+                          onClick={() => handleAddToDoctorList(row, selectedAssignDoctorId)}
+                          className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isAssigning ? 'Adding…' : 'Assign'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAssignDoctorDropdownPatientId(null);
+                            setSelectedAssignDoctorId('');
+                          }}
+                          className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-2 leading-snug">
+                        {row.patient_type === 'child'
+                          ? 'Adds to that doctor\'s My Child Patients list.'
+                          : 'Adds to that doctor\'s My Adult Patients list.'}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        }
+
         return (
           <Button
             type="button"
@@ -3218,8 +3391,14 @@ const PatientsPage = () => {
       referralSubView,
       assigningPatientId,
       isAddingToMyList,
+      isAdminUser,
+      assignDoctorDropdownPatientId,
+      selectedAssignDoctorId,
+      residentDoctors,
+      isLoadingResidents,
       user,
       handleAddToMyList,
+      handleAddToDoctorList,
       handleView,
       handleViewReferred,
       handleEdit,

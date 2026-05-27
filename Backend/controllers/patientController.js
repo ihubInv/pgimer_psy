@@ -869,11 +869,19 @@ class PatientController {
       }
 
       // Check if search parameter is provided.
-      // Junior residents: search must stay scoped to their assigned patients (server-side).
+      // Global Patient.search is only for unscoped lookups; list tabs (unassigned, my patients, total, etc.)
+      // must search within the same filters as the non-search list.
       if (req.query.search && req.query.search.trim().length >= 2 && !useChildDataset) {
-        if (scopedDoctorId) {
+        const searchWithinListScope =
+          scopedDoctorId ||
+          unassignedOnly ||
+          viewAllPatients ||
+          forReferralPick;
+        if (searchWithinListScope) {
           filters.search = req.query.search.trim();
-          Object.assign(filters, residentScope);
+          if (scopedDoctorId) {
+            Object.assign(filters, residentScope);
+          }
         } else {
           const result = await Patient.search(req.query.search.trim(), page, limit);
           return res.json({
@@ -901,6 +909,9 @@ class PatientController {
         if (filters.assigned_room) childFilters.assigned_room = filters.assigned_room;
         if (filters.date) childFilters.date = filters.date;
         if (unassignedOnly) childFilters.unassigned_only = true;
+        if (req.query.search && req.query.search.trim().length >= 2) {
+          childFilters.search = req.query.search.trim();
+        }
         if (scopedDoctorId && residentScope.junior_my_patients) {
           childFilters.junior_my_patients = residentScope.junior_my_patients;
         } else if (scopedDoctorId) {
@@ -3099,14 +3110,53 @@ class PatientController {
         String(req.body?.patient_type || req.query?.patient_type || '').trim().toLowerCase() ===
         'child';
 
+      let targetDoctorId = req.user.id;
+      if (req.user?.role === 'Admin') {
+        const rawDoctorId = req.body?.doctor_id;
+        if (rawDoctorId == null || rawDoctorId === '') {
+          return res.status(400).json({
+            success: false,
+            message: 'Please select a resident doctor to add this patient to their list',
+          });
+        }
+        targetDoctorId = parseInt(rawDoctorId, 10);
+        if (isNaN(targetDoctorId) || targetDoctorId <= 0) {
+          return res.status(400).json({ success: false, message: 'Invalid doctor ID' });
+        }
+        const User = require('../models/User');
+        const targetDoctor = await User.findById(targetDoctorId);
+        if (!targetDoctor) {
+          return res.status(404).json({ success: false, message: 'Selected doctor not found' });
+        }
+        if (targetDoctor.role !== 'Resident') {
+          return res.status(400).json({
+            success: false,
+            message: 'Patient can only be assigned to a Junior or Senior Resident',
+          });
+        }
+        const subRole = String(targetDoctor.sub_role || '').trim();
+        if (subRole !== 'Junior Resident' && subRole !== 'Senior Resident') {
+          return res.status(400).json({
+            success: false,
+            message: 'Patient can only be assigned to a Junior or Senior Resident',
+          });
+        }
+        if (!targetDoctor.is_active) {
+          return res.status(400).json({
+            success: false,
+            message: 'Selected doctor account is inactive',
+          });
+        }
+      }
+
       const {
         assignPatientToDoctorById,
         assignChildPatientToDoctorById,
       } = require('../utils/roomAssignment');
 
       const result = isChild
-        ? await assignChildPatientToDoctorById(patientIdInt, req.user.id)
-        : await assignPatientToDoctorById(patientIdInt, req.user.id);
+        ? await assignChildPatientToDoctorById(patientIdInt, targetDoctorId)
+        : await assignPatientToDoctorById(patientIdInt, targetDoctorId);
 
       if (!result.success) {
         const status =
@@ -3118,12 +3168,17 @@ class PatientController {
         return res.status(status).json({ success: false, message: result.message, code: result.code });
       }
 
+      const assignedByAdmin = req.user?.role === 'Admin';
+      const listOwner = result.doctor_name || 'doctor';
+
       if (isChild) {
         const ChildPatientRegistration = require('../models/ChildPatientRegistration');
         const child = await ChildPatientRegistration.findById(patientIdInt);
         return res.status(200).json({
           success: true,
-          message: `${result.patient_name || child?.child_name || 'Child patient'} added to your patient list`,
+          message: assignedByAdmin
+            ? `${result.patient_name || child?.child_name || 'Child patient'} added to Dr. ${listOwner}'s child patient list`
+            : `${result.patient_name || child?.child_name || 'Child patient'} added to your patient list`,
           data: {
             patient_type: 'child',
             patient: child ? child.toJSON() : null,
@@ -3137,7 +3192,9 @@ class PatientController {
       const patient = await Patient.findById(patientIdInt);
       return res.status(200).json({
         success: true,
-        message: `${patient?.name || 'Patient'} added to your patient list`,
+        message: assignedByAdmin
+          ? `${patient?.name || 'Patient'} added to Dr. ${listOwner}'s adult patient list`
+          : `${patient?.name || 'Patient'} added to your patient list`,
         data: {
           patient_type: 'adult',
           patient: patient ? patient.toJSON() : null,

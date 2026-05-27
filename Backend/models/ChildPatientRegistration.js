@@ -462,6 +462,19 @@ class ChildPatientRegistration {
         )`);
       }
 
+      if (filters.search && String(filters.search).trim().length >= 2) {
+        const searchParam = `$${idx}`;
+        const searchPattern = `%${String(filters.search).trim()}%`;
+        where.push(`(
+          COALESCE(cpr.child_name::text, '') ILIKE ${searchParam}
+          OR COALESCE(cpr.cr_number::text, '') ILIKE ${searchParam}
+          OR COALESCE(cpr.cgc_number::text, '') ILIKE ${searchParam}
+          OR COALESCE(cpr.mobile_no::text, '') ILIKE ${searchParam}
+        )`);
+        params.push(searchPattern);
+        idx++;
+      }
+
       // "My Patients" filter for child registrations:
       // include child if any follow-up visit OR child clinical proforma is by this doctor.
       // (child_patient_registrations has no direct assigned_doctor_id column, so we rely on
