@@ -102,15 +102,33 @@ const PatientsPage = () => {
     return p;
   }, [listFilters]);
 
+  const isResidentUser =
+    isJuniorResidentUser(user) || isSeniorResidentUser(user);
+
+  const patientListTabLabels = useMemo(
+    () => ({
+      adult: isResidentUser ? 'My Adult Patients' : 'Adult Patients',
+      child: isResidentUser ? 'My Child Patients' : 'Child Patients',
+      referred: 'Referred Patients',
+      total: 'Total Patients',
+      unassigned: 'Unassigned Patients',
+    }),
+    [isResidentUser]
+  );
+
   const patientsTabTitle = isTotalPatientsTab
-    ? 'Total Patients'
+    ? patientListTabLabels.total
     : isUnassignedTab
-      ? 'Unassigned Patients'
+      ? patientListTabLabels.unassigned
       : isReferredTab
-        ? 'Referred Patients'
-        : isJuniorResidentUser(user) || isSeniorResidentUser(user)
-          ? 'My Patients'
-          : 'Patients';
+        ? patientListTabLabels.referred
+        : patientType === 'adult'
+          ? patientListTabLabels.adult
+          : patientType === 'child'
+            ? patientListTabLabels.child
+            : isResidentUser
+              ? 'My Patients'
+              : 'Patients';
 
   // Fetch patients - use server-side pagination when not searching, client-side when searching
   const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
@@ -3490,7 +3508,7 @@ const PatientsPage = () => {
                 }`}
                 aria-current={patientType === 'adult' ? 'page' : undefined}
               >
-                Adult Patients
+                {patientListTabLabels.adult}
               </button>
               <button
                 type="button"
@@ -3502,7 +3520,7 @@ const PatientsPage = () => {
                 }`}
                 aria-current={patientType === 'child' ? 'page' : undefined}
               >
-                Child Patients
+                {patientListTabLabels.child}
               </button>
               {canReferPatients(user) && (
                 <button
@@ -3518,7 +3536,7 @@ const PatientsPage = () => {
                   }`}
                   aria-current={patientType === 'referred' ? 'page' : undefined}
                 >
-                  Referred Patients
+                  {patientListTabLabels.referred}
                 </button>
               )}
               {canSeeTotalPatientsTab(user) && (
@@ -3535,7 +3553,7 @@ const PatientsPage = () => {
                   }`}
                   aria-current={patientType === 'total' ? 'page' : undefined}
                 >
-                  Total Patients
+                  {patientListTabLabels.total}
                 </button>
               )}
               {canSeeUnassignedPatientsTab(user) && (
@@ -3552,7 +3570,7 @@ const PatientsPage = () => {
                   }`}
                   aria-current={patientType === 'unassigned' ? 'page' : undefined}
                 >
-                  Unassigned Patient
+                  {patientListTabLabels.unassigned}
                 </button>
               )}
             </div>
