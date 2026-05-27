@@ -28,6 +28,7 @@ import {
   canFillIntakeRecord,
   isJuniorResidentUser,
   isSeniorResidentUser,
+  isFacultyUser,
 } from '../../utils/constants';
 
 // listContext: 'new' = New Patients sub-tab (strip returning-patient-only actions); 'existing' = full actions
@@ -1132,22 +1133,31 @@ const ClinicalTodayPatients = () => {
       return true;
     }
     
-    // JR/SR: require today's room selection before any patient appears in the list
-    if (isJrSr(currentUser.role)) {
+    const doctorRoom =
+      effectiveRoomData?.data?.current_room?.trim?.() || effectiveRoomData?.data?.current_room;
+    const targetDate = toISTDateString(selectedDate || new Date());
+    const patientCreatedDate = p?.created_at ? toISTDateString(p.created_at) : '';
+    const patientUpdatedDate = p?.updated_at ? toISTDateString(p.updated_at) : '';
+    const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
+    const updatedToday = patientUpdatedDate && patientUpdatedDate === targetDate;
+    const patientRoom = p.assigned_room?.trim?.() || p.assigned_room;
+    const inMyRoom = doctorRoom && patientRoom && patientRoom === doctorRoom;
+
+    // Faculty: all patients in today's selected room (including PWO registrations for residents)
+    if (isFacultyUser(currentUser)) {
+      if (!doctorRoom) return false;
+      return (
+        inMyRoom &&
+        (createdToday || updatedToday || p.has_visit_today === true)
+      );
+    }
+
+    // Residents (JR/SR): require today's room selection before any patient appears in the list
+    if (currentUser.role === 'Resident') {
       const currentUserId = parseInt(currentUser.id, 10);
-      const doctorRoom = effectiveRoomData?.data?.current_room?.trim?.() || effectiveRoomData?.data?.current_room;
       if (!doctorRoom) {
         return false;
       }
-
-      const targetDate = toISTDateString(selectedDate || new Date());
-      const patientCreatedDate = p?.created_at ? toISTDateString(p.created_at) : '';
-      const patientUpdatedDate = p?.updated_at ? toISTDateString(p.updated_at) : '';
-      const createdToday = patientCreatedDate && patientCreatedDate === targetDate;
-      const updatedToday = patientUpdatedDate && patientUpdatedDate === targetDate;
-
-      const patientRoom = p.assigned_room?.trim?.() || p.assigned_room;
-      const inMyRoom = doctorRoom && patientRoom && patientRoom === doctorRoom;
 
       // Assigned to this doctor: show when in today's room or has a visit today
       if (p.assigned_doctor_id) {
@@ -1179,14 +1189,14 @@ const ClinicalTodayPatients = () => {
         return false;
       }
 
-      // Unassigned patients in my room today (e.g. before first doctor claims them)
-      if ((createdToday || updatedToday) && inMyRoom) {
+      // PWO-registered / unassigned patients in my room today (before or without doctor link)
+      if ((createdToday || updatedToday || p.has_visit_today === true) && inMyRoom) {
         if (!p.assigned_doctor_id) {
           return true;
         }
       }
 
-      // Otherwise, hide for doctors
+      // Otherwise, hide for residents
       return false;
     }
     

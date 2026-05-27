@@ -795,6 +795,62 @@ async function hasRoomToday(doctorId) {
 }
 
 /**
+ * Ensure an adult patient has a visit row for today (PWO registration / room queue).
+ * Idempotent: skips insert if a visit already exists for today.
+ */
+async function ensurePatientTodayVisit(patientId, roomNumber, assignedDoctorId = null) {
+  if (!patientId || !roomNumber || String(roomNumber).trim() === '') {
+    return { created: false, reason: 'missing_patient_or_room' };
+  }
+
+  const room = String(roomNumber).trim();
+  const todayResult = await db.query('SELECT CURRENT_DATE as today');
+  const todayDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+
+  const visitCheck = await db.query(
+    `SELECT id, assigned_doctor_id FROM patient_visits WHERE patient_id = $1 AND DATE(visit_date) = $2::date`,
+    [patientId, todayDate]
+  );
+
+  if (visitCheck.rows.length > 0) {
+    if (assignedDoctorId) {
+      await db.query(
+        `UPDATE patient_visits
+         SET assigned_doctor_id = COALESCE(assigned_doctor_id, $1),
+             room_no = COALESCE(NULLIF(TRIM(COALESCE(room_no::text, '')), ''), $2),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE patient_id = $3 AND DATE(visit_date) = $4::date`,
+        [assignedDoctorId, room, patientId, todayDate]
+      );
+    }
+    return { created: false, exists: true };
+  }
+
+  const visitCountResult = await db.query(
+    `SELECT COUNT(*) as count FROM patient_visits WHERE patient_id = $1`,
+    [patientId]
+  );
+  const visitCount = parseInt(visitCountResult.rows[0]?.count || 0, 10);
+  const visitType = visitCount === 0 ? 'first_visit' : 'follow_up';
+
+  await db.query(
+    `INSERT INTO patient_visits
+     (patient_id, visit_date, visit_type, has_file, assigned_doctor_id, room_no, visit_status, notes)
+     VALUES ($1, $2, $3, false, $4, $5, 'scheduled', $6)`,
+    [
+      patientId,
+      todayDate,
+      visitType,
+      assignedDoctorId,
+      room,
+      'Registered for today\'s clinic',
+    ]
+  );
+
+  return { created: true };
+}
+
+/**
  * When PWO registers a patient to a room that already has a doctor today,
  * assign the patient (and today's visit) to the first doctor in that room.
  * Mirrors the bulk assign in selectRoom but for a single new registration.
@@ -1127,6 +1183,7 @@ module.exports = {
   getTodayRoomDistribution,
   // autoAssignRoom - DEPRECATED: Room selection is now mandatory, no auto-assignment
   assignPatientsToDoctor,
+  ensurePatientTodayVisit,
   assignNewPatientToRoomDoctor,
   assignPatientToDoctorById,
   assignChildPatientToDoctorById,

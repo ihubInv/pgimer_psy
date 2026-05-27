@@ -102,13 +102,17 @@ class PatientController {
         [doctorId]
       );
       const roomRow = roomRes.rows[0];
-      if (roomRow?.current_room && roomRow?.room_assignment_time) {
+      if (roomRow?.current_room) {
         const todayRes = await db.query('SELECT CURRENT_DATE AS today');
-        const assignedTodayRes = await db.query(
-          `SELECT DATE(($1::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') = $2::date AS ok`,
-          [roomRow.room_assignment_time, todayRes.rows[0].today]
-        );
-        if (assignedTodayRes.rows[0]?.ok) {
+        let isAssignedToday = true;
+        if (roomRow.room_assignment_time) {
+          const assignedTodayRes = await db.query(
+            'SELECT DATE($1::timestamp) = $2::date AS ok',
+            [roomRow.room_assignment_time, todayRes.rows[0].today]
+          );
+          isAssignedToday = assignedTodayRes.rows[0]?.ok === true;
+        }
+        if (isAssignedToday) {
           doctorRoom = roomRow.current_room;
         }
       }
@@ -620,11 +624,13 @@ class PatientController {
       
       const patient = await Patient.create(patientData);
 
-      // If a doctor already selected this room today, link the new patient to them immediately
-      // (PWO registration after room selection — assignPatientsToDoctor only runs on selectRoom)
+      // Today's visit + optional link to doctor already in the selected room
       if (patientData.assigned_room && patient?.id) {
         try {
-          const { assignNewPatientToRoomDoctor } = require('../utils/roomAssignment');
+          const {
+            assignNewPatientToRoomDoctor,
+            ensurePatientTodayVisit,
+          } = require('../utils/roomAssignment');
           const linkResult = await assignNewPatientToRoomDoctor(patient.id, patientData.assigned_room);
           if (linkResult.assigned) {
             patient.assigned_doctor_id = linkResult.doctor_id;
@@ -632,9 +638,20 @@ class PatientController {
             console.log(
               `[patientController] Linked new patient ${patient.id} to room doctor ${linkResult.doctor_id}`
             );
+          } else {
+            await ensurePatientTodayVisit(patient.id, patientData.assigned_room, null);
+            console.log(
+              `[patientController] Created today's visit for patient ${patient.id} in room ${patientData.assigned_room} (no doctor in room yet)`
+            );
           }
         } catch (linkErr) {
-          console.error('[patientController] Room doctor link failed (non-fatal):', linkErr.message);
+          console.error('[patientController] Room/visit setup failed (non-fatal):', linkErr.message);
+          try {
+            const { ensurePatientTodayVisit } = require('../utils/roomAssignment');
+            await ensurePatientTodayVisit(patient.id, patientData.assigned_room, null);
+          } catch (visitErr) {
+            console.error('[patientController] ensurePatientTodayVisit failed:', visitErr.message);
+          }
         }
       }
       
