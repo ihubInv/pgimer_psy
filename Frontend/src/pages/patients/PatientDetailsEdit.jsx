@@ -6,7 +6,7 @@ import {
   FiCalendar, FiGlobe, FiFileText,  FiClock,
   FiHeart, FiBookOpen, FiTrendingUp, FiShield,
   FiNavigation, FiEdit3, FiSave, FiX, FiLayers, 
-  FiFolder, FiChevronDown, FiChevronUp, FiPackage, FiHash ,  FiPrinter, FiClipboard, FiEye, FiPlus, FiRefreshCw
+  FiFolder, FiChevronDown, FiChevronUp, FiPackage, FiHash, FiClipboard, FiEye, FiPlus, FiRefreshCw
 } from 'react-icons/fi';
 import { useUpdatePatientMutation, useGetPatientVisitHistoryQuery, useGetPatientFilesQuery } from '../../features/patients/patientsApiSlice';
 import { useSelector } from 'react-redux';
@@ -3559,21 +3559,6 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {!isEdit && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePrintPatientDetails();
-                }}
-                className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Print Patient Details"
-              >
-                <FiPrinter className="w-4 h-4 text-blue-600" />
-              </Button>
-            )}
             <div 
               className="cursor-pointer"
               onClick={() => toggleCard('patient')}
@@ -5065,21 +5050,6 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {!isEdit && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePrintADL();
-                  }}
-                  className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                  title="Print Out-Patient Intake Record"
-                >
-                  <FiPrinter className="w-4 h-4 text-purple-600" />
-                </Button>
-              )}
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('adl')}
@@ -5157,21 +5127,6 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {!isEdit && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePrintPrescription();
-                  }}
-                  className="h-9 w-9 p-0 bg-gradient-to-r from-amber-50 to-yellow-50 hover:from-amber-100 hover:to-yellow-100 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                  title="Print Prescription"
-                >
-                  <FiPrinter className="w-4 h-4 text-amber-600" />
-                </Button>
-              )}
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('prescriptions')}
@@ -5788,19 +5743,6 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handlePrintVisit(visit.visitId, visitDate);
-                                        }}
-                                        className="h-8 w-8 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                                        title={`Print Visit - ${visitDate}`}
-                                      >
-                                        <FiPrinter className="w-3.5 h-3.5 text-purple-600" />
-                                      </Button>
                                       {isExpanded ? (
                                         <FiChevronUp className="h-6 w-6 text-gray-500" />
                                       ) : (

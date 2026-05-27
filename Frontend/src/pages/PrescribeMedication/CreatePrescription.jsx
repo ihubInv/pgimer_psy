@@ -13,7 +13,7 @@ import Card from '../../components/Card';
 import Button from '../../components/Button';
 import Select from '../../components/Select';
 import Modal from '../../components/Modal';
-import { FiPackage, FiUser, FiSave, FiX, FiPlus, FiTrash2, FiHome, FiUserCheck, FiCalendar, FiFileText, FiClock, FiPrinter, FiSearch, FiDroplet, FiActivity, FiBookmark, FiDownload, FiArrowLeft } from 'react-icons/fi';
+import { FiPackage, FiUser, FiSave, FiX, FiPlus, FiTrash2, FiHome, FiUserCheck, FiCalendar, FiFileText, FiClock, FiSearch, FiDroplet, FiActivity, FiBookmark, FiDownload, FiArrowLeft } from 'react-icons/fi';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import { 
   PRESCRIPTION_FORM,
@@ -45,7 +45,6 @@ const CreatePrescription = ({
   removePrescriptionRow: propRemovePrescriptionRow,
   clearAllPrescriptions: propClearAllPrescriptions,
   handleSave: propHandleSave,
-  handlePrint: propHandlePrint,
   formatDateFull: propFormatDateFull,
   formatDate: propFormatDate,
 } = {}) => {
@@ -1799,16 +1798,6 @@ const CreatePrescription = ({
                 </Button>
               </>
             )}
-            {/* Print button - Always show, even in embedded mode */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePrint}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border-0"
-            >
-              <FiPrinter className="w-4 h-4 mr-2" />
-              Print
-            </Button>
           </div>
         </Card>
       </div>

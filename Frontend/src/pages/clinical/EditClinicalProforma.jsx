@@ -33,7 +33,7 @@ import Input from '../../components/Input';
 import Select from '../../components/Select';
 import Textarea from '../../components/Textarea';
 import Button from '../../components/Button';
-import { FiArrowLeft, FiAlertCircle, FiSave, FiHeart, FiActivity, FiUser, FiClipboard, FiList, FiCheckSquare, FiFileText, FiX, FiPlus, FiChevronDown, FiChevronUp, FiCalendar, FiPrinter } from 'react-icons/fi';
+import { FiArrowLeft, FiAlertCircle, FiSave, FiHeart, FiActivity, FiUser, FiClipboard, FiList, FiCheckSquare, FiFileText, FiX, FiPlus, FiChevronDown, FiChevronUp, FiCalendar } from 'react-icons/fi';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
 import { useUpdatePrescriptionMutation,useGetAllPrescriptionQuery, useCreatePrescriptionMutation } from '../../features/prescriptions/prescriptionApiSlice';
 import PrescriptionEdit from '../PrescribeMedication/PrescriptionEdit';
@@ -1879,19 +1879,6 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePrintSection('Walk-in Clinical Proforma');
-                }}
-                className="h-9 w-9 p-0 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Print Walk-in Clinical Proforma"
-              >
-                <FiPrinter className="w-4 h-4 text-blue-600" />
-              </Button>
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('clinicalProforma')}

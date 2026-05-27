@@ -1,7 +1,7 @@
 import { Link, useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useRef, useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { FiEdit, FiTrash2, FiArrowLeft, FiPrinter, FiFileText, FiActivity } from 'react-icons/fi';
+import { FiEdit, FiTrash2, FiArrowLeft, FiFileText, FiActivity } from 'react-icons/fi';
 import {
   useDeleteClinicalProformaMutation,
   useGetClinicalProformaByIdQuery,
@@ -1420,18 +1420,6 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
         <>
           <Card 
             title="Complex Case - Additional Details"
-            actions={
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handlePrintADL}
-                className="h-8 w-8 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                title="Print Out-Patient Intake Record"
-              >
-                <FiPrinter className="w-4 h-4 text-purple-600" />
-              </Button>
-            }
             className="border-2 border-red-200 bg-red-50/30"
           >
             <div className="mb-4 flex items-center gap-2">

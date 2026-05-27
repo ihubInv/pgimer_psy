@@ -12,7 +12,7 @@ import Textarea from '../../components/Textarea';
 import Button from '../../components/Button';
 import DatePicker from '../../components/CustomDatePicker';
 import { IconInput } from '../../components/IconInput';
-import { FiArrowLeft, FiSave, FiUser, FiCalendar, FiClock, FiEdit3, FiClipboard, FiPrinter, FiChevronDown, FiChevronUp, FiAlertCircle, FiFileText } from 'react-icons/fi';
+import { FiArrowLeft, FiSave, FiUser, FiCalendar, FiClock, FiEdit3, FiClipboard, FiChevronDown, FiChevronUp, FiAlertCircle, FiFileText } from 'react-icons/fi';
 import FileUpload from '../../components/FileUpload';
 import FilePreview from '../../components/FilePreview';
 import { useUpdateChildPatientDocumentsMutation } from '../../features/patients/patientsApiSlice';
@@ -943,14 +943,6 @@ const EditChildClinicalProforma = ({
                     <FiAlertCircle className="w-3 h-3" /> View Mode
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={() => handlePrintSection('Child Clinical Proforma')}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm"
-                >
-                  <FiPrinter className="w-4 h-4" />
-                  <span className="hidden sm:inline">Print</span>
-                </button>
                 {isViewMode && proformaRecordId && (
                   <button
                     type="button"

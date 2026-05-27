@@ -16,7 +16,7 @@ import {
   FiCalendar, FiGlobe, FiFileText, FiHash, FiClock,
   FiHeart, FiBookOpen, FiTrendingUp, FiShield,
   FiNavigation, FiSave, FiX, FiLayers, 
-  FiFolder, FiChevronDown, FiChevronUp, FiPackage,  FiDownload, FiPrinter, FiEye
+  FiFolder, FiChevronDown, FiChevronUp, FiPackage, FiDownload, FiEye
 } from 'react-icons/fi';
 import Button from '../../components/Button';
 import { toast } from 'react-toastify';

@@ -4,7 +4,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
   FiPlus, FiSearch, FiTrash2, FiEye,  FiEdit, FiUsers, 
-   FiDownload, FiPrinter,
+   FiDownload,
   FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle, FiClipboard
 } from 'react-icons/fi';
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
@@ -3162,17 +3162,6 @@ const PatientsPage = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handlePrint(patientId)}
-              className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-              title="Print Patient Details"
-            >
-              <FiPrinter className="w-4 h-4 text-purple-600" />
-            </Button>
-          )}
-          {!isReferredTab && (
-            <Button
-              variant="ghost"
-              size="sm"
               onClick={() => handleExport(patientId)}
               className="h-9 w-9 p-0 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
               title="Export Patient"
@@ -3216,7 +3205,6 @@ const PatientsPage = () => {
       handleView,
       handleViewReferred,
       handleEdit,
-      handlePrint,
       handleExport,
       handleCompleteReferral,
       handleReferredClinicalProforma,

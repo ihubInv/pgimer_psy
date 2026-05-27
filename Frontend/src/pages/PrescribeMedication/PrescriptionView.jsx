@@ -8,7 +8,7 @@ import { useGetClinicalProformaByIdQuery } from '../../features/clinical/clinica
 import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
-import { FiPackage, FiUser, FiEdit, FiPrinter, FiFileText, FiArrowLeft, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { FiPackage, FiUser, FiEdit, FiFileText, FiArrowLeft, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { isAdmin, isJrSr } from '../../utils/constants';
 
