@@ -1277,11 +1277,6 @@ const ClinicalTodayPatients = () => {
   const adminRoomGroups = useMemo(() => {
     if (!isAdminUser) return [];
 
-    const activeRoomNumbers = (allRoomsData?.data?.rooms || [])
-      .filter((room) => room.is_active)
-      .map((room) => String(room.room_number).trim())
-      .filter(Boolean);
-
     const groupsMap = new Map();
 
     const buildGroupMeta = (roomKey) => {
@@ -1329,19 +1324,19 @@ const ClinicalTodayPatients = () => {
       return groupsMap.get(roomKey);
     };
 
-    activeRoomNumbers.forEach((room) => ensureGroup(room));
-
     filteredPatients.forEach((patient) => {
       const roomRaw = patient?.assigned_room?.trim?.() || patient?.assigned_room || '';
       const roomKey = roomRaw ? String(roomRaw).trim() : UNASSIGNED_ROOM_KEY;
       ensureGroup(roomKey).patients.push(patient);
     });
 
-    return [...groupsMap.values()].sort((a, b) => {
-      if (a.roomKey === UNASSIGNED_ROOM_KEY) return 1;
-      if (b.roomKey === UNASSIGNED_ROOM_KEY) return -1;
-      return a.roomLabel.localeCompare(b.roomLabel, undefined, { numeric: true });
-    });
+    return [...groupsMap.values()]
+      .filter((group) => group.patients.length > 0)
+      .sort((a, b) => {
+        if (a.roomKey === UNASSIGNED_ROOM_KEY) return 1;
+        if (b.roomKey === UNASSIGNED_ROOM_KEY) return -1;
+        return a.roomLabel.localeCompare(b.roomLabel, undefined, { numeric: true });
+      });
   }, [
     isAdminUser,
     filteredPatients,
@@ -1792,28 +1787,20 @@ const ClinicalTodayPatients = () => {
                     {!isCollapsed && (
                       <div
                         id={`admin-room-panel-${group.roomKey}`}
-                        className="p-3 sm:p-4"
+                        className="p-3 sm:p-4 space-y-3"
                       >
-                        {group.patients.length === 0 ? (
-                          <p className="text-sm text-gray-500 text-center py-6">
-                            No patients in this room today.
-                          </p>
-                        ) : (
-                          <div className="space-y-3">
-                            {group.patients.map((patient) => (
-                              <PatientRow
-                                key={`${group.roomKey}-${patient.id}`}
-                                patient={patient}
-                                listContext={isNewPatientBasic(patient) ? 'new' : 'existing'}
-                                navigate={navigate}
-                                onMarkCompleted={handleMarkCompleted}
-                                onRoomChanged={handleMarkCompleted}
-                                availableRooms={activeRoomsList}
-                                sharedRoomContext={null}
-                              />
-                            ))}
-                          </div>
-                        )}
+                        {group.patients.map((patient) => (
+                          <PatientRow
+                            key={`${group.roomKey}-${patient.id}`}
+                            patient={patient}
+                            listContext={isNewPatientBasic(patient) ? 'new' : 'existing'}
+                            navigate={navigate}
+                            onMarkCompleted={handleMarkCompleted}
+                            onRoomChanged={handleMarkCompleted}
+                            availableRooms={activeRoomsList}
+                            sharedRoomContext={null}
+                          />
+                        ))}
                       </div>
                     )}
                   </section>
@@ -1846,10 +1833,8 @@ const ClinicalTodayPatients = () => {
                   <>
                     <span className="font-semibold text-gray-900">{filteredPatients.length}</span> patient
                     {filteredPatients.length !== 1 ? 's' : ''} today across{' '}
-                    <span className="font-semibold text-gray-900">
-                      {adminRoomGroups.filter((g) => g.patients.length > 0).length}
-                    </span>{' '}
-                    room{adminRoomGroups.filter((g) => g.patients.length > 0).length !== 1 ? 's' : ''}
+                    <span className="font-semibold text-gray-900">{adminRoomGroups.length}</span>{' '}
+                    room{adminRoomGroups.length !== 1 ? 's' : ''}
                     <span className="ml-3 text-blue-600 font-semibold">{newSubTabPatients.length} new</span>
                     <span className="mx-1 text-gray-400">/</span>
                     <span className="text-green-600 font-semibold">{existingSubTabPatients.length} existing</span>
