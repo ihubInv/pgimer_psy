@@ -273,6 +273,22 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         'Patient', // Invalidate all patient queries to refresh both doctors' lists
       ],
     }),
+    transferPatientToDoctor: builder.mutation({
+      query: ({ patient_id, target_doctor_id, patient_type }) => ({
+        url: `/patients/${patient_id}/transfer`,
+        method: 'POST',
+        body: {
+          target_doctor_id,
+          ...(patient_type ? { patient_type } : {}),
+        },
+      }),
+      invalidatesTags: (result, error, { patient_id }) => [
+        { type: 'Patient', id: patient_id },
+        { type: 'Patient', id: 'LIST' },
+        { type: 'PatientVisit', id: patient_id },
+        'Patient',
+      ],
+    }),
     addPatientToMyList: builder.mutation({
       query: ({ patientId, patient_type }) => ({
         url: `/patients/${patientId}/add-to-my-list`,
@@ -502,6 +518,7 @@ export const {
   useGetPatientVisitHistoryQuery,
   useMarkVisitCompletedMutation,
   useChangePatientRoomMutation,
+  useTransferPatientToDoctorMutation,
   useAddPatientToMyListMutation,
   useUploadPatientFilesMutation,
   useGetPatientFilesQuery,

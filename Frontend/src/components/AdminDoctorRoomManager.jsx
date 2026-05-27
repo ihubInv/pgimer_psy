@@ -281,8 +281,8 @@ const AdminDoctorRoomManager = ({ refetch, refetchRooms }) => {
             </div>
 
             <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-xs text-gray-600">
-              First doctor in a room receives today&apos;s patients. Shared rooms (capacity 2+) allow multiple
-              doctors without reassigning patients.
+              First doctor in a shared room receives today&apos;s patients. Other doctors join with an empty
+              list until the first doctor transfers patients to them.
             </div>
           </aside>
         </>

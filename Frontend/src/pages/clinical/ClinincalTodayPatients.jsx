@@ -5,7 +5,7 @@ import {
   FiUser, FiPhone,  FiClock, FiEye,
   FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus, FiClipboard, FiRepeat, FiX
 } from 'react-icons/fi';
-import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useChangePatientRoomMutation, patientsApiSlice } from '../../features/patients/patientsApiSlice';
+import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useChangePatientRoomMutation, useTransferPatientToDoctorMutation, patientsApiSlice } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
 import { useGetChildClinicalProformasByChildPatientIdQuery } from '../../features/clinical/childClinicalApiSlice';
 import { useGetMyRoomQuery, useGetAvailableRoomsQuery, useSelectRoomMutation, useClearRoomMutation, roomsApiSlice, useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
@@ -30,10 +30,21 @@ import {
 } from '../../utils/constants';
 
 // listContext: 'new' = New Patients sub-tab (strip returning-patient-only actions); 'existing' = full actions
-const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availableRooms = [], listContext = 'existing' }) => {
+const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availableRooms = [], listContext = 'existing', sharedRoomContext = null }) => {
   const currentUser = useSelector(selectCurrentUser);
   const mayFillClinicalProforma = canFillClinicalProforma(currentUser);
   const mayFillIntakeRecord = canFillIntakeRecord(currentUser);
+
+  const currentUserIdParsed = currentUser?.id ? parseInt(currentUser.id, 10) : null;
+  const patientDoctorId =
+    patient?.assigned_doctor_id != null ? parseInt(patient.assigned_doctor_id, 10) : null;
+  const ownsPatient =
+    currentUserIdParsed != null &&
+    patientDoctorId != null &&
+    !isNaN(patientDoctorId) &&
+    patientDoctorId === currentUserIdParsed;
+  const canShowTransferOnPatient = Boolean(sharedRoomContext?.room && ownsPatient);
+  const canTransferActive = canShowTransferOnPatient && sharedRoomContext?.hasColleagues;
 
   // Get patient ID safely - use 0 if invalid to satisfy hook rules (skip will prevent API call)
   const patientId = patient?.id || 0;
@@ -42,9 +53,14 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
   // ALL HOOKS MUST BE CALLED UNCONDITIONALLY - React rules of hooks
   const [markCompleted, { isLoading: isMarkingCompleted }] = useMarkVisitCompletedMutation();
   const [changeRoom, { isLoading: isChangingRoom }] = useChangePatientRoomMutation();
+  const [transferPatient, { isLoading: isTransferringPatient }] = useTransferPatientToDoctorMutation();
   const [showRoomDropdown, setShowRoomDropdown] = useState(false);
   const [selectedNewRoom, setSelectedNewRoom] = useState('');
   const roomDropdownRef = useRef(null);
+
+  const [showTransferDropdown, setShowTransferDropdown] = useState(false);
+  const [selectedTransferDoctorId, setSelectedTransferDoctorId] = useState('');
+  const transferDropdownRef = useRef(null);
   
   // Check if patient is a child patient
   const isChildPatient = patient?.patient_type === 'child';
@@ -76,6 +92,9 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
       if (roomDropdownRef.current && !roomDropdownRef.current.contains(event.target)) {
         setShowRoomDropdown(false);
       }
+      if (transferDropdownRef.current && !transferDropdownRef.current.contains(event.target)) {
+        setShowTransferDropdown(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -106,6 +125,34 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
     } catch (error) {
       console.error('Failed to change room:', error);
       toast.error(error?.data?.message || 'Failed to change patient room');
+    }
+  };
+
+  const handleTransferPatient = async () => {
+    if (!canTransferActive) {
+      toast.error('Transfer is only available when another doctor is in your shared room');
+      return;
+    }
+    if (!selectedTransferDoctorId) {
+      toast.warning('Please select a doctor');
+      return;
+    }
+
+    try {
+      const targetId = parseInt(selectedTransferDoctorId, 10);
+      const result = await transferPatient({
+        patient_id: patient.id,
+        target_doctor_id: targetId,
+        patient_type: isChildPatient ? 'child' : 'adult',
+      }).unwrap();
+
+      toast.success(result.message || 'Patient transferred successfully');
+      setShowTransferDropdown(false);
+      setSelectedTransferDoctorId('');
+      onRoomChanged?.(); // refresh list
+    } catch (error) {
+      console.error('Failed to transfer patient:', error);
+      toast.error(error?.data?.message || 'Failed to transfer patient');
     }
   };
   
@@ -464,14 +511,12 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
             </Button>
             )}
             
-            {/* Prescription Button — full width on Existing Patients tab (matches Change Room / Mark as Completed) */}
+            {/* Prescription Button — full width (matches Change Room / Mark as Completed) */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => navigate(`/prescriptions/create?patient_id=${patient.id}`)}
-              className={`flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100 hover:border-teal-400 transition-all hover:shadow-sm ${
-                listContext === 'existing' ? 'col-span-2 w-full' : ''
-              }`}
+              className="col-span-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100 hover:border-teal-400 transition-all hover:shadow-sm"
             >
               <FiPlusCircle className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">Prescription</span>
@@ -529,6 +574,74 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
                       ⚠️ Patient will be moved to the new room and assigned to the doctor in that room (if any).
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Transfer within shared room — only on patients assigned to you */}
+            {canShowTransferOnPatient && (
+              <div className="relative col-span-2" ref={transferDropdownRef}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (canTransferActive) {
+                      setShowTransferDropdown(!showTransferDropdown);
+                    }
+                  }}
+                  disabled={!canTransferActive}
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-sky-50 border-sky-300 text-sky-700 hover:bg-sky-100 hover:border-sky-400 transition-all hover:shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <FiUsers className="w-3.5 h-3.5" />
+                  <span className="whitespace-nowrap">Share patient to Dr…</span>
+                </Button>
+
+                {!canTransferActive && (
+                  <p className="text-xs text-amber-700 mt-1 px-1">
+                    Waiting for another doctor to join {sharedRoomContext.room} today before you can transfer.
+                  </p>
+                )}
+
+                {showTransferDropdown && canTransferActive && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+                    <h5 className="text-sm font-semibold text-gray-700 mb-2">
+                      Transfer patient to another doctor in {sharedRoomContext.room}
+                    </h5>
+                    <select
+                      value={selectedTransferDoctorId}
+                      onChange={(e) => setSelectedTransferDoctorId(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 mb-2"
+                      disabled={isTransferringPatient}
+                    >
+                      <option value="">Select doctor...</option>
+                      {sharedRoomContext.doctors.map((doc) => (
+                        <option key={doc.doctor_id} value={String(doc.doctor_id)}>
+                          Dr. {doc.doctor_name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleTransferPatient}
+                        disabled={!selectedTransferDoctorId || isTransferringPatient}
+                        className="flex-1 px-3 py-1.5 text-sm bg-sky-600 text-white rounded-md hover:bg-sky-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isTransferringPatient ? 'Transferring...' : 'Transfer'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowTransferDropdown(false);
+                          setSelectedTransferDoctorId('');
+                        }}
+                        className="px-3 py-1.5 text-sm bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Target doctor must be sitting in the same shared room today.
                     </p>
                   </div>
                 )}
@@ -831,6 +944,38 @@ const ClinicalTodayPatients = () => {
   const rooms = roomsData?.data?.rooms || []; // ALL rooms (including occupied)
   const distribution = roomsData?.data?.distribution_today || {}; // Use today's distribution only
   const occupiedRooms = roomsData?.data?.occupied_rooms || {};
+  const doctorRoom = effectiveRoomData?.data?.current_room?.trim?.() || effectiveRoomData?.data?.current_room || null;
+  const activeRoomsList = (allRoomsData?.data?.rooms || []).filter((room) => room.is_active);
+  const roomMeta = doctorRoom
+    ? activeRoomsList.find((r) => String(r.room_number).trim() === String(doctorRoom).trim())
+    : null;
+
+  const getOccupiedInfoForRoom = (roomNumber) => {
+    if (!roomNumber) return null;
+    const trimmed = String(roomNumber).trim();
+    if (occupiedRooms[trimmed]) return occupiedRooms[trimmed];
+    const matchKey = Object.keys(occupiedRooms).find((k) => String(k).trim() === trimmed);
+    return matchKey ? occupiedRooms[matchKey] : null;
+  };
+
+  const myRoomInfo = getOccupiedInfoForRoom(doctorRoom);
+  const myRoomCapacity = parseInt(myRoomInfo?.capacity ?? roomMeta?.doctor_capacity ?? 1, 10);
+  const myRoomDoctorsRaw =
+    myRoomInfo?.doctors ??
+    (myRoomInfo ? [{ doctor_id: myRoomInfo.doctor_id, doctor_name: myRoomInfo.doctor_name }] : []);
+  const myRoomOtherDoctors = Array.isArray(myRoomDoctorsRaw)
+    ? myRoomDoctorsRaw.filter(
+        (d) => d?.doctor_id != null && parseInt(d.doctor_id, 10) !== currentUserId
+      )
+    : [];
+  const isSharedRoom = Boolean(doctorRoom && myRoomCapacity > 1);
+  const sharedRoomContext = isSharedRoom
+    ? {
+        room: doctorRoom,
+        doctors: myRoomOtherDoctors,
+        hasColleagues: myRoomOtherDoctors.length > 0,
+      }
+    : null;
 
   // Build a room option label for a room that may have 1 or many doctors.
   // occupiedRooms[room] shape: { capacity, doctors: [{doctor_id, doctor_name}], slots_remaining, doctor_id, doctor_name }
@@ -1018,31 +1163,23 @@ const ClinicalTodayPatients = () => {
         }
       }
 
-      // Shared-room exception: if I am in a shared room (capacity > 1) and this patient is in my
-      // room today and assigned to a colleague, still show the patient (shared consultation queue).
-      if (inMyRoom && p.assigned_doctor_id && parseInt(p.assigned_doctor_id, 10) !== currentUserId) {
-        const roomInfo = occupiedRooms[doctorRoom];
-        const isSharedRoom = roomInfo
-          ? (roomInfo.capacity > 1 || (roomInfo.doctors && roomInfo.doctors.length > 1))
-          : false;
-        if (isSharedRoom && (createdToday || updatedToday)) {
-          return true;
+      // Patient assigned to another doctor in this room — hide (shared room uses transfer, not shared queue)
+      if (p.assigned_doctor_id) {
+        const patientDoctorId = parseInt(p.assigned_doctor_id, 10);
+        if (!isNaN(patientDoctorId) && patientDoctorId !== currentUserId) {
+          return false;
         }
-        // Solo room: patient belongs to another doctor — hide
-        return false;
       }
 
-      // If patient is assigned to another doctor (and above shared-room check didn't apply), hide
       if (p.assigned_doctor_name && p.assigned_doctor_role && p.assigned_doctor_id && parseInt(p.assigned_doctor_id, 10) !== currentUserId) {
         return false;
       }
 
-      // Fallback visibility rule for NEW patients:
-      // Show patients created today in the current doctor's room even if not yet assigned to a doctor.
-      // ALSO show existing patients (updated today) in the current doctor's room
-      // Show if: (created today OR updated today) AND in my room
+      // Unassigned patients in my room today (e.g. before first doctor claims them)
       if ((createdToday || updatedToday) && inMyRoom) {
-        return true;
+        if (!p.assigned_doctor_id) {
+          return true;
+        }
       }
 
       // Otherwise, hide for doctors
@@ -1384,7 +1521,7 @@ const ClinicalTodayPatients = () => {
                     
                     <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="text-xs text-blue-800">
-                        <strong>Note:</strong> Rooms with a capacity of 1 can only be selected by one doctor. Shared rooms (capacity 2+) allow multiple doctors and show all today's patients in that room to everyone assigned to it.
+                        <strong>Note:</strong> Rooms with a capacity of 1 can only be selected by one doctor. In shared rooms (capacity 2+), the first doctor to select the room receives today's patients; other doctors join with an empty list until patients are transferred to them.
                         Any patients already tied to an empty room for today will be assigned to you when you confirm.
                       </p>
                     </div>
@@ -1452,6 +1589,7 @@ const ClinicalTodayPatients = () => {
                   onMarkCompleted={handleMarkCompleted}
                   onRoomChanged={handleMarkCompleted}
                   availableRooms={(allRoomsData?.data?.rooms || []).filter(room => room.is_active)}
+                  sharedRoomContext={sharedRoomContext}
                 />
               ))}
             </div>

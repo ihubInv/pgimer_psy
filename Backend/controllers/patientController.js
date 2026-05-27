@@ -3085,6 +3085,237 @@ class PatientController {
     }
   }
 
+  /**
+   * Transfer (reassign) a patient to another doctor, but only within the same shared room today.
+   *
+   * This is intended for shared consultation rooms where multiple doctors sit together.
+   * It updates:
+   * - adult: registered_patient.assigned_doctor_id/name + today's patient_visits.assigned_doctor_id
+   * - child: followup_visits.assigned_doctor_id + (keeps assigned_room; child table has no assigned_doctor_id)
+   *
+   * Requirements:
+   * - current user must have a room selected today
+   * - target doctor must be sitting in the SAME room today
+   * - that room must have doctor_capacity > 1 (shared room)
+   */
+  static async transferPatientToDoctor(req, res) {
+    try {
+      const patientIdInt = parseInt(req.params.id, 10);
+      if (isNaN(patientIdInt) || patientIdInt <= 0) {
+        return res.status(400).json({ success: false, message: 'Invalid patient ID' });
+      }
+
+      const allowedRoles = ['Admin', 'Faculty', 'Resident'];
+      if (!allowedRoles.includes(req.user?.role)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only doctors and administrators can transfer patients',
+        });
+      }
+
+      const isChild =
+        String(req.body?.patient_type || req.query?.patient_type || '').trim().toLowerCase() === 'child';
+
+      const targetDoctorId = parseInt(req.body?.target_doctor_id, 10);
+      if (isNaN(targetDoctorId) || targetDoctorId <= 0) {
+        return res.status(400).json({ success: false, message: 'Target doctor is required' });
+      }
+      if (targetDoctorId === req.user.id) {
+        return res.status(400).json({ success: false, message: 'Cannot transfer to yourself' });
+      }
+
+      const db = require('../config/database');
+      const todayResult = await db.query('SELECT CURRENT_DATE as today');
+      const todayDate = todayResult.rows[0]?.today || new Date().toISOString().slice(0, 10);
+
+      // Resolve current user's room for today
+      const roomRes = await db.query(
+        `SELECT current_room
+         FROM users
+         WHERE id = $1 AND current_room IS NOT NULL AND current_room != ''
+           AND DATE(room_assignment_time) = $2`,
+        [req.user.id, todayDate]
+      );
+      const myRoom = roomRes.rows[0]?.current_room ? String(roomRes.rows[0].current_room).trim() : null;
+      if (!myRoom) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please select a room for today before transferring patients.',
+          code: 'ROOM_REQUIRED',
+        });
+      }
+
+      // Ensure this room is shared (capacity > 1)
+      const capRes = await db.query(
+        `SELECT doctor_capacity FROM rooms WHERE room_number = $1 AND is_active = true LIMIT 1`,
+        [myRoom]
+      );
+      const cap = capRes.rows.length > 0 ? parseInt(capRes.rows[0].doctor_capacity, 10) : 1;
+      if (isNaN(cap) || cap <= 1) {
+        return res.status(409).json({
+          success: false,
+          message: `Room ${myRoom} is not a shared room. Transfers are only allowed in shared rooms.`,
+          code: 'NOT_SHARED_ROOM',
+        });
+      }
+
+      // Target doctor must be sitting in the same room today
+      const targetRes = await db.query(
+        `SELECT id, name, role, current_room
+         FROM users
+         WHERE id = $1 AND is_active = true
+           AND current_room IS NOT NULL AND current_room != ''
+           AND DATE(room_assignment_time) = $2`,
+        [targetDoctorId, todayDate]
+      );
+      const target = targetRes.rows[0] || null;
+      const targetRoom = target?.current_room ? String(target.current_room).trim() : null;
+      if (!target || !targetRoom) {
+        return res.status(404).json({ success: false, message: 'Target doctor not found in any room today' });
+      }
+      if (targetRoom !== myRoom) {
+        return res.status(409).json({
+          success: false,
+          message: `Target doctor is not sitting in your room (${myRoom}) today.`,
+          code: 'DIFFERENT_ROOM',
+        });
+      }
+
+      // Validate patient exists and is in the same room (adult: assigned_room, child: assigned_room)
+      if (isChild) {
+        const ChildPatientRegistration = require('../models/ChildPatientRegistration');
+        const child = await ChildPatientRegistration.findById(patientIdInt);
+        if (!child) {
+          return res.status(404).json({ success: false, message: 'Child patient not found' });
+        }
+        const childRoom = child.assigned_room ? String(child.assigned_room).trim() : '';
+        if (childRoom !== myRoom) {
+          return res.status(409).json({
+            success: false,
+            message: `This patient is not in your room (${myRoom}) today.`,
+            code: 'PATIENT_NOT_IN_ROOM',
+          });
+        }
+
+        const childVisitRes = await db.query(
+          `SELECT id, assigned_doctor_id FROM followup_visits
+           WHERE child_patient_id = $1 AND DATE(visit_date) = $2::date
+           ORDER BY id DESC LIMIT 1`,
+          [patientIdInt, todayDate]
+        );
+        const childAssignedDoctorId = childVisitRes.rows[0]?.assigned_doctor_id;
+        if (childAssignedDoctorId != null && parseInt(childAssignedDoctorId, 10) !== req.user.id) {
+          return res.status(403).json({
+            success: false,
+            message: 'You can only transfer patients currently assigned to you.',
+            code: 'NOT_YOUR_PATIENT',
+          });
+        }
+
+        if (childVisitRes.rows.length > 0) {
+          await db.query(
+            `UPDATE followup_visits
+             SET assigned_doctor_id = $1, filled_by = $1, room_no = $2, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $3`,
+            [targetDoctorId, myRoom, childVisitRes.rows[0].id]
+          );
+        } else {
+          await db.query(
+            `INSERT INTO followup_visits
+             (child_patient_id, visit_date, clinical_assessment, filled_by, assigned_doctor_id, room_no, visit_status)
+             VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')`,
+            [
+              patientIdInt,
+              todayDate,
+              `Transferred to ${target.name} in shared room ${myRoom}`,
+              targetDoctorId,
+              targetDoctorId,
+              myRoom,
+            ]
+          );
+        }
+
+        await db.query(
+          `UPDATE child_patient_registrations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [patientIdInt]
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: `Patient transferred to Dr. ${target.name}`,
+          data: {
+            patient_type: 'child',
+            patient_id: patientIdInt,
+            assigned_room: myRoom,
+            assigned_doctor_id: targetDoctorId,
+            assigned_doctor_name: target.name,
+            assigned_doctor_role: target.role,
+          },
+        });
+      }
+
+      // Adult
+      const patient = await Patient.findById(patientIdInt);
+      if (!patient) {
+        return res.status(404).json({ success: false, message: 'Patient not found' });
+      }
+      const patientRoom = patient.assigned_room ? String(patient.assigned_room).trim() : '';
+      if (patientRoom !== myRoom) {
+        return res.status(409).json({
+          success: false,
+          message: `This patient is not in your room (${myRoom}) today.`,
+          code: 'PATIENT_NOT_IN_ROOM',
+        });
+      }
+
+      if (patient.assigned_doctor_id != null && parseInt(patient.assigned_doctor_id, 10) !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only transfer patients currently assigned to you.',
+          code: 'NOT_YOUR_PATIENT',
+        });
+      }
+
+      await db.query(
+        `UPDATE registered_patient
+         SET assigned_doctor_id = $1,
+             assigned_doctor_name = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $3`,
+        [targetDoctorId, target.name, patientIdInt]
+      );
+
+      // Update today's visit if present
+      await db.query(
+        `UPDATE patient_visits
+         SET assigned_doctor_id = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE patient_id = $2 AND DATE(visit_date) = $3::date`,
+        [targetDoctorId, patientIdInt, todayDate]
+      );
+
+      const updated = await Patient.findById(patientIdInt);
+      return res.status(200).json({
+        success: true,
+        message: `Patient transferred to Dr. ${target.name}`,
+        data: {
+          patient_type: 'adult',
+          patient: updated ? updated.toJSON() : null,
+          assigned_doctor_id: targetDoctorId,
+          assigned_doctor_name: target.name,
+          assigned_doctor_role: target.role,
+          assigned_room: myRoom,
+        },
+      });
+    } catch (error) {
+      console.error('[transferPatientToDoctor] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to transfer patient',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+  }
+
   static _canReferPatients(user) {
     const role = user?.role;
     return role === 'Faculty' || role === 'Resident' || role === 'Admin';

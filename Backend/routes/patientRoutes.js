@@ -808,6 +808,14 @@ router.post(
   PatientController.referPatientToDoctor
 );
 
+router.post(
+  '/:id/transfer',
+  authenticateToken,
+  authorizeRoles('Admin', 'Faculty', 'Resident'),
+  validateId,
+  PatientController.transferPatientToDoctor
+);
+
 /**
  * @swagger
  * /api/patients/{id}:

@@ -1002,7 +1002,7 @@ class UserController {
         ? (assignedCount === 0
             ? 'No patients are listed in this room for today yet; you can still use it for walk-ins and new registrations.'
             : `${assignedCount} patient(s) assigned to you.`)
-        : `Joined shared room with ${existingDoctors.length} colleague(s). All today's patients in this room are visible to you.`;
+        : `Joined shared room with ${existingDoctors.length} colleague(s). Patients stay with the first doctor until they are transferred to you.`;
 
       res.json({
         success: true,
