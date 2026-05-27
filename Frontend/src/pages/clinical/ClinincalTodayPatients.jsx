@@ -677,7 +677,7 @@ const ClinicalTodayPatients = () => {
   const currentUser = useSelector(selectCurrentUser);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [collapsedAdminRooms, setCollapsedAdminRooms] = useState(() => new Set());
+  const [expandedAdminRooms, setExpandedAdminRooms] = useState(() => new Set());
   
   // Helper: get YYYY-MM-DD string in IST for any date-like input
   const toISTDateString = (dateInput) => {
@@ -1350,8 +1350,8 @@ const ClinicalTodayPatients = () => {
     occupiedRooms,
   ]);
 
-  const toggleAdminRoomCollapsed = useCallback((roomKey) => {
-    setCollapsedAdminRooms((prev) => {
+  const toggleAdminRoomExpanded = useCallback((roomKey) => {
+    setExpandedAdminRooms((prev) => {
       const next = new Set(prev);
       if (next.has(roomKey)) next.delete(roomKey);
       else next.add(roomKey);
@@ -1360,12 +1360,12 @@ const ClinicalTodayPatients = () => {
   }, []);
 
   const expandAllAdminRooms = useCallback(() => {
-    setCollapsedAdminRooms(new Set());
-  }, []);
+    setExpandedAdminRooms(new Set(adminRoomGroups.map((g) => g.roomKey)));
+  }, [adminRoomGroups]);
 
   const collapseAllAdminRooms = useCallback(() => {
-    setCollapsedAdminRooms(new Set(adminRoomGroups.map((g) => g.roomKey)));
-  }, [adminRoomGroups]);
+    setExpandedAdminRooms(new Set());
+  }, []);
 
   // Follow-up search must be available even when today's list is empty (e.g. after selecting a room, before first patient).
   const showExistingPatientButton =
@@ -1720,7 +1720,7 @@ const ClinicalTodayPatients = () => {
                   group.doctors.length > 0
                     ? group.doctors.map((d) => d.doctor_name).join(', ')
                     : 'No doctor assigned today';
-                const isCollapsed = collapsedAdminRooms.has(group.roomKey);
+                const isCollapsed = !expandedAdminRooms.has(group.roomKey);
 
                 return (
                   <section
@@ -1729,7 +1729,7 @@ const ClinicalTodayPatients = () => {
                   >
                     <button
                       type="button"
-                      onClick={() => toggleAdminRoomCollapsed(group.roomKey)}
+                      onClick={() => toggleAdminRoomExpanded(group.roomKey)}
                       className={`w-full px-4 py-3 sm:px-5 sm:py-4 bg-gradient-to-r from-slate-50 to-blue-50/40 text-left transition-colors hover:from-slate-100 hover:to-blue-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset ${
                         isCollapsed ? '' : 'border-b border-gray-200'
                       }`}
