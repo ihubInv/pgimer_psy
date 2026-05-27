@@ -3,7 +3,8 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   FiUser, FiPhone,  FiClock, FiEye,
-  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus, FiClipboard, FiRepeat, FiX
+  FiRefreshCw, FiPlusCircle, FiFileText, FiUsers,  FiShield, FiCheck, FiHome, FiUserPlus, FiClipboard, FiRepeat, FiX,
+  FiChevronDown, FiChevronUp, FiMaximize2, FiMinimize2
 } from 'react-icons/fi';
 import { useGetAllPatientsQuery, useMarkVisitCompletedMutation, useChangePatientRoomMutation, useTransferPatientToDoctorMutation, patientsApiSlice } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery } from '../../features/clinical/clinicalApiSlice';
@@ -676,6 +677,7 @@ const ClinicalTodayPatients = () => {
   const currentUser = useSelector(selectCurrentUser);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [collapsedAdminRooms, setCollapsedAdminRooms] = useState(() => new Set());
   
   // Helper: get YYYY-MM-DD string in IST for any date-like input
   const toISTDateString = (dateInput) => {
@@ -693,6 +695,7 @@ const ClinicalTodayPatients = () => {
   
   // Check if user is a doctor (Faculty, Admin, or Resident)
   const isDoctor = currentUser && (isAdmin(currentUser.role) || isJrSr(currentUser.role));
+  const isAdminUser = Boolean(currentUser && isAdmin(currentUser.role));
   
   // Get current room assignment - with polling to auto-refresh when new day starts
   const { data: myRoomData, isLoading: isLoadingRoom, refetch: refetchMyRoom } = useGetMyRoomQuery(undefined, {
@@ -1029,7 +1032,8 @@ const ClinicalTodayPatients = () => {
   // - Only for doctors (Admin/Faculty/Resident)
   // - Only when there are no patients in today's list yet
   //   (once patients appear, we hide the room selector to avoid duplicate context)
-  const showRoomSelectionCard = isDoctor && !isLoadingRoom && !effectiveRoomData?.data?.current_room;
+  const showRoomSelectionCard =
+    isDoctor && !isAdminUser && !isLoadingRoom && !effectiveRoomData?.data?.current_room;
 
   // Room selection: always use current date/time (field is read-only)
   useEffect(() => {
@@ -1268,6 +1272,101 @@ const ClinicalTodayPatients = () => {
   const patientsForActiveSubTab =
     activePatientListTab === 'existing' ? existingSubTabPatients : newSubTabPatients;
 
+  const UNASSIGNED_ROOM_KEY = '__unassigned__';
+
+  const adminRoomGroups = useMemo(() => {
+    if (!isAdminUser) return [];
+
+    const activeRoomNumbers = (allRoomsData?.data?.rooms || [])
+      .filter((room) => room.is_active)
+      .map((room) => String(room.room_number).trim())
+      .filter(Boolean);
+
+    const groupsMap = new Map();
+
+    const buildGroupMeta = (roomKey) => {
+      if (roomKey === UNASSIGNED_ROOM_KEY) {
+        return {
+          roomKey,
+          roomLabel: 'No room assigned',
+          capacity: 0,
+          isShared: false,
+          doctors: [],
+          slotsRemaining: null,
+        };
+      }
+      const info = getOccupiedInfoForRoom(roomKey);
+      const roomMetaRow = activeRoomsList.find(
+        (r) => String(r.room_number).trim() === roomKey
+      );
+      const capacity = parseInt(
+        info?.capacity ?? roomMetaRow?.doctor_capacity ?? 1,
+        10
+      );
+      const doctors =
+        info?.doctors?.length > 0
+          ? info.doctors
+          : info?.doctor_id
+            ? [{ doctor_id: info.doctor_id, doctor_name: info.doctor_name }]
+            : [];
+      return {
+        roomKey,
+        roomLabel: roomKey,
+        capacity,
+        isShared: capacity > 1,
+        doctors,
+        slotsRemaining: info?.slots_remaining ?? null,
+      };
+    };
+
+    const ensureGroup = (roomKey) => {
+      if (!groupsMap.has(roomKey)) {
+        groupsMap.set(roomKey, {
+          ...buildGroupMeta(roomKey),
+          patients: [],
+        });
+      }
+      return groupsMap.get(roomKey);
+    };
+
+    activeRoomNumbers.forEach((room) => ensureGroup(room));
+
+    filteredPatients.forEach((patient) => {
+      const roomRaw = patient?.assigned_room?.trim?.() || patient?.assigned_room || '';
+      const roomKey = roomRaw ? String(roomRaw).trim() : UNASSIGNED_ROOM_KEY;
+      ensureGroup(roomKey).patients.push(patient);
+    });
+
+    return [...groupsMap.values()].sort((a, b) => {
+      if (a.roomKey === UNASSIGNED_ROOM_KEY) return 1;
+      if (b.roomKey === UNASSIGNED_ROOM_KEY) return -1;
+      return a.roomLabel.localeCompare(b.roomLabel, undefined, { numeric: true });
+    });
+  }, [
+    isAdminUser,
+    filteredPatients,
+    allRoomsData,
+    activeRoomsList,
+    occupiedRooms,
+  ]);
+
+  const toggleAdminRoomCollapsed = useCallback((roomKey) => {
+    setCollapsedAdminRooms((prev) => {
+      const next = new Set(prev);
+      if (next.has(roomKey)) next.delete(roomKey);
+      else next.add(roomKey);
+      return next;
+    });
+  }, []);
+
+  const expandAllAdminRooms = useCallback(() => {
+    setCollapsedAdminRooms(new Set());
+  }, []);
+
+  const collapseAllAdminRooms = useCallback(() => {
+    setCollapsedAdminRooms(new Set(adminRoomGroups.map((g) => g.roomKey)));
+  }, [adminRoomGroups]);
+
   // Follow-up search must be available even when today's list is empty (e.g. after selecting a room, before first patient).
   const showExistingPatientButton =
     activePatientListTab === 'existing' &&
@@ -1335,7 +1434,9 @@ const ClinicalTodayPatients = () => {
                     <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
                       {showRoomSelectionCard
                         ? 'Select room below to see patients'
-                        : `Total ${filteredPatients.length}`}
+                        : isAdminUser
+                          ? `${filteredPatients.length} today · ${newSubTabPatients.length} new · ${existingSubTabPatients.length} existing`
+                          : `Total ${filteredPatients.length}`}
                     </span>
                     {isDoctor && effectiveRoomData?.data?.current_room && (
                       <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg border border-blue-200">
@@ -1344,6 +1445,12 @@ const ClinicalTodayPatients = () => {
                       </div>
                     )}
                   </div>
+                  {isAdminUser && (
+                    <p className="text-sm text-gray-600 max-w-3xl">
+                      Overview of every active room: doctors on duty today, shared vs single-doctor rooms,
+                      and all new and existing patients registered or seen today.
+                    </p>
+                  )}
                   {(isJuniorResidentUser(currentUser) || isSeniorResidentUser(currentUser)) && (
                     <p className="text-sm text-gray-600 max-w-3xl">
                       {isSeniorResidentUser(currentUser) ? (
@@ -1359,7 +1466,8 @@ const ClinicalTodayPatients = () => {
                       )}
                     </p>
                   )}
-                  {/* New vs Existing sub-tabs (underline style, matches Adult/Child Patients tabs) */}
+                  {/* New vs Existing sub-tabs — hidden for admin (room view shows both) */}
+                  {!isAdminUser && (
                   <div
                     className="flex gap-2 border-b border-gray-200 -mx-6 px-6"
                     role="tablist"
@@ -1412,6 +1520,7 @@ const ClinicalTodayPatients = () => {
                       </span>
                     </button>
                   </div>
+                  )}
                 </div>
                 {/* Add returning patient — Existing tab; doctors need today&apos;s room, MWO always */}
                 {showExistingPatientButton && (
@@ -1544,7 +1653,7 @@ const ClinicalTodayPatients = () => {
                 }
               </p>
             </div>
-          ) : !showRoomSelectionCard && patientsForActiveSubTab.length === 0 ? (
+          ) : !showRoomSelectionCard && !isAdminUser && patientsForActiveSubTab.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-4">
               <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-4">
                 <FiUsers className="w-10 h-10 text-gray-400" />
@@ -1578,6 +1687,139 @@ const ClinicalTodayPatients = () => {
                 </button>
               )}
             </div>
+          ) : !showRoomSelectionCard && isAdminUser ? (
+            <div className="p-4 sm:p-5 space-y-4" role="tabpanel" aria-label="Today patients by room">
+              {adminRoomGroups.length > 0 && (
+                <div className="flex flex-wrap items-center justify-end gap-2 pb-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={expandAllAdminRooms}
+                    className="text-xs"
+                  >
+                    <FiMaximize2 className="w-3.5 h-3.5 mr-1.5" />
+                    Expand all
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={collapseAllAdminRooms}
+                    className="text-xs"
+                  >
+                    <FiMinimize2 className="w-3.5 h-3.5 mr-1.5" />
+                    Collapse all
+                  </Button>
+                </div>
+              )}
+              {adminRoomGroups.map((group) => {
+                const newCount = group.patients.filter((p) => isNewPatientBasic(p)).length;
+                const existingCount = group.patients.length - newCount;
+                const doctorLabel =
+                  group.doctors.length > 0
+                    ? group.doctors.map((d) => d.doctor_name).join(', ')
+                    : 'No doctor assigned today';
+                const isCollapsed = collapsedAdminRooms.has(group.roomKey);
+
+                return (
+                  <section
+                    key={group.roomKey}
+                    className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleAdminRoomCollapsed(group.roomKey)}
+                      className={`w-full px-4 py-3 sm:px-5 sm:py-4 bg-gradient-to-r from-slate-50 to-blue-50/40 text-left transition-colors hover:from-slate-100 hover:to-blue-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset ${
+                        isCollapsed ? '' : 'border-b border-gray-200'
+                      }`}
+                      aria-expanded={!isCollapsed}
+                      aria-controls={`admin-room-panel-${group.roomKey}`}
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                            <FiHome className="w-5 h-5 text-blue-700" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-base font-bold text-gray-900">{group.roomLabel}</h4>
+                            <p className="text-sm text-gray-600 mt-0.5">
+                              <span className="font-medium">Doctor{group.doctors.length !== 1 ? 's' : ''}:</span>{' '}
+                              {doctorLabel}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 shrink-0 sm:pl-2">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                              group.isShared
+                                ? 'bg-violet-100 text-violet-800 border-violet-200'
+                                : 'bg-gray-100 text-gray-700 border-gray-200'
+                            }`}
+                          >
+                            {group.roomKey === UNASSIGNED_ROOM_KEY
+                              ? 'Unassigned'
+                              : group.isShared
+                                ? `Shared room (${group.capacity} doctors)`
+                                : 'Single doctor room'}
+                          </span>
+                          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-white border border-gray-200 text-gray-800">
+                            {group.patients.length} patient{group.patients.length !== 1 ? 's' : ''}
+                          </span>
+                          {newCount > 0 && (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                              {newCount} new
+                            </span>
+                          )}
+                          {existingCount > 0 && (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
+                              {existingCount} existing
+                            </span>
+                          )}
+                          <span
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 bg-white text-gray-600"
+                            aria-hidden
+                          >
+                            {isCollapsed ? (
+                              <FiChevronDown className="w-5 h-5" />
+                            ) : (
+                              <FiChevronUp className="w-5 h-5" />
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                    {!isCollapsed && (
+                      <div
+                        id={`admin-room-panel-${group.roomKey}`}
+                        className="p-3 sm:p-4"
+                      >
+                        {group.patients.length === 0 ? (
+                          <p className="text-sm text-gray-500 text-center py-6">
+                            No patients in this room today.
+                          </p>
+                        ) : (
+                          <div className="space-y-3">
+                            {group.patients.map((patient) => (
+                              <PatientRow
+                                key={`${group.roomKey}-${patient.id}`}
+                                patient={patient}
+                                listContext={isNewPatientBasic(patient) ? 'new' : 'existing'}
+                                navigate={navigate}
+                                onMarkCompleted={handleMarkCompleted}
+                                onRoomChanged={handleMarkCompleted}
+                                availableRooms={activeRoomsList}
+                                sharedRoomContext={null}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
           ) : !showRoomSelectionCard ? (
             <div className="p-4 sm:p-5 space-y-3" role="tabpanel">
               {patientsForActiveSubTab.map((patient) => (
@@ -1596,22 +1838,39 @@ const ClinicalTodayPatients = () => {
           ) : null}
 
           {/* Patient count info - reflects active sub-tab */}
-          {filteredPatients.length > 0 && patientsForActiveSubTab.length > 0 && (
+          {filteredPatients.length > 0 &&
+            (isAdminUser || patientsForActiveSubTab.length > 0) && (
             <div className="px-6 py-5 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-slate-50">
               <div className="text-sm text-gray-700 font-medium">
-                Showing{' '}
-                <span className="font-semibold text-gray-900">{patientsForActiveSubTab.length}</span> patient
-                {patientsForActiveSubTab.length !== 1 ? 's' : ''}{' '}
-                <span className="text-gray-500">
-                  ({activePatientListTab === 'new' ? 'New Patients' : 'Existing Patients'})
-                </span>
-                <span className="ml-3 text-gray-500">
-                  · Total today{' '}
-                  <span className="font-semibold text-gray-800">{filteredPatients.length}</span>
-                  <span className="text-blue-600 font-semibold ml-1">{newSubTabPatients.length} new</span>
-                  <span className="mx-1 text-gray-400">/</span>
-                  <span className="text-green-600 font-semibold">{existingSubTabPatients.length} existing</span>
-                </span>
+                {isAdminUser ? (
+                  <>
+                    <span className="font-semibold text-gray-900">{filteredPatients.length}</span> patient
+                    {filteredPatients.length !== 1 ? 's' : ''} today across{' '}
+                    <span className="font-semibold text-gray-900">
+                      {adminRoomGroups.filter((g) => g.patients.length > 0).length}
+                    </span>{' '}
+                    room{adminRoomGroups.filter((g) => g.patients.length > 0).length !== 1 ? 's' : ''}
+                    <span className="ml-3 text-blue-600 font-semibold">{newSubTabPatients.length} new</span>
+                    <span className="mx-1 text-gray-400">/</span>
+                    <span className="text-green-600 font-semibold">{existingSubTabPatients.length} existing</span>
+                  </>
+                ) : (
+                  <>
+                    Showing{' '}
+                    <span className="font-semibold text-gray-900">{patientsForActiveSubTab.length}</span> patient
+                    {patientsForActiveSubTab.length !== 1 ? 's' : ''}{' '}
+                    <span className="text-gray-500">
+                      ({activePatientListTab === 'new' ? 'New Patients' : 'Existing Patients'})
+                    </span>
+                    <span className="ml-3 text-gray-500">
+                      · Total today{' '}
+                      <span className="font-semibold text-gray-800">{filteredPatients.length}</span>
+                      <span className="text-blue-600 font-semibold ml-1">{newSubTabPatients.length} new</span>
+                      <span className="mx-1 text-gray-400">/</span>
+                      <span className="text-green-600 font-semibold">{existingSubTabPatients.length} existing</span>
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           )}
