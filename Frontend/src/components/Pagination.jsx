@@ -20,6 +20,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange, itemsPerPage, total
 
   return (
     <div className="flex items-center justify-between px-4 py-3 sm:px-6 border-t border-gray-200">
+      {totalPages > 1 && (
       <div className="flex-1 flex justify-between sm:hidden">
         <button
           onClick={() => onPageChange(currentPage - 1)}
@@ -36,7 +37,8 @@ const Pagination = ({ currentPage, totalPages, onPageChange, itemsPerPage, total
           Next
         </button>
       </div>
-      <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+      )}
+      <div className={`${totalPages > 1 ? 'hidden sm:flex sm:flex-1' : 'flex flex-1'} sm:items-center sm:justify-between`}>
         <div>
           <p className="text-sm text-gray-700">
             Showing <span className="font-medium">{startItem}</span> to{' '}
@@ -44,6 +46,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange, itemsPerPage, total
             <span className="font-medium">{totalItems}</span> results
           </p>
         </div>
+        {totalPages > 1 && (
         <div>
           <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
             <button
@@ -107,6 +110,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange, itemsPerPage, total
             </button>
           </nav>
         </div>
+        )}
       </div>
     </div>
   );

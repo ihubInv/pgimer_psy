@@ -421,6 +421,33 @@ class ChildPatientRegistration {
         idx++;
       }
 
+      if (filters.state) {
+        where.push(`COALESCE(cpr.state, '') = $${idx}`);
+        params.push(filters.state);
+        idx++;
+      }
+
+      if (filters.sex) {
+        where.push(`cpr.sex = $${idx}`);
+        params.push(filters.sex);
+        idx++;
+      }
+
+      if (filters.created_from) {
+        where.push(
+          `DATE((cpr.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') >= $${idx}::date`
+        );
+        params.push(filters.created_from);
+        idx++;
+      }
+      if (filters.created_to) {
+        where.push(
+          `DATE((cpr.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') <= $${idx}::date`
+        );
+        params.push(filters.created_to);
+        idx++;
+      }
+
       if (filters.unassigned_only) {
         where.push(`(
           NOT EXISTS (

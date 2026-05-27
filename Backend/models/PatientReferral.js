@@ -182,7 +182,15 @@ class PatientReferral {
     `;
   }
 
-  static async findForDoctor({ doctorId, view = 'referred_to_me', page = 1, limit = 10, search = null, statusFilter = null }) {
+  static async findForDoctor({
+    doctorId,
+    view = 'referred_to_me',
+    page = 1,
+    limit = 10,
+    search = null,
+    statusFilter = null,
+    listFilters = null,
+  }) {
     const offset = (page - 1) * limit;
     const params = [doctorId];
     let where = '';
@@ -200,6 +208,39 @@ class PatientReferral {
       where += ` AND pr.status = $${params.length}`;
     } else {
       where += ` AND pr.status IN ('pending', 'seen')`;
+    }
+
+    if (listFilters?.state) {
+      params.push(listFilters.state);
+      where += ` AND COALESCE(
+        CASE WHEN pr.patient_type = 'adult' THEN rp.state ELSE cpr.state END, ''
+      ) = $${params.length}`;
+    }
+
+    if (listFilters?.sex || listFilters?.childSex) {
+      const adultSex = listFilters.sex;
+      const childSex = listFilters.childSex;
+      if (adultSex === 'Other') {
+        where += ` AND (
+          (pr.patient_type = 'adult' AND (rp.sex NOT IN ('M','F') OR rp.sex IS NULL))
+          OR (pr.patient_type = 'child' AND cpr.sex = 'Other')
+        )`;
+      } else if (adultSex && childSex) {
+        params.push(adultSex, childSex);
+        where += ` AND (
+          (pr.patient_type = 'adult' AND rp.sex = $${params.length - 1})
+          OR (pr.patient_type = 'child' AND cpr.sex = $${params.length})
+        )`;
+      }
+    }
+
+    if (listFilters?.created_from) {
+      params.push(listFilters.created_from);
+      where += ` AND DATE(pr.referred_at AT TIME ZONE 'Asia/Kolkata') >= $${params.length}::date`;
+    }
+    if (listFilters?.created_to) {
+      params.push(listFilters.created_to);
+      where += ` AND DATE(pr.referred_at AT TIME ZONE 'Asia/Kolkata') <= $${params.length}::date`;
     }
 
     if (search && search.trim().length >= 2) {

@@ -26,6 +26,68 @@ class PatientController {
     return patientData;
   }
 
+  static _todayISTDateString() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  }
+
+  /** Parse state / gender / week|month period for patient list endpoints */
+  static _parsePatientListFilters(query) {
+    const state = query.state ? String(query.state).trim() : '';
+    const genderRaw = query.gender || query.sex || '';
+    const gender = genderRaw ? String(genderRaw).trim() : '';
+    const period = String(query.period || '').trim().toLowerCase();
+
+    let sex = null;
+    if (gender) {
+      const g = gender.toLowerCase();
+      if (g === 'm' || g === 'male') sex = 'M';
+      else if (g === 'f' || g === 'female') sex = 'F';
+      else if (g === 'other' || g === 'o') sex = 'Other';
+    }
+
+    let childSex = null;
+    if (gender) {
+      const g = gender.toLowerCase();
+      if (g === 'm' || g === 'male') childSex = 'Male';
+      else if (g === 'f' || g === 'female') childSex = 'Female';
+      else if (g === 'other' || g === 'o') childSex = 'Other';
+    }
+
+    let created_from = null;
+    let created_to = null;
+    const today = PatientController._todayISTDateString();
+    if (period === 'week') {
+      const d = new Date();
+      d.setDate(d.getDate() - 6);
+      created_from = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      created_to = today;
+    } else if (period === 'month') {
+      const parts = today.split('-').map((x) => parseInt(x, 10));
+      created_from = `${parts[0]}-${String(parts[1]).padStart(2, '0')}-01`;
+      created_to = today;
+    }
+
+    return {
+      state: state || null,
+      sex,
+      childSex,
+      created_from,
+      created_to,
+      period: period === 'week' || period === 'month' ? period : null,
+    };
+  }
+
+  static _applyPatientListFiltersToModelFilters(target, listFilters, patientType) {
+    if (listFilters.state) target.state = listFilters.state;
+    if (patientType === 'child') {
+      if (listFilters.childSex) target.sex = listFilters.childSex;
+    } else if (listFilters.sex) {
+      target.sex = listFilters.sex;
+    }
+    if (listFilters.created_from) target.created_from = listFilters.created_from;
+    if (listFilters.created_to) target.created_to = listFilters.created_to;
+  }
+
   /** Junior residents: today's list includes patients in their selected room (same as child list). */
   static async _resolveJuniorResidentListScope(doctorId, forTodayList) {
     if (!doctorId) return {};
@@ -758,8 +820,10 @@ class PatientController {
       const wantsChildType = requestedPatientType === 'child';
       const useChildDataset = wantsChildType;
 
+      const listFilters = PatientController._parsePatientListFilters(req.query);
+
       // Apply filters
-      if (req.query.sex) filters.sex = req.query.sex;
+      if (req.query.sex && !listFilters.sex) filters.sex = req.query.sex;
       // if (req.query.case_complexity) filters.case_complexity = req.query.case_complexity;
       if (req.query.has_adl_file !== undefined) filters.has_adl_file = req.query.has_adl_file === 'true';
       if (req.query.file_status) filters.file_status = req.query.file_status;
@@ -821,6 +885,12 @@ class PatientController {
         Object.assign(filters, residentScope);
       }
 
+      PatientController._applyPatientListFiltersToModelFilters(
+        filters,
+        listFilters,
+        useChildDataset ? 'child' : 'adult'
+      );
+
       // Unified patient list scoped by requested `patient_type`:
       // - `patient_type=child` returns child registrations.
       // - otherwise returns adult patients.
@@ -836,6 +906,7 @@ class PatientController {
         } else if (scopedDoctorId) {
           childFilters.treating_doctor_id = scopedDoctorId;
         }
+        PatientController._applyPatientListFiltersToModelFilters(childFilters, listFilters, 'child');
 
         const childResult = await ChildPatientRegistration.findAll(page, limit, childFilters);
         const childPatients = childResult.child_patients || [];
@@ -3328,6 +3399,7 @@ class PatientController {
       const limit = parseInt(req.query.limit) || 10;
       const view = String(req.query.referral_view || 'referred_to_me').toLowerCase();
       const search = req.query.search?.trim() || null;
+      const listFilters = PatientController._parsePatientListFilters(req.query);
 
       const result = await PatientReferral.findForDoctor({
         doctorId: req.user.id,
@@ -3336,6 +3408,7 @@ class PatientController {
         limit,
         search,
         statusFilter: 'active',
+        listFilters,
       });
 
       const patients = result.referrals.map((r) => ({

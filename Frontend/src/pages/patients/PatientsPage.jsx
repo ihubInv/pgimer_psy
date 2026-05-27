@@ -4,8 +4,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { 
   FiPlus, FiSearch, FiTrash2, FiEye,  FiEdit, FiUsers, 
-   FiDownload,  FiClock, FiPrinter,
-  FiHeart, FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle, FiClipboard
+   FiDownload, FiPrinter,
+  FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle, FiClipboard
 } from 'react-icons/fi';
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
 import {
@@ -19,7 +19,6 @@ import {
 } from '../../features/patients/patientsApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { formatPatientsForExport, exportData } from '../../utils/exportUtils';
-import Card from '../../components/Card';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
 import Table from '../../components/Table';
@@ -49,6 +48,10 @@ import { childClinicalApiSlice } from '../../features/clinical/childClinicalApiS
 import { adlApiSlice } from '../../features/adl/adlApiSlice';
 import ReferPatientModal from '../../components/ReferPatientModal';
 import BulkReferPatientsModal from '../../components/BulkReferPatientsModal';
+import PatientListFilters, {
+  PATIENT_LIST_EMPTY_FILTERS,
+  PatientListActiveFilters,
+} from '../../components/PatientListFilters';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
@@ -80,6 +83,7 @@ const PatientsPage = () => {
   const [referModalPatient, setReferModalPatient] = useState(null);
   const [bulkReferModalOpen, setBulkReferModalOpen] = useState(false);
   const [assigningPatientId, setAssigningPatientId] = useState(null);
+  const [listFilters, setListFilters] = useState(PATIENT_LIST_EMPTY_FILTERS);
 
   const isReferredTab = patientType === 'referred';
   const isUnassignedTab = patientType === 'unassigned';
@@ -88,56 +92,78 @@ const PatientsPage = () => {
   // Reset page to 1 when search changes
   useEffect(() => {
     setPage(1);
-  }, [search, patientType, referralSubView, unassignedSubView, totalSubView]);
+  }, [search, patientType, referralSubView, unassignedSubView, totalSubView, listFilters]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [referralSubView, unassignedSubView, totalSubView]);
+  const listFilterParams = useMemo(() => {
+    const p = {};
+    if (listFilters.state) p.state = listFilters.state;
+    if (listFilters.gender) p.gender = listFilters.gender;
+    if (listFilters.period) p.period = listFilters.period;
+    return p;
+  }, [listFilters]);
 
   const patientsTabTitle = isTotalPatientsTab
     ? 'Total Patients'
-    : isJuniorResidentUser(user) || isSeniorResidentUser(user)
-      ? 'My Patients'
-      : 'Patients';
+    : isUnassignedTab
+      ? 'Unassigned Patients'
+      : isReferredTab
+        ? 'Referred Patients'
+        : isJuniorResidentUser(user) || isSeniorResidentUser(user)
+          ? 'My Patients'
+          : 'Patients';
 
   // Fetch patients - use server-side pagination when not searching, client-side when searching
   const fetchLimit = search.trim() ? 100 : limit; // Fetch more when searching to allow client-side filtering
 
   // Unified patient list. Backend scopes adult/child by `patient_type` query.
-  const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery(
-    isReferredTab
-      ? {
-          page: search.trim() ? 1 : page,
-          limit: fetchLimit,
-          search: search.trim() || undefined,
-          referral_view: referralSubView === 'by_me' ? 'referred_by_me' : 'referred_to_me',
-        }
-      : isUnassignedTab
-        ? {
-            page: search.trim() ? 1 : page,
-            limit: fetchLimit,
-            search: search.trim() || undefined,
-            patient_type: unassignedSubView,
-            unassigned_only: true,
-          }
-        : isTotalPatientsTab
-          ? {
-              page: search.trim() ? 1 : page,
-              limit: fetchLimit,
-              search: search.trim() || undefined,
-              patient_type: totalSubView,
-              all_patients: true,
-            }
-          : {
-              page: search.trim() ? 1 : page,
-              limit: fetchLimit,
-              search: search.trim() || undefined,
-              patient_type: patientType,
-            },
-    {
-      refetchOnMountOrArgChange: true,
+  const patientsQueryArgs = useMemo(() => {
+    const base = {
+      page: search.trim() ? 1 : page,
+      limit: fetchLimit,
+      search: search.trim() || undefined,
+      ...listFilterParams,
+    };
+    if (isReferredTab) {
+      return {
+        ...base,
+        referral_view: referralSubView === 'by_me' ? 'referred_by_me' : 'referred_to_me',
+      };
     }
-  );
+    if (isUnassignedTab) {
+      return {
+        ...base,
+        patient_type: unassignedSubView,
+        unassigned_only: true,
+      };
+    }
+    if (isTotalPatientsTab) {
+      return {
+        ...base,
+        patient_type: totalSubView,
+        all_patients: true,
+      };
+    }
+    return {
+      ...base,
+      patient_type: patientType,
+    };
+  }, [
+    search,
+    page,
+    fetchLimit,
+    listFilterParams,
+    isReferredTab,
+    isUnassignedTab,
+    isTotalPatientsTab,
+    referralSubView,
+    unassignedSubView,
+    totalSubView,
+    patientType,
+  ]);
+
+  const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery(patientsQueryArgs, {
+    refetchOnMountOrArgChange: true,
+  });
 
   const [markReferralSeen] = useMarkReferralSeenMutation();
   const [completeReferral] = useCompleteReferralMutation();
@@ -3210,12 +3236,7 @@ const PatientsPage = () => {
       ),
       accessor: 'cr_no',
       render: (row) => (
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center">
-            <FiFileText className="w-4 h-4 text-blue-600" />
-          </div>
-          <span className="font-medium text-gray-900">{row.cr_no || 'N/A'}</span>
-        </div>
+        <span className="font-medium text-gray-900 tabular-nums">{row.cr_no || 'N/A'}</span>
       ),
     },
     {
@@ -3226,27 +3247,20 @@ const PatientsPage = () => {
         </div>
       ),
       render: (row) => (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-r from-green-100 to-emerald-100 rounded-full flex items-center justify-center">
-              <FiHeart className="w-3 h-3 text-green-600" />
-            </div>
-            <span className="font-semibold text-gray-900">{row.name}</span>
+        <div className="min-w-[10rem] max-w-[14rem]">
+          <p className="font-medium text-gray-900 truncate" title={row.name}>
+            {row.name}
             {row.patient_type === 'child' && (
-              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+              <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">
                 Child
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-4 text-sm text-gray-600">
-            <span className="flex items-center gap-1">
-              <FiClock className="w-3 h-3" />
-              {row.patient_type === 'child' ? (row.age_group || 'N/A') : `${row.age || 'N/A'} years`}
-            </span>
-            <span className="px-2 py-1 bg-gray-100 rounded-full text-xs font-medium">
-              {row.sex}
-            </span>
-          </div>
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {row.patient_type === 'child' ? row.age_group || '—' : `${row.age ?? '—'} yrs`}
+            <span className="mx-1 text-gray-300">·</span>
+            {row.sex || '—'}
+          </p>
         </div>
       ),
     },
@@ -3392,16 +3406,11 @@ const PatientsPage = () => {
             ),
             accessor: 'psy_no',
             render: (row) => (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-orange-100 to-yellow-100 rounded-lg flex items-center justify-center">
-                  <FiFileText className="w-4 h-4 text-orange-600" />
-                </div>
-                <span className="font-medium text-gray-900">
-                  {row.patient_type === 'child'
-                    ? row.special_clinic_no || 'N/A'
-                    : row.psy_no || 'N/A'}
-                </span>
-              </div>
+              <span className="font-medium text-gray-900 tabular-nums">
+                {row.patient_type === 'child'
+                  ? row.special_clinic_no || 'N/A'
+                  : row.psy_no || 'N/A'}
+              </span>
             ),
           },
         ]
@@ -3410,7 +3419,7 @@ const PatientsPage = () => {
       header: (
         <div className="flex items-center gap-2">
           {/* <FiMoreVertical className="w-4 h-4 text-primary-600" /> */}
-          <span className="font-semibold ml-12">{isUnassignedTab ? 'Action' : 'Actions'}</span>
+          <span className="font-semibold">{isUnassignedTab ? 'Action' : 'Actions'}</span>
         </div>
       ),
       render: renderPatientActions,
@@ -3429,13 +3438,10 @@ const PatientsPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-        {/* Header Section */}
-        {/* Main Content Card */}
-        <Card className="shadow-lg border border-gray-200/50 bg-white/90 backdrop-blur-sm">
-          <div className="mb-4 px-1">
-            <h1 className="text-2xl font-bold text-gray-900">{patientsTabTitle}</h1>
+    <div className="max-w-[1600px] mx-auto w-full">
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+          <div className="px-4 sm:px-6 pt-5 pb-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{patientsTabTitle}</h1>
             {isJuniorResidentUser(user) &&
               !isReferredTab &&
               !isUnassignedTab &&
@@ -3484,13 +3490,12 @@ const PatientsPage = () => {
               </div>
             )} */}
           </div>
-          {/* Patient type tabs */}
-          <div className="mb-6">
-            <div className="flex gap-2 border-b border-gray-200">
+          <div className="mt-4 -mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto scrollbar-thin">
+            <div className="flex gap-0.5 border-b border-gray-200 min-w-max">
               <button
                 type="button"
                 onClick={() => setPatientType('adult')}
-                className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                className={`px-4 sm:px-5 py-2.5 font-semibold text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
                   patientType === 'adult'
                     ? 'border-primary-600 text-primary-600 bg-primary-50'
                     : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -3502,7 +3507,7 @@ const PatientsPage = () => {
               <button
                 type="button"
                 onClick={() => setPatientType('child')}
-                className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                className={`px-4 sm:px-5 py-2.5 font-semibold text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
                   patientType === 'child'
                     ? 'border-primary-600 text-primary-600 bg-primary-50'
                     : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -3518,7 +3523,7 @@ const PatientsPage = () => {
                     setPatientType('referred');
                     setReferralSubView('to_me');
                   }}
-                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                  className={`px-4 sm:px-5 py-2.5 font-semibold text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
                     patientType === 'referred'
                       ? 'border-primary-600 text-primary-600 bg-primary-50'
                       : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -3535,7 +3540,7 @@ const PatientsPage = () => {
                     setPatientType('total');
                     setTotalSubView('adult');
                   }}
-                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                  className={`px-4 sm:px-5 py-2.5 font-semibold text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
                     patientType === 'total'
                       ? 'border-primary-600 text-primary-600 bg-primary-50'
                       : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -3552,7 +3557,7 @@ const PatientsPage = () => {
                     setPatientType('unassigned');
                     setUnassignedSubView('adult');
                   }}
-                  className={`px-6 py-3 font-semibold text-sm transition-all duration-200 border-b-2 ${
+                  className={`px-4 sm:px-5 py-2.5 font-semibold text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
                     patientType === 'unassigned'
                       ? 'border-primary-600 text-primary-600 bg-primary-50'
                       : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -3566,7 +3571,7 @@ const PatientsPage = () => {
           </div>
 
           {currentError && (
-            <div className="mb-6 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-200 rounded-xl p-5 shadow-sm">
+            <div className="mx-4 sm:mx-6 mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
               <div className="flex items-start gap-4">
                 <div className="p-2.5 bg-red-100 rounded-lg flex-shrink-0">
                   <FiShield className="w-5 h-5 text-red-600" />
@@ -3578,11 +3583,10 @@ const PatientsPage = () => {
               </div>
             </div>
           )}
-          
-          {/* Enhanced Search and Filter Section */}
-          <div className="mb-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1 relative group">
+
+          <div className="px-4 sm:px-6 py-4 border-y border-gray-100 bg-slate-50/50 space-y-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+              <div className="flex-1 min-w-0 relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <FiSearch className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                 </div>
@@ -3604,10 +3608,11 @@ const PatientsPage = () => {
                   }
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-12 pr-12 h-12 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-200 shadow-sm hover:shadow-md"
+                  className="pl-12 pr-12 h-12 w-full bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-200 shadow-sm"
                 />
                 {search && (
                   <button
+                    type="button"
                     onClick={() => setSearch('')}
                     className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                     title="Clear search"
@@ -3616,19 +3621,19 @@ const PatientsPage = () => {
                   </button>
                 )}
               </div>
-              {!isMWO(user?.role) && (
-                <div className="flex flex-col sm:flex-row gap-3 lg:flex-col xl:flex-row">
-                  {canReferPatients(user) && isReferredTab && (
-                    <Button
-                      type="button"
-                      onClick={() => setBulkReferModalOpen(true)}
-                      className="h-12 px-5 bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap"
-                    >
-                      <FiUserPlus className="mr-2" />
-                      Refer Patient(s)
-                    </Button>
-                  )}
-                  {!isReferredTab && !isUnassignedTab && (
+
+              <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+                {!isMWO(user?.role) && canReferPatients(user) && isReferredTab && (
+                  <Button
+                    type="button"
+                    onClick={() => setBulkReferModalOpen(true)}
+                    className="h-12 px-4 bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 shadow-md whitespace-nowrap"
+                  >
+                    <FiUserPlus className="mr-2" />
+                    Refer Patient(s)
+                  </Button>
+                )}
+                {!isMWO(user?.role) && !isReferredTab && !isUnassignedTab && (
                   <Link
                     to={
                       (isTotalPatientsTab ? totalSubView : patientType) === 'child'
@@ -3636,30 +3641,42 @@ const PatientsPage = () => {
                         : '/patients/new'
                     }
                   >
-                    <Button className="bg-gradient-to-r h-12 px-5 from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap">
+                    <Button className="h-12 px-4 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-md whitespace-nowrap">
                       <FiPlus className="mr-2" />
                       {(isTotalPatientsTab ? totalSubView : patientType) === 'child'
                         ? 'Add Child Patient'
                         : 'Add Patient'}
                     </Button>
                   </Link>
-                  )}
-                </div>
-              )}
-              <div className="flex gap-3">
+                )}
+                <PatientListFilters
+                  appliedFilters={listFilters}
+                  onApply={setListFilters}
+                  onReset={() => setListFilters(PATIENT_LIST_EMPTY_FILTERS)}
+                  isLoading={currentIsLoading || currentIsFetching}
+                />
                 <Button
                   variant="outline"
-                  className="h-12 px-5 bg-white border-2 border-primary-200 hover:bg-primary-50 hover:border-primary-300 shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-12 px-4 bg-white border-2 border-gray-200 hover:bg-gray-50 shadow-sm whitespace-nowrap disabled:opacity-50"
                   onClick={() => setIsExportModalOpen(true)}
                   disabled={filteredPatients.length === 0 && (!data?.data?.patients || data.data.patients.length === 0)}
                 >
                   <FiDownload className="mr-2" />
-                  Export All Patients
+                  Export
                 </Button>
               </div>
             </div>
+
+            <PatientListActiveFilters
+              appliedFilters={listFilters}
+              onClear={(key) =>
+                setListFilters((prev) => ({ ...prev, [key]: '' }))
+              }
+              onClearAll={() => setListFilters(PATIENT_LIST_EMPTY_FILTERS)}
+            />
+
             {isReferredTab && (
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setReferralSubView('to_me')}
@@ -3685,7 +3702,7 @@ const PatientsPage = () => {
               </div>
             )}
             {isTotalPatientsTab && (
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setTotalSubView('adult')}
@@ -3711,7 +3728,7 @@ const PatientsPage = () => {
               </div>
             )}
             {isUnassignedTab && (
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setUnassignedSubView('adult')}
@@ -3738,8 +3755,9 @@ const PatientsPage = () => {
             )}
           </div>
 
+          <div className="px-4 sm:px-6 py-4">
           {(currentIsLoading || currentIsFetching) ? (
-            <div className="flex flex-col items-center justify-center py-20">
+            <div className="flex flex-col items-center justify-center py-14">
               <div className="relative">
                 <div className="w-20 h-20 border-4 border-primary-100 border-t-primary-600 rounded-full animate-spin"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -3750,7 +3768,7 @@ const PatientsPage = () => {
               <p className="mt-2 text-gray-500 text-sm">Please wait while we fetch the data</p>
             </div>
           ) : filteredPatients.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20">
+            <div className="flex flex-col items-center justify-center py-14">
               <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
                 <FiUsers className="w-12 h-12 text-gray-400" />
               </div>
@@ -3817,31 +3835,28 @@ const PatientsPage = () => {
                 </div>
               )}
               
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="rounded-xl border border-gray-200 overflow-hidden">
                 <Table
                   key={isUnassignedTab ? `unassigned-${unassignedSubView}` : patientType}
                   columns={columns}
                   data={filteredPatients}
                   loading={isLoading}
+                  flush
                 />
               </div>
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm mt-4">
-                  <Pagination
-                    currentPage={page}
-                    totalPages={totalPages}
-                    totalItems={totalFiltered}
-                    itemsPerPage={limit}
-                    onPageChange={setPage}
-                  />
-                </div>
-              )}
             </>
           )}
-        </Card>
+          </div>
 
+          {filteredPatients.length > 0 && !currentIsLoading && !currentIsFetching && (
+            <Pagination
+              currentPage={page}
+              totalPages={Math.max(totalPages, 1)}
+              totalItems={totalFiltered}
+              itemsPerPage={limit}
+              onPageChange={setPage}
+            />
+          )}
       </div>
 
       <BulkReferPatientsModal

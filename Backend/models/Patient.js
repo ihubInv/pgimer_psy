@@ -745,8 +745,12 @@ class Patient {
       let idx = 1;
 
       if (filters.sex) {
-        where.push(`p.sex = $${idx++}`);
-        params.push(filters.sex);
+        if (filters.sex === 'Other') {
+          where.push(`(p.sex NOT IN ('M','F') OR p.sex IS NULL)`);
+        } else {
+          where.push(`p.sex = $${idx++}`);
+          params.push(filters.sex);
+        }
       }
       if (filters.case_complexity) {
         if (filters.case_complexity === 'complex') {
@@ -770,6 +774,24 @@ class Patient {
       if (filters.assigned_room) {
         where.push(`p.assigned_room = $${idx++}`);
         params.push(filters.assigned_room);
+      }
+
+      if (filters.state) {
+        where.push(`COALESCE(p.state, '') = $${idx++}`);
+        params.push(filters.state);
+      }
+
+      if (filters.created_from) {
+        where.push(
+          `DATE((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') >= $${idx++}::date`
+        );
+        params.push(filters.created_from);
+      }
+      if (filters.created_to) {
+        where.push(
+          `DATE((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') <= $${idx++}::date`
+        );
+        params.push(filters.created_to);
       }
 
       if (filters.unassigned_only) {
