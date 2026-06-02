@@ -106,6 +106,27 @@ const Field = ({
   );
 };
 
+/** Stable field wrapper — must not be defined inside the form component (remounts inputs each render). */
+const CapFormField = ({ k, form, readOnly, onChange, ...rest }) => {
+  const isLocked = PATIENT_LOCKED_FIELDS.has(k);
+  if (isLocked) {
+    return <DisplayField locked value={form[k]} {...rest} />;
+  }
+  return (
+    <Field
+      readOnly={readOnly}
+      onChange={onChange}
+      {...rest}
+      name={k}
+      value={form[k]}
+    />
+  );
+};
+
+const CapBoolField = ({ k, label, form, readOnly, onChange }) => (
+  <BoolField readOnly={readOnly} label={label} name={k} value={form[k]} onChange={onChange} />
+);
+
 const BoolField = ({ readOnly, label, name, value, onChange }) => {
   if (readOnly) {
     return (
@@ -429,6 +450,9 @@ const EditChildCapWorkupLegacy = ({
 
   useEffect(() => {
     if (isFetching) return; // wait for data before deciding state
+    // Do not reset local form while user is creating or editing (avoids one-char / lost edits)
+    if (!readOnly) return;
+
     const records = data?.data?.records || [];
     if (records.length > 0) {
       const rec = records[0];
@@ -453,7 +477,7 @@ const EditChildCapWorkupLegacy = ({
       setFormActive(false); // no record yet — show empty state
       setForm({ ...DEFAULT_FORM, ...patientPrefill });
     }
-  }, [data, isFetching, readOnlyView]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, isFetching, readOnlyView, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
   // Note: patientPrefill intentionally omitted — we apply it once on handleStartCreate
 
   const toggleSection = useCallback((key) => {
@@ -604,26 +628,7 @@ const EditChildCapWorkupLegacy = ({
     );
   }
 
-  const S = ({ k, ...rest }) => {
-    const isLocked = PATIENT_LOCKED_FIELDS.has(k);
-    if (isLocked) {
-      // Locked fields always render as DisplayField regardless of form mode
-      return <DisplayField locked value={form[k]} {...rest} />;
-    }
-    return (
-      <Field
-        readOnly={readOnly}
-        onChange={handleChange}
-        {...rest}
-        name={k}
-        value={form[k]}
-      />
-    );
-  };
-
-  const B = ({ k, label }) => (
-    <BoolField readOnly={readOnly} label={label} name={k} value={form[k]} onChange={handleChange} />
-  );
+  const capFieldProps = { form, readOnly, onChange: handleChange };
 
   return (
     <div className="space-y-4">
@@ -647,7 +652,7 @@ const EditChildCapWorkupLegacy = ({
           )}
         </div>
 
-        {/* Right: action buttons — always rendered (even when hideToolbar hides the title) */}
+        {/* Right: Edit only in view mode — Save/Cancel live in the bottom bar while editing */}
         <div className="flex items-center gap-2 shrink-0">
           {readOnly && recordId && !readOnlyView && (
             <Button
@@ -661,34 +666,6 @@ const EditChildCapWorkupLegacy = ({
               Edit Record
             </Button>
           )}
-          {!readOnly && !readOnlyView && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={recordId ? handleCancelEdit : handleCancelCreate}
-                className="flex items-center gap-1.5"
-              >
-                <FiX className="w-4 h-4" />
-                Cancel
-              </Button>
-              {/* Inline save (top bar) — only when full toolbar is visible */}
-              {!effectiveHideToolbar && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleSave}
-                  loading={isSaving}
-                  disabled={isSaving}
-                  className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
-                >
-                  <FiSave className="w-4 h-4" />
-                  {recordId ? 'Update' : 'Save'}
-                </Button>
-              )}
-            </>
-          )}
         </div>
       </div>
 
@@ -700,17 +677,17 @@ const EditChildCapWorkupLegacy = ({
           collapsible={!effectiveFlatLayout} />
         {openSections.admin && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <S k="workup_date" label="Workup Date" type="date" />
-            <S k="cap_no" label="CAP No." placeholder="CAP number" />
-            <S k="patient_name" label="Patient Name" placeholder="Full name" />
-            <S k="age" label="Age" placeholder="Age" />
-            <S k="date_of_birth" label="Date of Birth" type="date" />
-            <S k="gender" label="Gender" placeholder="Male / Female / Other" />
-            <S k="education" label="Education" placeholder="Current class / level" />
-            <S k="school_type" label="School Type" placeholder="Government / Private / Special" />
-            <S k="referred_by" label="Referred By" placeholder="Referral source" />
+            <CapFormField {...capFieldProps} k="workup_date" label="Workup Date" type="date" />
+            <CapFormField {...capFieldProps} k="cap_no" label="CAP No." placeholder="CAP number" />
+            <CapFormField {...capFieldProps} k="patient_name" label="Patient Name" placeholder="Full name" />
+            <CapFormField {...capFieldProps} k="age" label="Age" placeholder="Age" />
+            <CapFormField {...capFieldProps} k="date_of_birth" label="Date of Birth" type="date" />
+            <CapFormField {...capFieldProps} k="gender" label="Gender" placeholder="Male / Female / Other" />
+            <CapFormField {...capFieldProps} k="education" label="Education" placeholder="Current class / level" />
+            <CapFormField {...capFieldProps} k="school_type" label="School Type" placeholder="Government / Private / Special" />
+            <CapFormField {...capFieldProps} k="referred_by" label="Referred By" placeholder="Referral source" />
             <div className="md:col-span-3">
-              <S k="reason_referral_present_consultation" label="Reason for Referral / Present Consultation" rows={3} placeholder="Reason for referral..." />
+              <CapFormField {...capFieldProps} k="reason_referral_present_consultation" label="Reason for Referral / Present Consultation" rows={3} placeholder="Reason for referral..." />
             </div>
           </div>
         )}
@@ -725,7 +702,7 @@ const EditChildCapWorkupLegacy = ({
         {openSections.informants && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="md:col-span-3">
-              <S k="information_reliability_adequacy" label="Reliability & Adequacy of Information" rows={2} placeholder="Assessment of information quality..." />
+              <CapFormField {...capFieldProps} k="information_reliability_adequacy" label="Reliability & Adequacy of Information" rows={2} placeholder="Assessment of information quality..." />
             </div>
             {(form.informants || []).map((inf, i) => (
               <div key={i} className="border border-indigo-100 rounded-xl p-4 bg-indigo-50/30 space-y-3">
@@ -814,18 +791,18 @@ const EditChildCapWorkupLegacy = ({
           collapsible={!effectiveFlatLayout} />
         {openSections.hpi && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 gap-4">
-            <S k="hpi_developmental_history_symptoms" label="Developmental History & Symptoms" rows={4} placeholder="Developmental history and symptom description..." />
-            <S k="hpi_symptoms_impairment_developmental_age" label="Symptoms & Impairment at Developmental Age" rows={3} placeholder="Impairment at developmental age..." />
-            <S k="hpi_behavioral_symptom_factors" label="Behavioral Symptom Factors" rows={3} placeholder="Behavioral and symptom factors..." />
-            <S k="hpi_phenomenology_symptoms" label="Phenomenology of Symptoms" rows={3} placeholder="Phenomenological description..." />
-            <S k="hpi_adolescent_biological_enquiry" label="Adolescent Biological Enquiry" rows={3} placeholder="Biological enquiry (for adolescents)..." />
-            <S k="hpi_sensory_impairments" label="Sensory Impairments" rows={2} placeholder="Sensory impairments..." />
-            <S k="hpi_comorbid_physical_illness" label="Comorbid Physical Illness" rows={2} placeholder="Comorbid physical illnesses..." />
-            <S k="hpi_treatment_history" label="Treatment History (Summary)" rows={3} placeholder="Brief treatment history..." />
-            <S k="hpi_continued" label="HPI Continued" rows={3} placeholder="Continued narrative..." />
-            <S k="relevant_negative_history" label="Relevant Negative History" rows={3} placeholder="Relevant negatives..." />
-            <S k="functioning_overall_assessment" label="Overall Functioning Assessment" rows={3} placeholder="Global functioning assessment..." />
-            <S k="impairment_severity" label="Impairment Severity (Mild / Moderate / Severe / None)" placeholder="Mild / Moderate / Severe / None / Not impaired" />
+            <CapFormField {...capFieldProps} k="hpi_developmental_history_symptoms" label="Developmental History & Symptoms" rows={4} placeholder="Developmental history and symptom description..." />
+            <CapFormField {...capFieldProps} k="hpi_symptoms_impairment_developmental_age" label="Symptoms & Impairment at Developmental Age" rows={3} placeholder="Impairment at developmental age..." />
+            <CapFormField {...capFieldProps} k="hpi_behavioral_symptom_factors" label="Behavioral Symptom Factors" rows={3} placeholder="Behavioral and symptom factors..." />
+            <CapFormField {...capFieldProps} k="hpi_phenomenology_symptoms" label="Phenomenology of Symptoms" rows={3} placeholder="Phenomenological description..." />
+            <CapFormField {...capFieldProps} k="hpi_adolescent_biological_enquiry" label="Adolescent Biological Enquiry" rows={3} placeholder="Biological enquiry (for adolescents)..." />
+            <CapFormField {...capFieldProps} k="hpi_sensory_impairments" label="Sensory Impairments" rows={2} placeholder="Sensory impairments..." />
+            <CapFormField {...capFieldProps} k="hpi_comorbid_physical_illness" label="Comorbid Physical Illness" rows={2} placeholder="Comorbid physical illnesses..." />
+            <CapFormField {...capFieldProps} k="hpi_treatment_history" label="Treatment History (Summary)" rows={3} placeholder="Brief treatment history..." />
+            <CapFormField {...capFieldProps} k="hpi_continued" label="HPI Continued" rows={3} placeholder="Continued narrative..." />
+            <CapFormField {...capFieldProps} k="relevant_negative_history" label="Relevant Negative History" rows={3} placeholder="Relevant negatives..." />
+            <CapFormField {...capFieldProps} k="functioning_overall_assessment" label="Overall Functioning Assessment" rows={3} placeholder="Global functioning assessment..." />
+            <CapFormField {...capFieldProps} k="impairment_severity" label="Impairment Severity (Mild / Moderate / Severe / None)" placeholder="Mild / Moderate / Severe / None / Not impaired" />
           </div>
         )}
       </Card>
@@ -839,9 +816,9 @@ const EditChildCapWorkupLegacy = ({
         {openSections.treatment && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <S k="treatment_who_initiated_first_contact" label="Who Initiated First Contact?" rows={2} placeholder="Person who initiated first contact..." />
-              <S k="treatment_first_contact_due_to" label="First Contact Due To" placeholder="Parental perception / Teacher referral / Physician / Pediatrician / Relative / Other" />
-              <S k="treatment_first_contact_due_to_other" label="First Contact (Other – specify)" placeholder="If other, specify..." />
+              <CapFormField {...capFieldProps} k="treatment_who_initiated_first_contact" label="Who Initiated First Contact?" rows={2} placeholder="Person who initiated first contact..." />
+              <CapFormField {...capFieldProps} k="treatment_first_contact_due_to" label="First Contact Due To" placeholder="Parental perception / Teacher referral / Physician / Pediatrician / Relative / Other" />
+              <CapFormField {...capFieldProps} k="treatment_first_contact_due_to_other" label="First Contact (Other – specify)" placeholder="If other, specify..." />
             </div>
             <h4 className="font-semibold text-sm text-teal-700 mt-2">Treatment History Chart (up to 4 contacts)</h4>
             {(form.treatment_history_chart || []).map((t, i) => (
@@ -884,26 +861,26 @@ const EditChildCapWorkupLegacy = ({
           collapsible={!effectiveFlatLayout} />
         {openSections.history && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 gap-4">
-            <S k="past_psychiatric_history" label="Past Psychiatric History" rows={3} placeholder="Details of past psychiatric history..." />
+            <CapFormField {...capFieldProps} k="past_psychiatric_history" label="Past Psychiatric History" rows={3} placeholder="Details of past psychiatric history..." />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <S k="medical_history_details" label="Medical History Details" rows={3} />
-              <S k="medical_enquiry_epilepsy" label="Epilepsy" rows={2} />
-              <S k="medical_enquiry_syncope" label="Syncope" rows={2} />
-              <S k="medical_enquiry_exercise_intolerance" label="Exercise Intolerance" rows={2} />
-              <S k="medical_enquiry_cardiac_ailment" label="Cardiac Ailment" rows={2} />
+              <CapFormField {...capFieldProps} k="medical_history_details" label="Medical History Details" rows={3} />
+              <CapFormField {...capFieldProps} k="medical_enquiry_epilepsy" label="Epilepsy" rows={2} />
+              <CapFormField {...capFieldProps} k="medical_enquiry_syncope" label="Syncope" rows={2} />
+              <CapFormField {...capFieldProps} k="medical_enquiry_exercise_intolerance" label="Exercise Intolerance" rows={2} />
+              <CapFormField {...capFieldProps} k="medical_enquiry_cardiac_ailment" label="Cardiac Ailment" rows={2} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <S k="family_history_details" label="Family History Details" rows={3} />
-              <S k="family_history_epilepsy" label="Family History – Epilepsy" rows={2} />
-              <S k="family_history_sudden_cardiac_death" label="Family History – Sudden Cardiac Death" rows={2} />
-              <S k="family_pedigree_description" label="Family Pedigree Description" rows={3} />
-              <S k="family_consanguinity" label="Consanguinity" rows={2} />
-              <S k="family_previous_abortions_stillbirths" label="Previous Abortions / Stillbirths" rows={2} />
+              <CapFormField {...capFieldProps} k="family_history_details" label="Family History Details" rows={3} />
+              <CapFormField {...capFieldProps} k="family_history_epilepsy" label="Family History – Epilepsy" rows={2} />
+              <CapFormField {...capFieldProps} k="family_history_sudden_cardiac_death" label="Family History – Sudden Cardiac Death" rows={2} />
+              <CapFormField {...capFieldProps} k="family_pedigree_description" label="Family Pedigree Description" rows={3} />
+              <CapFormField {...capFieldProps} k="family_consanguinity" label="Consanguinity" rows={2} />
+              <CapFormField {...capFieldProps} k="family_previous_abortions_stillbirths" label="Previous Abortions / Stillbirths" rows={2} />
             </div>
-            <S k="life_chart_details" label="Life Chart" rows={3} placeholder="Timeline of events..." />
-            <S k="life_chart_psychiatric_past_present" label="Psychiatric Illness – Past & Present (Life Chart)" rows={3} />
-            <S k="life_chart_physical_comorbidities_treatment" label="Physical Comorbidities & Treatment (Life Chart)" rows={3} />
-            <S k="life_chart_relation_physical_psychiatric" label="Relation: Physical & Psychiatric (Life Chart)" rows={2} />
+            <CapFormField {...capFieldProps} k="life_chart_details" label="Life Chart" rows={3} placeholder="Timeline of events..." />
+            <CapFormField {...capFieldProps} k="life_chart_psychiatric_past_present" label="Psychiatric Illness – Past & Present (Life Chart)" rows={3} />
+            <CapFormField {...capFieldProps} k="life_chart_physical_comorbidities_treatment" label="Physical Comorbidities & Treatment (Life Chart)" rows={3} />
+            <CapFormField {...capFieldProps} k="life_chart_relation_physical_psychiatric" label="Relation: Physical & Psychiatric (Life Chart)" rows={2} />
           </div>
         )}
       </Card>
@@ -916,35 +893,35 @@ const EditChildCapWorkupLegacy = ({
           collapsible={!effectiveFlatLayout} />
         {openSections.antenatal && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <S k="ante_natal_mother_age_conception" label="Mother's Age at Conception" type="number" />
-            <S k="ante_natal_father_age_conception" label="Father's Age at Conception" type="number" />
-            <S k="ante_natal_pregnancy_planned" label="Pregnancy Planned?" placeholder="Yes / No" />
-            <S k="ante_natal_pregnancy_wanted" label="Pregnancy Wanted?" placeholder="Yes / No" />
-            <S k="ante_natal_pregnancy_unwanted_reason" label="If Unwanted – Reason" rows={2} />
-            <S k="ante_natal_conception_method" label="Conception Method" placeholder="Natural / ART / etc." />
-            <S k="ante_natal_preconception_folate" label="Pre-conception Folate?" placeholder="Yes / No" />
-            <S k="ante_natal_preconception_folate_months" label="Folate – Months Before Conception" />
-            <S k="ante_natal_nutritional_status_mother" label="Mother's Nutritional Status" />
-            <S k="ante_natal_medical_illness_treatment" label="Medical Illness / Treatment in Pregnancy" rows={2} />
-            <S k="ante_natal_other_medical_surgery" label="Other Medical/Surgical Interventions" rows={2} />
-            <S k="ante_natal_hyperemesis" label="Hyperemesis" placeholder="Yes / No / Details" />
-            <S k="ante_natal_fever_first_trimester" label="Fever in First Trimester" placeholder="Yes / No" />
-            <S k="ante_natal_xray_exposure" label="X-ray Exposure" placeholder="Yes / No" />
-            <S k="ante_natal_drug_intake_non_supplement" label="Drug Intake (Non-supplement)" rows={2} />
-            <S k="ante_natal_psychotropic_use" label="Psychotropic Drug Use" rows={2} />
-            <S k="ante_natal_alcohol_tobacco" label="Alcohol / Tobacco Use" />
-            <S k="ante_natal_antenatal_visits" label="Ante-natal Visits" placeholder="Number / Regular / Irregular" />
-            <S k="ante_natal_immunization" label="Immunization during Pregnancy" />
-            <S k="ante_natal_usg" label="USG Details" rows={2} />
-            <S k="ante_natal_special_procedures" label="Special Procedures" rows={2} />
-            <S k="ante_natal_attempted_abortion" label="Attempted Abortion?" placeholder="Yes / No" />
-            <S k="ante_natal_rh_incompatibility" label="Rh Incompatibility?" placeholder="Yes / No" />
-            <S k="ante_natal_single_or_twin" label="Single / Twin Pregnancy" />
-            <S k="ante_natal_threatened_abortion_bleeding_pv" label="Threatened Abortion / Bleeding PV" />
-            <S k="ante_natal_preeclampsia_eclampsia" label="Pre-eclampsia / Eclampsia" placeholder="Yes / No / Details" />
-            <S k="ante_natal_foetal_movements" label="Foetal Movements" placeholder="Normal / Reduced / Excessive" />
+            <CapFormField {...capFieldProps} k="ante_natal_mother_age_conception" label="Mother's Age at Conception" type="number" />
+            <CapFormField {...capFieldProps} k="ante_natal_father_age_conception" label="Father's Age at Conception" type="number" />
+            <CapFormField {...capFieldProps} k="ante_natal_pregnancy_planned" label="Pregnancy Planned?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="ante_natal_pregnancy_wanted" label="Pregnancy Wanted?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="ante_natal_pregnancy_unwanted_reason" label="If Unwanted – Reason" rows={2} />
+            <CapFormField {...capFieldProps} k="ante_natal_conception_method" label="Conception Method" placeholder="Natural / ART / etc." />
+            <CapFormField {...capFieldProps} k="ante_natal_preconception_folate" label="Pre-conception Folate?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="ante_natal_preconception_folate_months" label="Folate – Months Before Conception" />
+            <CapFormField {...capFieldProps} k="ante_natal_nutritional_status_mother" label="Mother's Nutritional Status" />
+            <CapFormField {...capFieldProps} k="ante_natal_medical_illness_treatment" label="Medical Illness / Treatment in Pregnancy" rows={2} />
+            <CapFormField {...capFieldProps} k="ante_natal_other_medical_surgery" label="Other Medical/Surgical Interventions" rows={2} />
+            <CapFormField {...capFieldProps} k="ante_natal_hyperemesis" label="Hyperemesis" placeholder="Yes / No / Details" />
+            <CapFormField {...capFieldProps} k="ante_natal_fever_first_trimester" label="Fever in First Trimester" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="ante_natal_xray_exposure" label="X-ray Exposure" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="ante_natal_drug_intake_non_supplement" label="Drug Intake (Non-supplement)" rows={2} />
+            <CapFormField {...capFieldProps} k="ante_natal_psychotropic_use" label="Psychotropic Drug Use" rows={2} />
+            <CapFormField {...capFieldProps} k="ante_natal_alcohol_tobacco" label="Alcohol / Tobacco Use" />
+            <CapFormField {...capFieldProps} k="ante_natal_antenatal_visits" label="Ante-natal Visits" placeholder="Number / Regular / Irregular" />
+            <CapFormField {...capFieldProps} k="ante_natal_immunization" label="Immunization during Pregnancy" />
+            <CapFormField {...capFieldProps} k="ante_natal_usg" label="USG Details" rows={2} />
+            <CapFormField {...capFieldProps} k="ante_natal_special_procedures" label="Special Procedures" rows={2} />
+            <CapFormField {...capFieldProps} k="ante_natal_attempted_abortion" label="Attempted Abortion?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="ante_natal_rh_incompatibility" label="Rh Incompatibility?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="ante_natal_single_or_twin" label="Single / Twin Pregnancy" />
+            <CapFormField {...capFieldProps} k="ante_natal_threatened_abortion_bleeding_pv" label="Threatened Abortion / Bleeding PV" />
+            <CapFormField {...capFieldProps} k="ante_natal_preeclampsia_eclampsia" label="Pre-eclampsia / Eclampsia" placeholder="Yes / No / Details" />
+            <CapFormField {...capFieldProps} k="ante_natal_foetal_movements" label="Foetal Movements" placeholder="Normal / Reduced / Excessive" />
             <div className="md:col-span-2">
-              <S k="ante_natal_other_significant_history" label="Other Significant Ante-natal History" rows={3} />
+              <CapFormField {...capFieldProps} k="ante_natal_other_significant_history" label="Other Significant Ante-natal History" rows={3} />
             </div>
           </div>
         )}
@@ -958,26 +935,26 @@ const EditChildCapWorkupLegacy = ({
           collapsible={!effectiveFlatLayout} />
         {openSections.natal && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <S k="natal_gestational_age_weeks" label="Gestational Age (weeks)" type="number" />
-            <S k="natal_delivery_location" label="Delivery Location" placeholder="Hospital / Home / etc." />
-            <S k="natal_delivery_term" label="Delivery at Term?" placeholder="Term / Pre-term / Post-term" />
-            <S k="natal_delivery_method" label="Delivery Method" placeholder="Normal / LSCS / Forceps / Vacuum" />
-            <S k="natal_delivery_method_reason" label="Reason for Method" rows={2} />
-            <S k="natal_abnormal_presentation" label="Abnormal Presentation?" placeholder="Yes / No / Details" />
-            <S k="natal_large_head" label="Large Head?" placeholder="Yes / No" />
-            <S k="natal_low_placenta" label="Low-lying Placenta?" placeholder="Yes / No" />
-            <S k="natal_prolapsed_cord" label="Prolapsed Cord?" placeholder="Yes / No" />
-            <S k="natal_cord_around_neck" label="Cord Around Neck?" placeholder="Yes / No" />
-            <S k="natal_foetal_distress" label="Foetal Distress?" placeholder="Yes / No" />
-            <S k="natal_prolonged_labour" label="Prolonged Labour?" placeholder="Yes / No" />
-            <S k="natal_prom" label="PROM?" placeholder="Yes / No" />
-            <S k="natal_non_progress_labour" label="Non-progress of Labour?" placeholder="Yes / No" />
-            <S k="natal_meconium_stained" label="Meconium Stained Liquor?" placeholder="Yes / No" />
-            <S k="natal_eclampsia" label="Eclampsia?" placeholder="Yes / No" />
-            <S k="natal_excessive_bleeding_pph" label="Excessive Bleeding / PPH?" placeholder="Yes / No" />
-            <S k="natal_infections" label="Infections During Labour" rows={2} />
+            <CapFormField {...capFieldProps} k="natal_gestational_age_weeks" label="Gestational Age (weeks)" type="number" />
+            <CapFormField {...capFieldProps} k="natal_delivery_location" label="Delivery Location" placeholder="Hospital / Home / etc." />
+            <CapFormField {...capFieldProps} k="natal_delivery_term" label="Delivery at Term?" placeholder="Term / Pre-term / Post-term" />
+            <CapFormField {...capFieldProps} k="natal_delivery_method" label="Delivery Method" placeholder="Normal / LSCS / Forceps / Vacuum" />
+            <CapFormField {...capFieldProps} k="natal_delivery_method_reason" label="Reason for Method" rows={2} />
+            <CapFormField {...capFieldProps} k="natal_abnormal_presentation" label="Abnormal Presentation?" placeholder="Yes / No / Details" />
+            <CapFormField {...capFieldProps} k="natal_large_head" label="Large Head?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_low_placenta" label="Low-lying Placenta?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_prolapsed_cord" label="Prolapsed Cord?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_cord_around_neck" label="Cord Around Neck?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_foetal_distress" label="Foetal Distress?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_prolonged_labour" label="Prolonged Labour?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_prom" label="PROM?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_non_progress_labour" label="Non-progress of Labour?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_meconium_stained" label="Meconium Stained Liquor?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_eclampsia" label="Eclampsia?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_excessive_bleeding_pph" label="Excessive Bleeding / PPH?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="natal_infections" label="Infections During Labour" rows={2} />
             <div className="md:col-span-2">
-              <S k="natal_other_significant_history" label="Other Significant Natal History" rows={3} />
+              <CapFormField {...capFieldProps} k="natal_other_significant_history" label="Other Significant Natal History" rows={3} />
             </div>
           </div>
         )}
@@ -991,26 +968,26 @@ const EditChildCapWorkupLegacy = ({
           collapsible={!effectiveFlatLayout} />
         {openSections.neonatal && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <S k="neonatal_birth_weight_kg" label="Birth Weight (kg)" type="number" />
-            <S k="neonatal_birth_weight_category" label="Birth Weight Category" placeholder="Normal / LBW / VLBW / Macrosomic" />
-            <S k="neonatal_lga" label="Large for Gestational Age (LGA)?" placeholder="Yes / No" />
-            <S k="neonatal_birth_cry" label="Birth Cry" placeholder="Immediate / Delayed / Absent" />
-            <S k="neonatal_colour" label="Colour at Birth" placeholder="Pink / Cyanosed / Pale" />
-            <S k="neonatal_respiratory_distress" label="Respiratory Distress?" placeholder="Yes / No" />
-            <S k="neonatal_activity" label="Activity" placeholder="Normal / Hypotonic / Hypertonic" />
-            <S k="neonatal_suckling" label="Suckling" placeholder="Good / Poor / Absent" />
-            <S k="neonatal_feeding_method" label="Feeding Method" placeholder="Breast / Formula / Mixed" />
-            <S k="neonatal_feeding_schedule" label="Feeding Schedule" placeholder="Demand / Scheduled" />
-            <S k="neonatal_feeding_problem" label="Feeding Problems" rows={2} />
-            <S k="neonatal_urine_stools" label="Urine & Stools" placeholder="Normal / Abnormal / Details" />
-            <S k="neonatal_congenital_anomalies_stigmata" label="Congenital Anomalies / Stigmata" rows={2} />
-            <S k="neonatal_seizures" label="Neonatal Seizures?" placeholder="Yes / No / Details" />
-            <S k="neonatal_jaundice" label="Jaundice?" placeholder="Yes / No / Treated" />
-            <S k="neonatal_infection" label="Infection?" rows={2} />
-            <S k="neonatal_hospital_incubator_nicu" label="NICU / Incubator Admission?" placeholder="Yes / No" />
-            <S k="neonatal_icu_stay_details" label="ICU Stay Details" rows={2} />
+            <CapFormField {...capFieldProps} k="neonatal_birth_weight_kg" label="Birth Weight (kg)" type="number" />
+            <CapFormField {...capFieldProps} k="neonatal_birth_weight_category" label="Birth Weight Category" placeholder="Normal / LBW / VLBW / Macrosomic" />
+            <CapFormField {...capFieldProps} k="neonatal_lga" label="Large for Gestational Age (LGA)?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="neonatal_birth_cry" label="Birth Cry" placeholder="Immediate / Delayed / Absent" />
+            <CapFormField {...capFieldProps} k="neonatal_colour" label="Colour at Birth" placeholder="Pink / Cyanosed / Pale" />
+            <CapFormField {...capFieldProps} k="neonatal_respiratory_distress" label="Respiratory Distress?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="neonatal_activity" label="Activity" placeholder="Normal / Hypotonic / Hypertonic" />
+            <CapFormField {...capFieldProps} k="neonatal_suckling" label="Suckling" placeholder="Good / Poor / Absent" />
+            <CapFormField {...capFieldProps} k="neonatal_feeding_method" label="Feeding Method" placeholder="Breast / Formula / Mixed" />
+            <CapFormField {...capFieldProps} k="neonatal_feeding_schedule" label="Feeding Schedule" placeholder="Demand / Scheduled" />
+            <CapFormField {...capFieldProps} k="neonatal_feeding_problem" label="Feeding Problems" rows={2} />
+            <CapFormField {...capFieldProps} k="neonatal_urine_stools" label="Urine & Stools" placeholder="Normal / Abnormal / Details" />
+            <CapFormField {...capFieldProps} k="neonatal_congenital_anomalies_stigmata" label="Congenital Anomalies / Stigmata" rows={2} />
+            <CapFormField {...capFieldProps} k="neonatal_seizures" label="Neonatal Seizures?" placeholder="Yes / No / Details" />
+            <CapFormField {...capFieldProps} k="neonatal_jaundice" label="Jaundice?" placeholder="Yes / No / Treated" />
+            <CapFormField {...capFieldProps} k="neonatal_infection" label="Infection?" rows={2} />
+            <CapFormField {...capFieldProps} k="neonatal_hospital_incubator_nicu" label="NICU / Incubator Admission?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="neonatal_icu_stay_details" label="ICU Stay Details" rows={2} />
             <div className="md:col-span-2">
-              <S k="neonatal_other_significant_history" label="Other Significant Neonatal History" rows={3} />
+              <CapFormField {...capFieldProps} k="neonatal_other_significant_history" label="Other Significant Neonatal History" rows={3} />
             </div>
           </div>
         )}
@@ -1057,23 +1034,23 @@ const EditChildCapWorkupLegacy = ({
         {openSections.habits && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <S k="habits_feeding_type" label="Feeding Type" placeholder="Breast / Formula / Mixed" />
-              <S k="habits_exclusive_breastfeeding_months" label="Exclusive Breastfeeding (months)" type="number" />
-              <S k="habits_reasons_not_exclusive_breastfeeding" label="Reasons Not Exclusive Breastfed" rows={2} />
-              <S k="habits_weaning_age_months" label="Weaning Age (months)" type="number" />
-              <S k="habits_food_fads_preferences" label="Food Fads / Preferences" rows={2} />
-              <S k="habits_sleep_details" label="Sleep Details" rows={2} />
-              <S k="habits_sleep_bedtime_behavioral_problems" label="Bedtime Behavioural Problems" rows={2} />
-              <S k="habits_sleep_abnormal_movements_behaviours" label="Abnormal Movements / Behaviours During Sleep" rows={2} />
+              <CapFormField {...capFieldProps} k="habits_feeding_type" label="Feeding Type" placeholder="Breast / Formula / Mixed" />
+              <CapFormField {...capFieldProps} k="habits_exclusive_breastfeeding_months" label="Exclusive Breastfeeding (months)" type="number" />
+              <CapFormField {...capFieldProps} k="habits_reasons_not_exclusive_breastfeeding" label="Reasons Not Exclusive Breastfed" rows={2} />
+              <CapFormField {...capFieldProps} k="habits_weaning_age_months" label="Weaning Age (months)" type="number" />
+              <CapFormField {...capFieldProps} k="habits_food_fads_preferences" label="Food Fads / Preferences" rows={2} />
+              <CapFormField {...capFieldProps} k="habits_sleep_details" label="Sleep Details" rows={2} />
+              <CapFormField {...capFieldProps} k="habits_sleep_bedtime_behavioral_problems" label="Bedtime Behavioural Problems" rows={2} />
+              <CapFormField {...capFieldProps} k="habits_sleep_abnormal_movements_behaviours" label="Abnormal Movements / Behaviours During Sleep" rows={2} />
             </div>
             <h4 className="font-semibold text-sm text-amber-700">Neurotic Traits</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <B k="habits_neurotic_nail_biting" label="Nail Biting" />
-              <B k="habits_neurotic_thumb_sucking" label="Thumb Sucking" />
-              <B k="habits_neurotic_morbid_fears" label="Morbid Fears" />
-              <B k="habits_neurotic_obstinacy" label="Obstinacy" />
-              <B k="habits_neurotic_temper_tantrums" label="Temper Tantrums" />
-              <B k="habits_neurotic_enuresis_encopresis" label="Enuresis / Encopresis" />
+              <CapBoolField {...capFieldProps} k="habits_neurotic_nail_biting" label="Nail Biting" />
+              <CapBoolField {...capFieldProps} k="habits_neurotic_thumb_sucking" label="Thumb Sucking" />
+              <CapBoolField {...capFieldProps} k="habits_neurotic_morbid_fears" label="Morbid Fears" />
+              <CapBoolField {...capFieldProps} k="habits_neurotic_obstinacy" label="Obstinacy" />
+              <CapBoolField {...capFieldProps} k="habits_neurotic_temper_tantrums" label="Temper Tantrums" />
+              <CapBoolField {...capFieldProps} k="habits_neurotic_enuresis_encopresis" label="Enuresis / Encopresis" />
             </div>
           </div>
         )}
@@ -1088,24 +1065,24 @@ const EditChildCapWorkupLegacy = ({
         {openSections.play && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <S k="play_preference" label="Play Preference" rows={2} />
-              <S k="play_friends_quantity" label="Number of Friends" />
-              <S k="play_friends_age_relation" label="Friends' Age / Relationship" />
-              <S k="play_bully_details" label="Bully Details" rows={2} />
-              <S k="play_bullied_details" label="Bullied Details" rows={2} />
-              <S k="play_peculiarities" label="Play Peculiarities" rows={2} />
+              <CapFormField {...capFieldProps} k="play_preference" label="Play Preference" rows={2} />
+              <CapFormField {...capFieldProps} k="play_friends_quantity" label="Number of Friends" />
+              <CapFormField {...capFieldProps} k="play_friends_age_relation" label="Friends' Age / Relationship" />
+              <CapFormField {...capFieldProps} k="play_bully_details" label="Bully Details" rows={2} />
+              <CapFormField {...capFieldProps} k="play_bullied_details" label="Bullied Details" rows={2} />
+              <CapFormField {...capFieldProps} k="play_peculiarities" label="Play Peculiarities" rows={2} />
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <B k="play_indifferent_to_playmates" label="Indifferent to Playmates" />
-              <B k="play_inappropriate_intrusion_impulsivity" label="Inappropriate Intrusion / Impulsivity" />
-              <B k="play_understands_rules_based_games" label="Understands Rule-based Games" />
-              <B k="play_shows_cooperation_in_play" label="Shows Cooperation" />
-              <B k="play_is_bully" label="Is a Bully" />
-              <B k="play_is_bullied" label="Is Bullied" />
-              <B k="play_indulges_functional_play" label="Functional Play" />
-              <B k="play_indulges_symbolic_pretend_play" label="Symbolic / Pretend Play" />
+              <CapBoolField {...capFieldProps} k="play_indifferent_to_playmates" label="Indifferent to Playmates" />
+              <CapBoolField {...capFieldProps} k="play_inappropriate_intrusion_impulsivity" label="Inappropriate Intrusion / Impulsivity" />
+              <CapBoolField {...capFieldProps} k="play_understands_rules_based_games" label="Understands Rule-based Games" />
+              <CapBoolField {...capFieldProps} k="play_shows_cooperation_in_play" label="Shows Cooperation" />
+              <CapBoolField {...capFieldProps} k="play_is_bully" label="Is a Bully" />
+              <CapBoolField {...capFieldProps} k="play_is_bullied" label="Is Bullied" />
+              <CapBoolField {...capFieldProps} k="play_indulges_functional_play" label="Functional Play" />
+              <CapBoolField {...capFieldProps} k="play_indulges_symbolic_pretend_play" label="Symbolic / Pretend Play" />
             </div>
-            <S k="habits_play_other_significant_history" label="Other Significant Habits / Play History" rows={3} />
+            <CapFormField {...capFieldProps} k="habits_play_other_significant_history" label="Other Significant Habits / Play History" rows={3} />
           </div>
         )}
       </Card>
@@ -1118,21 +1095,21 @@ const EditChildCapWorkupLegacy = ({
           collapsible={!effectiveFlatLayout} />
         {openSections.education && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <S k="edu_schooling_type" label="Schooling Type" placeholder="Formal / Non-formal / Home-schooled" />
-            <S k="edu_school_nature" label="School Nature" placeholder="Government / Private / Special" />
-            <S k="edu_literacy_before_formal_schooling" label="Literacy Before Formal Schooling?" placeholder="Yes / No" />
-            <S k="edu_age_started_schooling" label="Age Started Schooling" />
-            <S k="edu_studied_up_to_class" label="Studied Up To Class" />
-            <S k="edu_current_school_address" label="Current School & Address" rows={2} />
-            <S k="edu_attendance" label="Attendance" placeholder="Regular / Irregular / % attendance" />
-            <S k="edu_scholastic_performance" label="Scholastic Performance" rows={2} />
-            <S k="edu_peer_group_adjustment" label="Peer Group Adjustment" rows={2} />
-            <S k="edu_problems_with_teachers" label="Problems with Teachers" rows={2} />
-            <S k="edu_classroom_behaviour" label="Classroom Behaviour" rows={2} />
-            <S k="edu_school_change_frequency_reasons" label="School Change – Frequency & Reasons" rows={2} />
-            <S k="edu_dropout_reasons" label="Dropout Reasons" rows={2} />
+            <CapFormField {...capFieldProps} k="edu_schooling_type" label="Schooling Type" placeholder="Formal / Non-formal / Home-schooled" />
+            <CapFormField {...capFieldProps} k="edu_school_nature" label="School Nature" placeholder="Government / Private / Special" />
+            <CapFormField {...capFieldProps} k="edu_literacy_before_formal_schooling" label="Literacy Before Formal Schooling?" placeholder="Yes / No" />
+            <CapFormField {...capFieldProps} k="edu_age_started_schooling" label="Age Started Schooling" />
+            <CapFormField {...capFieldProps} k="edu_studied_up_to_class" label="Studied Up To Class" />
+            <CapFormField {...capFieldProps} k="edu_current_school_address" label="Current School & Address" rows={2} />
+            <CapFormField {...capFieldProps} k="edu_attendance" label="Attendance" placeholder="Regular / Irregular / % attendance" />
+            <CapFormField {...capFieldProps} k="edu_scholastic_performance" label="Scholastic Performance" rows={2} />
+            <CapFormField {...capFieldProps} k="edu_peer_group_adjustment" label="Peer Group Adjustment" rows={2} />
+            <CapFormField {...capFieldProps} k="edu_problems_with_teachers" label="Problems with Teachers" rows={2} />
+            <CapFormField {...capFieldProps} k="edu_classroom_behaviour" label="Classroom Behaviour" rows={2} />
+            <CapFormField {...capFieldProps} k="edu_school_change_frequency_reasons" label="School Change – Frequency & Reasons" rows={2} />
+            <CapFormField {...capFieldProps} k="edu_dropout_reasons" label="Dropout Reasons" rows={2} />
             <div className="md:col-span-2">
-              <S k="edu_any_other_information" label="Any Other Educational Information" rows={3} />
+              <CapFormField {...capFieldProps} k="edu_any_other_information" label="Any Other Educational Information" rows={3} />
             </div>
           </div>
         )}
@@ -1146,14 +1123,14 @@ const EditChildCapWorkupLegacy = ({
           collapsible={!effectiveFlatLayout} />
         {openSections.sexual && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <S k="sexual_menstrual_age_appropriate_context" label="Age-appropriate Context / Awareness" rows={2} />
-            <S k="sexual_menstrual_menarche_regularity_lmp" label="Menarche, Regularity & LMP" rows={2} />
-            <S k="sexual_menstrual_reaction_menarche" label="Reaction to Menarche" rows={2} />
-            <S k="sexual_menstrual_orientation" label="Sexual Orientation" />
-            <S k="sexual_menstrual_masturbation_guilt" label="Masturbation / Guilt" rows={2} />
-            <S k="sexual_menstrual_intercourse_protection" label="Intercourse / Protection" rows={2} />
+            <CapFormField {...capFieldProps} k="sexual_menstrual_age_appropriate_context" label="Age-appropriate Context / Awareness" rows={2} />
+            <CapFormField {...capFieldProps} k="sexual_menstrual_menarche_regularity_lmp" label="Menarche, Regularity & LMP" rows={2} />
+            <CapFormField {...capFieldProps} k="sexual_menstrual_reaction_menarche" label="Reaction to Menarche" rows={2} />
+            <CapFormField {...capFieldProps} k="sexual_menstrual_orientation" label="Sexual Orientation" />
+            <CapFormField {...capFieldProps} k="sexual_menstrual_masturbation_guilt" label="Masturbation / Guilt" rows={2} />
+            <CapFormField {...capFieldProps} k="sexual_menstrual_intercourse_protection" label="Intercourse / Protection" rows={2} />
             <div className="md:col-span-2">
-              <S k="sexual_menstrual_knowledge_perceptions" label="Knowledge & Perceptions" rows={3} />
+              <CapFormField {...capFieldProps} k="sexual_menstrual_knowledge_perceptions" label="Knowledge & Perceptions" rows={3} />
             </div>
           </div>
         )}
@@ -1217,12 +1194,12 @@ const EditChildCapWorkupLegacy = ({
         {openSections.family && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <S k="child_strengths_psychosocial_assets" label="Psychosocial Assets / Strengths" rows={3} />
-              <S k="child_strengths_interests_hobbies" label="Interests & Hobbies" rows={3} />
-              <S k="family_primary_caregivers" label="Primary Caregivers" />
-              <S k="family_primary_breadwinner" label="Primary Breadwinner" />
-              <S k="family_structure_type" label="Family Structure Type" placeholder="Nuclear / Joint / Extended" />
-              <S k="family_main_decision_makers" label="Main Decision Makers" />
+              <CapFormField {...capFieldProps} k="child_strengths_psychosocial_assets" label="Psychosocial Assets / Strengths" rows={3} />
+              <CapFormField {...capFieldProps} k="child_strengths_interests_hobbies" label="Interests & Hobbies" rows={3} />
+              <CapFormField {...capFieldProps} k="family_primary_caregivers" label="Primary Caregivers" />
+              <CapFormField {...capFieldProps} k="family_primary_breadwinner" label="Primary Breadwinner" />
+              <CapFormField {...capFieldProps} k="family_structure_type" label="Family Structure Type" placeholder="Nuclear / Joint / Extended" />
+              <CapFormField {...capFieldProps} k="family_main_decision_makers" label="Main Decision Makers" />
             </div>
 
             <h4 className="font-semibold text-sm text-green-700 mt-4">Patterns of Parental Functioning</h4>
@@ -1261,14 +1238,14 @@ const EditChildCapWorkupLegacy = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <S k="pci_interaction_patterns_communication_warmth_abuse_indulgence" label="Parent-Child Interaction: Communication, Warmth, Abuse, Indulgence" rows={3} />
-              <S k="pci_attachment_bonding_child_parents" label="Attachment & Bonding: Child–Parents" rows={3} />
-              <S k="pci_family_understanding_illness_expectations" label="Family Understanding of Illness & Expectations" rows={3} />
-              <S k="family_functioning_discord_communication" label="Family Functioning: Discord & Communication" rows={3} />
-              <S k="family_functioning_role_significant_others" label="Role of Significant Others" rows={2} />
-              <S k="family_functioning_stressful_events_child_impact" label="Stressful Events & Impact on Child" rows={2} />
-              <S k="social_environmental_dwelling_crowding_finance_neighborhood" label="Social/Environmental: Dwelling, Crowding, Finance, Neighbourhood" rows={3} />
-              <S k="social_environmental_resources_milieu_support" label="Resources, Milieu & Support" rows={3} />
+              <CapFormField {...capFieldProps} k="pci_interaction_patterns_communication_warmth_abuse_indulgence" label="Parent-Child Interaction: Communication, Warmth, Abuse, Indulgence" rows={3} />
+              <CapFormField {...capFieldProps} k="pci_attachment_bonding_child_parents" label="Attachment & Bonding: Child–Parents" rows={3} />
+              <CapFormField {...capFieldProps} k="pci_family_understanding_illness_expectations" label="Family Understanding of Illness & Expectations" rows={3} />
+              <CapFormField {...capFieldProps} k="family_functioning_discord_communication" label="Family Functioning: Discord & Communication" rows={3} />
+              <CapFormField {...capFieldProps} k="family_functioning_role_significant_others" label="Role of Significant Others" rows={2} />
+              <CapFormField {...capFieldProps} k="family_functioning_stressful_events_child_impact" label="Stressful Events & Impact on Child" rows={2} />
+              <CapFormField {...capFieldProps} k="social_environmental_dwelling_crowding_finance_neighborhood" label="Social/Environmental: Dwelling, Crowding, Finance, Neighbourhood" rows={3} />
+              <CapFormField {...capFieldProps} k="social_environmental_resources_milieu_support" label="Resources, Milieu & Support" rows={3} />
             </div>
           </div>
         )}
@@ -1283,32 +1260,32 @@ const EditChildCapWorkupLegacy = ({
         {openSections.physical && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <S k="gpe_built" label="Built" placeholder="Ectomorph / Endomorph / Mesomorph" />
-              <S k="gpe_height_length_cm" label="Height / Length (cm)" type="number" />
-              <S k="gpe_height_growth_chart_position" label="Height – Growth Chart Position" />
-              <S k="gpe_weight_kg" label="Weight (kg)" type="number" />
-              <S k="gpe_weight_growth_chart_position" label="Weight – Growth Chart Position" />
-              <S k="gpe_bmi" label="BMI" type="number" />
-              <S k="gpe_bmi_growth_chart_position" label="BMI – Growth Chart Position" />
-              <S k="gpe_waist_circumference_cm" label="Waist Circumference (cm)" type="number" />
-              <S k="gpe_hip_circumference_cm" label="Hip Circumference (cm)" type="number" />
-              <S k="gpe_head_circumference_cm" label="Head Circumference (cm)" type="number" />
-              <S k="gpe_head_circumference_growth_chart_position" label="HC – Growth Chart Position" />
-              <S k="gpe_vitals_hr" label="Vitals – HR" placeholder="bpm" />
-              <S k="gpe_vitals_rr" label="Vitals – RR" placeholder="breaths/min" />
-              <S k="gpe_vitals_bp" label="Vitals – BP" placeholder="mmHg" />
+              <CapFormField {...capFieldProps} k="gpe_built" label="Built" placeholder="Ectomorph / Endomorph / Mesomorph" />
+              <CapFormField {...capFieldProps} k="gpe_height_length_cm" label="Height / Length (cm)" type="number" />
+              <CapFormField {...capFieldProps} k="gpe_height_growth_chart_position" label="Height – Growth Chart Position" />
+              <CapFormField {...capFieldProps} k="gpe_weight_kg" label="Weight (kg)" type="number" />
+              <CapFormField {...capFieldProps} k="gpe_weight_growth_chart_position" label="Weight – Growth Chart Position" />
+              <CapFormField {...capFieldProps} k="gpe_bmi" label="BMI" type="number" />
+              <CapFormField {...capFieldProps} k="gpe_bmi_growth_chart_position" label="BMI – Growth Chart Position" />
+              <CapFormField {...capFieldProps} k="gpe_waist_circumference_cm" label="Waist Circumference (cm)" type="number" />
+              <CapFormField {...capFieldProps} k="gpe_hip_circumference_cm" label="Hip Circumference (cm)" type="number" />
+              <CapFormField {...capFieldProps} k="gpe_head_circumference_cm" label="Head Circumference (cm)" type="number" />
+              <CapFormField {...capFieldProps} k="gpe_head_circumference_growth_chart_position" label="HC – Growth Chart Position" />
+              <CapFormField {...capFieldProps} k="gpe_vitals_hr" label="Vitals – HR" placeholder="bpm" />
+              <CapFormField {...capFieldProps} k="gpe_vitals_rr" label="Vitals – RR" placeholder="breaths/min" />
+              <CapFormField {...capFieldProps} k="gpe_vitals_bp" label="Vitals – BP" placeholder="mmHg" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <S k="gpe_general_signs" label="General Signs" rows={3} placeholder="Pallor, icterus, lymphadenopathy, oedema..." />
-              <S k="gpe_facial_dysmorphism" label="Facial Dysmorphism" rows={3} />
-              <S k="gpe_skin_neurocutaneous_stigmata" label="Skin / Neurocutaneous Stigmata" rows={3} />
+              <CapFormField {...capFieldProps} k="gpe_general_signs" label="General Signs" rows={3} placeholder="Pallor, icterus, lymphadenopathy, oedema..." />
+              <CapFormField {...capFieldProps} k="gpe_facial_dysmorphism" label="Facial Dysmorphism" rows={3} />
+              <CapFormField {...capFieldProps} k="gpe_skin_neurocutaneous_stigmata" label="Skin / Neurocutaneous Stigmata" rows={3} />
             </div>
             <h4 className="font-semibold text-sm text-slate-700 mt-2">Systemic Examination</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <S k="sys_exam_respiratory" label="Respiratory System" rows={3} />
-              <S k="sys_exam_cardiovascular" label="Cardiovascular System" rows={3} />
-              <S k="sys_exam_gastrointestinal" label="Gastrointestinal System" rows={3} />
-              <S k="sys_exam_nervous_system" label="Nervous System" rows={3} />
+              <CapFormField {...capFieldProps} k="sys_exam_respiratory" label="Respiratory System" rows={3} />
+              <CapFormField {...capFieldProps} k="sys_exam_cardiovascular" label="Cardiovascular System" rows={3} />
+              <CapFormField {...capFieldProps} k="sys_exam_gastrointestinal" label="Gastrointestinal System" rows={3} />
+              <CapFormField {...capFieldProps} k="sys_exam_nervous_system" label="Nervous System" rows={3} />
             </div>
           </div>
         )}
@@ -1322,22 +1299,22 @@ const EditChildCapWorkupLegacy = ({
           collapsible={!effectiveFlatLayout} />
         {openSections.mse && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <S k="mse_interview_approach_notes" label="Interview Approach / Notes" rows={2} />
-            <S k="mse_general_appearance_attitude_behaviour" label="General Appearance, Attitude & Behaviour" rows={3} />
-            <S k="mse_relationship_capacity" label="Relationship Capacity" rows={2} />
-            <S k="mse_spontaneous_motility" label="Spontaneous Motility" rows={2} />
-            <S k="mse_speech_and_language" label="Speech & Language" rows={2} />
-            <S k="mse_affect" label="Affect" rows={2} />
-            <S k="mse_thought_flow" label="Thought Flow" rows={2} />
-            <S k="mse_thought_form" label="Thought Form" rows={2} />
-            <S k="mse_thought_content" label="Thought Content" rows={2} />
-            <S k="mse_possession" label="Possession" rows={2} />
-            <S k="mse_perception" label="Perception" rows={2} />
-            <S k="mse_hmf_orientation" label="HMF – Orientation" rows={2} />
-            <S k="mse_hmf_attention_distractibility" label="HMF – Attention & Distractibility" rows={2} />
-            <S k="mse_hmf_memory" label="HMF – Memory" rows={2} />
-            <S k="mse_hmf_intelligence_fund_of_knowledge" label="HMF – Intelligence & Fund of Knowledge" rows={2} />
-            <S k="mse_insight_motivation" label="Insight & Motivation" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_interview_approach_notes" label="Interview Approach / Notes" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_general_appearance_attitude_behaviour" label="General Appearance, Attitude & Behaviour" rows={3} />
+            <CapFormField {...capFieldProps} k="mse_relationship_capacity" label="Relationship Capacity" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_spontaneous_motility" label="Spontaneous Motility" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_speech_and_language" label="Speech & Language" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_affect" label="Affect" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_thought_flow" label="Thought Flow" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_thought_form" label="Thought Form" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_thought_content" label="Thought Content" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_possession" label="Possession" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_perception" label="Perception" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_hmf_orientation" label="HMF – Orientation" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_hmf_attention_distractibility" label="HMF – Attention & Distractibility" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_hmf_memory" label="HMF – Memory" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_hmf_intelligence_fund_of_knowledge" label="HMF – Intelligence & Fund of Knowledge" rows={2} />
+            <CapFormField {...capFieldProps} k="mse_insight_motivation" label="Insight & Motivation" rows={2} />
           </div>
         )}
       </Card>
@@ -1351,13 +1328,13 @@ const EditChildCapWorkupLegacy = ({
         {openSections.diagnosis && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <S k="diagnostic_formulation" label="Diagnostic Formulation" rows={5} placeholder="Biopsychosocial formulation..." />
+              <CapFormField {...capFieldProps} k="diagnostic_formulation" label="Diagnostic Formulation" rows={5} placeholder="Biopsychosocial formulation..." />
             </div>
-            <S k="provisional_diagnosis" label="Provisional Diagnosis" rows={2} />
-            <S k="icd10_diagnosis" label="ICD-10 Diagnosis" rows={2} />
-            <S k="dsm5_diagnosis" label="DSM-5 Diagnosis" rows={2} />
+            <CapFormField {...capFieldProps} k="provisional_diagnosis" label="Provisional Diagnosis" rows={2} />
+            <CapFormField {...capFieldProps} k="icd10_diagnosis" label="ICD-10 Diagnosis" rows={2} />
+            <CapFormField {...capFieldProps} k="dsm5_diagnosis" label="DSM-5 Diagnosis" rows={2} />
             <div className="md:col-span-2">
-              <S k="residents_plan_of_management" label="Resident's Plan of Management" rows={4} />
+              <CapFormField {...capFieldProps} k="residents_plan_of_management" label="Resident's Plan of Management" rows={4} />
             </div>
           </div>
         )}
@@ -1372,19 +1349,19 @@ const EditChildCapWorkupLegacy = ({
         {openSections.consultant && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <S k="consultant_sr_discussion" label="Consultant / SR Discussion" rows={4} />
+              <CapFormField {...capFieldProps} k="consultant_sr_discussion" label="Consultant / SR Discussion" rows={4} />
             </div>
-            <S k="final_diagnosis" label="Final Diagnosis" rows={2} />
-            <S k="final_icd10_diagnosis" label="Final ICD-10 Diagnosis" rows={2} />
-            <S k="final_dsm5_diagnosis" label="Final DSM-5 Diagnosis" rows={2} />
-            <S k="mgmt_planned_followup_setting_frequency" label="Management: Follow-up Setting & Frequency" rows={2} />
-            <S k="mgmt_planned_further_exploration" label="Management: Further Exploration Planned" rows={2} />
-            <S k="mgmt_planned_rating_scales" label="Management: Rating Scales Planned" rows={2} />
+            <CapFormField {...capFieldProps} k="final_diagnosis" label="Final Diagnosis" rows={2} />
+            <CapFormField {...capFieldProps} k="final_icd10_diagnosis" label="Final ICD-10 Diagnosis" rows={2} />
+            <CapFormField {...capFieldProps} k="final_dsm5_diagnosis" label="Final DSM-5 Diagnosis" rows={2} />
+            <CapFormField {...capFieldProps} k="mgmt_planned_followup_setting_frequency" label="Management: Follow-up Setting & Frequency" rows={2} />
+            <CapFormField {...capFieldProps} k="mgmt_planned_further_exploration" label="Management: Further Exploration Planned" rows={2} />
+            <CapFormField {...capFieldProps} k="mgmt_planned_rating_scales" label="Management: Rating Scales Planned" rows={2} />
             <div className="md:col-span-2">
-              <S k="management_advice" label="General Advice" rows={4} />
+              <CapFormField {...capFieldProps} k="management_advice" label="General Advice" rows={4} />
             </div>
-            <S k="signature_consultant_sr_name" label="Consultant / SR Name & Signature" />
-            <S k="signature_resident_name" label="Resident Name & Signature" />
+            <CapFormField {...capFieldProps} k="signature_consultant_sr_name" label="Consultant / SR Name & Signature" />
+            <CapFormField {...capFieldProps} k="signature_resident_name" label="Resident Name & Signature" />
           </div>
         )}
       </Card>

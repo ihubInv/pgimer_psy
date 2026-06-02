@@ -47,6 +47,7 @@ import ChildPatientRegistrationViewCards from '../../components/ChildPatientRegi
 import { ReadOnlyToneProvider } from '../../components/PatientDetailReadOnlyCard';
 import ViewEmptyMessage from '../../components/ViewEmptyMessage';
 import {
+  VIEW_DETAILS_CARD_CLASS,
   VIEW_NESTED_PANEL_CLASS,
   VIEW_PAGE_SHELL_CLASS,
   VIEW_SECTION_ICON,
@@ -2551,7 +2552,7 @@ const CreateChildPatient = () => {
                       const n = visitGroup.visits.length;
 
                       return (
-                        <Card key={`date-${dateKey}`} className={viewDetailsCardClass}>
+                        <Card key={`date-${dateKey}`} className={VIEW_DETAILS_CARD_CLASS}>
                           <div
                             className="flex items-center justify-between p-5 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
                             onClick={() => toggleVisitCard(`date-${dateKey}`)}
