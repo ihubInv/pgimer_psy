@@ -6,7 +6,7 @@ import {
   FiUser, FiUsers, FiHome, FiMapPin, FiCalendar, FiGlobe,
   FiFileText, FiHash, FiSave, FiX, FiCamera, FiUpload, FiEdit,
   FiClock, FiChevronDown, FiChevronUp, FiEye, FiEdit3, FiClipboard, FiPackage,
-  FiFolder,
+  FiFolder, FiPrinter,
 } from 'react-icons/fi';
 import { IconInput } from '../../components/IconInput';
 import Card from '../../components/Card';
@@ -46,6 +46,7 @@ import ChildCapIntakeComingSoon from '../../components/ChildCapIntakeComingSoon'
 import ChildPatientRegistrationViewCards from '../../components/ChildPatientRegistrationViewCards';
 import ChildClinicalProformaSummaryView from '../../components/ChildClinicalProformaSummaryView';
 import FilePreview from '../../components/FilePreview';
+import PGI_Logo from '../../assets/PGI_Logo.png';
 
 const CreateChildPatient = () => {
   const navigate = useNavigate();
@@ -175,6 +176,10 @@ const CreateChildPatient = () => {
   
   // State for expanded visit cards
   const [expandedVisitCards, setExpandedVisitCards] = useState({});
+  const childPatientDetailsPrintRef = useRef(null);
+  const childClinicalPrintRef = useRef(null);
+  const childCapPrintRef = useRef(null);
+  const childPrescriptionPrintRef = useRef(null);
   
   // Fetch child clinical proformas when viewing/editing
   const { data: childClinicalData, isLoading: isLoadingChildProformas } = useGetChildClinicalProformasByChildPatientIdQuery(
@@ -291,6 +296,414 @@ const CreateChildPatient = () => {
   // Helper function to check if visit card is expanded
   const isVisitCardExpanded = (visitId) => {
     return expandedVisitCards[visitId] === true;
+  };
+
+  const sanitizeSectionHtml = (rawHtml, { stripDocuments = false } = {}) => {
+    if (!rawHtml) return '';
+    const temp = document.createElement('div');
+    temp.innerHTML = rawHtml;
+
+    temp
+      .querySelectorAll(
+        '.no-print, [class*="no-print"], button, [role="button"], script, style'
+      )
+      .forEach((el) => el.remove());
+
+    if (stripDocuments) {
+      const docHeadings = Array.from(temp.querySelectorAll('h4'));
+      docHeadings.forEach((heading) => {
+        const headingText = (heading.textContent || '').trim().toLowerCase();
+        if (headingText.includes('patient documents & files')) {
+          const block = heading.closest('div.rounded-xl') || heading.parentElement;
+          if (block) block.remove();
+        }
+      });
+    }
+
+    temp.querySelectorAll('*').forEach((el) => {
+      el.style.pageBreakBefore = 'auto';
+      el.style.pageBreakAfter = 'auto';
+      el.style.breakBefore = 'auto';
+      el.style.breakAfter = 'auto';
+      el.style.minHeight = '0';
+    });
+
+    return temp.innerHTML.trim();
+  };
+
+  const buildCombinedPrintDocument = (sections, documentTitle, logoBase64 = '') => {
+    const combinedHtml = sections
+      .map(
+        (section) => `
+          <section class="print-section">
+            <h3>${section.title}</h3>
+            ${section.html}
+          </section>
+        `
+      )
+      .join('');
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${documentTitle}</title>
+  <style>
+    @page { size: A4; margin: 12mm 15mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+      font-size: 10pt;
+      line-height: 1.5;
+    }
+    body * {
+      color: #000 !important;
+      background: #fff !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      border-bottom: 1px solid #000;
+      padding: 8px 0 12px;
+      margin-bottom: 14px;
+    }
+    .logo { height: 60px; width: auto; filter: grayscale(100%); object-fit: contain; }
+    .header-text { text-align: center; flex: 1; }
+    .header-text h1 {
+      margin: 0;
+      font-size: 14pt;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .header-text h2 { margin: 2px 0 0; font-size: 10pt; font-weight: 600; }
+    .header-text p { margin: 3px 0 0; font-size: 10pt; }
+    .print-section {
+      margin-bottom: 14px;
+      border: 1px solid #000;
+      padding: 10px;
+      page-break-inside: auto;
+      break-inside: auto;
+      page-break-before: auto !important;
+      break-before: auto !important;
+    }
+    .print-section * {
+      page-break-before: auto !important;
+      break-before: auto !important;
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    .print-section > h3 {
+      margin: 0 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #000;
+      font-size: 11pt;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .print-section .grid,
+    .print-section [class*="grid-cols-"],
+    .print-section [class*="grid "] {
+      display: grid !important;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      gap: 8px !important;
+      align-items: start !important;
+    }
+    .print-section [class*="col-span-"],
+    .print-section [class*="md:col-span-"],
+    .print-section [class*="lg:col-span-"] {
+      grid-column: auto !important;
+    }
+    .print-footer {
+      margin-top: 14px;
+      padding-top: 8px;
+      border-top: 1px solid #000;
+      font-size: 8.5pt;
+      text-align: center;
+      color: #000;
+    }
+    table, th, td {
+      border: 1px solid #000 !important;
+      border-collapse: collapse;
+    }
+    th, td { padding: 6px 8px; text-align: left; vertical-align: top; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    ${logoBase64 ? `<img src="${logoBase64}" alt="PGIMER Logo" class="logo" />` : ''}
+    <div class="header-text">
+      <h1>POSTGRADUATE INSTITUTE OF MEDICAL EDUCATION & RESEARCH</h1>
+      <h2>Department of Psychiatry</h2>
+      <p>Combined Child Patient Report</p>
+    </div>
+  </div>
+  ${combinedHtml}
+  <div class="print-footer">
+    <p><strong>Generated on:</strong> ${new Date().toLocaleString('en-IN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })}</p>
+    <p>PGIMER - Department of Psychiatry | Electronic Medical Record System</p>
+    <p>This is a computer-generated document. No signature required.</p>
+  </div>
+</body>
+</html>`;
+  };
+
+  const printSection = async (title, sectionRef, { stripDocuments = false } = {}) => {
+    const sectionEl = sectionRef?.current;
+    if (!sectionEl) {
+      toast.error('Please expand this section first');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print this section');
+      return;
+    }
+
+    let logoBase64 = '';
+    try {
+      const logoResponse = await fetch(PGI_Logo);
+      const logoBlob = await logoResponse.blob();
+      const logoReader = new FileReader();
+      logoBase64 = await new Promise((resolve) => {
+        logoReader.onloadend = () => resolve(logoReader.result);
+        logoReader.readAsDataURL(logoBlob);
+      });
+    } catch (e) {
+      console.warn('Could not load logo for print:', e);
+    }
+
+    const cleanedHtml = sanitizeSectionHtml(sectionEl.innerHTML, { stripDocuments });
+
+    const printContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10pt;
+      line-height: 1.5;
+      color: #000;
+      background: #fff;
+    }
+    body * {
+      color: #000 !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+      background: #fff !important;
+      border-color: #000 !important;
+    }
+    .print-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      border-bottom: 1px solid #000;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+    }
+    .logo {
+      height: 60px;
+      width: auto;
+      filter: grayscale(100%);
+      object-fit: contain;
+    }
+    .header-text {
+      text-align: center;
+      flex: 1;
+    }
+    .header-text h1 {
+      margin: 0;
+      font-size: 13pt;
+      font-weight: 700;
+      color: #000;
+      text-transform: uppercase;
+    }
+    .header-text h2 {
+      margin: 2px 0 0;
+      font-size: 10pt;
+      font-weight: 600;
+      color: #000;
+    }
+    .header-text p {
+      margin: 2px 0 0;
+      font-size: 9pt;
+      color: #000;
+    }
+    .print-footer {
+      margin-top: 14px;
+      padding-top: 8px;
+      border-top: 1px solid #000;
+      font-size: 8.5pt;
+      text-align: center;
+      color: #000;
+    }
+    .print-content .grid,
+    .print-content [class*="grid-cols-"] {
+      display: grid !important;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      gap: 8px !important;
+      align-items: start !important;
+    }
+    .print-content [class*="col-span-"] {
+      grid-column: auto !important;
+    }
+    .print-content .no-print,
+    .print-content [class*="no-print"],
+    .print-content button,
+    .print-content [role="button"] {
+      display: none !important;
+    }
+    table, th, td {
+      border: 1px solid #000 !important;
+      border-collapse: collapse;
+    }
+    th, td { padding: 6px 8px; text-align: left; vertical-align: top; }
+  </style>
+</head>
+<body>
+  <div class="print-header">
+    ${logoBase64 ? `<img src="${logoBase64}" alt="PGIMER Logo" class="logo" />` : ''}
+    <div class="header-text">
+      <h1>POSTGRADUATE INSTITUTE OF MEDICAL EDUCATION & RESEARCH</h1>
+      <h2>Department of Psychiatry</h2>
+      <p>${title}</p>
+    </div>
+  </div>
+  <div class="print-content">${cleanedHtml}</div>
+  <div class="print-footer">
+    <p><strong>Generated on:</strong> ${new Date().toLocaleString('en-IN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}</p>
+    <p>PGIMER - Department of Psychiatry | Electronic Medical Record System</p>
+    <p>This is a computer-generated document. No signature required.</p>
+  </div>
+</body>
+</html>`;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      setTimeout(() => printWindow.print(), 300);
+    };
+  };
+
+  const handlePrintFromChildCard = (cardName, sectionRef, title, options = {}) => {
+    if (expandedCards[cardName]) {
+      printSection(title, sectionRef, options);
+      return;
+    }
+    setExpandedCards((prev) => ({ ...prev, [cardName]: true }));
+    window.setTimeout(() => {
+      printSection(title, sectionRef, options);
+    }, 350);
+  };
+
+  const handlePrintAllChildCards = async () => {
+    setExpandedCards((prev) => ({
+      ...prev,
+      childPatientRegistration: true,
+      viewChildClinical: true,
+      viewIntake: true,
+      viewPrescription: true,
+    }));
+
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+
+    const sections = [];
+
+    if (childPatientDetailsPrintRef.current) {
+      const html = sanitizeSectionHtml(childPatientDetailsPrintRef.current.innerHTML, {
+        stripDocuments: true,
+      });
+      if (html) {
+        sections.push({ title: 'Child Patient Details', html });
+      }
+    }
+    if (childClinicalPrintRef.current) {
+      const html = sanitizeSectionHtml(childClinicalPrintRef.current.innerHTML);
+      if (html) {
+        sections.push({ title: 'Child Clinical Proforma', html });
+      }
+    }
+    if (childCapPrintRef.current) {
+      const html = sanitizeSectionHtml(childCapPrintRef.current.innerHTML);
+      if (html) {
+        sections.push({ title: 'CAP Detailed Work-up Record', html });
+      }
+    }
+    if (childPrescriptionPrintRef.current) {
+      const html = sanitizeSectionHtml(childPrescriptionPrintRef.current.innerHTML);
+      if (html) {
+        sections.push({ title: 'Prescription', html });
+      }
+    }
+
+    if (!sections.length) {
+      toast.error('No printable sections found');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print this section');
+      return;
+    }
+
+    let logoBase64 = '';
+    try {
+      const logoResponse = await fetch(PGI_Logo);
+      const logoBlob = await logoResponse.blob();
+      const logoReader = new FileReader();
+      logoBase64 = await new Promise((resolve) => {
+        logoReader.onloadend = () => resolve(logoReader.result);
+        logoReader.readAsDataURL(logoBlob);
+      });
+    } catch (e) {
+      console.warn('Could not load logo for print:', e);
+    }
+
+    const patientLabel = formData.child_name || 'Child Patient';
+    const printContent = buildCombinedPrintDocument(
+      sections,
+      `Combined Child Patient Report - ${patientLabel}`,
+      logoBase64
+    );
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+        toast.success('Combined print dialog opened');
+      }, 500);
+    };
   };
   
   // Helper function to convert date to IST date string (YYYY-MM-DD)
@@ -752,6 +1165,18 @@ const CreateChildPatient = () => {
             </div>
           </div>
         )}
+        {isViewMode && id && !isMWO(currentUser?.role) && (
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              className="no-print"
+              onClick={handlePrintAllChildCards}
+            >
+              <FiPrinter className="h-4 w-4 mr-2" />
+              Print All Cards
+            </Button>
+          </div>
+        )}
         {/* Registration / view: always. Edit demographics: MWO only (others use proforma+intake below). */}
         {showChildRegistrationCard && (
           <Card className="shadow-lg border-0 bg-white">
@@ -775,12 +1200,31 @@ const CreateChildPatient = () => {
                     </p>
                   </div>
                 </div>
-                <div className="cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="no-print"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrintFromChildCard(
+                        'childPatientRegistration',
+                        childPatientDetailsPrintRef,
+                        'Child Patient Details',
+                        { stripDocuments: true }
+                      );
+                    }}
+                  >
+                    <FiPrinter className="h-4 w-4 mr-1" />
+                    Print
+                  </Button>
+                  <div className="cursor-pointer">
                   {expandedCards.childPatientRegistration ? (
                     <FiChevronUp className="h-6 w-6 text-gray-500" />
                   ) : (
                     <FiChevronDown className="h-6 w-6 text-gray-500" />
                   )}
+                </div>
                 </div>
               </div>
             ) : (
@@ -1430,7 +1874,7 @@ const CreateChildPatient = () => {
           </form>
               ) : (
                 <>
-                  <div className="space-y-6 p-6">
+                  <div ref={childPatientDetailsPrintRef} className="space-y-6 p-6">
                     <ChildPatientRegistrationViewCards formData={formData} rooms={rooms} />
                     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                       <h4 className="mb-4 flex items-center gap-3 text-lg font-semibold text-gray-900">
@@ -1491,16 +1935,34 @@ const CreateChildPatient = () => {
                     <p className="mt-1 text-sm text-gray-500">{walkInClinicalProformaSubtitle}</p>
                   </div>
                 </div>
-                <div className="cursor-pointer" onClick={() => toggleCard('viewChildClinical')}>
-                  {expandedCards.viewChildClinical ? (
-                    <FiChevronUp className="h-6 w-6 text-gray-500" />
-                  ) : (
-                    <FiChevronDown className="h-6 w-6 text-gray-500" />
-                  )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="no-print"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrintFromChildCard(
+                        'viewChildClinical',
+                        childClinicalPrintRef,
+                        'Child Clinical Proforma'
+                      );
+                    }}
+                  >
+                    <FiPrinter className="h-4 w-4 mr-1" />
+                    Print
+                  </Button>
+                  <div className="cursor-pointer" onClick={() => toggleCard('viewChildClinical')}>
+                    {expandedCards.viewChildClinical ? (
+                      <FiChevronUp className="h-6 w-6 text-gray-500" />
+                    ) : (
+                      <FiChevronDown className="h-6 w-6 text-gray-500" />
+                    )}
+                  </div>
                 </div>
               </div>
               {expandedCards.viewChildClinical && (
-                <div className="p-6">
+                <div ref={childClinicalPrintRef} className="p-6">
                   {isLoadingChildProformas ? (
                     <p className="text-sm text-gray-500">Loading…</p>
                   ) : childClinicalProformas.length === 0 ? (
@@ -1553,16 +2015,34 @@ const CreateChildPatient = () => {
                     </p>
                   </div>
                 </div>
-                <div className="cursor-pointer" onClick={() => toggleCard('viewIntake')}>
-                  {expandedCards.viewIntake ? (
-                    <FiChevronUp className="h-6 w-6 text-gray-500" />
-                  ) : (
-                    <FiChevronDown className="h-6 w-6 text-gray-500" />
-                  )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="no-print"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrintFromChildCard(
+                        'viewIntake',
+                        childCapPrintRef,
+                        'CAP Detailed Work-up Record'
+                      );
+                    }}
+                  >
+                    <FiPrinter className="h-4 w-4 mr-1" />
+                    Print
+                  </Button>
+                  <div className="cursor-pointer" onClick={() => toggleCard('viewIntake')}>
+                    {expandedCards.viewIntake ? (
+                      <FiChevronUp className="h-6 w-6 text-gray-500" />
+                    ) : (
+                      <FiChevronDown className="h-6 w-6 text-gray-500" />
+                    )}
+                  </div>
                 </div>
               </div>
               {expandedCards.viewIntake && (
-                <div className="p-6">
+                <div ref={childCapPrintRef} className="p-6">
                   {CHILD_CAP_INTAKE_COMING_SOON ? (
                     <ChildCapIntakeComingSoon />
                   ) : isLoadingChildCapWorkup ? (
@@ -1609,16 +2089,34 @@ const CreateChildPatient = () => {
                     <p className="mt-1 text-sm text-gray-500">{prescriptionCardSubtitle}</p>
                   </div>
                 </div>
-                <div className="cursor-pointer" onClick={() => toggleCard('viewPrescription')}>
-                  {expandedCards.viewPrescription ? (
-                    <FiChevronUp className="h-6 w-6 text-gray-500" />
-                  ) : (
-                    <FiChevronDown className="h-6 w-6 text-gray-500" />
-                  )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="no-print"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrintFromChildCard(
+                        'viewPrescription',
+                        childPrescriptionPrintRef,
+                        'Prescription'
+                      );
+                    }}
+                  >
+                    <FiPrinter className="h-4 w-4 mr-1" />
+                    Print
+                  </Button>
+                  <div className="cursor-pointer" onClick={() => toggleCard('viewPrescription')}>
+                    {expandedCards.viewPrescription ? (
+                      <FiChevronUp className="h-6 w-6 text-gray-500" />
+                    ) : (
+                      <FiChevronDown className="h-6 w-6 text-gray-500" />
+                    )}
+                  </div>
                 </div>
               </div>
               {expandedCards.viewPrescription && (
-                <div className="p-6">
+                <div ref={childPrescriptionPrintRef} className="p-6">
                   {isLoadingPrescriptions ? (
                     <p className="text-sm text-gray-500">Loading…</p>
                   ) : prescriptions.length === 0 ? (
