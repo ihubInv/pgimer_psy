@@ -326,10 +326,11 @@ class ClinicalProforma {
             has_complaints: !!complexCaseData.complaints_patient,
             has_family_history: !!complexCaseData.family_history_father_age,
             has_physical_exam: !!complexCaseData.physical_appearance,
-            has_mse: !!complexCaseData.mse_general_demeanour,
-            has_provisional_diagnosis: !!complexCaseData.provisional_diagnosis,
+            has_mse: !!(complexCaseData.mse_general_examination || complexCaseData.mse_psychomotor_examination
+              || complexCaseData.mse_affect_examination || complexCaseData.mse_general_demeanour),
+            has_provisional_diagnosis: !!(complexCaseData.final_assessment_history || complexCaseData.provisional_diagnosis),
             has_treatment_plan: !!complexCaseData.treatment_plan,
-            has_consultant_comments: !!complexCaseData.consultant_comments
+            has_consultant_comments: !!(complexCaseData.final_assessment_history || complexCaseData.consultant_comments)
           });
           console.log(`[ClinicalProforma.create] All complex case data will be saved to adl_files table`);
 

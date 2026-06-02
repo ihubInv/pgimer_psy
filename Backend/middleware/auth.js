@@ -322,99 +322,35 @@ const requireMWOOrDoctor = authorizeRoles('Psychiatric Welfare Officer', 'Facult
 const {
   canFillClinicalProforma,
   canFillIntakeRecord,
-  canFillIntakeRecordForReferral,
-  canFillClinicalProformaForReferral,
 } = require('../utils/residentFormAccess');
 
-/** Walk-in Clinical Proforma — SR, or JR/SR with an active referral to them */
-const requireClinicalProformaWriter = async (req, res, next) => {
+/** Walk-in Clinical Proforma — Junior/Senior Residents, Faculty, Admin */
+const requireClinicalProformaWriter = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ success: false, message: 'Authentication required' });
   }
   if (canFillClinicalProforma(req.user)) {
     return next();
   }
-
-  if (
-    req.user.role === 'Resident' &&
-    canFillClinicalProformaForReferral(req.user)
-  ) {
-    try {
-      const PatientReferral = require('../models/PatientReferral');
-      const ClinicalProforma = require('../models/ClinicalProforma');
-      let patientId = req.body?.patient_id ? parseInt(req.body.patient_id, 10) : null;
-      const patientType = req.body?.patient_type || 'adult';
-      if (!patientId && req.params?.id) {
-        const existing = await ClinicalProforma.findById(req.params.id);
-        if (existing?.patient_id) {
-          patientId = parseInt(existing.patient_id, 10);
-        }
-      }
-      if (
-        patientId &&
-        (await PatientReferral.hasActiveReferralForDoctor(
-          patientId,
-          patientType,
-          req.user.id
-        ))
-      ) {
-        return next();
-      }
-    } catch (err) {
-      console.error('[requireClinicalProformaWriter] referral check failed:', err.message);
-    }
-  }
-
   return res.status(403).json({
     success: false,
-    message:
-      'Walk-in Clinical Proforma must be filled by a Senior Resident, or by residents for patients referred to them.',
-    code: 'SENIOR_RESIDENT_CLINICAL_PROFORMA_REQUIRED',
+    message: 'You do not have permission to create or update Walk-in Clinical Proforma.',
+    code: 'CLINICAL_PROFORMA_ACCESS_DENIED',
   });
 };
 
-/** Out-Patient Intake Record (ADL) — JR, or SR with an active referral to them */
-const requireIntakeRecordWriter = async (req, res, next) => {
+/** Out-Patient Intake Record (ADL) — Junior/Senior Residents, Faculty, Admin */
+const requireIntakeRecordWriter = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ success: false, message: 'Authentication required' });
   }
   if (canFillIntakeRecord(req.user)) {
     return next();
   }
-
-  if (req.user.role === 'Resident' && canFillIntakeRecordForReferral(req.user)) {
-    try {
-      const PatientReferral = require('../models/PatientReferral');
-      const ADLFile = require('../models/ADLFile');
-      let patientId = req.body?.patient_id ? parseInt(req.body.patient_id, 10) : null;
-      let patientType = req.body?.patient_type || 'adult';
-      if (!patientId && req.params?.id) {
-        const existing = await ADLFile.findById(req.params.id);
-        if (existing?.patient_id) {
-          patientId = parseInt(existing.patient_id, 10);
-          patientType = existing.patient_type || 'adult';
-        }
-      }
-      if (
-        patientId &&
-        (await PatientReferral.hasActiveReferralForDoctor(
-          patientId,
-          patientType,
-          req.user.id
-        ))
-      ) {
-        return next();
-      }
-    } catch (err) {
-      console.error('[requireIntakeRecordWriter] referral check failed:', err.message);
-    }
-  }
-
   return res.status(403).json({
     success: false,
-    message:
-      'Out-Patient Intake Record must be filled by a Junior Resident, or by a Senior Resident for patients referred to them.',
-    code: 'JUNIOR_RESIDENT_INTAKE_REQUIRED',
+    message: 'You do not have permission to create or update Out-Patient Intake Record.',
+    code: 'INTAKE_RECORD_ACCESS_DENIED',
   });
 };
 

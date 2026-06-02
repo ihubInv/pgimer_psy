@@ -45,49 +45,34 @@ export const canSeeUnassignedPatientsTab = (user) => {
 /** Senior Resident only — full department list tab (parallel to Unassigned Patient) */
 export const canSeeTotalPatientsTab = (user) => isSeniorResidentUser(user);
 
+const isResidentWithSubRole = (user) =>
+  user?.role === USER_ROLES.RESIDENT &&
+  (user.sub_role === RESIDENT_SUB_ROLES.JUNIOR ||
+    user.sub_role === RESIDENT_SUB_ROLES.SENIOR);
+
 /**
- * Walk-in Clinical Proforma: Senior Resident (and Faculty/Admin for oversight).
+ * Walk-in Clinical Proforma: Junior and Senior Residents (and Faculty/Admin).
  */
 export const canFillClinicalProforma = (user) => {
   if (!user?.role) return false;
   if (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.FACULTY) return true;
-  return (
-    user.role === USER_ROLES.RESIDENT && user.sub_role === RESIDENT_SUB_ROLES.SENIOR
-  );
+  return isResidentWithSubRole(user);
 };
 
 /**
- * Out-Patient Intake Record (ADL): Junior Resident (and Faculty/Admin for oversight).
+ * Out-Patient Intake Record (ADL): Junior and Senior Residents (and Faculty/Admin).
  */
 export const canFillIntakeRecord = (user) => {
   if (!user?.role) return false;
   if (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.FACULTY) return true;
-  return (
-    user.role === USER_ROLES.RESIDENT && user.sub_role === RESIDENT_SUB_ROLES.JUNIOR
-  );
+  return isResidentWithSubRole(user);
 };
 
-/** Referred Patients tab: JR and SR may create/update intake (SR also handles clinical). */
-export const canFillIntakeRecordForReferral = (user) => {
-  if (!user?.role) return false;
-  if (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.FACULTY) return true;
-  return (
-    user.role === USER_ROLES.RESIDENT &&
-    (user.sub_role === RESIDENT_SUB_ROLES.JUNIOR ||
-      user.sub_role === RESIDENT_SUB_ROLES.SENIOR)
-  );
-};
+/** Referred Patients tab — same access as general intake (both resident sub-roles). */
+export const canFillIntakeRecordForReferral = (user) => canFillIntakeRecord(user);
 
-/** Referred Patients tab: JR and SR may create/update clinical proforma. */
-export const canFillClinicalProformaForReferral = (user) => {
-  if (!user?.role) return false;
-  if (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.FACULTY) return true;
-  return (
-    user.role === USER_ROLES.RESIDENT &&
-    (user.sub_role === RESIDENT_SUB_ROLES.JUNIOR ||
-      user.sub_role === RESIDENT_SUB_ROLES.SENIOR)
-  );
-};
+/** Referred Patients tab — same access as general clinical proforma (both resident sub-roles). */
+export const canFillClinicalProformaForReferral = (user) => canFillClinicalProforma(user);
 
 // Helper function to get display name for a role
 export const getRoleDisplayName = (role) => {
@@ -513,13 +498,35 @@ export const CLINICAL_PROFORMA_FORM = [
 
 // ADL File Form Schema (Complex Case - Step 3)
 // Additional Detail (ADL) fields for complex cases
+/** Default shape for one ADL informant row (stored in adl_files.informants JSONB). */
+export const EMPTY_ADL_INFORMANT = {
+  relationship: '',
+  name: '',
+  reliability: '',
+  age: '',
+  sex: '',
+  education: '',
+  marital_status: '',
+  occupation: '',
+  city_district: '',
+};
+
+export const normalizeAdlInformant = (informant = {}) => ({
+  ...EMPTY_ADL_INFORMANT,
+  relationship: informant.relationship ?? '',
+  name: informant.name ?? '',
+  reliability: informant.reliability ?? '',
+  age: informant.age != null && informant.age !== '' ? String(informant.age) : '',
+  sex: informant.sex ?? '',
+  education: informant.education ?? '',
+  marital_status: informant.marital_status ?? '',
+  occupation: informant.occupation ?? '',
+  city_district: informant.city_district ?? '',
+});
+
 export const ADL_FILE_FORM = [
   // History
-  { value: 'history_narrative', label: 'History Narrative' },
-  { value: 'history_specific_enquiry', label: 'History Specific Enquiry' },
-  { value: 'history_drug_intake', label: 'History Drug Intake' },
-  { value: 'history_treatment_place', label: 'History Treatment Place' },
-  { value: 'history_treatment_dates', label: 'History Treatment Dates' },
+  { value: 'history_present_illness', label: 'History of Present Illness (A–C)' },
   { value: 'history_treatment_drugs', label: 'History Treatment Drugs' },
   { value: 'history_treatment_response', label: 'History Treatment Response' },
 
@@ -532,11 +539,7 @@ export const ADL_FILE_FORM = [
 
   // Past History
   { value: 'past_history_medical', label: 'Past History - Medical' },
-  { value: 'past_history_psychiatric_dates', label: 'Past History - Psychiatric Dates' },
-  { value: 'past_history_psychiatric_diagnosis', label: 'Past History - Psychiatric Diagnosis' },
-  { value: 'past_history_psychiatric_treatment', label: 'Past History - Psychiatric Treatment' },
-  { value: 'past_history_psychiatric_interim', label: 'Past History - Psychiatric Interim' },
-  { value: 'past_history_psychiatric_recovery', label: 'Past History - Psychiatric Recovery' },
+  { value: 'past_history_psychiatric', label: 'Past History - Psychiatric (combined)' },
 
   // Family History - Father
   { value: 'family_history_father_age', label: 'Family History - Father Age' },
@@ -562,18 +565,10 @@ export const ADL_FILE_FORM = [
   { value: 'family_history_siblings', label: 'Family History - Siblings' },
 
   // Diagnostic Formulation
-  { value: 'diagnostic_formulation_summary', label: 'Diagnostic Formulation - Summary' },
-  { value: 'diagnostic_formulation_features', label: 'Diagnostic Formulation - Features' },
-  { value: 'diagnostic_formulation_psychodynamic', label: 'Diagnostic Formulation - Psychodynamic' },
+  { value: 'diagnostic_formulation_history', label: 'Diagnostic Formulation' },
 
   // Premorbid Personality
-  { value: 'premorbid_personality_passive_active', label: 'Premorbid Personality - Passive/Active' },
-  { value: 'premorbid_personality_assertive', label: 'Premorbid Personality - Assertive' },
-  { value: 'premorbid_personality_introvert_extrovert', label: 'Premorbid Personality - Introvert/Extrovert' },
-  { value: 'premorbid_personality_traits', label: 'Premorbid Personality - Traits' },
-  { value: 'premorbid_personality_hobbies', label: 'Premorbid Personality - Hobbies' },
-  { value: 'premorbid_personality_habits', label: 'Premorbid Personality - Habits' },
-  { value: 'premorbid_personality_alcohol_drugs', label: 'Premorbid Personality - Alcohol/Drugs' },
+  { value: 'premorbid_personality_history', label: 'Premorbid Personality' },
 
   // Physical Examination
   { value: 'physical_appearance', label: 'Physical - Appearance' },
@@ -588,16 +583,9 @@ export const ADL_FILE_FORM = [
   { value: 'physical_weight', label: 'Physical - Weight' },
   { value: 'physical_waist', label: 'Physical - Waist' },
   { value: 'physical_fundus', label: 'Physical - Fundus' },
-  { value: 'physical_cvs_apex', label: 'Physical - CVS Apex' },
-  { value: 'physical_cvs_regularity', label: 'Physical - CVS Regularity' },
-  { value: 'physical_cvs_heart_sounds', label: 'Physical - CVS Heart Sounds' },
-  { value: 'physical_cvs_murmurs', label: 'Physical - CVS Murmurs' },
-  { value: 'physical_chest_expansion', label: 'Physical - Chest Expansion' },
-  { value: 'physical_chest_percussion', label: 'Physical - Chest Percussion' },
-  { value: 'physical_chest_adventitious', label: 'Physical - Chest Adventitious' },
-  { value: 'physical_abdomen_tenderness', label: 'Physical - Abdomen Tenderness' },
-  { value: 'physical_abdomen_mass', label: 'Physical - Abdomen Mass' },
-  { value: 'physical_abdomen_bowel_sounds', label: 'Physical - Abdomen Bowel Sounds' },
+  { value: 'physical_cvs_examination', label: 'Physical - Cardiovascular System' },
+  { value: 'physical_chest_examination', label: 'Physical - Respiratory System' },
+  { value: 'physical_abdomen_examination', label: 'Physical - Abdomen' },
   { value: 'physical_cns_cranial', label: 'Physical - CNS Cranial' },
   { value: 'physical_cns_motor_sensory', label: 'Physical - CNS Motor/Sensory' },
   { value: 'physical_cns_rigidity', label: 'Physical - CNS Rigidity' },
@@ -608,29 +596,20 @@ export const ADL_FILE_FORM = [
   { value: 'physical_cns_cerebellar', label: 'Physical - CNS Cerebellar' },
 
   // MSE - General
-  { value: 'mse_general_demeanour', label: 'MSE - General Demeanour' },
-  { value: 'mse_general_tidy', label: 'MSE - General Tidy' },
-  { value: 'mse_general_awareness', label: 'MSE - General Awareness' },
-  { value: 'mse_general_cooperation', label: 'MSE - General Cooperation' },
+  { value: 'mse_general_examination', label: 'MSE - General Appearance & Behavior' },
 
   // MSE - Psychomotor
-  { value: 'mse_psychomotor_verbalization', label: 'MSE - Psychomotor Verbalization' },
-  { value: 'mse_psychomotor_pressure', label: 'MSE - Psychomotor Pressure' },
-  { value: 'mse_psychomotor_tension', label: 'MSE - Psychomotor Tension' },
-  { value: 'mse_psychomotor_posture', label: 'MSE - Psychomotor Posture' },
-  { value: 'mse_psychomotor_mannerism', label: 'MSE - Psychomotor Mannerism' },
-  { value: 'mse_psychomotor_catatonic', label: 'MSE - Psychomotor Catatonic' },
+  { value: 'mse_psychomotor_examination', label: 'MSE - Psychomotor Activity' },
 
   // MSE - Affect
-  { value: 'mse_affect_subjective', label: 'MSE - Affect Subjective' },
-  { value: 'mse_affect_tone', label: 'MSE - Affect Tone' },
-  { value: 'mse_affect_resting', label: 'MSE - Affect Resting' },
-  { value: 'mse_affect_fluctuation', label: 'MSE - Affect Fluctuation' },
+  { value: 'mse_affect_examination', label: 'MSE - Affect & Mood' },
 
   // MSE - Thought
   { value: 'mse_thought_flow', label: 'MSE - Thought Flow' },
   { value: 'mse_thought_form', label: 'MSE - Thought Form' },
   { value: 'mse_thought_content', label: 'MSE - Thought Content' },
+  { value: 'mse_thought_possession', label: 'MSE - Thought Possession' },
+  { value: 'mse_thought_perception', label: 'MSE - Thought Perception' },
 
   // MSE - Cognitive
   { value: 'mse_cognitive_consciousness', label: 'MSE - Cognitive Consciousness' },
@@ -647,21 +626,13 @@ export const ADL_FILE_FORM = [
   { value: 'mse_cognitive_calculation', label: 'MSE - Cognitive Calculation' },
   { value: 'mse_cognitive_similarities', label: 'MSE - Cognitive Similarities' },
   { value: 'mse_cognitive_proverbs', label: 'MSE - Cognitive Proverbs' },
-  { value: 'mse_insight_understanding', label: 'MSE - Insight Understanding' },
-  { value: 'mse_insight_judgement', label: 'MSE - Insight Judgement' },
+  { value: 'mse_insight_examination', label: 'MSE - Insight & Judgement' },
 
   // Education
-  { value: 'education_start_age', label: 'Education - Start Age' },
-  { value: 'education_highest_class', label: 'Education - Highest Class' },
-  { value: 'education_performance', label: 'Education - Performance' },
-  { value: 'education_disciplinary', label: 'Education - Disciplinary' },
-  { value: 'education_peer_relationship', label: 'Education - Peer Relationship' },
-  { value: 'education_hobbies', label: 'Education - Hobbies' },
-  { value: 'education_special_abilities', label: 'Education - Special Abilities' },
-  { value: 'education_discontinue_reason', label: 'Education - Discontinue Reason' },
+  { value: 'education_history', label: 'Education' },
 
   // Occupation
-  { value: 'occupation_jobs', label: 'Occupation - Jobs' },
+  { value: 'occupation_history', label: 'Occupation' },
 
   // Sexual History
   { value: 'sexual_menarche_age', label: 'Sexual - Menarche Age' },
@@ -670,34 +641,18 @@ export const ADL_FILE_FORM = [
   { value: 'sexual_masturbation', label: 'Sexual - Masturbation' },
   { value: 'sexual_contact', label: 'Sexual - Contact' },
   { value: 'sexual_premarital_extramarital', label: 'Sexual - Premarital/Extramarital' },
-  { value: 'sexual_marriage_arranged', label: 'Sexual - Marriage Arranged' },
-  { value: 'sexual_marriage_date', label: 'Sexual - Marriage Date' },
-  { value: 'sexual_spouse_age', label: 'Sexual - Spouse Age' },
-  { value: 'sexual_spouse_occupation', label: 'Sexual - Spouse Occupation' },
-  { value: 'sexual_adjustment_general', label: 'Sexual - Adjustment General' },
-  { value: 'sexual_adjustment_sexual', label: 'Sexual - Adjustment Sexual' },
+  { value: 'sexual_marriage_arranged', label: 'Sexual - Marriage Type' },
+  { value: 'sexual_marriage_details', label: 'Sexual - Marriage Details' },
   { value: 'sexual_children', label: 'Sexual - Children' },
-  { value: 'sexual_problems', label: 'Sexual - Problems' },
 
   // Religion
-  { value: 'religion_type', label: 'Religion - Type' },
-  { value: 'religion_participation', label: 'Religion - Participation' },
-  { value: 'religion_changes', label: 'Religion - Changes' },
+  { value: 'religion_history', label: 'Religion' },
 
   // Living Situation
-  { value: 'living_residents', label: 'Living - Residents' },
-  { value: 'living_income_sharing', label: 'Living - Income Sharing' },
-  { value: 'living_expenses', label: 'Living - Expenses' },
-  { value: 'living_kitchen', label: 'Living - Kitchen' },
-  { value: 'living_domestic_conflicts', label: 'Living - Domestic Conflicts' },
-  { value: 'living_social_class', label: 'Living - Social Class' },
-  { value: 'living_inlaws', label: 'Living - In-laws' },
+  { value: 'living_situation_history', label: 'Living Situation' },
 
   // Home Situation
-  { value: 'home_situation_childhood', label: 'Home Situation - Childhood' },
-  { value: 'home_situation_parents_relationship', label: 'Home Situation - Parents Relationship' },
-  { value: 'home_situation_socioeconomic', label: 'Home Situation - Socioeconomic' },
-  { value: 'home_situation_interpersonal', label: 'Home Situation - Interpersonal' },
+  { value: 'general_home_situation', label: 'General Home Situation' },
 
   // Personal History
   { value: 'personal_birth_date', label: 'Personal - Birth Date' },
@@ -708,20 +663,10 @@ export const ADL_FILE_FORM = [
   { value: 'personal_complications_postnatal', label: 'Personal - Complications Postnatal' },
 
   // Development
-  { value: 'development_weaning_age', label: 'Development - Weaning Age' },
-  { value: 'development_first_words', label: 'Development - First Words' },
-  { value: 'development_three_words', label: 'Development - Three Words' },
-  { value: 'development_walking', label: 'Development - Walking' },
-  { value: 'development_neurotic_traits', label: 'Development - Neurotic Traits' },
-  { value: 'development_nail_biting', label: 'Development - Nail Biting' },
-  { value: 'development_bedwetting', label: 'Development - Bedwetting' },
-  { value: 'development_phobias', label: 'Development - Phobias' },
-  { value: 'development_childhood_illness', label: 'Development - Childhood Illness' },
+  { value: 'development_history', label: 'Development' },
 
   // Final Assessment
-  { value: 'provisional_diagnosis', label: 'Provisional Diagnosis' },
-  { value: 'treatment_plan', label: 'Treatment Plan' },
-  { value: 'consultant_comments', label: 'Consultant Comments' },
+  { value: 'final_assessment_history', label: 'Final Assessment' },
 ];
 
 

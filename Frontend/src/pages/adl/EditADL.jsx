@@ -6,7 +6,80 @@ import { useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice
 import { useGetPatientFilesQuery, useUpdatePatientFilesMutation, useCreatePatientFilesMutation } from '../../features/patients/patientFilesApiSlice';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '../../features/auth/authSlice';
-import { ADL_FILE_FORM, canFillIntakeRecord, canFillIntakeRecordForReferral } from '../../utils/constants';
+import {
+  ADL_FILE_FORM,
+  canFillIntakeRecord,
+  EMPTY_ADL_INFORMANT,
+  normalizeAdlInformant,
+  SEX_OPTIONS,
+  EDUCATION_OPTIONS,
+  MARITAL_STATUS,
+  OCCUPATION_OPTIONS,
+} from '../../utils/constants';
+import {
+  ADL_HISTORY_PRESENT_ILLNESS_PROMPTS,
+  resolveHistoryPresentIllness,
+} from '../../utils/adlHistoryPresentIllness';
+import {
+  ADL_PAST_HISTORY_PSYCHIATRIC_LABEL_LINE,
+  resolvePastHistoryPsychiatric,
+} from '../../utils/adlPastHistoryPsychiatric';
+import {
+  ADL_GENERAL_HOME_SITUATION_LABEL_LINE,
+  resolveGeneralHomeSituation,
+} from '../../utils/adlGeneralHomeSituation';
+import {
+  ADL_DEVELOPMENT_HISTORY_LABEL_LINE,
+  resolveDevelopmentHistory,
+} from '../../utils/adlDevelopmentHistory';
+import {
+  ADL_EDUCATION_HISTORY_LABEL_LINE,
+  resolveEducationHistory,
+} from '../../utils/adlEducationHistory';
+import {
+  ADL_OCCUPATION_HISTORY_LABEL_LINE,
+  resolveOccupationHistory,
+} from '../../utils/adlOccupationHistory';
+import {
+  ADL_SEXUAL_MARRIAGE_DETAILS_LABEL_LINE,
+  resolveSexualMarriageDetails,
+} from '../../utils/adlSexualMarriageDetails';
+import {
+  ADL_RELIGION_HISTORY_LABEL_LINE,
+  resolveReligionHistory,
+} from '../../utils/adlReligionHistory';
+import {
+  ADL_LIVING_SITUATION_HISTORY_LABEL_LINE,
+  resolveLivingSituationHistory,
+} from '../../utils/adlLivingSituationHistory';
+import {
+  ADL_PREMORBID_PERSONALITY_HISTORY_LABEL_LINE,
+  resolvePremorbidPersonalityHistory,
+} from '../../utils/adlPremorbidPersonalityHistory';
+import {
+  ADL_PHYSICAL_CVS_LABEL_LINE,
+  ADL_PHYSICAL_CHEST_LABEL_LINE,
+  ADL_PHYSICAL_ABDOMEN_LABEL_LINE,
+  resolvePhysicalCvsExamination,
+  resolvePhysicalChestExamination,
+  resolvePhysicalAbdomenExamination,
+} from '../../utils/adlPhysicalExaminationSections';
+import {
+  ADL_MSE_GENERAL_LABEL_LINE,
+  ADL_MSE_PSYCHOMOTOR_LABEL_LINE,
+  ADL_MSE_AFFECT_LABEL_LINE,
+  resolveMseGeneralExamination,
+  resolveMsePsychomotorExamination,
+  resolveMseAffectExamination,
+} from '../../utils/adlMseExaminationSections';
+import {
+  ADL_MSE_INSIGHT_LABEL_LINE,
+  ADL_DIAGNOSTIC_FORMULATION_LABEL_LINE,
+  ADL_FINAL_ASSESSMENT_LABEL_LINE,
+  resolveMseInsightExamination,
+  resolveDiagnosticFormulationHistory,
+  resolveFinalAssessmentHistory,
+} from '../../utils/adlClosingSections';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
 import Select from '../../components/Select';
@@ -17,7 +90,6 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import DatePicker from '../../components/CustomDatePicker';
 import FileUpload from '../../components/FileUpload';
 import FilePreview from '../../components/FilePreview';
-import { parseLivingPersonRows } from '../../utils/adlLivingPersonRows';
 
 // Display Field Component for read-only mode with glassmorphism
 const DisplayField = ({ label, value, icon, className = '', rows }) => {
@@ -144,17 +216,12 @@ const EditADL = ({
   const [createADLFile, { isLoading: isCreating }] = useCreateADLFileMutation();
   const currentUser = useSelector(selectCurrentUser);
 
-  const fromReferred = searchParams.get('from') === 'referred';
-
   useEffect(() => {
     if (readOnly || isEmbedded) return;
     if (canFillIntakeRecord(currentUser)) return;
-    if (fromReferred && canFillIntakeRecordForReferral(currentUser)) return;
-    toast.error(
-      'Out-Patient Intake Record is filled by Junior Residents. Senior Residents may fill it for patients referred to them.'
-    );
+    toast.error('You do not have permission to edit Out-Patient Intake Record.');
     navigate(-1);
-  }, [currentUser, readOnly, isEmbedded, navigate, fromReferred]);
+  }, [currentUser, readOnly, isEmbedded, navigate]);
 
   // Determine if this is create or update mode
   // Update mode: 
@@ -356,15 +423,14 @@ const EditADL = ({
       patient_id: sourceData.patient_id || '',
       clinical_proforma_id: sourceData.clinical_proforma_id || '',
       // History
-      history_narrative: sourceData.history_narrative || '',
-      history_specific_enquiry: sourceData.history_specific_enquiry || '',
-      history_drug_intake: sourceData.history_drug_intake || '',
-      history_treatment_place: sourceData.history_treatment_place || '',
-      history_treatment_dates: formatDateField(sourceData.history_treatment_dates),
+      history_present_illness: resolveHistoryPresentIllness(sourceData),
       history_treatment_drugs: sourceData.history_treatment_drugs || '',
       history_treatment_response: sourceData.history_treatment_response || '',
       // Informants
-      informants: parseArray(sourceData.informants).length > 0 ? parseArray(sourceData.informants) : [{ relationship: '', name: '', reliability: '' }],
+      informants:
+        parseArray(sourceData.informants).length > 0
+          ? parseArray(sourceData.informants).map(normalizeAdlInformant)
+          : [{ ...EMPTY_ADL_INFORMANT }],
       // Complaints
       complaints_patient: parseArray(sourceData.complaints_patient).length > 0 ? parseArray(sourceData.complaints_patient) : [{ complaint: '', duration: '' }],
       complaints_informant: parseArray(sourceData.complaints_informant).length > 0 ? parseArray(sourceData.complaints_informant) : [{ complaint: '', duration: '' }],
@@ -374,11 +440,7 @@ const EditADL = ({
       course: sourceData.course || '',
       // Past History
       past_history_medical: sourceData.past_history_medical || '',
-      past_history_psychiatric_dates: formatDateField(sourceData.past_history_psychiatric_dates),
-      past_history_psychiatric_diagnosis: sourceData.past_history_psychiatric_diagnosis || '',
-      past_history_psychiatric_treatment: sourceData.past_history_psychiatric_treatment || '',
-      past_history_psychiatric_interim: sourceData.past_history_psychiatric_interim || '',
-      past_history_psychiatric_recovery: sourceData.past_history_psychiatric_recovery || '',
+      past_history_psychiatric: resolvePastHistoryPsychiatric(sourceData),
       // Family History - Father
       family_history_father_age: adlFile.family_history_father_age || '',
       family_history_father_education: adlFile.family_history_father_education || '',
@@ -400,17 +462,9 @@ const EditADL = ({
       // Family History - Siblings
       family_history_siblings: parseArray(adlFile.family_history_siblings).length > 0 ? parseArray(adlFile.family_history_siblings) : [{ age: '', sex: '', education: '', occupation: '', marital_status: '' }],
       // Diagnostic Formulation
-      diagnostic_formulation_summary: adlFile.diagnostic_formulation_summary || '',
-      diagnostic_formulation_features: adlFile.diagnostic_formulation_features || '',
-      diagnostic_formulation_psychodynamic: adlFile.diagnostic_formulation_psychodynamic || '',
+      diagnostic_formulation_history: resolveDiagnosticFormulationHistory(sourceData),
       // Premorbid Personality
-      premorbid_personality_passive_active: adlFile.premorbid_personality_passive_active || '',
-      premorbid_personality_assertive: adlFile.premorbid_personality_assertive || '',
-      premorbid_personality_introvert_extrovert: adlFile.premorbid_personality_introvert_extrovert || '',
-      premorbid_personality_traits: parseArray(adlFile.premorbid_personality_traits),
-      premorbid_personality_hobbies: adlFile.premorbid_personality_hobbies || '',
-      premorbid_personality_habits: adlFile.premorbid_personality_habits || '',
-      premorbid_personality_alcohol_drugs: adlFile.premorbid_personality_alcohol_drugs || '',
+      premorbid_personality_history: resolvePremorbidPersonalityHistory(sourceData),
       // Physical Examination
       physical_appearance: adlFile.physical_appearance || '',
       physical_body_build: adlFile.physical_body_build || '',
@@ -424,16 +478,9 @@ const EditADL = ({
       physical_weight: adlFile.physical_weight || '',
       physical_waist: adlFile.physical_waist || '',
       physical_fundus: adlFile.physical_fundus || '',
-      physical_cvs_apex: adlFile.physical_cvs_apex || '',
-      physical_cvs_regularity: adlFile.physical_cvs_regularity || '',
-      physical_cvs_heart_sounds: adlFile.physical_cvs_heart_sounds || '',
-      physical_cvs_murmurs: adlFile.physical_cvs_murmurs || '',
-      physical_chest_expansion: adlFile.physical_chest_expansion || '',
-      physical_chest_percussion: adlFile.physical_chest_percussion || '',
-      physical_chest_adventitious: adlFile.physical_chest_adventitious || '',
-      physical_abdomen_tenderness: adlFile.physical_abdomen_tenderness || '',
-      physical_abdomen_mass: adlFile.physical_abdomen_mass || '',
-      physical_abdomen_bowel_sounds: adlFile.physical_abdomen_bowel_sounds || '',
+      physical_cvs_examination: resolvePhysicalCvsExamination(sourceData),
+      physical_chest_examination: resolvePhysicalChestExamination(sourceData),
+      physical_abdomen_examination: resolvePhysicalAbdomenExamination(sourceData),
       physical_cns_cranial: adlFile.physical_cns_cranial || '',
       physical_cns_motor_sensory: adlFile.physical_cns_motor_sensory || '',
       physical_cns_rigidity: adlFile.physical_cns_rigidity || '',
@@ -442,27 +489,16 @@ const EditADL = ({
       physical_cns_dtrs: adlFile.physical_cns_dtrs || '',
       physical_cns_plantar: adlFile.physical_cns_plantar || '',
       physical_cns_cerebellar: adlFile.physical_cns_cerebellar || '',
-      // MSE - General
-      mse_general_demeanour: adlFile.mse_general_demeanour || '',
-      mse_general_tidy: adlFile.mse_general_tidy || '',
-      mse_general_awareness: adlFile.mse_general_awareness || '',
-      mse_general_cooperation: adlFile.mse_general_cooperation || '',
-      // MSE - Psychomotor
-      mse_psychomotor_verbalization: adlFile.mse_psychomotor_verbalization || '',
-      mse_psychomotor_pressure: adlFile.mse_psychomotor_pressure || '',
-      mse_psychomotor_tension: adlFile.mse_psychomotor_tension || '',
-      mse_psychomotor_posture: adlFile.mse_psychomotor_posture || '',
-      mse_psychomotor_mannerism: adlFile.mse_psychomotor_mannerism || '',
-      mse_psychomotor_catatonic: adlFile.mse_psychomotor_catatonic || '',
-      // MSE - Affect
-      mse_affect_subjective: adlFile.mse_affect_subjective || '',
-      mse_affect_tone: adlFile.mse_affect_tone || '',
-      mse_affect_resting: adlFile.mse_affect_resting || '',
-      mse_affect_fluctuation: adlFile.mse_affect_fluctuation || '',
+      // MSE - General, Psychomotor, Affect
+      mse_general_examination: resolveMseGeneralExamination(sourceData),
+      mse_psychomotor_examination: resolveMsePsychomotorExamination(sourceData),
+      mse_affect_examination: resolveMseAffectExamination(sourceData),
       // MSE - Thought
       mse_thought_flow: adlFile.mse_thought_flow || '',
       mse_thought_form: adlFile.mse_thought_form || '',
       mse_thought_content: adlFile.mse_thought_content || '',
+      mse_thought_possession: adlFile.mse_thought_possession || '',
+      mse_thought_perception: adlFile.mse_thought_perception || '',
       // MSE - Cognitive
       mse_cognitive_consciousness: adlFile.mse_cognitive_consciousness || '',
       mse_cognitive_orientation_time: adlFile.mse_cognitive_orientation_time || '',
@@ -478,19 +514,11 @@ const EditADL = ({
       mse_cognitive_calculation: adlFile.mse_cognitive_calculation || '',
       mse_cognitive_similarities: adlFile.mse_cognitive_similarities || '',
       mse_cognitive_proverbs: adlFile.mse_cognitive_proverbs || '',
-      mse_insight_understanding: adlFile.mse_insight_understanding || '',
-      mse_insight_judgement: adlFile.mse_insight_judgement || '',
+      mse_insight_examination: resolveMseInsightExamination(sourceData),
       // Education
-      education_start_age: adlFile.education_start_age || '',
-      education_highest_class: adlFile.education_highest_class || '',
-      education_performance: adlFile.education_performance || '',
-      education_disciplinary: adlFile.education_disciplinary || '',
-      education_peer_relationship: adlFile.education_peer_relationship || '',
-      education_hobbies: adlFile.education_hobbies || '',
-      education_special_abilities: adlFile.education_special_abilities || '',
-      education_discontinue_reason: adlFile.education_discontinue_reason || '',
+      education_history: resolveEducationHistory(sourceData),
       // Occupation
-      occupation_jobs: parseArray(adlFile.occupation_jobs).length > 0 ? parseArray(adlFile.occupation_jobs) : [{ job: '', dates: '', adjustment: '', difficulties: '', promotions: '', change_reason: '' }],
+      occupation_history: resolveOccupationHistory(sourceData),
       // Sexual History
       sexual_menarche_age: adlFile.sexual_menarche_age || '',
       sexual_menarche_reaction: adlFile.sexual_menarche_reaction || '',
@@ -499,36 +527,14 @@ const EditADL = ({
       sexual_contact: adlFile.sexual_contact || '',
       sexual_premarital_extramarital: adlFile.sexual_premarital_extramarital || '',
       sexual_marriage_arranged: adlFile.sexual_marriage_arranged || '',
-      sexual_marriage_date: formatDateField(adlFile.sexual_marriage_date),
-      sexual_spouse_age: adlFile.sexual_spouse_age || '',
-      sexual_spouse_occupation: adlFile.sexual_spouse_occupation || '',
-      sexual_adjustment_general: adlFile.sexual_adjustment_general || '',
-      sexual_adjustment_sexual: adlFile.sexual_adjustment_sexual || '',
+      sexual_marriage_details: resolveSexualMarriageDetails(sourceData),
       sexual_children: parseArray(adlFile.sexual_children).length > 0 ? parseArray(adlFile.sexual_children) : [{ age: '', sex: '' }],
-      sexual_problems: adlFile.sexual_problems || '',
       // Religion
-      religion_type: adlFile.religion_type || '',
-      religion_participation: adlFile.religion_participation || '',
-      religion_changes: adlFile.religion_changes || '',
+      religion_history: resolveReligionHistory(sourceData),
       // Living Situation
-      living_residents: (() => {
-        const rows = parseLivingPersonRows(sourceData.living_residents);
-        return rows.length > 0 ? rows : [{ name: '', relationship: '', age: '' }];
-      })(),
-      living_income_sharing: adlFile.living_income_sharing || '',
-      living_expenses: adlFile.living_expenses || '',
-      living_kitchen: adlFile.living_kitchen || '',
-      living_domestic_conflicts: adlFile.living_domestic_conflicts || '',
-      living_social_class: adlFile.living_social_class || '',
-      living_inlaws: (() => {
-        const rows = parseLivingPersonRows(sourceData.living_inlaws);
-        return rows.length > 0 ? rows : [{ name: '', relationship: '', age: '' }];
-      })(),
+      living_situation_history: resolveLivingSituationHistory(sourceData),
       // Home Situation
-      home_situation_childhood: adlFile.home_situation_childhood || '',
-      home_situation_parents_relationship: adlFile.home_situation_parents_relationship || '',
-      home_situation_socioeconomic: adlFile.home_situation_socioeconomic || '',
-      home_situation_interpersonal: adlFile.home_situation_interpersonal || '',
+      general_home_situation: resolveGeneralHomeSituation(sourceData),
       // Personal History
       personal_birth_date: formatDateField(adlFile.personal_birth_date),
       personal_birth_place: adlFile.personal_birth_place || '',
@@ -537,19 +543,9 @@ const EditADL = ({
       personal_complications_natal: adlFile.personal_complications_natal || '',
       personal_complications_postnatal: adlFile.personal_complications_postnatal || '',
       // Development
-      development_weaning_age: adlFile.development_weaning_age || '',
-      development_first_words: adlFile.development_first_words || '',
-      development_three_words: adlFile.development_three_words || '',
-      development_walking: adlFile.development_walking || '',
-      development_neurotic_traits: adlFile.development_neurotic_traits || '',
-      development_nail_biting: adlFile.development_nail_biting || '',
-      development_bedwetting: adlFile.development_bedwetting || '',
-      development_phobias: adlFile.development_phobias || '',
-      development_childhood_illness: adlFile.development_childhood_illness || '',
+      development_history: resolveDevelopmentHistory(sourceData),
       // Final Assessment
-      provisional_diagnosis: adlFile.provisional_diagnosis || '',
-      treatment_plan: adlFile.treatment_plan || '',
-      consultant_comments: adlFile.consultant_comments || '',
+      final_assessment_history: resolveFinalAssessmentHistory(sourceData),
     };
   }, [adlFile, initialAdlData]);
 
@@ -557,25 +553,17 @@ const EditADL = ({
   const defaultFormData = {
     patient_id: '',
     clinical_proforma_id: '',
-    history_narrative: '',
-    history_specific_enquiry: '',
-    history_drug_intake: '',
-    history_treatment_place: '',
-    history_treatment_dates: '',
+    history_present_illness: '',
     history_treatment_drugs: '',
     history_treatment_response: '',
-    informants: [{ relationship: '', name: '', reliability: '' }],
+    informants: [{ ...EMPTY_ADL_INFORMANT }],
     complaints_patient: [{ complaint: '', duration: '' }],
     complaints_informant: [{ complaint: '', duration: '' }],
     onset_duration: '',
     precipitating_factor: '',
     course: '',
     past_history_medical: '',
-    past_history_psychiatric_dates: '',
-    past_history_psychiatric_diagnosis: '',
-    past_history_psychiatric_treatment: '',
-    past_history_psychiatric_interim: '',
-    past_history_psychiatric_recovery: '',
+    past_history_psychiatric: '',
     family_history_father_age: '',
     family_history_father_education: '',
     family_history_father_occupation: '',
@@ -593,16 +581,8 @@ const EditADL = ({
     family_history_mother_death_date: '',
     family_history_mother_death_cause: '',
     family_history_siblings: [{ age: '', sex: '', education: '', occupation: '', marital_status: '' }],
-    diagnostic_formulation_summary: '',
-    diagnostic_formulation_features: '',
-    diagnostic_formulation_psychodynamic: '',
-    premorbid_personality_passive_active: '',
-    premorbid_personality_assertive: '',
-    premorbid_personality_introvert_extrovert: '',
-    premorbid_personality_traits: [],
-    premorbid_personality_hobbies: '',
-    premorbid_personality_habits: '',
-    premorbid_personality_alcohol_drugs: '',
+    diagnostic_formulation_history: '',
+    premorbid_personality_history: '',
     physical_appearance: '',
     physical_body_build: '',
     physical_pallor: false,
@@ -615,16 +595,9 @@ const EditADL = ({
     physical_weight: '',
     physical_waist: '',
     physical_fundus: '',
-    physical_cvs_apex: '',
-    physical_cvs_regularity: '',
-    physical_cvs_heart_sounds: '',
-    physical_cvs_murmurs: '',
-    physical_chest_expansion: '',
-    physical_chest_percussion: '',
-    physical_chest_adventitious: '',
-    physical_abdomen_tenderness: '',
-    physical_abdomen_mass: '',
-    physical_abdomen_bowel_sounds: '',
+    physical_cvs_examination: '',
+    physical_chest_examination: '',
+    physical_abdomen_examination: '',
     physical_cns_cranial: '',
     physical_cns_motor_sensory: '',
     physical_cns_rigidity: '',
@@ -633,23 +606,14 @@ const EditADL = ({
     physical_cns_dtrs: '',
     physical_cns_plantar: '',
     physical_cns_cerebellar: '',
-    mse_general_demeanour: '',
-    mse_general_tidy: '',
-    mse_general_awareness: '',
-    mse_general_cooperation: '',
-    mse_psychomotor_verbalization: '',
-    mse_psychomotor_pressure: '',
-    mse_psychomotor_tension: '',
-    mse_psychomotor_posture: '',
-    mse_psychomotor_mannerism: '',
-    mse_psychomotor_catatonic: '',
-    mse_affect_subjective: '',
-    mse_affect_tone: '',
-    mse_affect_resting: '',
-    mse_affect_fluctuation: '',
+    mse_general_examination: '',
+    mse_psychomotor_examination: '',
+    mse_affect_examination: '',
     mse_thought_flow: '',
     mse_thought_form: '',
     mse_thought_content: '',
+    mse_thought_possession: '',
+    mse_thought_perception: '',
     mse_cognitive_consciousness: '',
     mse_cognitive_orientation_time: '',
     mse_cognitive_orientation_place: '',
@@ -664,17 +628,9 @@ const EditADL = ({
     mse_cognitive_calculation: '',
     mse_cognitive_similarities: '',
     mse_cognitive_proverbs: '',
-    mse_insight_understanding: '',
-    mse_insight_judgement: '',
-    education_start_age: '',
-    education_highest_class: '',
-    education_performance: '',
-    education_disciplinary: '',
-    education_peer_relationship: '',
-    education_hobbies: '',
-    education_special_abilities: '',
-    education_discontinue_reason: '',
-    occupation_jobs: [{ job: '', dates: '', adjustment: '', difficulties: '', promotions: '', change_reason: '' }],
+    mse_insight_examination: '',
+    education_history: '',
+    occupation_history: '',
     sexual_menarche_age: '',
     sexual_menarche_reaction: '',
     sexual_education: '',
@@ -682,45 +638,19 @@ const EditADL = ({
     sexual_contact: '',
     sexual_premarital_extramarital: '',
     sexual_marriage_arranged: '',
-    sexual_marriage_date: '',
-    sexual_spouse_age: '',
-    sexual_spouse_occupation: '',
-    sexual_adjustment_general: '',
-    sexual_adjustment_sexual: '',
+    sexual_marriage_details: '',
     sexual_children: [{ age: '', sex: '' }],
-    sexual_problems: '',
-    religion_type: '',
-    religion_participation: '',
-    religion_changes: '',
-    living_residents: [{ name: '', relationship: '', age: '' }],
-    living_income_sharing: '',
-    living_expenses: '',
-    living_kitchen: '',
-    living_domestic_conflicts: '',
-    living_social_class: '',
-    living_inlaws: [{ name: '', relationship: '', age: '' }],
-    home_situation_childhood: '',
-    home_situation_parents_relationship: '',
-    home_situation_socioeconomic: '',
-    home_situation_interpersonal: '',
+    religion_history: '',
+    living_situation_history: '',
+    general_home_situation: '',
     personal_birth_date: '',
     personal_birth_place: '',
     personal_delivery_type: '',
     personal_complications_prenatal: '',
     personal_complications_natal: '',
     personal_complications_postnatal: '',
-    development_weaning_age: '',
-    development_first_words: '',
-    development_three_words: '',
-    development_walking: '',
-    development_neurotic_traits: '',
-    development_nail_biting: '',
-    development_bedwetting: '',
-    development_phobias: '',
-    development_childhood_illness: '',
-    provisional_diagnosis: '',
-    treatment_plan: '',
-    consultant_comments: '',
+    development_history: '',
+    final_assessment_history: '',
   };
 
   const [formData, setFormData] = useState(() => cloneForFormState(defaultFormData));
@@ -743,14 +673,14 @@ const EditADL = ({
   useEffect(() => {
     if (adlFile && id && initialFormData) {
       // Check if formData still has default empty values but adlFile has data
-      const hasData = adlFile.history_narrative || adlFile.history_specific_enquiry || adlFile.history_drug_intake;
-      const formIsEmpty = !formData.history_narrative && !formData.history_specific_enquiry && !formData.history_drug_intake;
+      const hasData = resolveHistoryPresentIllness(adlFile);
+      const formIsEmpty = !formData.history_present_illness;
       
       if (hasData && formIsEmpty) {
         setFormData(cloneForFormState(initialFormData));
       }
     }
-  }, [adlFile, id, formData.history_narrative, formData.history_specific_enquiry, formData.history_drug_intake, initialFormData]);
+  }, [adlFile, id, formData.history_present_illness, initialFormData]);
 
   const handleChange = (e) => {
     if (readOnly) return; // Prevent changes in read-only mode
@@ -1082,7 +1012,7 @@ const EditADL = ({
             </div>
             <div>
               <h3 className="text-xl font-bold text-gray-900">Informants</h3>
-              <p className="text-sm text-gray-500 mt-1">Multiple informants with relationship and reliability</p>
+              <p className="text-sm text-gray-500 mt-1">Multiple informants with demographics and reliability</p>
             </div>
           </div>
           {expandedCards.informants ? (
@@ -1094,7 +1024,15 @@ const EditADL = ({
 
         {expandedCards.informants && (
           <div className="p-6 space-y-4">
-            {(formData.informants || [{ relationship: '', name: '', reliability: '' }])?.map((informant, index) => (
+            {(formData.informants || [{ ...EMPTY_ADL_INFORMANT }])?.map((informant, index) => {
+              const updateInformantField = (field, value) => {
+                const newInformants = (formData.informants || []).map((item, i) =>
+                  i === index ? { ...item, [field]: value } : item
+                );
+                setFormData((prev) => ({ ...prev, informants: newInformants }));
+              };
+
+              return (
               <div key={index} className="border-b pb-4 last:border-b-0 space-y-3">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-medium text-gray-700">Informant {index + 1}</h4>
@@ -1105,7 +1043,10 @@ const EditADL = ({
                       size="sm"
                       onClick={() => {
                         const newInformants = (formData.informants || []).filter((_, i) => i !== index);
-                        setFormData(prev => ({ ...prev, informants: newInformants.length > 0 ? newInformants : [{ relationship: '', name: '', reliability: '' }] }));
+                        setFormData(prev => ({
+                          ...prev,
+                          informants: newInformants.length > 0 ? newInformants : [{ ...EMPTY_ADL_INFORMANT }],
+                        }));
                       }}
                       className="text-red-600 hover:text-red-700"
                     >
@@ -1114,66 +1055,82 @@ const EditADL = ({
                   )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {readOnly ? (
-                    <DisplayField
-                      label="Relationship"
-                      value={informant.relationship}
-                    />
-                  ) : (
-                    <Input
-                      label="Relationship"
-                      value={informant.relationship}
-                      onChange={(e) => {
-                        const newInformants = (formData.informants || []).map((item, i) => 
-                          i === index ? { ...item, relationship: e.target.value } : { ...item }
-                        );
-                        setFormData(prev => ({ ...prev, informants: newInformants }));
-                      }}
-                      placeholder="e.g., Father, Mother, Spouse"
-                      disabled={readOnly}
-                    />
-                  )}
-                  {readOnly ? (
-                    <DisplayField
-                      label="Name"
-                      value={informant.name}
-                    />
-                  ) : (
-                    <Input
-                      label="Name"
-                      value={informant.name}
-                      onChange={(e) => {
-                        const newInformants = (formData.informants || []).map((item, i) => 
-                          i === index ? { ...item, name: e.target.value } : { ...item }
-                        );
-                        setFormData(prev => ({ ...prev, informants: newInformants }));
-                      }}
-                      placeholder="Full name"
-                      disabled={readOnly}
-                    />
-                  )}
-                  {readOnly ? (
-                    <DisplayField
-                      label="Reliability / Ability to report"
-                      value={informant.reliability}
-                    />
-                  ) : (
-                    <Input
-                      label="Reliability / Ability to report"
-                      value={informant.reliability}
-                      onChange={(e) => {
-                        const newInformants = (formData.informants || []).map((item, i) => 
-                          i === index ? { ...item, reliability: e.target.value } : { ...item }
-                        );
-                        setFormData(prev => ({ ...prev, informants: newInformants }));
-                      }}
-                      placeholder="Assessment of reliability"
-                      disabled={readOnly}
-                    />
-                  )}
+                  <ConditionalInput
+                    readOnly={readOnly}
+                    label="Relationship"
+                    value={informant.relationship}
+                    onChange={(e) => updateInformantField('relationship', e.target.value)}
+                    placeholder="e.g., Father, Mother, Spouse"
+                    disabled={readOnly}
+                  />
+                  <ConditionalInput
+                    readOnly={readOnly}
+                    label="Name"
+                    value={informant.name}
+                    onChange={(e) => updateInformantField('name', e.target.value)}
+                    placeholder="Full name"
+                    disabled={readOnly}
+                  />
+                  <ConditionalInput
+                    readOnly={readOnly}
+                    label="Age"
+                    value={informant.age}
+                    onChange={(e) => updateInformantField('age', e.target.value)}
+                    placeholder="Age in years"
+                    disabled={readOnly}
+                  />
+                  <ConditionalSelect
+                    readOnly={readOnly}
+                    label="Sex"
+                    value={informant.sex}
+                    onChange={(e) => updateInformantField('sex', e.target.value)}
+                    options={[{ value: '', label: 'Select' }, ...SEX_OPTIONS]}
+                    disabled={readOnly}
+                  />
+                  <ConditionalSelect
+                    readOnly={readOnly}
+                    label="Education"
+                    value={informant.education}
+                    onChange={(e) => updateInformantField('education', e.target.value)}
+                    options={[{ value: '', label: 'Select' }, ...EDUCATION_OPTIONS]}
+                    disabled={readOnly}
+                  />
+                  <ConditionalSelect
+                    readOnly={readOnly}
+                    label="Marital Status"
+                    value={informant.marital_status}
+                    onChange={(e) => updateInformantField('marital_status', e.target.value)}
+                    options={[{ value: '', label: 'Select' }, ...MARITAL_STATUS]}
+                    disabled={readOnly}
+                  />
+                  <ConditionalSelect
+                    readOnly={readOnly}
+                    label="Occupation"
+                    value={informant.occupation}
+                    onChange={(e) => updateInformantField('occupation', e.target.value)}
+                    options={[{ value: '', label: 'Select' }, ...OCCUPATION_OPTIONS]}
+                    disabled={readOnly}
+                  />
+                  <ConditionalInput
+                    readOnly={readOnly}
+                    label="Name of the City/District"
+                    value={informant.city_district}
+                    onChange={(e) => updateInformantField('city_district', e.target.value)}
+                    placeholder="City or district"
+                    disabled={readOnly}
+                  />
+                  <ConditionalInput
+                    readOnly={readOnly}
+                    label="Reliability / Ability to report"
+                    value={informant.reliability}
+                    onChange={(e) => updateInformantField('reliability', e.target.value)}
+                    placeholder="Assessment of reliability"
+                    disabled={readOnly}
+                  />
                 </div>
               </div>
-            ))}
+            );
+            })}
             {!readOnly && (
               <Button
                 type="button"
@@ -1182,7 +1139,7 @@ const EditADL = ({
                 onClick={() => {
                   setFormData(prev => ({
                     ...prev,
-                    informants: [...prev.informants, { relationship: '', name: '', reliability: '' }]
+                    informants: [...(prev.informants || []), { ...EMPTY_ADL_INFORMANT }],
                   }));
                 }}
                 className="flex items-center gap-2"
@@ -1465,7 +1422,6 @@ const EditADL = ({
             </div>
             <div>
               <h3 className="text-xl font-bold text-gray-900">History of Present Illness</h3>
-              <p className="text-sm text-gray-500 mt-1">Spontaneous narrative, specific enquiry, drug intake, treatment</p>
             </div>
           </div>
           {expandedCards.history ? (
@@ -1477,89 +1433,33 @@ const EditADL = ({
 
         {expandedCards.history && (
           <div className="p-6 space-y-6">
+            <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 space-y-2 mb-4">
+              {ADL_HISTORY_PRESENT_ILLNESS_PROMPTS.map((line) => (
+                <p key={line} className="text-sm text-gray-700 leading-snug">
+                  {line}
+                </p>
+              ))}
+            </div>
             {readOnly ? (
               <DisplayField
-                label="A. Spontaneous narrative account"
-                value={formData.history_narrative}
-                rows={4}
+                label="History (sections A–C)"
+                value={formData.history_present_illness}
+                rows={10}
               />
             ) : (
               <Textarea
-                label="A. Spontaneous narrative account"
-                name="history_narrative"
-                value={formData.history_narrative}
+                label="History (sections A–C)"
+                name="history_present_illness"
+                value={formData.history_present_illness}
                 onChange={handleChange}
-                placeholder="Patient's spontaneous account of the illness..."
-                rows={4}
+                placeholder="Document sections A, B, and C in this field..."
+                rows={10}
               />
             )}
-            
-            {readOnly ? (
-              <DisplayField
-                label="B. Specific enquiry about mood, sleep, appetite, anxiety symptoms, suicidal risk, social interaction, job efficiency, personal hygiene, memory, etc."
-                value={formData.history_specific_enquiry}
-                rows={5}
-              />
-            ) : (
-              <Textarea
-                label="B. Specific enquiry about mood, sleep, appetite, anxiety symptoms, suicidal risk, social interaction, job efficiency, personal hygiene, memory, etc."
-                name="history_specific_enquiry"
-                value={formData.history_specific_enquiry}
-                onChange={handleChange}
-                placeholder="Detailed specific enquiries..."
-                rows={5}
-              />
-            )}
-            
-            {readOnly ? (
-              <DisplayField
-                label="C. Intake of dependence producing and prescription drugs"
-                value={formData.history_drug_intake}
-                rows={3}
-              />
-            ) : (
-              <Textarea
-                label="C. Intake of dependence producing and prescription drugs"
-                name="history_drug_intake"
-                value={formData.history_drug_intake}
-                onChange={handleChange}
-                placeholder="List all dependence producing substances and prescription drugs..."
-                rows={3}
-              />
-            )}
-            
+
             <div className="border-t pt-4">
               <h4 className="font-semibold text-gray-800 mb-3">D. Treatment received so far in this illness</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {readOnly ? (
-                  <DisplayField
-                    label="Place"
-                    value={formData.history_treatment_place}
-                  />
-                ) : (
-                  <Input
-                    label="Place"
-                    name="history_treatment_place"
-                    value={formData.history_treatment_place}
-                    onChange={handleChange}
-                    placeholder="Location of treatment"
-                  />
-                )}
-                {readOnly ? (
-                  <DisplayField
-                    label="Treatment Date"
-                    value={formData.history_treatment_dates}
-                    icon={<FiCalendar className="w-4 h-4" />}
-                  />
-                ) : (
-                  <DatePicker
-                    icon={<FiCalendar className="w-4 h-4" />}
-                    label="Treatment Date"
-                    name="history_treatment_dates"
-                    value={formData.history_treatment_dates}
-                    onChange={handleChange}
-                  />
-                )}
                 {readOnly ? (
                   <DisplayField
                     label="Drugs"
@@ -1650,87 +1550,25 @@ const EditADL = ({
             </div>
             <div className="border-t pt-4">
               <h4 className="font-semibold text-gray-800 mb-3">B. Psychiatric</h4>
-              <div className="space-y-4">
-                {readOnly ? (
-                  <DisplayField
-                    label="Psychiatric History Date"
-                    value={formData.past_history_psychiatric_dates}
-                    icon={<FiCalendar className="w-4 h-4" />}
-                  />
-                ) : (
-                  <DatePicker
-                    icon={<FiCalendar className="w-4 h-4" />}
-                    label="Psychiatric History Date"
-                    name="past_history_psychiatric_dates"
-                    value={formData.past_history_psychiatric_dates}
-                    onChange={handleChange}
-                  />
-                )}
-                {readOnly ? (
-                  <DisplayField
-                    label="Diagnosis or salient features"
-                    value={formData.past_history_psychiatric_diagnosis}
-                    rows={2}
-                  />
-                ) : (
-                  <Textarea
-                    label="Diagnosis or salient features"
-                    name="past_history_psychiatric_diagnosis"
-                    value={formData.past_history_psychiatric_diagnosis}
-                    onChange={handleChange}
-                    placeholder="Previous psychiatric diagnoses or key features"
-                    rows={2}
-                  />
-                )}
-                {readOnly ? (
-                  <DisplayField
-                    label="Treatment"
-                    value={formData.past_history_psychiatric_treatment}
-                    rows={2}
-                  />
-                ) : (
-                  <Textarea
-                    label="Treatment"
-                    name="past_history_psychiatric_treatment"
-                    value={formData.past_history_psychiatric_treatment}
-                    onChange={handleChange}
-                    placeholder="Treatment received"
-                    rows={2}
-                  />
-                )}
-                {readOnly ? (
-                  <DisplayField
-                    label="Interim history of previous psychiatric illness"
-                    value={formData.past_history_psychiatric_interim}
-                    rows={2}
-                  />
-                ) : (
-                  <Textarea
-                    label="Interim history of previous psychiatric illness"
-                    name="past_history_psychiatric_interim"
-                    value={formData.past_history_psychiatric_interim}
-                    onChange={handleChange}
-                    placeholder="History between episodes"
-                    rows={2}
-                  />
-                )}
-                {readOnly ? (
-                  <DisplayField
-                    label="Specific enquiry into completeness of recovery and socialization/personal care in the interim period"
-                    value={formData.past_history_psychiatric_recovery}
-                    rows={3}
-                  />
-                ) : (
-                  <Textarea
-                    label="Specific enquiry into completeness of recovery and socialization/personal care in the interim period"
-                    name="past_history_psychiatric_recovery"
-                    value={formData.past_history_psychiatric_recovery}
-                    onChange={handleChange}
-                    placeholder="Recovery assessment, socialization, personal care during interim"
-                    rows={3}
-                  />
-                )}
-              </div>
+              <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+                {ADL_PAST_HISTORY_PSYCHIATRIC_LABEL_LINE}
+              </p>
+              {readOnly ? (
+                <DisplayField
+                  label="Psychiatric past history"
+                  value={formData.past_history_psychiatric}
+                  rows={8}
+                />
+              ) : (
+                <Textarea
+                  label="Psychiatric past history"
+                  name="past_history_psychiatric"
+                  value={formData.past_history_psychiatric}
+                  onChange={handleChange}
+                  placeholder="Document diagnosis, treatment, interim history, and recovery/socialization..."
+                  rows={8}
+                />
+              )}
             </div>
           </div>
         )}
@@ -2220,37 +2058,23 @@ const EditADL = ({
           <div className="p-6 space-y-6">
             <div>
               <h4 className="font-semibold text-gray-800 mb-3">General Home Situation</h4>
-              <Textarea
-                label="Description of childhood home situation"
-                name="home_situation_childhood"
-                value={formData.home_situation_childhood}
-                onChange={handleChange}
-                rows={3}
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <Textarea
-                  label="Parents' relationship"
-                  name="home_situation_parents_relationship"
-                  value={formData.home_situation_parents_relationship}
-                  onChange={handleChange}
-                  rows={2}
+              <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+                {ADL_GENERAL_HOME_SITUATION_LABEL_LINE}
+              </p>
+              {readOnly ? (
+                <DisplayField
+                  value={formData.general_home_situation}
+                  rows={6}
                 />
+              ) : (
                 <Textarea
-                  label="Socioeconomic status"
-                  name="home_situation_socioeconomic"
-                  value={formData.home_situation_socioeconomic}
+                  name="general_home_situation"
+                  value={formData.general_home_situation}
                   onChange={handleChange}
-                  rows={2}
+                  placeholder="Childhood home, parents' relationship, socioeconomic status, interpersonal relationships..."
+                  rows={6}
                 />
-                <Textarea
-                  label="Interpersonal relationships"
-                  name="home_situation_interpersonal"
-                  value={formData.home_situation_interpersonal}
-                  onChange={handleChange}
-                  rows={2}
-                  className="md:col-span-2"
-                />
-              </div>
+              )}
             </div>
 
             <div className="border-t pt-6">
@@ -2307,66 +2131,23 @@ const EditADL = ({
 
             <div className="border-t pt-6">
               <h4 className="font-semibold text-gray-800 mb-3">Development</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Weaning age"
-                  name="development_weaning_age"
-                  value={formData.development_weaning_age}
-                  onChange={handleChange}
+              <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+                {ADL_DEVELOPMENT_HISTORY_LABEL_LINE}
+              </p>
+              {readOnly ? (
+                <DisplayField
+                  value={formData.development_history}
+                  rows={6}
                 />
-                <Input
-                  label="First words"
-                  name="development_first_words"
-                  value={formData.development_first_words}
-                  onChange={handleChange}
-                />
-                <Input
-                  label="Three words sentences"
-                  name="development_three_words"
-                  value={formData.development_three_words}
-                  onChange={handleChange}
-                />
-                <Input
-                  label="Walking age"
-                  name="development_walking"
-                  value={formData.development_walking}
-                  onChange={handleChange}
-                />
+              ) : (
                 <Textarea
-                  label="Neurotic traits"
-                  name="development_neurotic_traits"
-                  value={formData.development_neurotic_traits}
+                  name="development_history"
+                  value={formData.development_history}
                   onChange={handleChange}
-                  rows={2}
-                  className="md:col-span-2"
+                  placeholder="Weaning age, first words, walking, neurotic traits, bedwetting, phobias, childhood illness..."
+                  rows={6}
                 />
-                <Input
-                  label="Nail biting"
-                  name="development_nail_biting"
-                  value={formData.development_nail_biting}
-                  onChange={handleChange}
-                />
-                <Input
-                  label="Bedwetting"
-                  name="development_bedwetting"
-                  value={formData.development_bedwetting}
-                  onChange={handleChange}
-                />
-                <Textarea
-                  label="Phobias"
-                  name="development_phobias"
-                  value={formData.development_phobias}
-                  onChange={handleChange}
-                  rows={2}
-                />
-                <Textarea
-                  label="Childhood illness"
-                  name="development_childhood_illness"
-                  value={formData.development_childhood_illness}
-                  onChange={handleChange}
-                  rows={2}
-                />
-              </div>
+              )}
             </div>
           </div>
         )}
@@ -2396,62 +2177,23 @@ const EditADL = ({
 
         {expandedCards.education && (
           <div className="p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Age at start of education"
-                name="education_start_age"
-                value={formData.education_start_age}
-                onChange={handleChange}
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {ADL_EDUCATION_HISTORY_LABEL_LINE}
+            </p>
+            {readOnly ? (
+              <DisplayField
+                value={formData.education_history}
+                rows={6}
               />
-              <Input
-                label="Highest class passed"
-                name="education_highest_class"
-                value={formData.education_highest_class}
-                onChange={handleChange}
-              />
+            ) : (
               <Textarea
-                label="Performance"
-                name="education_performance"
-                value={formData.education_performance}
+                name="education_history"
+                value={formData.education_history}
                 onChange={handleChange}
-                rows={2}
+                placeholder="Age at start, class passed, performance, disciplinary issues, peers, hobbies, special abilities, discontinuation..."
+                rows={6}
               />
-              <Textarea
-                label="Disciplinary problems"
-                name="education_disciplinary"
-                value={formData.education_disciplinary}
-                onChange={handleChange}
-                rows={2}
-              />
-              <Textarea
-                label="Peer relationships"
-                name="education_peer_relationship"
-                value={formData.education_peer_relationship}
-                onChange={handleChange}
-                rows={2}
-              />
-              <Textarea
-                label="Hobbies and interests"
-                name="education_hobbies"
-                value={formData.education_hobbies}
-                onChange={handleChange}
-                rows={2}
-              />
-              <Textarea
-                label="Special abilities"
-                name="education_special_abilities"
-                value={formData.education_special_abilities}
-                onChange={handleChange}
-                rows={2}
-              />
-              <Textarea
-                label="Reason for discontinuing education"
-                name="education_discontinue_reason"
-                value={formData.education_discontinue_reason}
-                onChange={handleChange}
-                rows={2}
-              />
-            </div>
+            )}
           </div>
         )}
       </Card>
@@ -2480,120 +2222,22 @@ const EditADL = ({
 
         {expandedCards.occupation && (
           <div className="p-6 space-y-4">
-            {(formData.occupation_jobs || [{ job: '', dates: '', adjustment: '', difficulties: '', promotions: '', change_reason: '' }])?.map((job, index) => (
-              <div key={index} className="border-b pb-4 last:border-b-0 space-y-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium text-gray-700">Job {index + 1}</h4>
-                  {!readOnly && (formData.occupation_jobs || []).length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        const newJobs = (formData.occupation_jobs || []).filter((_, i) => i !== index);
-                        setFormData(prev => ({ ...prev, occupation_jobs: newJobs.length > 0 ? newJobs : [{ job: '', dates: '', adjustment: '', difficulties: '', promotions: '', change_reason: '' }] }));
-                      }}
-                      className="text-red-600"
-                    >
-                      <FiX className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Job title"
-                    value={job.job}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
-                        i === index ? { ...item, job: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
-                    }}
-                    disabled={readOnly}
-                  />
-                  <Input
-                    label="Dates"
-                    value={job.dates}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
-                        i === index ? { ...item, dates: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
-                    }}
-                    disabled={readOnly}
-                  />
-                  <Textarea
-                    label="Adjustment"
-                    value={job.adjustment}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
-                        i === index ? { ...item, adjustment: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
-                    }}
-                    rows={2}
-                    disabled={readOnly}
-                  />
-                  <Textarea
-                    label="Difficulties"
-                    value={job.difficulties}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
-                        i === index ? { ...item, difficulties: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
-                    }}
-                    rows={2}
-                    disabled={readOnly}
-                  />
-                  <Input
-                    label="Promotions"
-                    value={job.promotions}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
-                        i === index ? { ...item, promotions: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
-                    }}
-                    disabled={readOnly}
-                  />
-                  <Textarea
-                    label="Reason for change"
-                    value={job.change_reason}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newJobs = (formData.occupation_jobs || []).map((item, i) =>
-                        i === index ? { ...item, change_reason: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, occupation_jobs: newJobs }));
-                    }}
-                    rows={2}
-                    disabled={readOnly}
-                  />
-                </div>
-              </div>
-            ))}
-            {!readOnly && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setFormData(prev => ({
-                    ...prev,
-                    occupation_jobs: [...prev.occupation_jobs, { job: '', dates: '', adjustment: '', difficulties: '', promotions: '', change_reason: '' }]
-                  }));
-                }}
-                className="flex items-center gap-2"
-              >
-                <FiPlus className="w-4 h-4" />
-                Add Job
-              </Button>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {ADL_OCCUPATION_HISTORY_LABEL_LINE}
+            </p>
+            {readOnly ? (
+              <DisplayField
+                value={formData.occupation_history}
+                rows={6}
+              />
+            ) : (
+              <Textarea
+                name="occupation_history"
+                value={formData.occupation_history}
+                onChange={handleChange}
+                placeholder="Job title, dates, adjustment, difficulties, promotions, reason for change..."
+                rows={6}
+              />
             )}
           </div>
         )}
@@ -2671,7 +2315,7 @@ const EditADL = ({
 
             <div className="border-t pt-6">
               <h4 className="font-semibold text-gray-800 mb-3">Marriage</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <Select
                   label="Marriage type"
                   name="sexual_marriage_arranged"
@@ -2683,49 +2327,25 @@ const EditADL = ({
                     { value: 'Love', label: 'Love' },
                     { value: 'Other', label: 'Other' }
                   ]}
+                  disabled={readOnly}
                 />
-                    <DatePicker
-                      icon={<FiCalendar className="w-4 h-4" />}
-                      label="Marriage date"
-                      name="sexual_marriage_date"
-                      value={formData.sexual_marriage_date}
-                      onChange={handleChange}
-                    disabled={readOnly}
-                    />
-                <Input
-                  label="Spouse age"
-                  name="sexual_spouse_age"
-                  value={formData.sexual_spouse_age}
-                  onChange={handleChange}
-                />
-                <Input
-                  label="Spouse occupation"
-                  name="sexual_spouse_occupation"
-                  value={formData.sexual_spouse_occupation}
-                  onChange={handleChange}
-                />
-                <Textarea
-                  label="General adjustment"
-                  name="sexual_adjustment_general"
-                  value={formData.sexual_adjustment_general}
-                  onChange={handleChange}
-                  rows={2}
-                />
-                <Textarea
-                  label="Sexual adjustment"
-                  name="sexual_adjustment_sexual"
-                  value={formData.sexual_adjustment_sexual}
-                  onChange={handleChange}
-                  rows={2}
-                />
-                <Textarea
-                  label="Sexual problems"
-                  name="sexual_problems"
-                  value={formData.sexual_problems}
-                  onChange={handleChange}
-                  rows={2}
-                  className="md:col-span-2"
-                />
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {ADL_SEXUAL_MARRIAGE_DETAILS_LABEL_LINE}
+                </p>
+                {readOnly ? (
+                  <DisplayField
+                    value={formData.sexual_marriage_details}
+                    rows={6}
+                  />
+                ) : (
+                  <Textarea
+                    name="sexual_marriage_details"
+                    value={formData.sexual_marriage_details}
+                    onChange={handleChange}
+                    placeholder="Spouse age, occupation, general and sexual adjustment, sexual problems..."
+                    rows={6}
+                  />
+                )}
               </div>
             </div>
 
@@ -2826,26 +2446,23 @@ const EditADL = ({
 
         {expandedCards.religion && (
           <div className="p-6 space-y-4">
-            <Input
-              label="Type of religion"
-              name="religion_type"
-              value={formData.religion_type}
-              onChange={handleChange}
-            />
-            <Textarea
-              label="Participation in religious activities"
-              name="religion_participation"
-              value={formData.religion_participation}
-              onChange={handleChange}
-              rows={2}
-            />
-            <Textarea
-              label="Changes in religious beliefs"
-              name="religion_changes"
-              value={formData.religion_changes}
-              onChange={handleChange}
-              rows={2}
-            />
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {ADL_RELIGION_HISTORY_LABEL_LINE}
+            </p>
+            {readOnly ? (
+              <DisplayField
+                value={formData.religion_history}
+                rows={6}
+              />
+            ) : (
+              <Textarea
+                name="religion_history"
+                value={formData.religion_history}
+                onChange={handleChange}
+                placeholder="Type of religion, participation in activities, changes in beliefs..."
+                rows={6}
+              />
+            )}
           </div>
         )}
       </Card>
@@ -2873,197 +2490,24 @@ const EditADL = ({
         </div>
 
         {expandedCards.living && (
-          <div className="p-6 space-y-6">
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-3">Household Residents</h4>
-              {(formData.living_residents || [{ name: '', relationship: '', age: '' }])?.map((resident, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-3">
-                  <Input
-                    label={`Resident ${index + 1} - Name`}
-                    value={resident.name}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newResidents = (formData.living_residents || []).map((item, i) =>
-                        i === index ? { ...item, name: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, living_residents: newResidents }));
-                    }}
-                    disabled={readOnly}
-                  />
-                  <Input
-                    label="Relationship"
-                    value={resident.relationship}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newResidents = (formData.living_residents || []).map((item, i) =>
-                        i === index ? { ...item, relationship: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, living_residents: newResidents }));
-                    }}
-                    disabled={readOnly}
-                  />
-                  <Input
-                    label="Age"
-                    value={resident.age}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newResidents = (formData.living_residents || []).map((item, i) =>
-                        i === index ? { ...item, age: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, living_residents: newResidents }));
-                    }}
-                    disabled={readOnly}
-                  />
-                  <div className="flex items-end">
-                    {!readOnly && (formData.living_residents || []).length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const newResidents = (formData.living_residents || []).filter((_, i) => i !== index);
-                          setFormData(prev => ({ ...prev, living_residents: newResidents.length > 0 ? newResidents : [{ name: '', relationship: '', age: '' }] }));
-                        }}
-                        className="text-red-600"
-                      >
-                        <FiX />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {!readOnly && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      living_residents: [...prev.living_residents, { name: '', relationship: '', age: '' }]
-                    }));
-                  }}
-                  className="flex items-center gap-2 mb-4"
-                >
-                  <FiPlus className="w-4 h-4" />
-                  Add Resident
-                </Button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {ADL_LIVING_SITUATION_HISTORY_LABEL_LINE}
+            </p>
+            {readOnly ? (
+              <DisplayField
+                value={formData.living_situation_history}
+                rows={6}
+              />
+            ) : (
               <Textarea
-                label="Income sharing arrangements"
-                name="living_income_sharing"
-                value={formData.living_income_sharing}
+                name="living_situation_history"
+                value={formData.living_situation_history}
                 onChange={handleChange}
-                rows={2}
+                placeholder="Income sharing, expenses, kitchen, domestic conflicts, social class..."
+                rows={6}
               />
-              <Textarea
-                label="Expenses"
-                name="living_expenses"
-                value={formData.living_expenses}
-                onChange={handleChange}
-                rows={2}
-              />
-              <Textarea
-                label="Kitchen arrangements"
-                name="living_kitchen"
-                value={formData.living_kitchen}
-                onChange={handleChange}
-                rows={2}
-              />
-              <Textarea
-                label="Domestic conflicts"
-                name="living_domestic_conflicts"
-                value={formData.living_domestic_conflicts}
-                onChange={handleChange}
-                rows={2}
-              />
-              <Input
-                label="Social class"
-                name="living_social_class"
-                value={formData.living_social_class}
-                onChange={handleChange}
-              />
-            </div>
-
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-800 mb-3">In-laws (if applicable)</h4>
-              {(formData.living_inlaws || [{ name: '', relationship: '', age: '' }])?.map((inlaw, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-3">
-                  <Input
-                    label={`In-law ${index + 1} - Name`}
-                    value={inlaw.name}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newInlaws = (formData.living_inlaws || []).map((item, i) =>
-                        i === index ? { ...item, name: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, living_inlaws: newInlaws }));
-                    }}
-                    disabled={readOnly}
-                  />
-                  <Input
-                    label="Relationship"
-                    value={inlaw.relationship}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newInlaws = (formData.living_inlaws || []).map((item, i) =>
-                        i === index ? { ...item, relationship: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, living_inlaws: newInlaws }));
-                    }}
-                    disabled={readOnly}
-                  />
-                  <Input
-                    label="Age"
-                    value={inlaw.age}
-                    onChange={(e) => {
-                      if (readOnly) return;
-                      const newInlaws = (formData.living_inlaws || []).map((item, i) =>
-                        i === index ? { ...item, age: e.target.value } : item
-                      );
-                      setFormData(prev => ({ ...prev, living_inlaws: newInlaws }));
-                    }}
-                    disabled={readOnly}
-                  />
-                  <div className="flex items-end">
-                    {!readOnly && (formData.living_inlaws || []).length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const newInlaws = (formData.living_inlaws || []).filter((_, i) => i !== index);
-                          setFormData(prev => ({ ...prev, living_inlaws: newInlaws.length > 0 ? newInlaws : [{ name: '', relationship: '', age: '' }] }));
-                        }}
-                        className="text-red-600"
-                      >
-                        <FiX />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {!readOnly && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      living_inlaws: [...prev.living_inlaws, { name: '', relationship: '', age: '' }]
-                    }));
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <FiPlus className="w-4 h-4" />
-                  Add In-law
-                </Button>
-              )}
-            </div>
+            )}
           </div>
         )}
       </Card>
@@ -3092,55 +2536,23 @@ const EditADL = ({
 
         {expandedCards.premorbid && (
           <div className="p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Input
-                label="Passive vs Active"
-                name="premorbid_personality_passive_active"
-                value={formData.premorbid_personality_passive_active}
-                onChange={handleChange}
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {ADL_PREMORBID_PERSONALITY_HISTORY_LABEL_LINE}
+            </p>
+            {readOnly ? (
+              <DisplayField
+                value={formData.premorbid_personality_history}
+                rows={6}
               />
-              <Input
-                label="Assertiveness"
-                name="premorbid_personality_assertive"
-                value={formData.premorbid_personality_assertive}
+            ) : (
+              <Textarea
+                name="premorbid_personality_history"
+                value={formData.premorbid_personality_history}
                 onChange={handleChange}
+                placeholder="Passive/active, assertiveness, introvert/extrovert, traits, hobbies, habits, alcohol/drug use..."
+                rows={6}
               />
-              <Input
-                label="Introvert vs Extrovert"
-                name="premorbid_personality_introvert_extrovert"
-                value={formData.premorbid_personality_introvert_extrovert}
-                onChange={handleChange}
-              />
-            </div>
-            <Textarea
-              label="Personality traits"
-              name="premorbid_personality_traits"
-              value={Array.isArray(formData.premorbid_personality_traits) ? formData.premorbid_personality_traits.join(', ') : formData.premorbid_personality_traits}
-              onChange={(e) => setFormData(prev => ({ ...prev, premorbid_personality_traits: e.target.value.split(',').map(t => t.trim()) }))}
-              placeholder="Enter traits separated by commas"
-              rows={2}
-            />
-            <Textarea
-              label="Hobbies and interests"
-              name="premorbid_personality_hobbies"
-              value={formData.premorbid_personality_hobbies}
-              onChange={handleChange}
-              rows={2}
-            />
-            <Textarea
-              label="Habits"
-              name="premorbid_personality_habits"
-              value={formData.premorbid_personality_habits}
-              onChange={handleChange}
-              rows={2}
-            />
-            <Textarea
-              label="Alcohol and drug use"
-              name="premorbid_personality_alcohol_drugs"
-              value={formData.premorbid_personality_alcohol_drugs}
-              onChange={handleChange}
-              rows={2}
-            />
+            )}
           </div>
         )}
       </Card>
@@ -3238,32 +2650,49 @@ const EditADL = ({
               <Input label="Fundus" name="physical_fundus" value={formData.physical_fundus} onChange={handleChange} />
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-800 mb-3">Cardiovascular System</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input label="Apex" name="physical_cvs_apex" value={formData.physical_cvs_apex} onChange={handleChange} />
-                <Input label="Regularity" name="physical_cvs_regularity" value={formData.physical_cvs_regularity} onChange={handleChange} />
-                <Textarea label="Heart sounds" name="physical_cvs_heart_sounds" value={formData.physical_cvs_heart_sounds} onChange={handleChange} rows={2} />
-                <Textarea label="Murmurs" name="physical_cvs_murmurs" value={formData.physical_cvs_murmurs} onChange={handleChange} rows={2} />
-              </div>
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-semibold text-gray-800">Cardiovascular System</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{ADL_PHYSICAL_CVS_LABEL_LINE}</p>
+              {readOnly ? (
+                <DisplayField value={formData.physical_cvs_examination} rows={4} />
+              ) : (
+                <Textarea
+                  name="physical_cvs_examination"
+                  value={formData.physical_cvs_examination}
+                  onChange={handleChange}
+                  rows={4}
+                />
+              )}
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-800 mb-3">Respiratory System</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input label="Chest expansion" name="physical_chest_expansion" value={formData.physical_chest_expansion} onChange={handleChange} />
-                <Input label="Percussion" name="physical_chest_percussion" value={formData.physical_chest_percussion} onChange={handleChange} />
-                <Textarea label="Adventitious sounds" name="physical_chest_adventitious" value={formData.physical_chest_adventitious} onChange={handleChange} rows={2} className="md:col-span-2" />
-              </div>
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-semibold text-gray-800">Respiratory System</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{ADL_PHYSICAL_CHEST_LABEL_LINE}</p>
+              {readOnly ? (
+                <DisplayField value={formData.physical_chest_examination} rows={4} />
+              ) : (
+                <Textarea
+                  name="physical_chest_examination"
+                  value={formData.physical_chest_examination}
+                  onChange={handleChange}
+                  rows={4}
+                />
+              )}
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-800 mb-3">Abdomen</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Textarea label="Tenderness" name="physical_abdomen_tenderness" value={formData.physical_abdomen_tenderness} onChange={handleChange} rows={2} />
-                <Textarea label="Mass" name="physical_abdomen_mass" value={formData.physical_abdomen_mass} onChange={handleChange} rows={2} />
-                <Textarea label="Bowel sounds" name="physical_abdomen_bowel_sounds" value={formData.physical_abdomen_bowel_sounds} onChange={handleChange} rows={2} className="md:col-span-2" />
-              </div>
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-semibold text-gray-800">Abdomen</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{ADL_PHYSICAL_ABDOMEN_LABEL_LINE}</p>
+              {readOnly ? (
+                <DisplayField value={formData.physical_abdomen_examination} rows={4} />
+              ) : (
+                <Textarea
+                  name="physical_abdomen_examination"
+                  value={formData.physical_abdomen_examination}
+                  onChange={handleChange}
+                  rows={4}
+                />
+              )}
             </div>
 
             <div className="border-t pt-4">
@@ -3307,36 +2736,49 @@ const EditADL = ({
 
         {expandedCards.mse && (
           <div className="p-6 space-y-6">
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-3">General Appearance & Behavior</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Textarea label="Demeanour" name="mse_general_demeanour" value={formData.mse_general_demeanour} onChange={handleChange} rows={2} />
-                <Input label="Tidy/Unkempt" name="mse_general_tidy" value={formData.mse_general_tidy} onChange={handleChange} />
-                <Input label="Awareness" name="mse_general_awareness" value={formData.mse_general_awareness} onChange={handleChange} />
-                <Input label="Cooperation" name="mse_general_cooperation" value={formData.mse_general_cooperation} onChange={handleChange} />
-              </div>
+            <div className="space-y-4">
+              <h4 className="font-semibold text-gray-800">General Appearance & Behavior</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{ADL_MSE_GENERAL_LABEL_LINE}</p>
+              {readOnly ? (
+                <DisplayField value={formData.mse_general_examination} rows={4} />
+              ) : (
+                <Textarea
+                  name="mse_general_examination"
+                  value={formData.mse_general_examination}
+                  onChange={handleChange}
+                  rows={4}
+                />
+              )}
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-800 mb-3">Psychomotor Activity</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input label="Verbalization" name="mse_psychomotor_verbalization" value={formData.mse_psychomotor_verbalization} onChange={handleChange} />
-                <Input label="Pressure of activity" name="mse_psychomotor_pressure" value={formData.mse_psychomotor_pressure} onChange={handleChange} />
-                <Input label="Tension" name="mse_psychomotor_tension" value={formData.mse_psychomotor_tension} onChange={handleChange} />
-                <Textarea label="Posture" name="mse_psychomotor_posture" value={formData.mse_psychomotor_posture} onChange={handleChange} rows={2} />
-                <Textarea label="Mannerism/Stereotypy" name="mse_psychomotor_mannerism" value={formData.mse_psychomotor_mannerism} onChange={handleChange} rows={2} />
-                <Textarea label="Catatonic features" name="mse_psychomotor_catatonic" value={formData.mse_psychomotor_catatonic} onChange={handleChange} rows={2} />
-              </div>
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-semibold text-gray-800">Psychomotor Activity</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{ADL_MSE_PSYCHOMOTOR_LABEL_LINE}</p>
+              {readOnly ? (
+                <DisplayField value={formData.mse_psychomotor_examination} rows={4} />
+              ) : (
+                <Textarea
+                  name="mse_psychomotor_examination"
+                  value={formData.mse_psychomotor_examination}
+                  onChange={handleChange}
+                  rows={4}
+                />
+              )}
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-800 mb-3">Affect & Mood</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Textarea label="Subjective feeling" name="mse_affect_subjective" value={formData.mse_affect_subjective} onChange={handleChange} rows={2} />
-                <Input label="Tone" name="mse_affect_tone" value={formData.mse_affect_tone} onChange={handleChange} />
-                <Input label="Resting expression" name="mse_affect_resting" value={formData.mse_affect_resting} onChange={handleChange} />
-                <Input label="Fluctuation" name="mse_affect_fluctuation" value={formData.mse_affect_fluctuation} onChange={handleChange} />
-              </div>
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-semibold text-gray-800">Affect & Mood</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{ADL_MSE_AFFECT_LABEL_LINE}</p>
+              {readOnly ? (
+                <DisplayField value={formData.mse_affect_examination} rows={4} />
+              ) : (
+                <Textarea
+                  name="mse_affect_examination"
+                  value={formData.mse_affect_examination}
+                  onChange={handleChange}
+                  rows={4}
+                />
+              )}
             </div>
 
             <div className="border-t pt-4">
@@ -3345,6 +2787,8 @@ const EditADL = ({
                 <Textarea label="Flow" name="mse_thought_flow" value={formData.mse_thought_flow} onChange={handleChange} rows={2} />
                 <Textarea label="Form" name="mse_thought_form" value={formData.mse_thought_form} onChange={handleChange} rows={2} />
                 <Textarea label="Content" name="mse_thought_content" value={formData.mse_thought_content} onChange={handleChange} rows={3} />
+                <Textarea label="Possession" name="mse_thought_possession" value={formData.mse_thought_possession} onChange={handleChange} rows={2} />
+                <Textarea label="Perception" name="mse_thought_perception" value={formData.mse_thought_perception} onChange={handleChange} rows={2} />
               </div>
             </div>
 
@@ -3368,12 +2812,19 @@ const EditADL = ({
               </div>
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-800 mb-3">Insight & Judgement</h4>
-              <div className="grid grid-cols-1 gap-4">
-                <Textarea label="Understanding of illness" name="mse_insight_understanding" value={formData.mse_insight_understanding} onChange={handleChange} rows={2} />
-                <Textarea label="Judgement" name="mse_insight_judgement" value={formData.mse_insight_judgement} onChange={handleChange} rows={2} />
-              </div>
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-semibold text-gray-800">Insight & Judgement</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{ADL_MSE_INSIGHT_LABEL_LINE}</p>
+              {readOnly ? (
+                <DisplayField value={formData.mse_insight_examination} rows={4} />
+              ) : (
+                <Textarea
+                  name="mse_insight_examination"
+                  value={formData.mse_insight_examination}
+                  onChange={handleChange}
+                  rows={4}
+                />
+              )}
             </div>
           </div>
         )}
@@ -3403,30 +2854,20 @@ const EditADL = ({
 
         {expandedCards.diagnostic && (
           <div className="p-6 space-y-4">
-            <Textarea
-              label="Brief clinical summary"
-              name="diagnostic_formulation_summary"
-              value={formData.diagnostic_formulation_summary}
-              onChange={handleChange}
-              rows={4}
-              placeholder="Summarize the clinical presentation..."
-            />
-            <Textarea
-              label="Salient features supporting diagnosis"
-              name="diagnostic_formulation_features"
-              value={formData.diagnostic_formulation_features}
-              onChange={handleChange}
-              rows={4}
-              placeholder="Key diagnostic features..."
-            />
-            <Textarea
-              label="Psychodynamic formulation"
-              name="diagnostic_formulation_psychodynamic"
-              value={formData.diagnostic_formulation_psychodynamic}
-              onChange={handleChange}
-              rows={4}
-              placeholder="Psychodynamic understanding..."
-            />
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {ADL_DIAGNOSTIC_FORMULATION_LABEL_LINE}
+            </p>
+            {readOnly ? (
+              <DisplayField value={formData.diagnostic_formulation_history} rows={6} />
+            ) : (
+              <Textarea
+                name="diagnostic_formulation_history"
+                value={formData.diagnostic_formulation_history}
+                onChange={handleChange}
+                placeholder="Summarize the clinical presentation, salient features, psychodynamic formulation..."
+                rows={6}
+              />
+            )}
           </div>
         )}
       </Card>
@@ -3455,30 +2896,20 @@ const EditADL = ({
 
         {expandedCards.final && (
           <div className="p-6 space-y-4">
-            <Textarea
-              label="Provisional Diagnosis"
-              name="provisional_diagnosis"
-              value={formData.provisional_diagnosis}
-              onChange={handleChange}
-              rows={3}
-              placeholder="Enter provisional diagnosis..."
-            />
-            <Textarea
-              label="Treatment Plan"
-              name="treatment_plan"
-              value={formData.treatment_plan}
-              onChange={handleChange}
-              rows={4}
-              placeholder="Comprehensive treatment plan..."
-            />
-            <Textarea
-              label="Consultant Comments"
-              name="consultant_comments"
-              value={formData.consultant_comments}
-              onChange={handleChange}
-              rows={3}
-              placeholder="Comments from consultant..."
-            />
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {ADL_FINAL_ASSESSMENT_LABEL_LINE}
+            </p>
+            {readOnly ? (
+              <DisplayField value={formData.final_assessment_history} rows={6} />
+            ) : (
+              <Textarea
+                name="final_assessment_history"
+                value={formData.final_assessment_history}
+                onChange={handleChange}
+                placeholder="Provisional diagnosis, treatment plan, consultant comments..."
+                rows={6}
+              />
+            )}
           </div>
         )}
       </Card>

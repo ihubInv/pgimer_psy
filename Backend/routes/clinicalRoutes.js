@@ -330,15 +330,7 @@ const {
  *         adl_reasoning:
  *           type: string
  *         # History of Present Illness - Expanded
- *         history_narrative:
- *           type: string
- *         history_specific_enquiry:
- *           type: string
- *         history_drug_intake:
- *           type: string
- *         history_treatment_place:
- *           type: string
- *         history_treatment_dates:
+ *         history_present_illness:
  *           type: string
  *         history_treatment_drugs:
  *           type: string
@@ -355,6 +347,18 @@ const {
  *               name:
  *                 type: string
  *               reliability:
+ *                 type: string
+ *               age:
+ *                 type: string
+ *               sex:
+ *                 type: string
+ *               education:
+ *                 type: string
+ *               marital_status:
+ *                 type: string
+ *               occupation:
+ *                 type: string
+ *               city_district:
  *                 type: string
  *         # Complaints and Duration (JSON arrays)
  *         complaints_patient:
@@ -378,15 +382,7 @@ const {
  *         # Past History - Detailed
  *         past_history_medical:
  *           type: string
- *         past_history_psychiatric_dates:
- *           type: string
- *         past_history_psychiatric_diagnosis:
- *           type: string
- *         past_history_psychiatric_treatment:
- *           type: string
- *         past_history_psychiatric_interim:
- *           type: string
- *         past_history_psychiatric_recovery:
+ *         past_history_psychiatric:
  *           type: string
  *         # Family History - Detailed
  *         family_history_father_age:
@@ -439,28 +435,10 @@ const {
  *               marital_status:
  *                 type: string
  *         # Diagnostic Formulation
- *         diagnostic_formulation_summary:
- *           type: string
- *         diagnostic_formulation_features:
- *           type: string
- *         diagnostic_formulation_psychodynamic:
+ *         diagnostic_formulation_history:
  *           type: string
  *         # Premorbid Personality
- *         premorbid_personality_passive_active:
- *           type: string
- *         premorbid_personality_assertive:
- *           type: string
- *         premorbid_personality_introvert_extrovert:
- *           type: string
- *         premorbid_personality_traits:
- *           type: array
- *           items:
- *             type: string
- *         premorbid_personality_hobbies:
- *           type: string
- *         premorbid_personality_habits:
- *           type: string
- *         premorbid_personality_alcohol_drugs:
+ *         premorbid_personality_history:
  *           type: string
  *         # Physical Examination - Comprehensive
  *         physical_appearance:
@@ -487,25 +465,11 @@ const {
  *           type: string
  *         physical_fundus:
  *           type: string
- *         physical_cvs_apex:
+ *         physical_cvs_examination:
  *           type: string
- *         physical_cvs_regularity:
+ *         physical_chest_examination:
  *           type: string
- *         physical_cvs_heart_sounds:
- *           type: string
- *         physical_cvs_murmurs:
- *           type: string
- *         physical_chest_expansion:
- *           type: string
- *         physical_chest_percussion:
- *           type: string
- *         physical_chest_adventitious:
- *           type: string
- *         physical_abdomen_tenderness:
- *           type: string
- *         physical_abdomen_mass:
- *           type: string
- *         physical_abdomen_bowel_sounds:
+ *         physical_abdomen_examination:
  *           type: string
  *         physical_cns_cranial:
  *           type: string
@@ -524,39 +488,21 @@ const {
  *         physical_cns_cerebellar:
  *           type: string
  *         # Mental Status Examination - Expanded
- *         mse_general_demeanour:
+ *         mse_general_examination:
  *           type: string
- *         mse_general_tidy:
+ *         mse_psychomotor_examination:
  *           type: string
- *         mse_general_awareness:
- *           type: string
- *         mse_general_cooperation:
- *           type: string
- *         mse_psychomotor_verbalization:
- *           type: string
- *         mse_psychomotor_pressure:
- *           type: string
- *         mse_psychomotor_tension:
- *           type: string
- *         mse_psychomotor_posture:
- *           type: string
- *         mse_psychomotor_mannerism:
- *           type: string
- *         mse_psychomotor_catatonic:
- *           type: string
- *         mse_affect_subjective:
- *           type: string
- *         mse_affect_tone:
- *           type: string
- *         mse_affect_resting:
- *           type: string
- *         mse_affect_fluctuation:
+ *         mse_affect_examination:
  *           type: string
  *         mse_thought_flow:
  *           type: string
  *         mse_thought_form:
  *           type: string
  *         mse_thought_content:
+ *           type: string
+ *         mse_thought_possession:
+ *           type: string
+ *         mse_thought_perception:
  *           type: string
  *         mse_cognitive_consciousness:
  *           type: string
@@ -586,45 +532,15 @@ const {
  *           type: string
  *         mse_cognitive_proverbs:
  *           type: string
- *         mse_insight_understanding:
- *           type: string
- *         mse_insight_judgement:
+ *         mse_insight_examination:
  *           type: string
  *         # Educational History
- *         education_start_age:
+ *         education_history:
  *           type: string
- *         education_highest_class:
+ *           description: Age at start, highest class, performance, disciplinary problems, peer relationships, hobbies, special abilities, reason for discontinuing
+ *         occupation_history:
  *           type: string
- *         education_performance:
- *           type: string
- *         education_disciplinary:
- *           type: string
- *         education_peer_relationship:
- *           type: string
- *         education_hobbies:
- *           type: string
- *         education_special_abilities:
- *           type: string
- *         education_discontinue_reason:
- *           type: string
- *         # Occupational History (JSON array)
- *         occupation_jobs:
- *           type: array
- *           items:
- *             type: object
- *             properties:
- *               job:
- *                 type: string
- *               dates:
- *                 type: string
- *               adjustment:
- *                 type: string
- *               difficulties:
- *                 type: string
- *               promotions:
- *                 type: string
- *               change_reason:
- *                 type: string
+ *           description: Job title, dates, adjustment, difficulties, promotions, reason for change
  *         # Sexual and Marital History
  *         sexual_menarche_age:
  *           type: string
@@ -640,17 +556,9 @@ const {
  *           type: string
  *         sexual_marriage_arranged:
  *           type: string
- *         sexual_marriage_date:
+ *         sexual_marriage_details:
  *           type: string
- *           format: date
- *         sexual_spouse_age:
- *           type: string
- *         sexual_spouse_occupation:
- *           type: string
- *         sexual_adjustment_general:
- *           type: string
- *         sexual_adjustment_sexual:
- *           type: string
+ *           description: Spouse age, spouse occupation, general adjustment, sexual adjustment, sexual problems
  *         sexual_children:
  *           type: array
  *           items:
@@ -660,59 +568,17 @@ const {
  *                 type: string
  *               sex:
  *                 type: string
- *               sexual_problems:
- *                 type: string
- *         sexual_problems:
- *           type: string
  *         # Religion
- *         religion_type:
+ *         religion_history:
  *           type: string
- *         religion_participation:
+ *           description: Type of religion, participation in religious activities, changes in religious beliefs
+ *         living_situation_history:
  *           type: string
- *         religion_changes:
- *           type: string
- *         # Present Living Situation
- *         living_residents:
- *           type: array
- *           items:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *               relationship:
- *                 type: string
- *               age:
- *                 type: string
- *         living_income_sharing:
- *           type: string
- *         living_expenses:
- *           type: string
- *         living_kitchen:
- *           type: string
- *         living_domestic_conflicts:
- *           type: string
- *         living_social_class:
- *           type: string
- *         living_inlaws:
- *           type: array
- *           items:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *               relationship:
- *                 type: string
- *               age:
- *                 type: string
+ *           description: Income sharing arrangements, expenses, kitchen arrangements, domestic conflicts, social class
  *         # General Home Situation and Early Development
- *         home_situation_childhood:
+ *         general_home_situation:
  *           type: string
- *         home_situation_parents_relationship:
- *           type: string
- *         home_situation_socioeconomic:
- *           type: string
- *         home_situation_interpersonal:
- *           type: string
+ *           description: Childhood home, parents relationship, socioeconomic status, interpersonal relationships
  *         personal_birth_date:
  *           type: string
  *           format: date
@@ -726,31 +592,11 @@ const {
  *           type: string
  *         personal_complications_postnatal:
  *           type: string
- *         development_weaning_age:
+ *         development_history:
  *           type: string
- *         development_first_words:
- *           type: string
- *         development_three_words:
- *           type: string
- *         development_walking:
- *           type: string
- *         development_neurotic_traits:
- *           type: string
- *         development_nail_biting:
- *           type: string
- *         development_bedwetting:
- *           type: string
- *         development_phobias:
- *           type: string
- *         development_childhood_illness:
- *           type: string
- *         # Provisional Diagnosis and Treatment Plan
- *         provisional_diagnosis:
- *           type: string
- *         treatment_plan:
- *           type: string
- *         # Comments of the Consultant
- *         consultant_comments:
+ *           description: Weaning age, first words, three-word sentences, walking, neurotic traits, nail biting, bedwetting, phobias, childhood illness
+ *         # Final Assessment
+ *         final_assessment_history:
  *           type: string
  */
 
@@ -779,7 +625,7 @@ const {
      *       **Data Storage:**
      *       - Basic proforma fields: Stored in `clinical_proforma` table
      *       - Complex case fields (when `doctor_decision` = `complex_case`): Stored in `adl_files` table
-     *       - Complex case fields include: history_narrative, informants, past_history_*, family_history_*, physical_*, mse_*, education_*, occupation_jobs, sexual_*, religion_*, living_*, home_situation_*, personal_*, development_*, provisional_diagnosis, treatment_plan, consultant_comments
+     *       - Complex case fields include: history_narrative, informants, past_history_*, family_history_*, physical_*, mse_*, education_*, occupation_history, sexual_*, religion_*, living_*, general_home_situation, personal_*, development_*, provisional_diagnosis, treatment_plan, consultant_comments
  *       
  *       **Patient Status Auto-Update:**
  *       - When an ADL file is created for a complex case, the patient's status is automatically updated:

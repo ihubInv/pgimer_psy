@@ -6,11 +6,8 @@
 const ADL_DATE_FIELD_KEYS = new Set([
   'file_created_date',
   'last_accessed_date',
-  'history_treatment_dates',
-  'past_history_psychiatric_dates',
   'family_history_father_death_date',
   'family_history_mother_death_date',
-  'sexual_marriage_date',
   'personal_birth_date',
 ]);
 

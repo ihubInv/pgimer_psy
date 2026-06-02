@@ -100,16 +100,8 @@ CREATE TABLE public.adl_files (
     family_history_mother_death_cause text,
     family_history_siblings jsonb DEFAULT '[]'::jsonb,
     family_history text,
-    diagnostic_formulation_summary text,
-    diagnostic_formulation_features text,
-    diagnostic_formulation_psychodynamic text,
-    premorbid_personality_passive_active text,
-    premorbid_personality_assertive text,
-    premorbid_personality_introvert_extrovert text,
-    premorbid_personality_traits jsonb DEFAULT '[]'::jsonb,
-    premorbid_personality_hobbies text,
-    premorbid_personality_habits text,
-    premorbid_personality_alcohol_drugs text,
+    diagnostic_formulation_history text,
+    premorbid_personality_history text,
     physical_appearance text,
     physical_body_build text,
     physical_pallor boolean DEFAULT false,
@@ -122,16 +114,9 @@ CREATE TABLE public.adl_files (
     physical_weight text,
     physical_waist text,
     physical_fundus text,
-    physical_cvs_apex text,
-    physical_cvs_regularity text,
-    physical_cvs_heart_sounds text,
-    physical_cvs_murmurs text,
-    physical_chest_expansion text,
-    physical_chest_percussion text,
-    physical_chest_adventitious text,
-    physical_abdomen_tenderness text,
-    physical_abdomen_mass text,
-    physical_abdomen_bowel_sounds text,
+    physical_cvs_examination text,
+    physical_chest_examination text,
+    physical_abdomen_examination text,
     physical_cns_cranial text,
     physical_cns_motor_sensory text,
     physical_cns_rigidity text,
@@ -140,24 +125,14 @@ CREATE TABLE public.adl_files (
     physical_cns_dtrs text,
     physical_cns_plantar text,
     physical_cns_cerebellar text,
-    mse_general_demeanour text,
-    mse_general_tidy text,
-    mse_general_awareness text,
-    mse_general_cooperation text,
-    mse_psychomotor_verbalization text,
-    mse_psychomotor_pressure text,
-    mse_psychomotor_tension text,
-    mse_psychomotor_posture text,
-    mse_psychomotor_mannerism text,
-    mse_psychomotor_catatonic text,
-    mse_affect_subjective text,
-    mse_affect_tone text,
-    mse_affect_resting text,
-    mse_affect_fluctuation text,
+    mse_general_examination text,
+    mse_psychomotor_examination text,
+    mse_affect_examination text,
     mse_thought_flow text,
     mse_thought_form text,
     mse_thought_content text,
     mse_thought_possession text,
+    mse_thought_perception text,
     mse_cognitive_consciousness text,
     mse_cognitive_orientation_time text,
     mse_cognitive_orientation_place text,
@@ -172,17 +147,9 @@ CREATE TABLE public.adl_files (
     mse_cognitive_calculation text,
     mse_cognitive_similarities text,
     mse_cognitive_proverbs text,
-    mse_insight_understanding text,
-    mse_insight_judgement text,
-    education_start_age text,
-    education_highest_class text,
-    education_performance text,
-    education_disciplinary text,
-    education_peer_relationship text,
-    education_hobbies text,
-    education_special_abilities text,
-    education_discontinue_reason text,
-    occupation_jobs jsonb DEFAULT '[]'::jsonb,
+    mse_insight_examination text,
+    education_history text,
+    occupation_history text,
     sexual_menarche_age text,
     sexual_menarche_reaction text,
     sexual_education text,
@@ -190,45 +157,19 @@ CREATE TABLE public.adl_files (
     sexual_contact text,
     sexual_premarital_extramarital text,
     sexual_marriage_arranged text,
-    sexual_marriage_date date,
-    sexual_spouse_age integer,
-    sexual_spouse_occupation text,
-    sexual_adjustment_general text,
-    sexual_adjustment_sexual text,
+    sexual_marriage_details text,
     sexual_children jsonb DEFAULT '[]'::jsonb,
-    sexual_problems text,
-    religion_type text,
-    religion_participation text,
-    religion_changes text,
-    living_residents jsonb DEFAULT '[]'::jsonb,
-    living_income_sharing text,
-    living_expenses text,
-    living_kitchen text,
-    living_domestic_conflicts text,
-    living_social_class text,
-    living_inlaws jsonb DEFAULT '[]'::jsonb,
-    home_situation_childhood text,
-    home_situation_parents_relationship text,
-    home_situation_socioeconomic text,
-    home_situation_interpersonal text,
+    religion_history text,
+    living_situation_history text,
+    general_home_situation text,
     personal_birth_date date,
     personal_birth_place text,
     personal_delivery_type text,
     personal_complications_prenatal text,
     personal_complications_natal text,
     personal_complications_postnatal text,
-    development_weaning_age text,
-    development_first_words text,
-    development_three_words text,
-    development_walking text,
-    development_neurotic_traits text,
-    development_nail_biting text,
-    development_bedwetting text,
-    development_phobias text,
-    development_childhood_illness text,
-    provisional_diagnosis text,
-    treatment_plan text,
-    consultant_comments text,
+    development_history text,
+    final_assessment_history text,
     CONSTRAINT adl_files_file_status_check CHECK (((file_status)::text = ANY (ARRAY[('created'::character varying)::text, ('stored'::character varying)::text, ('retrieved'::character varying)::text, ('active'::character varying)::text, ('archived'::character varying)::text])))
 );
 
@@ -292,19 +233,19 @@ COMMENT ON COLUMN public.adl_files.family_history_siblings IS 'JSONB array of si
 --
 -- TOC entry 5199 (class 0 OID 0)
 -- Dependencies: 226
--- Name: COLUMN adl_files.premorbid_personality_traits; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN adl_files.premorbid_personality_history; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN public.adl_files.premorbid_personality_traits IS 'JSONB array of premorbid personality traits';
+COMMENT ON COLUMN public.adl_files.premorbid_personality_history IS 'Premorbid personality: passive/active, assertiveness, introvert/extrovert, traits, hobbies, habits, alcohol/drugs';
 
 
 --
 -- TOC entry 5200 (class 0 OID 0)
 -- Dependencies: 226
--- Name: COLUMN adl_files.occupation_jobs; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN adl_files.occupation_history; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN public.adl_files.occupation_jobs IS 'JSONB array of occupation/job history';
+COMMENT ON COLUMN public.adl_files.occupation_history IS 'Occupation / employment history (combined job fields)';
 
 
 --
@@ -322,7 +263,7 @@ COMMENT ON COLUMN public.adl_files.sexual_children IS 'JSONB array of children i
 -- Name: COLUMN adl_files.living_residents; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN public.adl_files.living_residents IS 'JSONB array of living residents';
+COMMENT ON COLUMN public.adl_files.living_situation_history IS 'Living arrangements: income sharing, expenses, kitchen, domestic conflicts, social class';
 
 
 --
@@ -331,7 +272,6 @@ COMMENT ON COLUMN public.adl_files.living_residents IS 'JSONB array of living re
 -- Name: COLUMN adl_files.living_inlaws; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN public.adl_files.living_inlaws IS 'JSONB array of in-laws information';
 
 
 --

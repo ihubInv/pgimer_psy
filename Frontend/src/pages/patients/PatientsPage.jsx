@@ -56,6 +56,7 @@ import PatientListFilters, {
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import * as XLSX from 'xlsx-js-style';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
+import { resolveFinalAssessmentHistory } from '../../utils/adlClosingSections';
 
 const toISTDateString = (dateInput) => {
   if (!dateInput) return '';
@@ -1052,11 +1053,7 @@ const PatientsPage = () => {
             adlRow['Created At'] = formatDateTime(adl.created_at);
             
             // Populate from ADL_FILE_FORM constants
-            const adlMappings = {
-              'history_treatment_dates': (data) => formatDate(data.history_treatment_dates),
-            };
-            
-            populateRowFromConstants(adlRow, ADL_FILE_FORM, adl, adlMappings);
+            populateRowFromConstants(adlRow, ADL_FILE_FORM, adl, {});
             
             adlFileData.push(adlRow);
           });
@@ -1664,11 +1661,7 @@ const PatientsPage = () => {
                 adlRow['Created At'] = formatDateTime(adl.created_at);
                 
                 // Populate from ADL_FILE_FORM constants
-                const adlMappings = {
-                  'history_treatment_dates': (data) => formatDate(data.history_treatment_dates),
-                };
-                
-                populateRowFromConstants(adlRow, ADL_FILE_FORM, adl, adlMappings);
+                populateRowFromConstants(adlRow, ADL_FILE_FORM, adl, {});
                 
                 adlFileData.push(adlRow);
               });
@@ -2903,34 +2896,10 @@ const PatientsPage = () => {
           <div class="info-value">${formatValue(adl.notes)}</div>
         </div>
         ` : ''}
-        ${adl.history_narrative ? `
+        ${(adl.history_present_illness || adl.history_narrative || adl.history_specific_enquiry || adl.history_drug_intake) ? `
         <div class="info-item full-width">
-          <div class="info-label">History Narrative</div>
-          <div class="info-value">${formatValue(adl.history_narrative)}</div>
-        </div>
-        ` : ''}
-        ${adl.history_specific_enquiry ? `
-        <div class="info-item full-width">
-          <div class="info-label">History Specific Enquiry</div>
-          <div class="info-value">${formatValue(adl.history_specific_enquiry)}</div>
-        </div>
-        ` : ''}
-        ${adl.history_drug_intake ? `
-        <div class="info-item full-width">
-          <div class="info-label">History Drug Intake</div>
-          <div class="info-value">${formatValue(adl.history_drug_intake)}</div>
-        </div>
-        ` : ''}
-        ${adl.history_treatment_place ? `
-        <div class="info-item">
-          <div class="info-label">History Treatment Place</div>
-          <div class="info-value">${formatValue(adl.history_treatment_place)}</div>
-        </div>
-        ` : ''}
-        ${adl.history_treatment_dates ? `
-        <div class="info-item">
-          <div class="info-label">History Treatment Dates</div>
-          <div class="info-value">${formatDate(adl.history_treatment_dates)}</div>
+          <div class="info-label">History of Present Illness (A–C)</div>
+          <div class="info-value">${formatValue(adl.history_present_illness || [adl.history_narrative, adl.history_specific_enquiry, adl.history_drug_intake].filter(Boolean).join('\\n\\n'))}</div>
         </div>
         ` : ''}
         ${adl.history_treatment_drugs ? `
@@ -2969,16 +2938,10 @@ const PatientsPage = () => {
           <div class="info-value">${formatValue(adl.past_history_medical)}</div>
         </div>
         ` : ''}
-        ${adl.past_history_psychiatric_diagnosis ? `
+        ${(adl.past_history_psychiatric || adl.past_history_psychiatric_diagnosis || adl.past_history_psychiatric_treatment) ? `
         <div class="info-item full-width">
-          <div class="info-label">Past History - Psychiatric Diagnosis</div>
-          <div class="info-value">${formatValue(adl.past_history_psychiatric_diagnosis)}</div>
-        </div>
-        ` : ''}
-        ${adl.past_history_psychiatric_treatment ? `
-        <div class="info-item full-width">
-          <div class="info-label">Past History - Psychiatric Treatment</div>
-          <div class="info-value">${formatValue(adl.past_history_psychiatric_treatment)}</div>
+          <div class="info-label">Past History - Psychiatric</div>
+          <div class="info-value">${formatValue(adl.past_history_psychiatric || [adl.past_history_psychiatric_diagnosis, adl.past_history_psychiatric_treatment, adl.past_history_psychiatric_interim, adl.past_history_psychiatric_recovery].filter(Boolean).join('\\n\\n'))}</div>
         </div>
         ` : ''}
         ${adl.family_history_father_age ? `
@@ -3017,22 +2980,10 @@ const PatientsPage = () => {
           <div class="info-value">${formatValue(adl.family_history_mother_occupation)}</div>
         </div>
         ` : ''}
-        ${adl.provisional_diagnosis ? `
+        ${resolveFinalAssessmentHistory(adl) ? `
         <div class="info-item full-width">
-          <div class="info-label">Provisional Diagnosis</div>
-          <div class="info-value">${formatValue(adl.provisional_diagnosis)}</div>
-        </div>
-        ` : ''}
-        ${adl.treatment_plan ? `
-        <div class="info-item full-width">
-          <div class="info-label">Treatment Plan</div>
-          <div class="info-value">${formatValue(adl.treatment_plan)}</div>
-        </div>
-        ` : ''}
-        ${adl.consultant_comments ? `
-        <div class="info-item full-width">
-          <div class="info-label">Consultant Comments</div>
-          <div class="info-value">${formatValue(adl.consultant_comments)}</div>
+          <div class="info-label">Final Assessment</div>
+          <div class="info-value">${formatValue(resolveFinalAssessmentHistory(adl))}</div>
         </div>
         ` : ''}
         ${adl.created_at ? `

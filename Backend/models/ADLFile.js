@@ -41,11 +41,8 @@ const sanitizeDateFields = (data) => {
   const dateFields = [
     'file_created_date', 
     'last_accessed_date', 
-    'history_treatment_dates',
-    'past_history_psychiatric_dates',
     'family_history_father_death_date',
     'family_history_mother_death_date', 
-    'sexual_marriage_date', 
     'personal_birth_date'
   ];
   
@@ -65,8 +62,7 @@ const sanitizeIntegerFields = (data) => {
     'family_history_father_age',
     'family_history_father_death_age',
     'family_history_mother_age',
-    'family_history_mother_death_age',
-    'sexual_spouse_age'
+    'family_history_mother_death_age'
   ];
   
   const sanitized = { ...data };
@@ -320,12 +316,8 @@ class ADLFile {
     this.proforma_visit_date = data.proforma_visit_date || null;
 
     // Complex Case Data Fields (stored in ADL file, not in clinical_proforma)
-    // History of Present Illness - Expanded
-    this.history_narrative = data.history_narrative;
-    this.history_specific_enquiry = data.history_specific_enquiry;
-    this.history_drug_intake = data.history_drug_intake;
-    this.history_treatment_place = data.history_treatment_place;
-    this.history_treatment_dates = data.history_treatment_dates;
+    // History of Present Illness (A–C combined) + section D treatment
+    this.history_present_illness = data.history_present_illness;
     this.history_treatment_drugs = data.history_treatment_drugs;
     this.history_treatment_response = data.history_treatment_response;
 
@@ -343,11 +335,7 @@ class ADLFile {
 
     // Past History - Detailed
     this.past_history_medical = data.past_history_medical;
-    this.past_history_psychiatric_dates = data.past_history_psychiatric_dates;
-    this.past_history_psychiatric_diagnosis = data.past_history_psychiatric_diagnosis;
-    this.past_history_psychiatric_treatment = data.past_history_psychiatric_treatment;
-    this.past_history_psychiatric_interim = data.past_history_psychiatric_interim;
-    this.past_history_psychiatric_recovery = data.past_history_psychiatric_recovery;
+    this.past_history_psychiatric = data.past_history_psychiatric;
 
     // Family History - Detailed
     this.family_history_father_age = data.family_history_father_age;
@@ -371,18 +359,10 @@ class ADLFile {
     this.family_history = data.family_history;
 
     // Diagnostic Formulation
-    this.diagnostic_formulation_summary = data.diagnostic_formulation_summary;
-    this.diagnostic_formulation_features = data.diagnostic_formulation_features;
-    this.diagnostic_formulation_psychodynamic = data.diagnostic_formulation_psychodynamic;
+    this.diagnostic_formulation_history = data.diagnostic_formulation_history;
 
     // Premorbid Personality
-    this.premorbid_personality_passive_active = data.premorbid_personality_passive_active;
-    this.premorbid_personality_assertive = data.premorbid_personality_assertive;
-    this.premorbid_personality_introvert_extrovert = data.premorbid_personality_introvert_extrovert;
-    this.premorbid_personality_traits = data.premorbid_personality_traits ? (typeof data.premorbid_personality_traits === 'string' ? JSON.parse(data.premorbid_personality_traits) : data.premorbid_personality_traits) : [];
-    this.premorbid_personality_hobbies = data.premorbid_personality_hobbies;
-    this.premorbid_personality_habits = data.premorbid_personality_habits;
-    this.premorbid_personality_alcohol_drugs = data.premorbid_personality_alcohol_drugs;
+    this.premorbid_personality_history = data.premorbid_personality_history;
 
     // Physical Examination - Comprehensive
     this.physical_appearance = data.physical_appearance;
@@ -397,16 +377,9 @@ class ADLFile {
     this.physical_weight = data.physical_weight;
     this.physical_waist = data.physical_waist;
     this.physical_fundus = data.physical_fundus;
-    this.physical_cvs_apex = data.physical_cvs_apex;
-    this.physical_cvs_regularity = data.physical_cvs_regularity;
-    this.physical_cvs_heart_sounds = data.physical_cvs_heart_sounds;
-    this.physical_cvs_murmurs = data.physical_cvs_murmurs;
-    this.physical_chest_expansion = data.physical_chest_expansion;
-    this.physical_chest_percussion = data.physical_chest_percussion;
-    this.physical_chest_adventitious = data.physical_chest_adventitious;
-    this.physical_abdomen_tenderness = data.physical_abdomen_tenderness;
-    this.physical_abdomen_mass = data.physical_abdomen_mass;
-    this.physical_abdomen_bowel_sounds = data.physical_abdomen_bowel_sounds;
+    this.physical_cvs_examination = data.physical_cvs_examination;
+    this.physical_chest_examination = data.physical_chest_examination;
+    this.physical_abdomen_examination = data.physical_abdomen_examination;
     this.physical_cns_cranial = data.physical_cns_cranial;
     this.physical_cns_motor_sensory = data.physical_cns_motor_sensory;
     this.physical_cns_rigidity = data.physical_cns_rigidity;
@@ -417,24 +390,14 @@ class ADLFile {
     this.physical_cns_cerebellar = data.physical_cns_cerebellar;
 
     // Mental Status Examination - Expanded
-    this.mse_general_demeanour = data.mse_general_demeanour;
-    this.mse_general_tidy = data.mse_general_tidy;
-    this.mse_general_awareness = data.mse_general_awareness;
-    this.mse_general_cooperation = data.mse_general_cooperation;
-    this.mse_psychomotor_verbalization = data.mse_psychomotor_verbalization;
-    this.mse_psychomotor_pressure = data.mse_psychomotor_pressure;
-    this.mse_psychomotor_tension = data.mse_psychomotor_tension;
-    this.mse_psychomotor_posture = data.mse_psychomotor_posture;
-    this.mse_psychomotor_mannerism = data.mse_psychomotor_mannerism;
-    this.mse_psychomotor_catatonic = data.mse_psychomotor_catatonic;
-    this.mse_affect_subjective = data.mse_affect_subjective;
-    this.mse_affect_tone = data.mse_affect_tone;
-    this.mse_affect_resting = data.mse_affect_resting;
-    this.mse_affect_fluctuation = data.mse_affect_fluctuation;
+    this.mse_general_examination = data.mse_general_examination;
+    this.mse_psychomotor_examination = data.mse_psychomotor_examination;
+    this.mse_affect_examination = data.mse_affect_examination;
     this.mse_thought_flow = data.mse_thought_flow;
     this.mse_thought_form = data.mse_thought_form;
     this.mse_thought_content = data.mse_thought_content;
     this.mse_thought_possession = data.mse_thought_possession;
+    this.mse_thought_perception = data.mse_thought_perception;
     this.mse_cognitive_consciousness = data.mse_cognitive_consciousness;
     this.mse_cognitive_orientation_time = data.mse_cognitive_orientation_time;
     this.mse_cognitive_orientation_place = data.mse_cognitive_orientation_place;
@@ -449,21 +412,13 @@ class ADLFile {
     this.mse_cognitive_calculation = data.mse_cognitive_calculation;
     this.mse_cognitive_similarities = data.mse_cognitive_similarities;
     this.mse_cognitive_proverbs = data.mse_cognitive_proverbs;
-    this.mse_insight_understanding = data.mse_insight_understanding;
-    this.mse_insight_judgement = data.mse_insight_judgement;
+    this.mse_insight_examination = data.mse_insight_examination;
 
     // Educational History
-    this.education_start_age = data.education_start_age;
-    this.education_highest_class = data.education_highest_class;
-    this.education_performance = data.education_performance;
-    this.education_disciplinary = data.education_disciplinary;
-    this.education_peer_relationship = data.education_peer_relationship;
-    this.education_hobbies = data.education_hobbies;
-    this.education_special_abilities = data.education_special_abilities;
-    this.education_discontinue_reason = data.education_discontinue_reason;
+    this.education_history = data.education_history;
 
     // Occupational History (JSONB)
-    this.occupation_jobs = data.occupation_jobs ? (typeof data.occupation_jobs === 'string' ? JSON.parse(data.occupation_jobs) : data.occupation_jobs) : [];
+    this.occupation_history = data.occupation_history;
 
     // Sexual and Marital History
     this.sexual_menarche_age = data.sexual_menarche_age;
@@ -473,55 +428,27 @@ class ADLFile {
     this.sexual_contact = data.sexual_contact;
     this.sexual_premarital_extramarital = data.sexual_premarital_extramarital;
     this.sexual_marriage_arranged = data.sexual_marriage_arranged;
-    this.sexual_marriage_date = data.sexual_marriage_date;
-    this.sexual_spouse_age = data.sexual_spouse_age;
-    this.sexual_spouse_occupation = data.sexual_spouse_occupation;
-    this.sexual_adjustment_general = data.sexual_adjustment_general;
-    this.sexual_adjustment_sexual = data.sexual_adjustment_sexual;
+    this.sexual_marriage_details = data.sexual_marriage_details;
     this.sexual_children = data.sexual_children ? (typeof data.sexual_children === 'string' ? JSON.parse(data.sexual_children) : data.sexual_children) : [];
-    this.sexual_problems = data.sexual_problems;
 
     // Religion
-    this.religion_type = data.religion_type;
-    this.religion_participation = data.religion_participation;
-    this.religion_changes = data.religion_changes;
+    this.religion_history = data.religion_history;
 
     // Present Living Situation
-    this.living_residents = data.living_residents ? (typeof data.living_residents === 'string' ? JSON.parse(data.living_residents) : data.living_residents) : [];
-    this.living_income_sharing = data.living_income_sharing;
-    this.living_expenses = data.living_expenses;
-    this.living_kitchen = data.living_kitchen;
-    this.living_domestic_conflicts = data.living_domestic_conflicts;
-    this.living_social_class = data.living_social_class;
-    this.living_inlaws = data.living_inlaws ? (typeof data.living_inlaws === 'string' ? JSON.parse(data.living_inlaws) : data.living_inlaws) : [];
+    this.living_situation_history = data.living_situation_history;
 
     // General Home Situation and Early Development
-    this.home_situation_childhood = data.home_situation_childhood;
-    this.home_situation_parents_relationship = data.home_situation_parents_relationship;
-    this.home_situation_socioeconomic = data.home_situation_socioeconomic;
-    this.home_situation_interpersonal = data.home_situation_interpersonal;
+    this.general_home_situation = data.general_home_situation;
     this.personal_birth_date = data.personal_birth_date;
     this.personal_birth_place = data.personal_birth_place;
     this.personal_delivery_type = data.personal_delivery_type;
     this.personal_complications_prenatal = data.personal_complications_prenatal;
     this.personal_complications_natal = data.personal_complications_natal;
     this.personal_complications_postnatal = data.personal_complications_postnatal;
-    this.development_weaning_age = data.development_weaning_age;
-    this.development_first_words = data.development_first_words;
-    this.development_three_words = data.development_three_words;
-    this.development_walking = data.development_walking;
-    this.development_neurotic_traits = data.development_neurotic_traits;
-    this.development_nail_biting = data.development_nail_biting;
-    this.development_bedwetting = data.development_bedwetting;
-    this.development_phobias = data.development_phobias;
-    this.development_childhood_illness = data.development_childhood_illness;
+    this.development_history = data.development_history;
 
-    // Provisional Diagnosis and Treatment Plan
-    this.provisional_diagnosis = data.provisional_diagnosis;
-    this.treatment_plan = data.treatment_plan;
-
-    // Comments of the Consultant
-    this.consultant_comments = data.consultant_comments;
+    // Final assessment (provisional diagnosis, treatment plan, consultant comments)
+    this.final_assessment_history = data.final_assessment_history;
   }
 
   // Static method to create ADL file with transaction support
@@ -537,24 +464,17 @@ class ADLFile {
       complaints_patient: normalizeJsonArray(sanitizedData.complaints_patient),
       complaints_informant: normalizeJsonArray(sanitizedData.complaints_informant),
       family_history_siblings: normalizeJsonArray(sanitizedData.family_history_siblings),
-      premorbid_personality_traits: normalizeJsonArray(sanitizedData.premorbid_personality_traits),
-      occupation_jobs: normalizeJsonArray(sanitizedData.occupation_jobs),
       sexual_children: normalizeJsonArray(sanitizedData.sexual_children),
-      living_residents: normalizeJsonArray(sanitizedData.living_residents),
-      living_inlaws: normalizeJsonArray(sanitizedData.living_inlaws),
       family_history: normalizeFamilyHistoryDb(sanitizedData.family_history),
     };
     
     const {
       patient_id, child_patient_id, adl_no, created_by, clinical_proforma_id,
       file_status = 'created', file_created_date = new Date(), total_visits = 1,
-      history_narrative, history_specific_enquiry, history_drug_intake,
-      history_treatment_place, history_treatment_dates, history_treatment_drugs,
+      history_present_illness, history_treatment_drugs,
       history_treatment_response, informants, complaints_patient, complaints_informant,
       onset_duration, precipitating_factor, course,
-      past_history_medical, past_history_psychiatric_dates, past_history_psychiatric_diagnosis,
-      past_history_psychiatric_treatment, past_history_psychiatric_interim,
-      past_history_psychiatric_recovery, family_history_father_age,
+      past_history_medical, past_history_psychiatric, family_history_father_age,
       family_history_father_education, family_history_father_occupation,
       family_history_father_personality, family_history_father_deceased,
       family_history_father_death_age, family_history_father_death_date,
@@ -563,64 +483,45 @@ class ADLFile {
       family_history_mother_personality, family_history_mother_deceased,
       family_history_mother_death_age, family_history_mother_death_date,
       family_history_mother_death_cause, family_history_siblings, family_history,
-      diagnostic_formulation_summary, diagnostic_formulation_features,
-      diagnostic_formulation_psychodynamic, premorbid_personality_passive_active,
-      premorbid_personality_assertive, premorbid_personality_introvert_extrovert,
-      premorbid_personality_traits, premorbid_personality_hobbies,
-      premorbid_personality_habits, premorbid_personality_alcohol_drugs,
+      diagnostic_formulation_history, premorbid_personality_history,
       physical_appearance, physical_body_build, physical_pallor, physical_icterus,
       physical_oedema, physical_lymphadenopathy, physical_pulse, physical_bp,
       physical_height, physical_weight, physical_waist, physical_fundus,
-      physical_cvs_apex, physical_cvs_regularity, physical_cvs_heart_sounds,
-      physical_cvs_murmurs, physical_chest_expansion, physical_chest_percussion,
-      physical_chest_adventitious, physical_abdomen_tenderness, physical_abdomen_mass,
-      physical_abdomen_bowel_sounds, physical_cns_cranial, physical_cns_motor_sensory,
+      physical_cvs_examination, physical_chest_examination, physical_abdomen_examination,
+      physical_cns_cranial, physical_cns_motor_sensory,
       physical_cns_rigidity, physical_cns_involuntary, physical_cns_superficial_reflexes,
       physical_cns_dtrs, physical_cns_plantar, physical_cns_cerebellar,
-      mse_general_demeanour, mse_general_tidy, mse_general_awareness,
-      mse_general_cooperation, mse_psychomotor_verbalization, mse_psychomotor_pressure,
-      mse_psychomotor_tension, mse_psychomotor_posture, mse_psychomotor_mannerism,
-      mse_psychomotor_catatonic, mse_affect_subjective, mse_affect_tone,
-      mse_affect_resting, mse_affect_fluctuation, mse_thought_flow, mse_thought_form,
-      mse_thought_content, mse_thought_possession, mse_cognitive_consciousness, mse_cognitive_orientation_time,
+      mse_general_examination, mse_psychomotor_examination, mse_affect_examination,
+      mse_thought_flow, mse_thought_form,
+      mse_thought_content, mse_thought_possession, mse_thought_perception, mse_cognitive_consciousness, mse_cognitive_orientation_time,
       mse_cognitive_orientation_place, mse_cognitive_orientation_person,
       mse_cognitive_memory_immediate, mse_cognitive_memory_recent,
       mse_cognitive_memory_remote, mse_cognitive_subtraction, mse_cognitive_digit_span,
       mse_cognitive_counting, mse_cognitive_general_knowledge, mse_cognitive_calculation,
-      mse_cognitive_similarities, mse_cognitive_proverbs, mse_insight_understanding,
-      mse_insight_judgement, education_start_age, education_highest_class,
-      education_performance, education_disciplinary, education_peer_relationship,
-      education_hobbies, education_special_abilities, education_discontinue_reason,
-      occupation_jobs, sexual_menarche_age, sexual_menarche_reaction, sexual_education,
+      mse_cognitive_similarities, mse_cognitive_proverbs, mse_insight_examination,
+      education_history,
+      occupation_history, sexual_menarche_age, sexual_menarche_reaction, sexual_education,
       sexual_masturbation, sexual_contact, sexual_premarital_extramarital,
-      sexual_marriage_arranged, sexual_marriage_date, sexual_spouse_age,
-      sexual_spouse_occupation, sexual_adjustment_general, sexual_adjustment_sexual,
-      sexual_children, sexual_problems, religion_type, religion_participation,
-      religion_changes, living_residents, living_income_sharing, living_expenses,
-      living_kitchen, living_domestic_conflicts, living_social_class, living_inlaws,
-      home_situation_childhood, home_situation_parents_relationship,
-      home_situation_socioeconomic, home_situation_interpersonal, personal_birth_date,
+      sexual_marriage_arranged, sexual_marriage_details,
+      sexual_children, religion_history, living_situation_history,
+      general_home_situation, personal_birth_date,
       personal_birth_place, personal_delivery_type, personal_complications_prenatal,
       personal_complications_natal, personal_complications_postnatal,
-      development_weaning_age, development_first_words, development_three_words,
-      development_walking, development_neurotic_traits, development_nail_biting,
-      development_bedwetting, development_phobias, development_childhood_illness,
-      provisional_diagnosis, treatment_plan, consultant_comments
+      development_history,
+      final_assessment_history
     } = sanitizedData;
 
     // Prepare ADL data for saving
 
+    try {
     const result = await client.query(
       `INSERT INTO adl_files (
         patient_id, child_patient_id, adl_no, created_by, clinical_proforma_id, file_status, 
-        file_created_date, total_visits, history_narrative, history_specific_enquiry, 
-        history_drug_intake, history_treatment_place, history_treatment_dates,
+        file_created_date, total_visits, history_present_illness,
         history_treatment_drugs, history_treatment_response, informants, 
         complaints_patient, complaints_informant, onset_duration, precipitating_factor, course,
-        past_history_medical, 
-        past_history_psychiatric_dates, past_history_psychiatric_diagnosis,
-        past_history_psychiatric_treatment, past_history_psychiatric_interim, 
-        past_history_psychiatric_recovery, family_history_father_age, 
+        past_history_medical,
+        past_history_psychiatric, family_history_father_age, 
         family_history_father_education, family_history_father_occupation,
         family_history_father_personality, family_history_father_deceased, 
         family_history_father_death_age, family_history_father_death_date, 
@@ -629,837 +530,55 @@ class ADLFile {
         family_history_mother_personality, family_history_mother_deceased, 
         family_history_mother_death_age, family_history_mother_death_date, 
         family_history_mother_death_cause, family_history_siblings, family_history,
-        diagnostic_formulation_summary, diagnostic_formulation_features, 
-        diagnostic_formulation_psychodynamic, premorbid_personality_passive_active, 
-        premorbid_personality_assertive, premorbid_personality_introvert_extrovert,
-        premorbid_personality_traits, premorbid_personality_hobbies, 
-        premorbid_personality_habits, premorbid_personality_alcohol_drugs,
+        diagnostic_formulation_history, premorbid_personality_history, 
         physical_appearance, physical_body_build, physical_pallor, physical_icterus, 
         physical_oedema, physical_lymphadenopathy, physical_pulse, physical_bp, 
         physical_height, physical_weight, physical_waist, physical_fundus,
-        physical_cvs_apex, physical_cvs_regularity, physical_cvs_heart_sounds, 
-        physical_cvs_murmurs, physical_chest_expansion, physical_chest_percussion, 
-        physical_chest_adventitious, physical_abdomen_tenderness, physical_abdomen_mass, 
-        physical_abdomen_bowel_sounds, physical_cns_cranial, physical_cns_motor_sensory, 
+        physical_cvs_examination, physical_chest_examination, physical_abdomen_examination,
+        physical_cns_cranial, physical_cns_motor_sensory, 
         physical_cns_rigidity, physical_cns_involuntary, physical_cns_superficial_reflexes, 
         physical_cns_dtrs, physical_cns_plantar, physical_cns_cerebellar,
-        mse_general_demeanour, mse_general_tidy, mse_general_awareness, 
-        mse_general_cooperation, mse_psychomotor_verbalization, mse_psychomotor_pressure, 
-        mse_psychomotor_tension, mse_psychomotor_posture, mse_psychomotor_mannerism, 
-        mse_psychomotor_catatonic, mse_affect_subjective, mse_affect_tone,
-        mse_affect_resting, mse_affect_fluctuation,         mse_thought_flow, mse_thought_form, 
-        mse_thought_content, mse_thought_possession, mse_cognitive_consciousness, mse_cognitive_orientation_time, 
+        mse_general_examination, mse_psychomotor_examination, mse_affect_examination,
+        mse_thought_flow, mse_thought_form, 
+        mse_thought_content, mse_thought_possession, mse_thought_perception, mse_cognitive_consciousness, mse_cognitive_orientation_time, 
         mse_cognitive_orientation_place, mse_cognitive_orientation_person, 
         mse_cognitive_memory_immediate, mse_cognitive_memory_recent,
         mse_cognitive_memory_remote, mse_cognitive_subtraction, mse_cognitive_digit_span, 
         mse_cognitive_counting, mse_cognitive_general_knowledge, mse_cognitive_calculation, 
-        mse_cognitive_similarities, mse_cognitive_proverbs, mse_insight_understanding, 
-        mse_insight_judgement, education_start_age, education_highest_class, 
-        education_performance, education_disciplinary, education_peer_relationship, 
-        education_hobbies, education_special_abilities, education_discontinue_reason,
-        occupation_jobs, sexual_menarche_age, sexual_menarche_reaction, sexual_education, 
+        mse_cognitive_similarities, mse_cognitive_proverbs, mse_insight_examination, 
+        education_history, 
+        occupation_history, sexual_menarche_age, sexual_menarche_reaction, sexual_education, 
         sexual_masturbation, sexual_contact, sexual_premarital_extramarital, 
-        sexual_marriage_arranged, sexual_marriage_date, sexual_spouse_age, 
-        sexual_spouse_occupation, sexual_adjustment_general, sexual_adjustment_sexual,
-        sexual_children, sexual_problems, religion_type, religion_participation, 
-        religion_changes, living_residents, living_income_sharing, living_expenses, 
-        living_kitchen, living_domestic_conflicts, living_social_class, living_inlaws, 
-        home_situation_childhood, home_situation_parents_relationship,
-        home_situation_socioeconomic, home_situation_interpersonal, personal_birth_date, 
+        sexual_marriage_arranged, sexual_marriage_details,
+        sexual_children, religion_history, living_situation_history, 
+        general_home_situation, personal_birth_date, 
         personal_birth_place, personal_delivery_type, personal_complications_prenatal, 
         personal_complications_natal, personal_complications_postnatal,
-        development_weaning_age, development_first_words, development_three_words, 
-        development_walking, development_neurotic_traits, development_nail_biting, 
-        development_bedwetting, development_phobias, development_childhood_illness, 
-        provisional_diagnosis, treatment_plan, consultant_comments
+        development_history, 
+        final_assessment_history
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31,
-        $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43,
-        $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55,
-        $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68,
-        $69, $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $80, $81, $82, $83,
-        $84, $85, $86, $87, $88, $89, $90, $91, $92, $93, $94, $95, $96, $97, $98,
-        $99, $100, $101, $102, $103, $104, $105, $106, $107, $108, $109, $110,
-        $111, $112, $113, $114, $115, $116, $117, $118, $119, $120, $121,
-        $122, $123, $124, $125, $126, $127, $128, $129, $130, $131, $132, $133,
-        $134, $135, $136, $137, $138, $139, $140, $141, $142, $143, $144, $145,
-        $146, $147, $148, $149, $150, $151, $152, $153, $154, $155, $156, $157,
-        $158, $159, $160, $161, $162, $163, $164, $165, $166, $167, $168,
-        $169, $170, $171, $172, $173, $174, $175, $176, $177, $178, $179,
-        $180, $181, $182, $183, $184, $185, $186, $187, $188, $189, $190,
-        $191, $192, $193, $194, $195, $196, $197, $198, $199, $200, $201, $202,
-        $203, $204, $205, $206, $207, $208, $209, $210, $211, $212, $213, $214
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
+        $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48,
+        $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64,
+        $65, $66, $67, $68, $69, $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $80,
+        $81, $82, $83, $84, $85, $86, $87, $88, $89, $90, $91, $92, $93, $94, $95, $96,
+        $97, $98, $99, $100, $101, $102, $103, $104, $105, $106, $107
       ) RETURNING *`,
       [
-        patient_id, child_patient_id, adl_no, created_by, clinical_proforma_id, file_status,
+        patient_id || null, child_patient_id || null, adl_no, created_by || null, clinical_proforma_id || null, file_status,
         file_created_date, total_visits,
-        history_narrative,
-        history_specific_enquiry || null,
-        history_drug_intake || null,
-        history_treatment_place || null,
-        history_treatment_dates || null,
+        history_present_illness || null,
         history_treatment_drugs || null,
         history_treatment_response || null,
-        jsonbArrayParam(informants),
-        jsonbArrayParam(complaints_patient),
-        jsonbArrayParam(complaints_informant),
+          jsonbArrayParam(informants),
+          jsonbArrayParam(complaints_patient),
+          jsonbArrayParam(complaints_informant),
         onset_duration || null,
         precipitating_factor || null,
         course || null,
         past_history_medical || null,
-        past_history_psychiatric_dates || null,
-        past_history_psychiatric_diagnosis || null,
-        past_history_psychiatric_treatment || null,
-        past_history_psychiatric_interim || null,
-        past_history_psychiatric_recovery || null,
-        family_history_father_age || null,
-        family_history_father_education || null,
-        family_history_father_occupation || null,
-        family_history_father_personality || null,
-        family_history_father_deceased || null,
-        family_history_father_death_age || null,
-        family_history_father_death_date || null,
-        family_history_father_death_cause || null,
-        family_history_mother_age || null,
-        family_history_mother_education || null,
-        family_history_mother_occupation || null,
-        family_history_mother_personality || null,
-        family_history_mother_deceased || null,
-        family_history_mother_death_age || null,
-        family_history_mother_death_date || null,
-        family_history_mother_death_cause || null,
-        jsonbArrayParam(family_history_siblings),
-        family_history,
-        diagnostic_formulation_summary || null,
-        diagnostic_formulation_features || null,
-        diagnostic_formulation_psychodynamic || null,
-        premorbid_personality_passive_active || null,
-        premorbid_personality_assertive || null,
-        premorbid_personality_introvert_extrovert || null,
-        jsonbArrayParam(premorbid_personality_traits),
-        premorbid_personality_hobbies || null,
-        premorbid_personality_habits || null,
-        premorbid_personality_alcohol_drugs || null,
-        physical_appearance || null,
-        physical_body_build || null,
-        physical_pallor || null, physical_icterus || null,
-        physical_oedema || null, physical_lymphadenopathy || null,
-        physical_pulse || null,
-        physical_bp || null,
-        physical_height || null,
-        physical_weight || null,
-        physical_waist || null,
-        physical_fundus || null,
-        physical_cvs_apex || null,
-        physical_cvs_regularity || null,
-        physical_cvs_heart_sounds || null,
-        physical_cvs_murmurs || null,
-        physical_chest_expansion || null,
-        physical_chest_percussion || null,
-        physical_chest_adventitious || null,
-        physical_abdomen_tenderness || null,
-        physical_abdomen_mass || null,
-        physical_abdomen_bowel_sounds || null,
-        physical_cns_cranial || null,
-        physical_cns_motor_sensory || null,
-        physical_cns_rigidity || null,
-        physical_cns_involuntary || null,
-        physical_cns_superficial_reflexes || null,
-        physical_cns_dtrs || null,
-        physical_cns_plantar || null,
-        physical_cns_cerebellar || null,
-        mse_general_demeanour || null,
-        mse_general_tidy || null,
-        mse_general_awareness || null,
-        mse_general_cooperation || null,
-        mse_psychomotor_verbalization || null,
-        mse_psychomotor_pressure || null,
-        mse_psychomotor_tension || null,
-        mse_psychomotor_posture || null,
-        mse_psychomotor_mannerism || null,
-        mse_psychomotor_catatonic || null,
-        mse_affect_subjective || null,
-        mse_affect_tone || null,
-        mse_affect_resting || null,
-        mse_affect_fluctuation || null,
-        mse_thought_flow || null,
-        mse_thought_form || null,
-        mse_thought_content || null,
-        mse_thought_possession || null,
-        mse_cognitive_consciousness || null,
-        mse_cognitive_orientation_time || null,
-        mse_cognitive_orientation_place || null,
-        mse_cognitive_orientation_person || null,
-        mse_cognitive_memory_immediate || null,
-        mse_cognitive_memory_recent || null,
-        mse_cognitive_memory_remote || null,
-        mse_cognitive_subtraction || null,
-        mse_cognitive_digit_span || null,
-        mse_cognitive_counting || null,
-        mse_cognitive_general_knowledge || null,
-        mse_cognitive_calculation || null,
-        mse_cognitive_similarities || null,
-        mse_cognitive_proverbs || null,
-        mse_insight_understanding || null,
-        mse_insight_judgement || null,
-        education_start_age || null, education_highest_class || null,
-        education_performance || null,
-        education_disciplinary || null,
-        education_peer_relationship || null,
-        education_hobbies || null,
-        education_special_abilities || null,
-        education_discontinue_reason || null,
-        jsonbArrayParam(occupation_jobs), sexual_menarche_age || null,
-        sexual_menarche_reaction || null,
-        sexual_education || null,
-        sexual_masturbation || null,
-        sexual_contact || null,
-        sexual_premarital_extramarital || null,
-        sexual_marriage_arranged || null, sexual_marriage_date || null, sexual_spouse_age || null,
-        sexual_spouse_occupation || null,
-        sexual_adjustment_general || null,
-        sexual_adjustment_sexual || null,
-        jsonbArrayParam(sexual_children),
-        sexual_problems || null,
-        religion_type || null,
-        religion_participation || null,
-        religion_changes || null,
-        jsonbArrayParam(living_residents),
-        living_income_sharing || null,
-        living_expenses || null,
-        living_kitchen || null,
-        living_domestic_conflicts || null,
-        living_social_class || null,
-        jsonbArrayParam(living_inlaws),
-        home_situation_childhood || null,
-        home_situation_parents_relationship || null,
-        home_situation_socioeconomic || null,
-        home_situation_interpersonal || null,
-        personal_birth_date || null,
-        personal_birth_place || null,
-        personal_delivery_type || null,
-        personal_complications_prenatal || null,
-        personal_complications_natal || null,
-        personal_complications_postnatal || null,
-        development_weaning_age || null, development_first_words || null, development_three_words || null,
-        development_walking || null,
-        development_neurotic_traits || null,
-        development_nail_biting || null,
-        development_bedwetting || null,
-        development_phobias || null,
-        development_childhood_illness || null,
-        provisional_diagnosis || null,
-        treatment_plan || null,
-        consultant_comments || null
-      ].map(pgParam)
-    );
-
-    return new ADLFile(result.rows[0]);
-  }
-
-  // Static method to create ADL file (without transaction)
-  //   static async create(adlData) {
-  //     try {
-  //       // Verify that required columns exist in the table
-  //       const columnCheck = await db.query(`
-  //         SELECT column_name 
-  //         FROM information_schema.columns 
-  //         WHERE table_name = 'adl_files' 
-  //         AND column_name IN ('history_narrative', 'informants', 'physical_appearance', 'mse_general_demeanour')
-  //       `);
-
-  //       if (columnCheck.rows.length < 4) {
-  //         throw new Error(
-  //           'Database schema mismatch: The adl_files table is missing required complex case columns. ' +
-  //           'Please run the migration script: Backend/database/add_complex_case_columns_to_adl_files.sql ' +
-  //           `(Found only ${columnCheck.rows.length} of 4 test columns)`
-  //         );
-  //       }
-  //       const {
-  //         patient_id, adl_no, created_by, clinical_proforma_id,
-  //         file_status = 'created', file_created_date = new Date(), total_visits = 1,
-  //         history_narrative, history_specific_enquiry, history_drug_intake,
-  //         history_treatment_place, history_treatment_dates, history_treatment_drugs, 
-  //         history_treatment_response, informants, complaints_patient, complaints_informant,
-  //         past_history_medical, past_history_psychiatric_dates, past_history_psychiatric_diagnosis,
-  //         past_history_psychiatric_treatment, past_history_psychiatric_interim, 
-  //         past_history_psychiatric_recovery, family_history_father_age, 
-  //         family_history_father_education, family_history_father_occupation,
-  //         family_history_father_personality, family_history_father_deceased, 
-  //         family_history_father_death_age, family_history_father_death_date, 
-  //         family_history_father_death_cause, family_history_mother_age, 
-  //         family_history_mother_education, family_history_mother_occupation,
-  //         family_history_mother_personality, family_history_mother_deceased, 
-  //         family_history_mother_death_age, family_history_mother_death_date, 
-  //         family_history_mother_death_cause, family_history_siblings, family_history,
-  //         diagnostic_formulation_summary, diagnostic_formulation_features, 
-  //         diagnostic_formulation_psychodynamic, premorbid_personality_passive_active, 
-  //         premorbid_personality_assertive, premorbid_personality_introvert_extrovert,
-  //         premorbid_personality_traits, premorbid_personality_hobbies, 
-  //         premorbid_personality_habits, premorbid_personality_alcohol_drugs,
-  //         physical_appearance, physical_body_build, physical_pallor, physical_icterus, 
-  //         physical_oedema, physical_lymphadenopathy, physical_pulse, physical_bp, 
-  //         physical_height, physical_weight, physical_waist, physical_fundus,
-  //         physical_cvs_apex, physical_cvs_regularity, physical_cvs_heart_sounds, 
-  //         physical_cvs_murmurs, physical_chest_expansion, physical_chest_percussion, 
-  //         physical_chest_adventitious, physical_abdomen_tenderness, physical_abdomen_mass, 
-  //         physical_abdomen_bowel_sounds, physical_cns_cranial, physical_cns_motor_sensory, 
-  //         physical_cns_rigidity, physical_cns_involuntary, physical_cns_superficial_reflexes, 
-  //         physical_cns_dtrs, physical_cns_plantar, physical_cns_cerebellar,
-  //         mse_general_demeanour, mse_general_tidy, mse_general_awareness, 
-  //         mse_general_cooperation, mse_psychomotor_verbalization, mse_psychomotor_pressure, 
-  //         mse_psychomotor_tension, mse_psychomotor_posture, mse_psychomotor_mannerism, 
-  //         mse_psychomotor_catatonic, mse_affect_subjective, mse_affect_tone,
-  //         mse_affect_resting, mse_affect_fluctuation,         mse_thought_flow, mse_thought_form, 
-  //         mse_thought_content, mse_thought_possession, mse_cognitive_consciousness, mse_cognitive_orientation_time, 
-  //         mse_cognitive_orientation_place, mse_cognitive_orientation_person, 
-  //         mse_cognitive_memory_immediate, mse_cognitive_memory_recent,
-  //         mse_cognitive_memory_remote, mse_cognitive_subtraction, mse_cognitive_digit_span, 
-  //         mse_cognitive_counting, mse_cognitive_general_knowledge, mse_cognitive_calculation, 
-  //         mse_cognitive_similarities, mse_cognitive_proverbs, mse_insight_understanding, 
-  //         mse_insight_judgement, education_start_age, education_highest_class, 
-  //         education_performance, education_disciplinary, education_peer_relationship, 
-  //         education_hobbies, education_special_abilities, education_discontinue_reason,
-  //         occupation_jobs, sexual_menarche_age, sexual_menarche_reaction, sexual_education, 
-  //         sexual_masturbation, sexual_contact, sexual_premarital_extramarital, 
-  //         sexual_marriage_arranged, sexual_marriage_date, sexual_spouse_age, 
-  //         sexual_spouse_occupation, sexual_adjustment_general, sexual_adjustment_sexual,
-  //         sexual_children, sexual_problems, religion_type, religion_participation, 
-  //         religion_changes, living_residents, living_income_sharing, living_expenses, 
-  //         living_kitchen, living_domestic_conflicts, living_social_class, living_inlaws, 
-  //         home_situation_childhood, home_situation_parents_relationship,
-  //         home_situation_socioeconomic, home_situation_interpersonal, personal_birth_date, 
-  //         personal_birth_place, personal_delivery_type, personal_complications_prenatal, 
-  //         personal_complications_natal, personal_complications_postnatal,
-  //         development_weaning_age, development_first_words, development_three_words, 
-  //         development_walking, development_neurotic_traits, development_nail_biting, 
-  //         development_bedwetting, development_phobias, development_childhood_illness, 
-  //         provisional_diagnosis, treatment_plan, consultant_comments
-  //       } = adlData;
-
-  //       // Convert arrays to JSONB
-  //       const informantsJson = informants ? JSON.stringify(Array.isArray(informants) ? informants : []) : '[]';
-  //       const complaintsPatientJson = complaints_patient ? JSON.stringify(Array.isArray(complaints_patient) ? complaints_patient : []) : '[]';
-  //       const complaintsInformantJson = complaints_informant ? JSON.stringify(Array.isArray(complaints_informant) ? complaints_informant : []) : '[]';
-  //       const familyHistorySiblingsJson = family_history_siblings ? JSON.stringify(Array.isArray(family_history_siblings) ? family_history_siblings : []) : '[]';
-  //       const premorbidPersonalityTraitsJson = premorbid_personality_traits ? JSON.stringify(Array.isArray(premorbid_personality_traits) ? premorbid_personality_traits : []) : '[]';
-  //       const occupationJobsJson = occupation_jobs ? JSON.stringify(Array.isArray(occupation_jobs) ? occupation_jobs : []) : '[]';
-  //       const sexualChildrenJson = sexual_children ? JSON.stringify(Array.isArray(sexual_children) ? sexual_children : []) : '[]';
-  //       const livingResidentsJson = living_residents ? JSON.stringify(Array.isArray(living_residents) ? living_residents : []) : '[]';
-  //       const livingInlawsJson = living_inlaws ? JSON.stringify(Array.isArray(living_inlaws) ? living_inlaws : []) : '[]';
-
-  //       // Use db.query directly instead of managing separate transaction
-  //       // This allows it to work within the existing transaction context from ClinicalProforma.create()
-  //       const result = await db.query(
-  //         `INSERT INTO adl_files (
-  //           patient_id, adl_no, created_by, clinical_proforma_id, file_status, 
-  //           file_created_date, total_visits, history_narrative, history_specific_enquiry, 
-  //           history_drug_intake, history_treatment_place, history_treatment_dates,
-  //           history_treatment_drugs, history_treatment_response, informants, 
-  //           complaints_patient, complaints_informant, onset_duration, precipitating_factor, course,
-  //         past_history_medical, 
-  //           past_history_psychiatric_dates, past_history_psychiatric_diagnosis,
-  //           past_history_psychiatric_treatment, past_history_psychiatric_interim, 
-  //           past_history_psychiatric_recovery, family_history_father_age, 
-  //           family_history_father_education, family_history_father_occupation,
-  //           family_history_father_personality, family_history_father_deceased, 
-  //           family_history_father_death_age, family_history_father_death_date, 
-  //           family_history_father_death_cause, family_history_mother_age, 
-  //           family_history_mother_education, family_history_mother_occupation,
-  //           family_history_mother_personality, family_history_mother_deceased, 
-  //           family_history_mother_death_age, family_history_mother_death_date, 
-  //           family_history_mother_death_cause, family_history_siblings,
-  //           diagnostic_formulation_summary, diagnostic_formulation_features, 
-  //           diagnostic_formulation_psychodynamic, premorbid_personality_passive_active, 
-  //           premorbid_personality_assertive, premorbid_personality_introvert_extrovert,
-  //           premorbid_personality_traits, premorbid_personality_hobbies, 
-  //           premorbid_personality_habits, premorbid_personality_alcohol_drugs,
-  //           physical_appearance, physical_body_build, physical_pallor, physical_icterus, 
-  //           physical_oedema, physical_lymphadenopathy, physical_pulse, physical_bp, 
-  //           physical_height, physical_weight, physical_waist, physical_fundus,
-  //           physical_cvs_apex, physical_cvs_regularity, physical_cvs_heart_sounds, 
-  //           physical_cvs_murmurs, physical_chest_expansion, physical_chest_percussion, 
-  //           physical_chest_adventitious, physical_abdomen_tenderness, physical_abdomen_mass, 
-  //           physical_abdomen_bowel_sounds, physical_cns_cranial, physical_cns_motor_sensory, 
-  //           physical_cns_rigidity, physical_cns_involuntary, physical_cns_superficial_reflexes, 
-  //           physical_cns_dtrs, physical_cns_plantar, physical_cns_cerebellar,
-  //           mse_general_demeanour, mse_general_tidy, mse_general_awareness, 
-  //           mse_general_cooperation, mse_psychomotor_verbalization, mse_psychomotor_pressure, 
-  //           mse_psychomotor_tension, mse_psychomotor_posture, mse_psychomotor_mannerism, 
-  //           mse_psychomotor_catatonic, mse_affect_subjective, mse_affect_tone,
-  //           mse_affect_resting, mse_affect_fluctuation,         mse_thought_flow, mse_thought_form, 
-  //         mse_thought_content, mse_thought_possession, mse_cognitive_consciousness, mse_cognitive_orientation_time, 
-  //           mse_cognitive_orientation_place, mse_cognitive_orientation_person, 
-  //           mse_cognitive_memory_immediate, mse_cognitive_memory_recent,
-  //           mse_cognitive_memory_remote, mse_cognitive_subtraction, mse_cognitive_digit_span, 
-  //           mse_cognitive_counting, mse_cognitive_general_knowledge, mse_cognitive_calculation, 
-  //           mse_cognitive_similarities, mse_cognitive_proverbs, mse_insight_understanding, 
-  //           mse_insight_judgement, education_start_age, education_highest_class, 
-  //           education_performance, education_disciplinary, education_peer_relationship, 
-  //           education_hobbies, education_special_abilities, education_discontinue_reason,
-  //           occupation_jobs, sexual_menarche_age, sexual_menarche_reaction, sexual_education, 
-  //           sexual_masturbation, sexual_contact, sexual_premarital_extramarital, 
-  //           sexual_marriage_arranged, sexual_marriage_date, sexual_spouse_age, 
-  //           sexual_spouse_occupation, sexual_adjustment_general, sexual_adjustment_sexual,
-  //           sexual_children, sexual_problems, religion_type, religion_participation, 
-  //           religion_changes, living_residents, living_income_sharing, living_expenses, 
-  //           living_kitchen, living_domestic_conflicts, living_social_class, living_inlaws, 
-  //           home_situation_childhood, home_situation_parents_relationship,
-  //           home_situation_socioeconomic, home_situation_interpersonal, personal_birth_date, 
-  //           personal_birth_place, personal_delivery_type, personal_complications_prenatal, 
-  //           personal_complications_natal, personal_complications_postnatal,
-  //           development_weaning_age, development_first_words, development_three_words, 
-  //           development_walking, development_neurotic_traits, development_nail_biting, 
-  //           development_bedwetting, development_phobias, development_childhood_illness, 
-  //           provisional_diagnosis, treatment_plan, consultant_comments
-  //         ) VALUES (
-  //           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, 
-  //           $16::jsonb, $17::jsonb, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, 
-  //           $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40::jsonb,
-  //           $41, $42, $43, $44, $45, $46, $47::jsonb, $48, $49, $50, $51, $52, $53, 
-  //           $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, 
-  //           $69, $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $80, $81, $82, $83, 
-  //           $84, $85, $86, $87, $88, $89, $90, $91, $92, $93, $94, $95, $96, $97, $98,
-  //           $99, $100, $101, $102, $103, $104, $105, $106, $107, $108, $109, $110,
-  //           $111, $112, $113, $114, $115, $116, $117, $118, $119::jsonb, $120, $121, 
-  //           $122, $123, $124, $125, $126, $127, $128, $129, $130, $131, $132, $133, 
-  //           $134, $135, $136, $137, $138, $139, $140, $141, $142, $143, $144, $145, 
-  //           $146, $147, $148, $149, $150, $151, $152, $153, $154, $155, $156, $157, 
-  //           $158, $159, $160::jsonb, $161, $162, $163, $164, $165, $166, $167, $168
-  //         ) RETURNING *`,
-  //         [
-  //           patient_id, adl_no, created_by, clinical_proforma_id, file_status, 
-  //           file_created_date, total_visits, 
-  // history_narrative, 
-  // history_specific_enquiry || history_specific_enquiry, 
-  // history_drug_intake || history_drug_intake, 
-  // history_treatment_place || history_treatment_place, 
-  // history_treatment_dates || history_treatment_dates,
-  // history_treatment_drugs || history_treatment_drugs, 
-  // history_treatment_response || history_treatment_response, 
-  //           informantsJson, 
-  //           complaintsPatientJson, complaintsInformantJson, 
-  // past_history_medical || past_history_medical, 
-  // past_history_psychiatric_dates || past_history_psychiatric_dates, 
-  // past_history_psychiatric_diagnosis || past_history_psychiatric_diagnosis,
-  // past_history_psychiatric_treatment || past_history_psychiatric_treatment, 
-  // past_history_psychiatric_interim || past_history_psychiatric_interim, 
-  // past_history_psychiatric_recovery || past_history_psychiatric_recovery, 
-  // family_history_father_age || family_history_father_age, 
-  // family_history_father_education || family_history_father_education, 
-  // family_history_father_occupation || family_history_father_occupation,
-  // family_history_father_personality || family_history_father_personality, 
-  //           family_history_father_deceased, 
-  // family_history_father_death_age || family_history_father_death_age, 
-  // family_history_father_death_date || family_history_father_death_date, 
-  // family_history_father_death_cause || family_history_father_death_cause, 
-  // family_history_mother_age || family_history_mother_age, 
-  // family_history_mother_education || family_history_mother_education, 
-  // family_history_mother_occupation || family_history_mother_occupation,
-  // family_history_mother_personality || family_history_mother_personality, 
-  //           family_history_mother_deceased, 
-  // family_history_mother_death_age || family_history_mother_death_age, 
-  // family_history_mother_death_date || family_history_mother_death_date, 
-  // family_history_mother_death_cause || family_history_mother_death_cause, 
-  //           familyHistorySiblingsJson,
-  // diagnostic_formulation_summary || diagnostic_formulation_summary, 
-  // diagnostic_formulation_features || diagnostic_formulation_features, 
-  // diagnostic_formulation_psychodynamic || diagnostic_formulation_psychodynamic, 
-  // premorbid_personality_passive_active || premorbid_personality_passive_active, 
-  // premorbid_personality_assertive || premorbid_personality_assertive, 
-  // premorbid_personality_introvert_extrovert || premorbid_personality_introvert_extrovert,
-  //           premorbidPersonalityTraitsJson, 
-  // premorbid_personality_hobbies || premorbid_personality_hobbies, 
-  // premorbid_personality_habits || premorbid_personality_habits, 
-  // premorbid_personality_alcohol_drugs || premorbid_personality_alcohol_drugs,
-  // physical_appearance || physical_appearance, 
-  // physical_body_build || physical_body_build, 
-  //           physical_pallor, physical_icterus, 
-  //           physical_oedema, physical_lymphadenopathy, 
-  // physical_pulse || physical_pulse, 
-  // physical_bp || physical_bp, 
-  // physical_height || physical_height, 
-  // physical_weight || physical_weight, 
-  // physical_waist || physical_waist, 
-  // physical_fundus || physical_fundus,
-  // physical_cvs_apex || physical_cvs_apex, 
-  // physical_cvs_regularity || physical_cvs_regularity, 
-  // physical_cvs_heart_sounds || physical_cvs_heart_sounds, 
-  // physical_cvs_murmurs || physical_cvs_murmurs, 
-  // physical_chest_expansion || physical_chest_expansion, 
-  // physical_chest_percussion || physical_chest_percussion, 
-  // physical_chest_adventitious || physical_chest_adventitious, 
-  // physical_abdomen_tenderness || physical_abdomen_tenderness, 
-  // physical_abdomen_mass || physical_abdomen_mass, 
-  // physical_abdomen_bowel_sounds || physical_abdomen_bowel_sounds, 
-  // physical_cns_cranial || physical_cns_cranial, 
-  // physical_cns_motor_sensory || physical_cns_motor_sensory, 
-  // physical_cns_rigidity || physical_cns_rigidity, 
-  // physical_cns_involuntary || physical_cns_involuntary, 
-  // physical_cns_superficial_reflexes || physical_cns_superficial_reflexes, 
-  // physical_cns_dtrs || physical_cns_dtrs, 
-  // physical_cns_plantar || physical_cns_plantar, 
-  // physical_cns_cerebellar || physical_cns_cerebellar,
-  // mse_general_demeanour || mse_general_demeanour, 
-  // mse_general_tidy || mse_general_tidy, 
-  // mse_general_awareness || mse_general_awareness, 
-  // mse_general_cooperation || mse_general_cooperation, 
-  // mse_psychomotor_verbalization || mse_psychomotor_verbalization, 
-  // mse_psychomotor_pressure || mse_psychomotor_pressure, 
-  // mse_psychomotor_tension || mse_psychomotor_tension, 
-  // mse_psychomotor_posture || mse_psychomotor_posture, 
-  // mse_psychomotor_mannerism || mse_psychomotor_mannerism, 
-  // mse_psychomotor_catatonic || mse_psychomotor_catatonic, 
-  // mse_affect_subjective || mse_affect_subjective, 
-  // mse_affect_tone || mse_affect_tone,
-  // mse_affect_resting || mse_affect_resting, 
-  // mse_affect_fluctuation || mse_affect_fluctuation, 
-  // mse_thought_flow || mse_thought_flow, 
-  // mse_thought_form || mse_thought_form, 
-  // mse_thought_content || mse_thought_content, 
-  // mse_cognitive_consciousness || mse_cognitive_consciousness, 
-  // mse_cognitive_orientation_time || mse_cognitive_orientation_time, 
-  // mse_cognitive_orientation_place || mse_cognitive_orientation_place, 
-  // mse_cognitive_orientation_person || mse_cognitive_orientation_person, 
-  // mse_cognitive_memory_immediate || mse_cognitive_memory_immediate, 
-  // mse_cognitive_memory_recent || mse_cognitive_memory_recent,
-  // mse_cognitive_memory_remote || mse_cognitive_memory_remote, 
-  // mse_cognitive_subtraction || mse_cognitive_subtraction, 
-  // mse_cognitive_digit_span || mse_cognitive_digit_span, 
-  // mse_cognitive_counting || mse_cognitive_counting, 
-  // mse_cognitive_general_knowledge || mse_cognitive_general_knowledge, 
-  // mse_cognitive_calculation || mse_cognitive_calculation, 
-  // mse_cognitive_similarities || mse_cognitive_similarities, 
-  // mse_cognitive_proverbs || mse_cognitive_proverbs, 
-  // mse_insight_understanding || mse_insight_understanding, 
-  // mse_insight_judgement || mse_insight_judgement, 
-  // education_start_age || education_start_age, 
-  // education_highest_class || education_highest_class, 
-  // education_performance || education_performance, 
-  // education_disciplinary || education_disciplinary, 
-  // education_peer_relationship || education_peer_relationship, 
-  // education_hobbies || education_hobbies, 
-  // education_special_abilities || education_special_abilities, 
-  // education_discontinue_reason || education_discontinue_reason,
-  //           occupationJobsJson, 
-  // sexual_menarche_age || sexual_menarche_age, 
-  // sexual_menarche_reaction || sexual_menarche_reaction, 
-  // sexual_education || sexual_education, 
-  // sexual_masturbation || sexual_masturbation, 
-  // sexual_contact || sexual_contact, 
-  // sexual_premarital_extramarital || sexual_premarital_extramarital, 
-  // sexual_marriage_arranged || sexual_marriage_arranged, 
-  // sexual_marriage_date || sexual_marriage_date, 
-  // sexual_spouse_age || sexual_spouse_age, 
-  // sexual_spouse_occupation || sexual_spouse_occupation, 
-  // sexual_adjustment_general || sexual_adjustment_general, 
-  // sexual_adjustment_sexual || sexual_adjustment_sexual,
-  //           sexualChildrenJson, 
-  // sexual_problems || sexual_problems, 
-  // religion_type || religion_type, 
-  // religion_participation || religion_participation, 
-  // religion_changes || religion_changes, 
-  //           livingResidentsJson, 
-  // living_income_sharing || living_income_sharing, 
-  // living_expenses || living_expenses, 
-  // living_kitchen || living_kitchen, 
-  // living_domestic_conflicts || living_domestic_conflicts, 
-  // living_social_class || living_social_class, 
-  //           livingInlawsJson, 
-  // home_situation_childhood || home_situation_childhood, 
-  // home_situation_parents_relationship || home_situation_parents_relationship,
-  // home_situation_socioeconomic || home_situation_socioeconomic, 
-  // home_situation_interpersonal || home_situation_interpersonal, 
-  // personal_birth_date || personal_birth_date, 
-  // personal_birth_place || personal_birth_place, 
-  // personal_delivery_type || personal_delivery_type, 
-  // personal_complications_prenatal || personal_complications_prenatal, 
-  // personal_complications_natal || personal_complications_natal, 
-  // personal_complications_postnatal || personal_complications_postnatal,
-  // development_weaning_age || development_weaning_age, 
-  // development_first_words || development_first_words, 
-  // development_three_words || development_three_words, 
-  // development_walking || development_walking, 
-  // development_neurotic_traits || development_neurotic_traits, 
-  // development_nail_biting || development_nail_biting, 
-  // development_bedwetting || development_bedwetting, 
-  // development_phobias || development_phobias, 
-  // development_childhood_illness || development_childhood_illness, 
-  // provisional_diagnosis || provisional_diagnosis, 
-  // treatment_plan || treatment_plan, 
-  // consultant_comments || consultant_comments
-  //         ]
-  //       );
-
-  //       return new ADLFile(result.rows[0]);
-  //     } catch (error) {
-  //       console.error('ADLFile.create error:', error);
-  //       console.error('Error details:', {
-  //         message: error.message,
-  //         code: error.code,
-  //         detail: error.detail,
-  //         hint: error.hint
-  //       });
-
-  //       // Provide more helpful error message
-  //       if (error.message && error.message.includes('more expressions than target columns')) {
-  //         throw new Error(`Database schema mismatch: The adl_files table is missing required columns. Please run the migration script: Backend/database/add_complex_case_columns_to_adl_files.sql. Original error: ${error.message}`);
-  //       }
-
-  //       if (error.message && error.message.includes('does not exist')) {
-  //         throw new Error(`Database schema mismatch: Some columns are missing from the adl_files table. Please run the migration script: Backend/database/add_complex_case_columns_to_adl_files.sql. Original error: ${error.message}`);
-  //       }
-
-  //       throw error;
-  //     }
-  //   }
-
-
-  // Static method to create ADL file (without transaction)
-  static async create(adlDataInput) {
-    try {
-      const adlData = sanitizeAdlRequestBody(adlDataInput);
-      // Sanitize date fields - convert empty strings to null for PostgreSQL date columns
-      let sanitizedData = sanitizeDateFields(adlData);
-      // Sanitize integer fields - convert empty strings to null for PostgreSQL integer columns
-      sanitizedData = sanitizeIntegerFields(sanitizedData);
-      // Normalize JSONB array fields to avoid invalid JSON
-      sanitizedData = {
-        ...sanitizedData,
-        informants: normalizeJsonArray(sanitizedData.informants),
-        complaints_patient: normalizeJsonArray(sanitizedData.complaints_patient),
-        complaints_informant: normalizeJsonArray(sanitizedData.complaints_informant),
-        family_history_siblings: normalizeJsonArray(sanitizedData.family_history_siblings),
-        premorbid_personality_traits: normalizeJsonArray(sanitizedData.premorbid_personality_traits),
-        occupation_jobs: normalizeJsonArray(sanitizedData.occupation_jobs),
-        sexual_children: normalizeJsonArray(sanitizedData.sexual_children),
-        living_residents: normalizeJsonArray(sanitizedData.living_residents),
-        living_inlaws: normalizeJsonArray(sanitizedData.living_inlaws),
-        family_history: normalizeFamilyHistoryDb(sanitizedData.family_history),
-      };
-      
-      // Verify that required columns exist in the table
-      const columnCheck = await db.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'adl_files' 
-      AND column_name IN ('history_narrative', 'informants', 'physical_appearance', 'mse_general_demeanour')
-    `);
-
-      if (columnCheck.rows.length < 4) {
-        throw new Error(
-          'Database schema mismatch: The adl_files table is missing required complex case columns. ' +
-          'Please run the migration script: Backend/database/add_complex_case_columns_to_adl_files.sql ' +
-          `(Found only ${columnCheck.rows.length} of 4 test columns)`
-        );
-      }
-
-      // Check if an ADL file already exists for this patient_id
-      const patientIdInt = sanitizedData.patient_id ? parseInt(sanitizedData.patient_id, 10) : null;
-      if (patientIdInt) {
-        const existingFiles = await ADLFile.findByPatientId(patientIdInt);
-        if (existingFiles && existingFiles.length > 0) {
-          // Use the most recent ADL file (first in the sorted list)
-          const existingFile = existingFiles[0];
-          console.log(`[ADLFile.create] ⚠️ ADL file with id ${existingFile.id} already exists for patient_id ${patientIdInt}, updating instead of creating`);
-          
-          // Update the existing file with new data
-          // Exclude patient_id, created_by, and adl_no from update (keep original values)
-          const updateData = { ...sanitizedData };
-          delete updateData.patient_id;
-          delete updateData.created_by;
-          delete updateData.adl_no;
-          
-          // Update the existing file
-          await existingFile.update(updateData);
-          
-          // Fetch the updated file with all joins
-          const updatedFile = await ADLFile.findById(existingFile.id);
-          return updatedFile;
-        }
-      }
-
-      const {
-        patient_id, adl_no, created_by, clinical_proforma_id,
-        file_status = 'created', file_created_date = new Date(), total_visits = 1,
-        history_narrative, history_specific_enquiry, history_drug_intake,
-        history_treatment_place, history_treatment_dates, history_treatment_drugs,
-        history_treatment_response, informants, complaints_patient, complaints_informant,
-        onset_duration, precipitating_factor, course,
-        past_history_medical, past_history_psychiatric_dates, past_history_psychiatric_diagnosis,
-        past_history_psychiatric_treatment, past_history_psychiatric_interim,
-        past_history_psychiatric_recovery, family_history_father_age,
-        family_history_father_education, family_history_father_occupation,
-        family_history_father_personality, family_history_father_deceased,
-        family_history_father_death_age, family_history_father_death_date,
-        family_history_father_death_cause, family_history_mother_age,
-        family_history_mother_education, family_history_mother_occupation,
-        family_history_mother_personality, family_history_mother_deceased,
-        family_history_mother_death_age, family_history_mother_death_date,
-        family_history_mother_death_cause, family_history_siblings, family_history,
-        diagnostic_formulation_summary, diagnostic_formulation_features,
-        diagnostic_formulation_psychodynamic, premorbid_personality_passive_active,
-        premorbid_personality_assertive, premorbid_personality_introvert_extrovert,
-        premorbid_personality_traits, premorbid_personality_hobbies,
-        premorbid_personality_habits, premorbid_personality_alcohol_drugs,
-        physical_appearance, physical_body_build, physical_pallor, physical_icterus,
-        physical_oedema, physical_lymphadenopathy, physical_pulse, physical_bp,
-        physical_height, physical_weight, physical_waist, physical_fundus,
-        physical_cvs_apex, physical_cvs_regularity, physical_cvs_heart_sounds,
-        physical_cvs_murmurs, physical_chest_expansion, physical_chest_percussion,
-        physical_chest_adventitious, physical_abdomen_tenderness, physical_abdomen_mass,
-        physical_abdomen_bowel_sounds, physical_cns_cranial, physical_cns_motor_sensory,
-        physical_cns_rigidity, physical_cns_involuntary, physical_cns_superficial_reflexes,
-        physical_cns_dtrs, physical_cns_plantar, physical_cns_cerebellar,
-        mse_general_demeanour, mse_general_tidy, mse_general_awareness,
-        mse_general_cooperation, mse_psychomotor_verbalization, mse_psychomotor_pressure,
-        mse_psychomotor_tension, mse_psychomotor_posture, mse_psychomotor_mannerism,
-        mse_psychomotor_catatonic, mse_affect_subjective, mse_affect_tone,
-        mse_affect_resting, mse_affect_fluctuation, mse_thought_flow, mse_thought_form,
-        mse_thought_content, mse_thought_possession, mse_cognitive_consciousness,
-        mse_cognitive_orientation_time, mse_cognitive_orientation_place,
-        mse_cognitive_orientation_person, mse_cognitive_memory_immediate,
-        mse_cognitive_memory_recent, mse_cognitive_memory_remote, mse_cognitive_subtraction,
-        mse_cognitive_digit_span, mse_cognitive_counting, mse_cognitive_general_knowledge,
-        mse_cognitive_calculation, mse_cognitive_similarities, mse_cognitive_proverbs,
-        mse_insight_understanding, mse_insight_judgement, education_start_age,
-        education_highest_class, education_performance, education_disciplinary,
-        education_peer_relationship, education_hobbies, education_special_abilities,
-        education_discontinue_reason, occupation_jobs, sexual_menarche_age,
-        sexual_menarche_reaction, sexual_education, sexual_masturbation, sexual_contact,
-        sexual_premarital_extramarital, sexual_marriage_arranged, sexual_marriage_date,
-        sexual_spouse_age, sexual_spouse_occupation, sexual_adjustment_general,
-        sexual_adjustment_sexual, sexual_children, sexual_problems, religion_type,
-        religion_participation, religion_changes, living_residents, living_income_sharing,
-        living_expenses, living_kitchen, living_domestic_conflicts, living_social_class,
-        living_inlaws, home_situation_childhood, home_situation_parents_relationship,
-        home_situation_socioeconomic, home_situation_interpersonal, personal_birth_date,
-        personal_birth_place, personal_delivery_type, personal_complications_prenatal,
-        personal_complications_natal, personal_complications_postnatal,
-        development_weaning_age, development_first_words, development_three_words,
-        development_walking, development_neurotic_traits, development_nail_biting,
-        development_bedwetting, development_phobias, development_childhood_illness,
-        provisional_diagnosis, treatment_plan, consultant_comments
-      } = sanitizedData;
-
-      // Ensure integer IDs are properly parsed (patientIdInt already defined above)
-      const createdByIdInt = created_by ? parseInt(created_by, 10) : null;
-      const clinicalProformaIdInt = clinical_proforma_id ? parseInt(clinical_proforma_id, 10) : null;
-
-      // Pass native arrays/objects for JSONB columns — node-pg serializes them reliably (avoids
-      // malformed JSON text edge cases). Keep safeJsonStringify helper for update() parity.
-      const safeJsonStringify = (value) => {
-        try {
-          const normalized = normalizeJsonArray(value);
-          const jsonString = JSON.stringify(normalized);
-          JSON.parse(jsonString);
-          return jsonString;
-        } catch (e) {
-          console.warn(`[safeJsonStringify] Failed to stringify value, using empty array:`, e.message);
-          return '[]';
-        }
-      };
-
-      const result = await db.query(
-        `INSERT INTO adl_files (
-        patient_id, adl_no, created_by, clinical_proforma_id, file_status, 
-        file_created_date, total_visits, history_narrative, history_specific_enquiry, 
-        history_drug_intake, history_treatment_place, history_treatment_dates,
-        history_treatment_drugs, history_treatment_response, informants, 
-        complaints_patient, complaints_informant, onset_duration, precipitating_factor, course,
-        past_history_medical, past_history_psychiatric_dates, past_history_psychiatric_diagnosis,
-        past_history_psychiatric_treatment, past_history_psychiatric_interim, 
-        past_history_psychiatric_recovery, family_history_father_age, 
-        family_history_father_education, family_history_father_occupation,
-        family_history_father_personality, family_history_father_deceased, 
-        family_history_father_death_age, family_history_father_death_date, 
-        family_history_father_death_cause, family_history_mother_age, 
-        family_history_mother_education, family_history_mother_occupation,
-        family_history_mother_personality, family_history_mother_deceased, 
-        family_history_mother_death_age, family_history_mother_death_date, 
-        family_history_mother_death_cause, family_history_siblings, family_history,
-        diagnostic_formulation_summary, diagnostic_formulation_features, 
-        diagnostic_formulation_psychodynamic, premorbid_personality_passive_active, 
-        premorbid_personality_assertive, premorbid_personality_introvert_extrovert,
-        premorbid_personality_traits, premorbid_personality_hobbies, 
-        premorbid_personality_habits, premorbid_personality_alcohol_drugs,
-        physical_appearance, physical_body_build, physical_pallor, physical_icterus, 
-        physical_oedema, physical_lymphadenopathy, physical_pulse, physical_bp, 
-        physical_height, physical_weight, physical_waist, physical_fundus,
-        physical_cvs_apex, physical_cvs_regularity, physical_cvs_heart_sounds, 
-        physical_cvs_murmurs, physical_chest_expansion, physical_chest_percussion, 
-        physical_chest_adventitious, physical_abdomen_tenderness, physical_abdomen_mass, 
-        physical_abdomen_bowel_sounds, physical_cns_cranial, physical_cns_motor_sensory, 
-        physical_cns_rigidity, physical_cns_involuntary, physical_cns_superficial_reflexes, 
-        physical_cns_dtrs, physical_cns_plantar, physical_cns_cerebellar,
-        mse_general_demeanour, mse_general_tidy, mse_general_awareness, 
-        mse_general_cooperation, mse_psychomotor_verbalization, mse_psychomotor_pressure, 
-        mse_psychomotor_tension, mse_psychomotor_posture, mse_psychomotor_mannerism, 
-        mse_psychomotor_catatonic, mse_affect_subjective, mse_affect_tone,
-        mse_affect_resting, mse_affect_fluctuation, mse_thought_flow, mse_thought_form, 
-        mse_thought_content, mse_thought_possession, mse_cognitive_consciousness, 
-        mse_cognitive_orientation_time, mse_cognitive_orientation_place, 
-        mse_cognitive_orientation_person, mse_cognitive_memory_immediate, 
-        mse_cognitive_memory_recent, mse_cognitive_memory_remote, mse_cognitive_subtraction, 
-        mse_cognitive_digit_span, mse_cognitive_counting, mse_cognitive_general_knowledge, 
-        mse_cognitive_calculation, mse_cognitive_similarities, mse_cognitive_proverbs, 
-        mse_insight_understanding, mse_insight_judgement, education_start_age, 
-        education_highest_class, education_performance, education_disciplinary, 
-        education_peer_relationship, education_hobbies, education_special_abilities, 
-        education_discontinue_reason, occupation_jobs, sexual_menarche_age, 
-        sexual_menarche_reaction, sexual_education, sexual_masturbation, sexual_contact, 
-        sexual_premarital_extramarital, sexual_marriage_arranged, sexual_marriage_date, 
-        sexual_spouse_age, sexual_spouse_occupation, sexual_adjustment_general, 
-        sexual_adjustment_sexual, sexual_children, sexual_problems, religion_type, 
-        religion_participation, religion_changes, living_residents, living_income_sharing, 
-        living_expenses, living_kitchen, living_domestic_conflicts, living_social_class, 
-        living_inlaws, home_situation_childhood, home_situation_parents_relationship,
-        home_situation_socioeconomic, home_situation_interpersonal, personal_birth_date, 
-        personal_birth_place, personal_delivery_type, personal_complications_prenatal, 
-        personal_complications_natal, personal_complications_postnatal,
-        development_weaning_age, development_first_words, development_three_words, 
-        development_walking, development_neurotic_traits, development_nail_biting, 
-        development_bedwetting, development_phobias, development_childhood_illness, 
-        provisional_diagnosis, treatment_plan, consultant_comments
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
-        $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41,
-        $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53,
-        $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68,
-        $69, $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $80, $81, $82, $83,
-        $84, $85, $86, $87, $88, $89, $90, $91, $92, $93, $94, $95, $96, $97, $98,
-        $99, $100, $101, $102, $103, $104, $105, $106, $107, $108, $109, $110,
-        $111, $112, $113, $114, $115, $116, $117, $118, $119, $120, $121,
-        $122, $123, $124, $125, $126, $127, $128, $129, $130, $131, $132, $133,
-        $134, $135, $136, $137, $138, $139, $140, $141, $142, $143, $144, $145,
-        $146, $147, $148, $149, $150, $151, $152, $153, $154, $155, $156, $157,
-        $158, $159, $160, $161, $162, $163, $164, $165, $166, $167, $168,
-        $169, $170, $171, $172, $173
-      ) RETURNING *`,
-        [
-          patientIdInt, adl_no, createdByIdInt, clinicalProformaIdInt, file_status,
-          file_created_date, total_visits,
-          history_narrative,
-          history_specific_enquiry,
-          history_drug_intake,
-          history_treatment_place,
-          history_treatment_dates,
-          history_treatment_drugs,
-          history_treatment_response,
-          jsonbArrayParam(informants),
-          jsonbArrayParam(complaints_patient),
-          jsonbArrayParam(complaints_informant),
-          onset_duration,
-          precipitating_factor,
-          course,
-          past_history_medical,
-          past_history_psychiatric_dates,
-          past_history_psychiatric_diagnosis,
-          past_history_psychiatric_treatment,
-          past_history_psychiatric_interim,
-          past_history_psychiatric_recovery,
+        past_history_psychiatric || null,
           family_history_father_age,
           family_history_father_education,
           family_history_father_occupation,
@@ -1478,16 +597,8 @@ class ADLFile {
           family_history_mother_death_cause,
           jsonbArrayParam(family_history_siblings),
           family_history,
-          diagnostic_formulation_summary,
-          diagnostic_formulation_features,
-          diagnostic_formulation_psychodynamic,
-          premorbid_personality_passive_active,
-          premorbid_personality_assertive,
-          premorbid_personality_introvert_extrovert,
-          jsonbArrayParam(premorbid_personality_traits),
-          premorbid_personality_hobbies,
-          premorbid_personality_habits,
-          premorbid_personality_alcohol_drugs,
+          diagnostic_formulation_history || null,
+          premorbid_personality_history || null,
           physical_appearance,
           physical_body_build,
           physical_pallor,
@@ -1500,16 +611,9 @@ class ADLFile {
           physical_weight,
           physical_waist,
           physical_fundus,
-          physical_cvs_apex,
-          physical_cvs_regularity,
-          physical_cvs_heart_sounds,
-          physical_cvs_murmurs,
-          physical_chest_expansion,
-          physical_chest_percussion,
-          physical_chest_adventitious,
-          physical_abdomen_tenderness,
-          physical_abdomen_mass,
-          physical_abdomen_bowel_sounds,
+          physical_cvs_examination || null,
+          physical_chest_examination || null,
+          physical_abdomen_examination || null,
           physical_cns_cranial,
           physical_cns_motor_sensory,
           physical_cns_rigidity,
@@ -1518,24 +622,14 @@ class ADLFile {
           physical_cns_dtrs,
           physical_cns_plantar,
           physical_cns_cerebellar,
-          mse_general_demeanour,
-          mse_general_tidy,
-          mse_general_awareness,
-          mse_general_cooperation,
-          mse_psychomotor_verbalization,
-          mse_psychomotor_pressure,
-          mse_psychomotor_tension,
-          mse_psychomotor_posture,
-          mse_psychomotor_mannerism,
-          mse_psychomotor_catatonic,
-          mse_affect_subjective,
-          mse_affect_tone,
-          mse_affect_resting,
-          mse_affect_fluctuation,
+          mse_general_examination || null,
+          mse_psychomotor_examination || null,
+          mse_affect_examination || null,
           mse_thought_flow,
           mse_thought_form,
           mse_thought_content,
           mse_thought_possession,
+          mse_thought_perception,
           mse_cognitive_consciousness,
           mse_cognitive_orientation_time,
           mse_cognitive_orientation_place,
@@ -1550,63 +644,29 @@ class ADLFile {
           mse_cognitive_calculation,
           mse_cognitive_similarities,
           mse_cognitive_proverbs,
-          mse_insight_understanding,
-          mse_insight_judgement,
-          education_start_age,
-          education_highest_class,
-          education_performance,
-          education_disciplinary,
-          education_peer_relationship,
-          education_hobbies,
-          education_special_abilities,
-          education_discontinue_reason,
-          jsonbArrayParam(occupation_jobs),
+          mse_insight_examination || null,
+          education_history,
+          occupation_history || null,
           sexual_menarche_age,
           sexual_menarche_reaction,
           sexual_education,
           sexual_masturbation,
           sexual_contact,
           sexual_premarital_extramarital,
-          sexual_marriage_arranged,
-          sexual_marriage_date,
-          sexual_spouse_age,
-          sexual_spouse_occupation,
-          sexual_adjustment_general,
-          sexual_adjustment_sexual,
+          sexual_marriage_arranged || null,
+          sexual_marriage_details || null,
           jsonbArrayParam(sexual_children),
-          sexual_problems,
-          religion_type,
-          religion_participation,
-          religion_changes,
-          jsonbArrayParam(living_residents),
-          living_income_sharing,
-          living_expenses,
-          living_kitchen,
-          living_domestic_conflicts,
-          living_social_class,
-          jsonbArrayParam(living_inlaws),
-          home_situation_childhood,
-          home_situation_parents_relationship,
-          home_situation_socioeconomic,
-          home_situation_interpersonal,
+          religion_history || null,
+          living_situation_history || null,
+          general_home_situation,
           personal_birth_date,
           personal_birth_place,
           personal_delivery_type,
           personal_complications_prenatal,
           personal_complications_natal,
           personal_complications_postnatal,
-          development_weaning_age,
-          development_first_words,
-          development_three_words,
-          development_walking,
-          development_neurotic_traits,
-          development_nail_biting,
-          development_bedwetting,
-          development_phobias,
-          development_childhood_illness,
-          provisional_diagnosis,
-          treatment_plan,
-          consultant_comments
+          development_history,
+          final_assessment_history || null
         ].map(pgParam)
       );
 
@@ -1632,6 +692,9 @@ class ADLFile {
     }
   }
 
+  static async create(adlData) {
+    return ADLFile.createWithTransaction(db, adlData);
+  }
 
   // Find ADL file by ID
   static async findById(id) {
@@ -1936,13 +999,10 @@ class ADLFile {
       const allowedFields = [
         'file_status', 'physical_file_location', 'last_accessed_date',
         'last_accessed_by', 'total_visits', 'is_active', 'notes', 'clinical_proforma_id',
-        'history_narrative', 'history_specific_enquiry', 'history_drug_intake',
-        'history_treatment_place', 'history_treatment_dates', 'history_treatment_drugs',
+        'history_present_illness', 'history_treatment_drugs',
         'history_treatment_response', 'informants', 'complaints_patient', 'complaints_informant',
         'onset_duration', 'precipitating_factor', 'course',
-        'past_history_medical', 'past_history_psychiatric_dates', 'past_history_psychiatric_diagnosis',
-        'past_history_psychiatric_treatment', 'past_history_psychiatric_interim',
-        'past_history_psychiatric_recovery', 'family_history_father_age',
+        'past_history_medical', 'past_history_psychiatric', 'family_history_father_age',
         'family_history_father_education', 'family_history_father_occupation',
         'family_history_father_personality', 'family_history_father_deceased',
         'family_history_father_death_age', 'family_history_father_death_date',
@@ -1951,49 +1011,33 @@ class ADLFile {
         'family_history_mother_personality', 'family_history_mother_deceased',
         'family_history_mother_death_age', 'family_history_mother_death_date',
         'family_history_mother_death_cause', 'family_history_siblings', 'family_history',
-        'diagnostic_formulation_summary', 'diagnostic_formulation_features',
-        'diagnostic_formulation_psychodynamic', 'premorbid_personality_passive_active',
-        'premorbid_personality_assertive', 'premorbid_personality_introvert_extrovert',
-        'premorbid_personality_traits', 'premorbid_personality_hobbies',
-        'premorbid_personality_habits', 'premorbid_personality_alcohol_drugs',
+        'diagnostic_formulation_history', 'premorbid_personality_history',
         'physical_appearance', 'physical_body_build', 'physical_pallor', 'physical_icterus',
         'physical_oedema', 'physical_lymphadenopathy', 'physical_pulse', 'physical_bp',
         'physical_height', 'physical_weight', 'physical_waist', 'physical_fundus',
-        'physical_cvs_apex', 'physical_cvs_regularity', 'physical_cvs_heart_sounds',
-        'physical_cvs_murmurs', 'physical_chest_expansion', 'physical_chest_percussion',
-        'physical_chest_adventitious', 'physical_abdomen_tenderness', 'physical_abdomen_mass',
-        'physical_abdomen_bowel_sounds', 'physical_cns_cranial', 'physical_cns_motor_sensory',
+        'physical_cvs_examination', 'physical_chest_examination', 'physical_abdomen_examination',
+        'physical_cns_cranial', 'physical_cns_motor_sensory',
         'physical_cns_rigidity', 'physical_cns_involuntary', 'physical_cns_superficial_reflexes',
         'physical_cns_dtrs', 'physical_cns_plantar', 'physical_cns_cerebellar',
-        'mse_general_demeanour', 'mse_general_tidy', 'mse_general_awareness',
-        'mse_general_cooperation', 'mse_psychomotor_verbalization', 'mse_psychomotor_pressure',
-        'mse_psychomotor_tension', 'mse_psychomotor_posture', 'mse_psychomotor_mannerism',
-        'mse_psychomotor_catatonic', 'mse_affect_subjective', 'mse_affect_tone',
-        'mse_affect_resting', 'mse_affect_fluctuation', 'mse_thought_flow', 'mse_thought_form',
-        'mse_thought_content', 'mse_cognitive_consciousness', 'mse_cognitive_orientation_time',
+        'mse_general_examination', 'mse_psychomotor_examination', 'mse_affect_examination',
+        'mse_thought_flow', 'mse_thought_form',
+        'mse_thought_content', 'mse_thought_possession', 'mse_thought_perception',
+        'mse_cognitive_consciousness', 'mse_cognitive_orientation_time',
         'mse_cognitive_orientation_place', 'mse_cognitive_orientation_person',
         'mse_cognitive_memory_immediate', 'mse_cognitive_memory_recent',
         'mse_cognitive_memory_remote', 'mse_cognitive_subtraction', 'mse_cognitive_digit_span',
         'mse_cognitive_counting', 'mse_cognitive_general_knowledge', 'mse_cognitive_calculation',
-        'mse_cognitive_similarities', 'mse_cognitive_proverbs', 'mse_insight_understanding',
-        'mse_insight_judgement', 'education_start_age', 'education_highest_class',
-        'education_performance', 'education_disciplinary', 'education_peer_relationship',
-        'education_hobbies', 'education_special_abilities', 'education_discontinue_reason',
-        'occupation_jobs', 'sexual_menarche_age', 'sexual_menarche_reaction', 'sexual_education',
+        'mse_cognitive_similarities', 'mse_cognitive_proverbs', 'mse_insight_examination',
+        'education_history',
+        'occupation_history', 'sexual_menarche_age', 'sexual_menarche_reaction', 'sexual_education',
         'sexual_masturbation', 'sexual_contact', 'sexual_premarital_extramarital',
-        'sexual_marriage_arranged', 'sexual_marriage_date', 'sexual_spouse_age',
-        'sexual_spouse_occupation', 'sexual_adjustment_general', 'sexual_adjustment_sexual',
-        'sexual_children', 'sexual_problems', 'religion_type', 'religion_participation',
-        'religion_changes', 'living_residents', 'living_income_sharing', 'living_expenses',
-        'living_kitchen', 'living_domestic_conflicts', 'living_social_class', 'living_inlaws',
-        'home_situation_childhood', 'home_situation_parents_relationship',
-        'home_situation_socioeconomic', 'home_situation_interpersonal', 'personal_birth_date',
+        'sexual_marriage_arranged', 'sexual_marriage_details',
+        'sexual_children', 'religion_history', 'living_situation_history',
+        'general_home_situation', 'personal_birth_date',
         'personal_birth_place', 'personal_delivery_type', 'personal_complications_prenatal',
         'personal_complications_natal', 'personal_complications_postnatal',
-        'development_weaning_age', 'development_first_words', 'development_three_words',
-        'development_walking', 'development_neurotic_traits', 'development_nail_biting',
-        'development_bedwetting', 'development_phobias', 'development_childhood_illness',
-        'provisional_diagnosis', 'treatment_plan', 'consultant_comments'
+        'development_history',
+        'final_assessment_history'
       ];
 
       const updates = [];
@@ -2001,14 +1045,13 @@ class ADLFile {
       let paramCount = 0;
 
       const jsonbFields = ['informants', 'complaints_patient', 'complaints_informant',
-        'family_history_siblings', 'premorbid_personality_traits', 'occupation_jobs',
-        'sexual_children', 'living_residents', 'living_inlaws'];
+        'family_history_siblings',
+        'sexual_children'];
 
       // Date fields that need sanitization (empty strings should become null)
       const dateFields = [
-        'history_treatment_dates', 'past_history_psychiatric_dates',
         'family_history_father_death_date', 'family_history_mother_death_date',
-        'sexual_marriage_date', 'personal_birth_date', 'last_accessed_date'
+        'personal_birth_date', 'last_accessed_date'
       ];
 
       // Integer fields that need sanitization (empty strings should become null)
@@ -2017,7 +1060,6 @@ class ADLFile {
         'family_history_father_death_age',
         'family_history_mother_age',
         'family_history_mother_death_age',
-        'sexual_spouse_age'
       ];
 
       // Helper function to sanitize date fields
@@ -2075,11 +1117,7 @@ class ADLFile {
         complaints_patient: normalizeJsonArray(updateData.complaints_patient),
         complaints_informant: normalizeJsonArray(updateData.complaints_informant),
         family_history_siblings: normalizeJsonArray(updateData.family_history_siblings),
-        premorbid_personality_traits: normalizeJsonArray(updateData.premorbid_personality_traits),
-        occupation_jobs: normalizeJsonArray(updateData.occupation_jobs),
         sexual_children: normalizeJsonArray(updateData.sexual_children),
-        living_residents: normalizeJsonArray(updateData.living_residents),
-        living_inlaws: normalizeJsonArray(updateData.living_inlaws),
       };
 
       for (const [key, value] of Object.entries(normalizedUpdateData)) {
@@ -2359,22 +1397,14 @@ class ADLFile {
       assigned_doctor_name: this.assigned_doctor_name,
       assigned_doctor_role: this.assigned_doctor_role,
       proforma_visit_date: this.proforma_visit_date,
-      history_narrative: this.history_narrative,
-      history_specific_enquiry: this.history_specific_enquiry,
-      history_drug_intake: this.history_drug_intake,
-      history_treatment_place: this.history_treatment_place,
-      history_treatment_dates: this.history_treatment_dates,
+      history_present_illness: this.history_present_illness,
       history_treatment_drugs: this.history_treatment_drugs,
       history_treatment_response: this.history_treatment_response,
       informants: this.informants,
       complaints_patient: this.complaints_patient,
       complaints_informant: this.complaints_informant,
       past_history_medical: this.past_history_medical,
-      past_history_psychiatric_dates: this.past_history_psychiatric_dates,
-      past_history_psychiatric_diagnosis: this.past_history_psychiatric_diagnosis,
-      past_history_psychiatric_treatment: this.past_history_psychiatric_treatment,
-      past_history_psychiatric_interim: this.past_history_psychiatric_interim,
-      past_history_psychiatric_recovery: this.past_history_psychiatric_recovery,
+      past_history_psychiatric: this.past_history_psychiatric,
       family_history_father_age: this.family_history_father_age,
       family_history_father_education: this.family_history_father_education,
       family_history_father_occupation: this.family_history_father_occupation,
@@ -2393,16 +1423,8 @@ class ADLFile {
       family_history_mother_death_cause: this.family_history_mother_death_cause,
       family_history_siblings: this.family_history_siblings,
       family_history: this.family_history,
-      diagnostic_formulation_summary: this.diagnostic_formulation_summary,
-      diagnostic_formulation_features: this.diagnostic_formulation_features,
-      diagnostic_formulation_psychodynamic: this.diagnostic_formulation_psychodynamic,
-      premorbid_personality_passive_active: this.premorbid_personality_passive_active,
-      premorbid_personality_assertive: this.premorbid_personality_assertive,
-      premorbid_personality_introvert_extrovert: this.premorbid_personality_introvert_extrovert,
-      premorbid_personality_traits: this.premorbid_personality_traits,
-      premorbid_personality_hobbies: this.premorbid_personality_hobbies,
-      premorbid_personality_habits: this.premorbid_personality_habits,
-      premorbid_personality_alcohol_drugs: this.premorbid_personality_alcohol_drugs,
+      diagnostic_formulation_history: this.diagnostic_formulation_history,
+      premorbid_personality_history: this.premorbid_personality_history,
       physical_appearance: this.physical_appearance,
       physical_body_build: this.physical_body_build,
       physical_pallor: this.physical_pallor,
@@ -2415,16 +1437,9 @@ class ADLFile {
       physical_weight: this.physical_weight,
       physical_waist: this.physical_waist,
       physical_fundus: this.physical_fundus,
-      physical_cvs_apex: this.physical_cvs_apex,
-      physical_cvs_regularity: this.physical_cvs_regularity,
-      physical_cvs_heart_sounds: this.physical_cvs_heart_sounds,
-      physical_cvs_murmurs: this.physical_cvs_murmurs,
-      physical_chest_expansion: this.physical_chest_expansion,
-      physical_chest_percussion: this.physical_chest_percussion,
-      physical_chest_adventitious: this.physical_chest_adventitious,
-      physical_abdomen_tenderness: this.physical_abdomen_tenderness,
-      physical_abdomen_mass: this.physical_abdomen_mass,
-      physical_abdomen_bowel_sounds: this.physical_abdomen_bowel_sounds,
+      physical_cvs_examination: this.physical_cvs_examination,
+      physical_chest_examination: this.physical_chest_examination,
+      physical_abdomen_examination: this.physical_abdomen_examination,
       physical_cns_cranial: this.physical_cns_cranial,
       physical_cns_motor_sensory: this.physical_cns_motor_sensory,
       physical_cns_rigidity: this.physical_cns_rigidity,
@@ -2433,23 +1448,14 @@ class ADLFile {
       physical_cns_dtrs: this.physical_cns_dtrs,
       physical_cns_plantar: this.physical_cns_plantar,
       physical_cns_cerebellar: this.physical_cns_cerebellar,
-      mse_general_demeanour: this.mse_general_demeanour,
-      mse_general_tidy: this.mse_general_tidy,
-      mse_general_awareness: this.mse_general_awareness,
-      mse_general_cooperation: this.mse_general_cooperation,
-      mse_psychomotor_verbalization: this.mse_psychomotor_verbalization,
-      mse_psychomotor_pressure: this.mse_psychomotor_pressure,
-      mse_psychomotor_tension: this.mse_psychomotor_tension,
-      mse_psychomotor_posture: this.mse_psychomotor_posture,
-      mse_psychomotor_mannerism: this.mse_psychomotor_mannerism,
-      mse_psychomotor_catatonic: this.mse_psychomotor_catatonic,
-      mse_affect_subjective: this.mse_affect_subjective,
-      mse_affect_tone: this.mse_affect_tone,
-      mse_affect_resting: this.mse_affect_resting,
-      mse_affect_fluctuation: this.mse_affect_fluctuation,
+      mse_general_examination: this.mse_general_examination,
+      mse_psychomotor_examination: this.mse_psychomotor_examination,
+      mse_affect_examination: this.mse_affect_examination,
       mse_thought_flow: this.mse_thought_flow,
       mse_thought_form: this.mse_thought_form,
       mse_thought_content: this.mse_thought_content,
+      mse_thought_possession: this.mse_thought_possession,
+      mse_thought_perception: this.mse_thought_perception,
       mse_cognitive_consciousness: this.mse_cognitive_consciousness,
       mse_cognitive_orientation_time: this.mse_cognitive_orientation_time,
       mse_cognitive_orientation_place: this.mse_cognitive_orientation_place,
@@ -2464,17 +1470,9 @@ class ADLFile {
       mse_cognitive_calculation: this.mse_cognitive_calculation,
       mse_cognitive_similarities: this.mse_cognitive_similarities,
       mse_cognitive_proverbs: this.mse_cognitive_proverbs,
-      mse_insight_understanding: this.mse_insight_understanding,
-      mse_insight_judgement: this.mse_insight_judgement,
-      education_start_age: this.education_start_age,
-      education_highest_class: this.education_highest_class,
-      education_performance: this.education_performance,
-      education_disciplinary: this.education_disciplinary,
-      education_peer_relationship: this.education_peer_relationship,
-      education_hobbies: this.education_hobbies,
-      education_special_abilities: this.education_special_abilities,
-      education_discontinue_reason: this.education_discontinue_reason,
-      occupation_jobs: this.occupation_jobs,
+      mse_insight_examination: this.mse_insight_examination,
+      education_history: this.education_history,
+      occupation_history: this.occupation_history,
       sexual_menarche_age: this.sexual_menarche_age,
       sexual_menarche_reaction: this.sexual_menarche_reaction,
       sexual_education: this.sexual_education,
@@ -2482,45 +1480,19 @@ class ADLFile {
       sexual_contact: this.sexual_contact,
       sexual_premarital_extramarital: this.sexual_premarital_extramarital,
       sexual_marriage_arranged: this.sexual_marriage_arranged,
-      sexual_marriage_date: this.sexual_marriage_date,
-      sexual_spouse_age: this.sexual_spouse_age,
-      sexual_spouse_occupation: this.sexual_spouse_occupation,
-      sexual_adjustment_general: this.sexual_adjustment_general,
-      sexual_adjustment_sexual: this.sexual_adjustment_sexual,
+      sexual_marriage_details: this.sexual_marriage_details,
       sexual_children: this.sexual_children,
-      sexual_problems: this.sexual_problems,
-      religion_type: this.religion_type,
-      religion_participation: this.religion_participation,
-      religion_changes: this.religion_changes,
-      living_residents: this.living_residents,
-      living_income_sharing: this.living_income_sharing,
-      living_expenses: this.living_expenses,
-      living_kitchen: this.living_kitchen,
-      living_domestic_conflicts: this.living_domestic_conflicts,
-      living_social_class: this.living_social_class,
-      living_inlaws: this.living_inlaws,
-      home_situation_childhood: this.home_situation_childhood,
-      home_situation_parents_relationship: this.home_situation_parents_relationship,
-      home_situation_socioeconomic: this.home_situation_socioeconomic,
-      home_situation_interpersonal: this.home_situation_interpersonal,
+      religion_history: this.religion_history,
+      living_situation_history: this.living_situation_history,
+      general_home_situation: this.general_home_situation,
       personal_birth_date: this.personal_birth_date,
       personal_birth_place: this.personal_birth_place,
       personal_delivery_type: this.personal_delivery_type,
       personal_complications_prenatal: this.personal_complications_prenatal,
       personal_complications_natal: this.personal_complications_natal,
       personal_complications_postnatal: this.personal_complications_postnatal,
-      development_weaning_age: this.development_weaning_age,
-      development_first_words: this.development_first_words,
-      development_three_words: this.development_three_words,
-      development_walking: this.development_walking,
-      development_neurotic_traits: this.development_neurotic_traits,
-      development_nail_biting: this.development_nail_biting,
-      development_bedwetting: this.development_bedwetting,
-      development_phobias: this.development_phobias,
-      development_childhood_illness: this.development_childhood_illness,
-      provisional_diagnosis: this.provisional_diagnosis,
-      treatment_plan: this.treatment_plan,
-      consultant_comments: this.consultant_comments
+      development_history: this.development_history,
+      final_assessment_history: this.final_assessment_history,
     };
   }
 }

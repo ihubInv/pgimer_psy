@@ -1,37 +1,33 @@
 /**
- * Resident workflow: Senior Resident → Walk-in Clinical Proforma; Junior Resident → Intake Record (ADL).
- * Faculty and Admin may use both for supervision.
+ * Resident workflow: Junior and Senior Residents may complete both
+ * Walk-in Clinical Proforma and Out-Patient Intake Record (ADL).
  */
+
+function isResidentWithSubRole(user) {
+  return (
+    user?.role === 'Resident' &&
+    (user.sub_role === 'Junior Resident' || user.sub_role === 'Senior Resident')
+  );
+}
 
 function canFillClinicalProforma(user) {
   if (!user?.role) return false;
   if (user.role === 'Admin' || user.role === 'Faculty') return true;
-  return user.role === 'Resident' && user.sub_role === 'Senior Resident';
+  return isResidentWithSubRole(user);
 }
 
 function canFillIntakeRecord(user) {
   if (!user?.role) return false;
   if (user.role === 'Admin' || user.role === 'Faculty') return true;
-  return user.role === 'Resident' && user.sub_role === 'Junior Resident';
+  return isResidentWithSubRole(user);
 }
 
-/** Referred workflow: Senior and Junior residents may write intake for assigned referrals. */
 function canFillIntakeRecordForReferral(user) {
-  if (!user?.role) return false;
-  if (user.role === 'Admin' || user.role === 'Faculty') return true;
-  return (
-    user.role === 'Resident' &&
-    (user.sub_role === 'Junior Resident' || user.sub_role === 'Senior Resident')
-  );
+  return canFillIntakeRecord(user);
 }
 
 function canFillClinicalProformaForReferral(user) {
-  if (!user?.role) return false;
-  if (user.role === 'Admin' || user.role === 'Faculty') return true;
-  return (
-    user.role === 'Resident' &&
-    (user.sub_role === 'Junior Resident' || user.sub_role === 'Senior Resident')
-  );
+  return canFillClinicalProforma(user);
 }
 
 module.exports = {

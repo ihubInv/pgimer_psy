@@ -179,11 +179,8 @@ class ADLController {
         'complaints_patient',
         'complaints_informant',
         'family_history_siblings',
-        'premorbid_personality_traits',
-        'occupation_jobs',
+        'occupation_history',
         'sexual_children',
-        'living_residents',
-        'living_inlaws',
       ];
 
       // Normalize all JSONB fields on the incoming payload (same rules as ADLFile.create)
@@ -203,9 +200,9 @@ class ADLController {
 
       // List of all DATE type columns in the adl_files table
       const dateFields = [
-        'file_created_date', 'last_accessed_date', 'history_treatment_dates',
-        'past_history_psychiatric_dates', 'family_history_father_death_date',
-        'family_history_mother_death_date', 'sexual_marriage_date', 'personal_birth_date'
+        'file_created_date', 'last_accessed_date',
+        'family_history_father_death_date',
+        'family_history_mother_death_date', 'personal_birth_date'
       ];
 
       // Sanitize all date fields in the request body

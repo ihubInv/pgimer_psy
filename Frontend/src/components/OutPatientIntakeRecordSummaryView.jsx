@@ -9,7 +9,49 @@ import {
 } from './PatientDetailReadOnlyCard';
 import FilePreview from './FilePreview';
 import { FiFileText } from 'react-icons/fi';
-import { parseLivingPersonRows } from '../utils/adlLivingPersonRows';
+import { resolveHistoryPresentIllness } from '../utils/adlHistoryPresentIllness';
+import {
+  ADL_PAST_HISTORY_PSYCHIATRIC_LABEL_LINE,
+  resolvePastHistoryPsychiatric,
+} from '../utils/adlPastHistoryPsychiatric';
+import {
+  ADL_GENERAL_HOME_SITUATION_LABEL_LINE,
+  resolveGeneralHomeSituation,
+} from '../utils/adlGeneralHomeSituation';
+import {
+  ADL_DEVELOPMENT_HISTORY_LABEL_LINE,
+  resolveDevelopmentHistory,
+} from '../utils/adlDevelopmentHistory';
+import {
+  ADL_EDUCATION_HISTORY_LABEL_LINE,
+  resolveEducationHistory,
+} from '../utils/adlEducationHistory';
+import {
+  ADL_OCCUPATION_HISTORY_LABEL_LINE,
+  resolveOccupationHistory,
+} from '../utils/adlOccupationHistory';
+import {
+  ADL_SEXUAL_MARRIAGE_DETAILS_LABEL_LINE,
+  resolveSexualMarriageDetails,
+} from '../utils/adlSexualMarriageDetails';
+import {
+  ADL_RELIGION_HISTORY_LABEL_LINE,
+  resolveReligionHistory,
+} from '../utils/adlReligionHistory';
+import {
+  ADL_LIVING_SITUATION_HISTORY_LABEL_LINE,
+  resolveLivingSituationHistory,
+} from '../utils/adlLivingSituationHistory';
+import {
+  ADL_PREMORBID_PERSONALITY_HISTORY_LABEL_LINE,
+  resolvePremorbidPersonalityHistory,
+} from '../utils/adlPremorbidPersonalityHistory';
+import {
+  ADL_DIAGNOSTIC_FORMULATION_LABEL_LINE,
+  ADL_FINAL_ASSESSMENT_LABEL_LINE,
+  resolveDiagnosticFormulationHistory,
+  resolveFinalAssessmentHistory,
+} from '../utils/adlClosingSections';
 
 function parseArray(value) {
   if (!value) return [];
@@ -27,10 +69,6 @@ function hasRecorded(value) {
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === 'object') return Object.keys(value).length > 0;
   return String(value).trim() !== '';
-}
-
-function livingPersonRowHasContent(row) {
-  return hasRecorded(row?.name) || hasRecorded(row?.relationship) || hasRecorded(row?.age);
 }
 
 function formatMaybeDate(raw) {
@@ -83,15 +121,7 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
   const complaintsPatient = useMemo(() => parseArray(adlFile?.complaints_patient), [adlFile?.complaints_patient]);
   const complaintsInformant = useMemo(() => parseArray(adlFile?.complaints_informant), [adlFile?.complaints_informant]);
   const familyHistorySiblings = useMemo(() => parseArray(adlFile?.family_history_siblings), [adlFile?.family_history_siblings]);
-  const occupationJobs = useMemo(() => parseArray(adlFile?.occupation_jobs), [adlFile?.occupation_jobs]);
   const sexualChildren = useMemo(() => parseArray(adlFile?.sexual_children), [adlFile?.sexual_children]);
-  const livingResidents = useMemo(() => parseLivingPersonRows(adlFile?.living_residents), [adlFile?.living_residents]);
-  const livingInlaws = useMemo(() => parseLivingPersonRows(adlFile?.living_inlaws), [adlFile?.living_inlaws]);
-  const premorbidPersonalityTraits = useMemo(
-    () => parseArray(adlFile?.premorbid_personality_traits),
-    [adlFile?.premorbid_personality_traits]
-  );
-
   if (!adlFile) {
     return (
       <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 p-8 text-center text-gray-500">
@@ -151,7 +181,18 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
         </PatientDetailCardShell>
       )}
 
-      {informants.some((i) => hasRecorded(i?.name) || hasRecorded(i?.relationship) || hasRecorded(i?.reliability)) && (
+      {informants.some(
+        (i) =>
+          hasRecorded(i?.name) ||
+          hasRecorded(i?.relationship) ||
+          hasRecorded(i?.reliability) ||
+          hasRecorded(i?.age) ||
+          hasRecorded(i?.sex) ||
+          hasRecorded(i?.education) ||
+          hasRecorded(i?.marital_status) ||
+          hasRecorded(i?.occupation) ||
+          hasRecorded(i?.city_district)
+      ) && (
         <PatientDetailCardShell className="mb-0">
           <div className="px-5 pt-5">
             <PatientDetailSectionTitle>Informants</PatientDetailSectionTitle>
@@ -159,7 +200,15 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
           <div className="space-y-4 px-5 pb-5">
             {informants.map((inf, index) => {
               const any =
-                hasRecorded(inf?.relationship) || hasRecorded(inf?.name) || hasRecorded(inf?.reliability);
+                hasRecorded(inf?.relationship) ||
+                hasRecorded(inf?.name) ||
+                hasRecorded(inf?.reliability) ||
+                hasRecorded(inf?.age) ||
+                hasRecorded(inf?.sex) ||
+                hasRecorded(inf?.education) ||
+                hasRecorded(inf?.marital_status) ||
+                hasRecorded(inf?.occupation) ||
+                hasRecorded(inf?.city_district);
               if (!any) return null;
               return (
                 <div key={index} className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
@@ -169,6 +218,12 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
                   <PatientDetailFieldGroup>
                     <Val label="Relationship" value={inf?.relationship} />
                     <Val label="Name" value={inf?.name} />
+                    <Val label="Age" value={inf?.age} />
+                    <Val label="Sex" value={inf?.sex} />
+                    <Val label="Education" value={inf?.education} />
+                    <Val label="Marital status" value={inf?.marital_status} />
+                    <Val label="Occupation" value={inf?.occupation} />
+                    <Val label="City / district" value={inf?.city_district} />
                     <Val
                       label="Reliability / ability to report"
                       value={inf?.reliability}
@@ -232,26 +287,18 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
       )}
 
       <SectionBlock title="History of present illness">
-        <Val label="A. Spontaneous narrative" value={adlFile.history_narrative} className="md:col-span-2" />
-        <Val label="B. Specific enquiry" value={adlFile.history_specific_enquiry} className="md:col-span-2" />
-        <Val label="C. Drug intake" value={adlFile.history_drug_intake} className="md:col-span-2" />
-        <Val label="D. Treatment — place" value={adlFile.history_treatment_place} />
-        <Val label="D. Treatment — dates" value={adlFile.history_treatment_dates} />
+        <Val label="History (A–C)" value={resolveHistoryPresentIllness(adlFile)} className="md:col-span-2" />
         <Val label="D. Treatment — drugs" value={adlFile.history_treatment_drugs} className="md:col-span-2" />
         <Val label="D. Treatment — response" value={adlFile.history_treatment_response} className="md:col-span-2" />
       </SectionBlock>
 
       <SectionBlock title="Past history">
         <Val label="A. Medical (injuries & operations)" value={adlFile.past_history_medical} className="md:col-span-2" />
-        <Val label="B. Psychiatric — dates" value={adlFile.past_history_psychiatric_dates} />
         <Val
-          label="B. Psychiatric — diagnosis / salient features"
-          value={adlFile.past_history_psychiatric_diagnosis}
+          label={`B. Psychiatric (${ADL_PAST_HISTORY_PSYCHIATRIC_LABEL_LINE})`}
+          value={resolvePastHistoryPsychiatric(adlFile)}
           className="md:col-span-2"
         />
-        <Val label="B. Psychiatric — treatment" value={adlFile.past_history_psychiatric_treatment} className="md:col-span-2" />
-        <Val label="B. Psychiatric — interim history" value={adlFile.past_history_psychiatric_interim} className="md:col-span-2" />
-        <Val label="B. Psychiatric — recovery / socialization" value={adlFile.past_history_psychiatric_recovery} className="md:col-span-2" />
       </SectionBlock>
 
       {(hasRecorded(adlFile.family_history_father_age) ||
@@ -356,65 +403,43 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
       )}
 
       <SectionBlock title="Home situation & early development">
-        <Val label="Childhood home situation" value={adlFile.home_situation_childhood} className="md:col-span-2" />
-        <Val label="Parents' relationship" value={adlFile.home_situation_parents_relationship} className="md:col-span-2" />
-        <Val label="Socioeconomic status" value={adlFile.home_situation_socioeconomic} className="md:col-span-2" />
-        <Val label="Interpersonal relationships" value={adlFile.home_situation_interpersonal} className="md:col-span-2" />
+        <Val
+          label={ADL_GENERAL_HOME_SITUATION_LABEL_LINE}
+          value={resolveGeneralHomeSituation(adlFile)}
+          className="md:col-span-2"
+        />
         <Val label="Birth date" value={formatMaybeDate(adlFile.personal_birth_date)} />
         <Val label="Birth place" value={adlFile.personal_birth_place} />
         <Val label="Delivery type" value={adlFile.personal_delivery_type} />
         <Val label="Prenatal complications" value={adlFile.personal_complications_prenatal} className="md:col-span-2" />
         <Val label="Natal complications" value={adlFile.personal_complications_natal} className="md:col-span-2" />
         <Val label="Postnatal complications" value={adlFile.personal_complications_postnatal} className="md:col-span-2" />
-        <Val label="Weaning age" value={adlFile.development_weaning_age} />
-        <Val label="First words" value={adlFile.development_first_words} />
-        <Val label="Three-word sentences" value={adlFile.development_three_words} />
-        <Val label="Walking age" value={adlFile.development_walking} />
-        <Val label="Neurotic traits" value={adlFile.development_neurotic_traits} className="md:col-span-2" />
-        <Val label="Nail biting" value={adlFile.development_nail_biting} />
-        <Val label="Bedwetting" value={adlFile.development_bedwetting} />
-        <Val label="Phobias" value={adlFile.development_phobias} className="md:col-span-2" />
-        <Val label="Childhood illness" value={adlFile.development_childhood_illness} className="md:col-span-2" />
+        <Val
+          label={ADL_DEVELOPMENT_HISTORY_LABEL_LINE}
+          value={resolveDevelopmentHistory(adlFile)}
+          className="md:col-span-2"
+        />
       </SectionBlock>
 
       <SectionBlock title="Education">
-        <Val label="Age at start of education" value={adlFile.education_start_age} />
-        <Val label="Highest class passed" value={adlFile.education_highest_class} />
-        <Val label="Performance" value={adlFile.education_performance} className="md:col-span-2" />
-        <Val label="Disciplinary problems" value={adlFile.education_disciplinary} className="md:col-span-2" />
-        <Val label="Peer relationships" value={adlFile.education_peer_relationship} className="md:col-span-2" />
-        <Val label="Hobbies & interests" value={adlFile.education_hobbies} className="md:col-span-2" />
-        <Val label="Special abilities" value={adlFile.education_special_abilities} className="md:col-span-2" />
-        <Val label="Reason for discontinuing" value={adlFile.education_discontinue_reason} className="md:col-span-2" />
+        <Val
+          label={ADL_EDUCATION_HISTORY_LABEL_LINE}
+          value={resolveEducationHistory(adlFile)}
+          className="md:col-span-2"
+        />
       </SectionBlock>
 
-      {occupationJobs.some((j) =>
-        ['job', 'dates', 'adjustment', 'difficulties', 'promotions', 'change_reason'].some((k) => hasRecorded(j?.[k]))
-      ) && (
+      {hasRecorded(resolveOccupationHistory(adlFile)) && (
         <PatientDetailCardShell className="mb-0">
           <div className="px-5 pt-5">
             <PatientDetailSectionTitle>Occupation</PatientDetailSectionTitle>
           </div>
-          <div className="space-y-4 px-5 pb-5">
-            {occupationJobs.map((job, index) => {
-              const any = ['job', 'dates', 'adjustment', 'difficulties', 'promotions', 'change_reason'].some((k) =>
-                hasRecorded(job?.[k])
-              );
-              if (!any) return null;
-              return (
-                <div key={index} className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700">Job {index + 1}</p>
-                  <PatientDetailFieldGroup>
-                    <Val label="Job title" value={job?.job} className="md:col-span-2" />
-                    <Val label="Dates" value={job?.dates} />
-                    <Val label="Adjustment" value={job?.adjustment} className="md:col-span-2" />
-                    <Val label="Difficulties" value={job?.difficulties} className="md:col-span-2" />
-                    <Val label="Promotions" value={job?.promotions} />
-                    <Val label="Reason for change" value={job?.change_reason} className="md:col-span-2" />
-                  </PatientDetailFieldGroup>
-                </div>
-              );
-            })}
+          <div className="px-5 pb-5">
+            <Val
+              label={ADL_OCCUPATION_HISTORY_LABEL_LINE}
+              value={resolveOccupationHistory(adlFile)}
+              className="md:col-span-2"
+            />
           </div>
         </PatientDetailCardShell>
       )}
@@ -425,9 +450,12 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
         <Val label="Sexual education" value={adlFile.sexual_education} className="md:col-span-2" />
         <Val label="Masturbation" value={adlFile.sexual_masturbation} className="md:col-span-2" />
         <Val label="Sexual contact" value={adlFile.sexual_contact} className="md:col-span-2" />
-        <Val label="Marriage date" value={formatMaybeDate(adlFile.sexual_marriage_date)} />
-        <Val label="Marital adjustment" value={adlFile.sexual_marital_adjustment} className="md:col-span-2" />
-        <Val label="Sexual adjustment" value={adlFile.sexual_sexual_adjustment} className="md:col-span-2" />
+        <Val label="Marriage type" value={adlFile.sexual_marriage_arranged} />
+        <Val
+          label={ADL_SEXUAL_MARRIAGE_DETAILS_LABEL_LINE}
+          value={resolveSexualMarriageDetails(adlFile)}
+          className="md:col-span-2"
+        />
       </SectionBlock>
 
       {sexualChildren.some((ch) => hasRecorded(ch?.age) || hasRecorded(ch?.sex) || hasRecorded(ch?.health)) && (
@@ -454,14 +482,17 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
       )}
 
       <SectionBlock title="Religion">
-        <Val label="Religious beliefs & practices" value={adlFile.religion} className="md:col-span-2" />
+        <Val
+          label={ADL_RELIGION_HISTORY_LABEL_LINE}
+          value={resolveReligionHistory(adlFile)}
+          className="md:col-span-2"
+        />
       </SectionBlock>
 
       {(hasRecorded(adlFile.living_type) ||
         hasRecorded(adlFile.living_rooms) ||
         hasRecorded(adlFile.living_relationship) ||
-        livingResidents.some(livingPersonRowHasContent) ||
-        livingInlaws.some(livingPersonRowHasContent)) && (
+        hasRecorded(resolveLivingSituationHistory(adlFile))) && (
         <PatientDetailCardShell className="mb-0">
           <div className="px-5 pt-5">
             <PatientDetailSectionTitle>Living situation</PatientDetailSectionTitle>
@@ -472,73 +503,26 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
               <Val label="Number of rooms" value={adlFile.living_rooms} />
               <Val label="Relationship with residents" value={adlFile.living_relationship} className="md:col-span-2" />
             </PatientDetailFieldGroup>
-            {livingResidents.some(livingPersonRowHasContent) && (
-              <div className="border-t border-gray-100 pt-4">
-                <p className="mb-2 text-sm font-semibold text-gray-800">Residents</p>
-                <div className="space-y-4">
-                  {livingResidents.map((resident, index) => {
-                    if (!livingPersonRowHasContent(resident)) return null;
-                    return (
-                      <div key={index} className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
-                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700">
-                          Resident {index + 1}
-                        </p>
-                        <PatientDetailFieldGroup>
-                          <Val label="Name" value={resident.name} />
-                          <Val label="Relationship" value={resident.relationship} />
-                          <Val label="Age" value={resident.age} />
-                        </PatientDetailFieldGroup>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {livingInlaws.some(livingPersonRowHasContent) && (
-              <div className="border-t border-gray-100 pt-4">
-                <p className="mb-2 text-sm font-semibold text-gray-800">In-laws</p>
-                <div className="space-y-4">
-                  {livingInlaws.map((inlaw, index) => {
-                    if (!livingPersonRowHasContent(inlaw)) return null;
-                    return (
-                      <div key={index} className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
-                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700">
-                          In-law {index + 1}
-                        </p>
-                        <PatientDetailFieldGroup>
-                          <Val label="Name" value={inlaw.name} />
-                          <Val label="Relationship" value={inlaw.relationship} />
-                          <Val label="Age" value={inlaw.age} />
-                        </PatientDetailFieldGroup>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+            {hasRecorded(resolveLivingSituationHistory(adlFile)) && (
+              <Val
+                label={ADL_LIVING_SITUATION_HISTORY_LABEL_LINE}
+                value={resolveLivingSituationHistory(adlFile)}
+                className="md:col-span-2"
+              />
             )}
           </div>
         </PatientDetailCardShell>
       )}
 
-      {premorbidPersonalityTraits.length > 0 &&
-        premorbidPersonalityTraits.some((t) =>
-          hasRecorded(typeof t === 'string' ? t : JSON.stringify(t))
-        ) && (
-          <PatientDetailCardShell className="mb-0">
-            <div className="px-5 pt-5">
-              <PatientDetailSectionTitle>Premorbid personality</PatientDetailSectionTitle>
-            </div>
-            <div className="space-y-3 px-5 pb-5">
-              <PatientDetailFieldGroup>
-                {premorbidPersonalityTraits.map((trait, index) => {
-                  const text = typeof trait === 'string' ? trait : JSON.stringify(trait);
-                  if (!hasRecorded(text)) return null;
-                  return <Val key={index} label={`Trait ${index + 1}`} value={text} className="md:col-span-2" />;
-                })}
-              </PatientDetailFieldGroup>
-            </div>
-          </PatientDetailCardShell>
-        )}
+      {hasRecorded(resolvePremorbidPersonalityHistory(adlFile)) && (
+        <SectionBlock title="Premorbid personality">
+          <Val
+            label={ADL_PREMORBID_PERSONALITY_HISTORY_LABEL_LINE}
+            value={resolvePremorbidPersonalityHistory(adlFile)}
+            className="md:col-span-2"
+          />
+        </SectionBlock>
+      )}
 
       <SectionBlock title="Physical examination">
         <Val label="General appearance" value={adlFile.physical_general_appearance} className="md:col-span-2" />
@@ -565,15 +549,25 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
         <Val label="Judgment" value={adlFile.mse_judgment} className="md:col-span-2" />
       </SectionBlock>
 
-      <SectionBlock title="Diagnostic formulation">
-        <Val label="Diagnostic formulation" value={adlFile.diagnostic_formulation} className="md:col-span-2" />
-      </SectionBlock>
+      {hasRecorded(resolveDiagnosticFormulationHistory(adlFile)) && (
+        <SectionBlock title="Diagnostic formulation">
+          <Val
+            label={ADL_DIAGNOSTIC_FORMULATION_LABEL_LINE}
+            value={resolveDiagnosticFormulationHistory(adlFile)}
+            className="md:col-span-2"
+          />
+        </SectionBlock>
+      )}
 
-      <SectionBlock title="Final assessment">
-        <Val label="Provisional diagnosis" value={adlFile.provisional_diagnosis} className="md:col-span-2" />
-        <Val label="Treatment plan" value={adlFile.treatment_plan} className="md:col-span-2" />
-        <Val label="Consultant comments" value={adlFile.consultant_comments} className="md:col-span-2" />
-      </SectionBlock>
+      {hasRecorded(resolveFinalAssessmentHistory(adlFile)) && (
+        <SectionBlock title="Final assessment">
+          <Val
+            label={ADL_FINAL_ASSESSMENT_LABEL_LINE}
+            value={resolveFinalAssessmentHistory(adlFile)}
+            className="md:col-span-2"
+          />
+        </SectionBlock>
+      )}
 
       {patientId && existingFiles.length > 0 && (
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

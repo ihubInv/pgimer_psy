@@ -24,6 +24,23 @@ import Textarea from '../../components/Textarea';
 import DatePicker from '../../components/CustomDatePicker';
 import { CheckboxGroup } from '../../components/CheckboxGroup';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
+import { resolveHistoryPresentIllness } from '../../utils/adlHistoryPresentIllness';
+import { resolvePastHistoryPsychiatric } from '../../utils/adlPastHistoryPsychiatric';
+import {
+  resolvePhysicalCvsExamination,
+  resolvePhysicalChestExamination,
+  resolvePhysicalAbdomenExamination,
+} from '../../utils/adlPhysicalExaminationSections';
+import {
+  resolveMseGeneralExamination,
+  resolveMsePsychomotorExamination,
+  resolveMseAffectExamination,
+} from '../../utils/adlMseExaminationSections';
+import {
+  resolveMseInsightExamination,
+  resolveDiagnosticFormulationHistory,
+  resolveFinalAssessmentHistory,
+} from '../../utils/adlClosingSections';
 
 const ClinicalProformaDetails = ({ proforma: propProforma }) => {
   const navigate = useNavigate();
@@ -1439,15 +1456,13 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
             ) : (
               <div ref={adlPrintRef} className="space-y-6">
                 {/* History of Present Illness - Expanded */}
-                {(adlFile.history_narrative || adlFile.history_specific_enquiry || adlFile.history_drug_intake) && (
+                {(resolveHistoryPresentIllness(adlFile) ||
+                  adlFile.history_treatment_drugs ||
+                  adlFile.history_treatment_response) && (
                   <InfoSection
                     title="History of Present Illness (Expanded)"
                     data={{
-                      'Narrative': adlFile.history_narrative,
-                      'Specific Enquiry': adlFile.history_specific_enquiry,
-                      'Drug Intake': adlFile.history_drug_intake,
-                      'Treatment Place': adlFile.history_treatment_place,
-                      'Treatment Dates': adlFile.history_treatment_dates,
+                      'History (A–C)': resolveHistoryPresentIllness(adlFile),
                       'Treatment Drugs': adlFile.history_treatment_drugs,
                       'Treatment Response': adlFile.history_treatment_response,
                     }}
@@ -1459,10 +1474,28 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
                   <Card title="Informants" className="mt-4">
                     <div className="space-y-3">
                       {adlFile.informants.map((informant, index) => (
-                        <div key={index} className="p-3 border border-gray-200 rounded">
+                        <div key={index} className="p-3 border border-gray-200 rounded space-y-1">
                           <p className="font-medium">{informant.name || `Informant ${index + 1}`}</p>
-                          {informant.relation && <p className="text-sm text-gray-600">Relation: {informant.relation}</p>}
+                          {informant.relationship && (
+                            <p className="text-sm text-gray-600">Relationship: {informant.relationship}</p>
+                          )}
                           {informant.age && <p className="text-sm text-gray-600">Age: {informant.age}</p>}
+                          {informant.sex && <p className="text-sm text-gray-600">Sex: {informant.sex}</p>}
+                          {informant.education && (
+                            <p className="text-sm text-gray-600">Education: {informant.education}</p>
+                          )}
+                          {informant.marital_status && (
+                            <p className="text-sm text-gray-600">Marital status: {informant.marital_status}</p>
+                          )}
+                          {informant.occupation && (
+                            <p className="text-sm text-gray-600">Occupation: {informant.occupation}</p>
+                          )}
+                          {informant.city_district && (
+                            <p className="text-sm text-gray-600">City/District: {informant.city_district}</p>
+                          )}
+                          {informant.reliability && (
+                            <p className="text-sm text-gray-600">Reliability: {informant.reliability}</p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1470,16 +1503,12 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
                 )}
 
                 {/* Past History - Detailed */}
-                {(adlFile.past_history_medical || adlFile.past_history_psychiatric_dates || adlFile.past_history_psychiatric_diagnosis) && (
+                {(adlFile.past_history_medical || resolvePastHistoryPsychiatric(adlFile)) && (
                   <InfoSection
                     title="Past History (Detailed)"
                     data={{
                       'Medical History': adlFile.past_history_medical,
-                      'Psychiatric Dates': adlFile.past_history_psychiatric_dates,
-                      'Psychiatric Diagnosis': adlFile.past_history_psychiatric_diagnosis,
-                      'Psychiatric Treatment': adlFile.past_history_psychiatric_treatment,
-                      'Interim Period': adlFile.past_history_psychiatric_interim,
-                      'Recovery': adlFile.past_history_psychiatric_recovery,
+                      'Psychiatric History': resolvePastHistoryPsychiatric(adlFile),
                     }}
                   />
                 )}
@@ -1504,26 +1533,29 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
                 )}
 
                 {/* Mental Status Examination - Expanded */}
-                {(adlFile.mse_general_demeanour || adlFile.mse_affect_subjective || adlFile.mse_thought_flow) && (
+                {(resolveMseGeneralExamination(adlFile) || resolveMsePsychomotorExamination(adlFile)
+                  || resolveMseAffectExamination(adlFile) || adlFile.mse_thought_flow) && (
                   <InfoSection
                     title="Mental Status Examination (Expanded)"
                     data={{
-                      'General Demeanour': adlFile.mse_general_demeanour,
-                      'General Awareness': adlFile.mse_general_awareness,
-                      'Affect - Subjective': adlFile.mse_affect_subjective,
-                      'Affect - Tone': adlFile.mse_affect_tone,
+                      'General Appearance & Behavior': resolveMseGeneralExamination(adlFile),
+                      'Psychomotor Activity': resolveMsePsychomotorExamination(adlFile),
+                      'Affect & Mood': resolveMseAffectExamination(adlFile),
                       'Thought Flow': adlFile.mse_thought_flow,
                       'Thought Form': adlFile.mse_thought_form,
                       'Thought Content': adlFile.mse_thought_content,
+                      'Thought Possession': adlFile.mse_thought_possession,
+                      'Thought Perception': adlFile.mse_thought_perception,
                       'Cognitive - Consciousness': adlFile.mse_cognitive_consciousness,
-                      'Insight - Understanding': adlFile.mse_insight_understanding,
-                      'Insight - Judgement': adlFile.mse_insight_judgement,
+                      'Insight & Judgement': resolveMseInsightExamination(adlFile),
                     }}
                   />
                 )}
 
                 {/* Physical Examination - Comprehensive */}
-                {(adlFile.physical_appearance || adlFile.physical_pulse || adlFile.physical_bp) && (
+                {(adlFile.physical_appearance || adlFile.physical_pulse || adlFile.physical_bp
+                  || resolvePhysicalCvsExamination(adlFile) || resolvePhysicalChestExamination(adlFile)
+                  || resolvePhysicalAbdomenExamination(adlFile)) && (
                   <InfoSection
                     title="Physical Examination (Comprehensive)"
                     data={{
@@ -1533,37 +1565,24 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
                       'Blood Pressure': adlFile.physical_bp,
                       'Height': adlFile.physical_height,
                       'Weight': adlFile.physical_weight,
-                      'CVS Apex': adlFile.physical_cvs_apex,
-                      'CVS Heart Sounds': adlFile.physical_cvs_heart_sounds,
+                      'Cardiovascular System': resolvePhysicalCvsExamination(adlFile),
+                      'Respiratory System': resolvePhysicalChestExamination(adlFile),
+                      'Abdomen': resolvePhysicalAbdomenExamination(adlFile),
                       'CNS Cranial': adlFile.physical_cns_cranial,
                     }}
                   />
                 )}
 
                 {/* Provisional Diagnosis and Treatment Plan */}
-                {(adlFile.provisional_diagnosis || adlFile.treatment_plan) && (
-                  <Card title="Provisional Diagnosis and Treatment Plan" className="border-2 border-blue-200 bg-blue-50/30">
-                    <div className="space-y-4">
-                      {adlFile.provisional_diagnosis && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-500">Provisional Diagnosis</label>
-                          <p className="text-gray-900 mt-1 whitespace-pre-wrap">{adlFile.provisional_diagnosis}</p>
-                        </div>
-                      )}
-                      {adlFile.treatment_plan && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-500">Treatment Plan</label>
-                          <p className="text-gray-900 mt-1 whitespace-pre-wrap">{adlFile.treatment_plan}</p>
-                        </div>
-                      )}
-                    </div>
+                {resolveDiagnosticFormulationHistory(adlFile) && (
+                  <Card title="Diagnostic Formulation" className="border-2 border-emerald-200 bg-emerald-50/30">
+                    <p className="text-gray-900 whitespace-pre-wrap">{resolveDiagnosticFormulationHistory(adlFile)}</p>
                   </Card>
                 )}
 
-                {/* Comments of the Consultant */}
-                {adlFile.consultant_comments && (
-                  <Card title="Comments of the Consultant" className="border-2 border-purple-200 bg-purple-50/30">
-                    <p className="text-gray-900 whitespace-pre-wrap">{adlFile.consultant_comments}</p>
+                {resolveFinalAssessmentHistory(adlFile) && (
+                  <Card title="Final Assessment" className="border-2 border-blue-200 bg-blue-50/30">
+                    <p className="text-gray-900 whitespace-pre-wrap">{resolveFinalAssessmentHistory(adlFile)}</p>
                   </Card>
                 )}
               </div>
@@ -1589,4 +1608,3 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
 };
 
 export default ClinicalProformaDetails;
-

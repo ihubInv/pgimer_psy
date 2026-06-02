@@ -24,7 +24,6 @@ import {
   DOCTOR_DECISION,
   CASE_SEVERITY,
   canFillClinicalProforma,
-  canFillClinicalProformaForReferral,
 } from '../../utils/constants';
 import { normalizeArrayField } from '../../utils/clinicalMultiSelectArray';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -75,6 +74,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
     proformaNumericId,
     { skip: !proformaNumericId || !!propInitialData }
   );
+  const canRefetchProformaById = Boolean(proformaNumericId && !propInitialData);
 
   // patientIdFromUrl must only come from the ?patient_id= query param.
   // The URL :id segment is a PROFORMA id, not a patient id – do NOT use it as a fallback.
@@ -470,17 +470,12 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
   const [errors, setErrors] = useState({});
   const currentUser = useSelector(selectCurrentUser);
 
-  const fromReferred = searchParams.get('from') === 'referred';
-
   useEffect(() => {
     if (propInitialData) return;
     if (canFillClinicalProforma(currentUser)) return;
-    if (fromReferred && canFillClinicalProformaForReferral(currentUser)) return;
-    toast.error(
-      'Walk-in Clinical Proforma is filled by Senior Residents. Junior Residents may fill it for patients referred to them.'
-    );
+    toast.error('You do not have permission to edit Walk-in Clinical Proforma.');
     navigate(-1);
-  }, [currentUser, propInitialData, navigate, fromReferred]);
+  }, [currentUser, propInitialData, navigate]);
   
   // Ref to track the latest formData to ensure we always use current values in submit
   const formDataRef = useRef(formData);
@@ -1187,7 +1182,13 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           // Reset user edited flag after successful save to allow future updates
           userHasEditedRef.current = false;
           // Refetch proformas to get the new one
-          refetch();
+          if (canRefetchProformaById) {
+            try {
+              refetch();
+            } catch {
+              /* RTK #38: query skipped/unsubscribed */
+            }
+          }
         }
       } catch (err) {
         console.error('Proforma save error:', err);

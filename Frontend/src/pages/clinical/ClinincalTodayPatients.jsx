@@ -489,7 +489,7 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
               }
             })()}
             
-            {/* Intake Record — Junior Resident (ADL); hidden on Existing Patients tab */}
+            {/* Intake Record (ADL); hidden on Existing Patients tab */}
             {listContext !== 'existing' && mayFillIntakeRecord && (
             <Button
               variant="outline"
@@ -513,12 +513,12 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
             </Button>
             )}
             
-            {/* Prescription Button — full width (matches Change Room / Mark as Completed) */}
+            {/* Prescription Button */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => navigate(`/prescriptions/create?patient_id=${patient.id}`)}
-              className="col-span-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100 hover:border-teal-400 transition-all hover:shadow-sm"
+              className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100 hover:border-teal-400 transition-all hover:shadow-sm"
             >
               <FiPlusCircle className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">Prescription</span>
@@ -526,7 +526,7 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
             
             {/* Change Room Button - Opens room change dropdown */}
             {patient.assigned_room && availableRooms.length > 0 && (
-              <div className="relative col-span-2" ref={roomDropdownRef}>
+              <div className="relative" ref={roomDropdownRef}>
                 <Button
                   variant="outline"
                   size="sm"
@@ -584,7 +584,7 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
 
             {/* Transfer within shared room — only on patients assigned to you */}
             {canShowTransferOnPatient && (
-              <div className="relative col-span-2" ref={transferDropdownRef}>
+              <div className="relative" ref={transferDropdownRef}>
                 <Button
                   variant="outline"
                   size="sm"
@@ -657,7 +657,7 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
                 size="sm"
                 onClick={handleMarkCompleted}
                 loading={isMarkingCompleted}
-                className="col-span-2 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-gradient-to-r from-green-500 to-emerald-500 border-green-500 text-white hover:from-green-600 hover:to-emerald-600 hover:border-green-600 transition-all hover:shadow-md shadow-sm"
+                className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-gradient-to-r from-green-500 to-emerald-500 border-green-500 text-white hover:from-green-600 hover:to-emerald-600 hover:border-green-600 transition-all hover:shadow-md shadow-sm"
               >
                 <FiCheck className="w-3.5 h-3.5" />
                 <span className="whitespace-nowrap">Mark as Completed</span>
@@ -1458,17 +1458,8 @@ const ClinicalTodayPatients = () => {
                   )}
                   {(isJuniorResidentUser(currentUser) || isSeniorResidentUser(currentUser)) && (
                     <p className="text-sm text-gray-600 max-w-3xl">
-                      {isSeniorResidentUser(currentUser) ? (
-                        <>
-                          As <strong>Senior Resident</strong>, use <strong>Clinical Proforma</strong> for walk-in assessment.
-                          Intake Record is completed by the Junior Resident in your room.
-                        </>
-                      ) : (
-                        <>
-                          As <strong>Junior Resident</strong>, use <strong>Intake Record</strong> for the detailed work-up.
-                          Walk-in <strong>Clinical Proforma</strong> is completed by the Senior Resident in your room.
-                        </>
-                      )}
+                      Junior and Senior Residents may complete both{' '}
+                      <strong>Clinical Proforma</strong> and <strong>Intake Record</strong> as required for each patient.
                     </p>
                   )}
                   {/* New vs Existing sub-tabs — hidden for admin (room view shows both) */}

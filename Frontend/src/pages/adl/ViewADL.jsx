@@ -9,7 +9,54 @@ import FilePreview from '../../components/FilePreview';
 import { FiChevronDown, FiChevronUp, FiFileText, FiCalendar, FiUser, FiHome, FiX, FiArrowLeft } from 'react-icons/fi';
 import { formatDate, formatDateTime } from '../../utils/formatters';
 import Button from '../../components/Button';
-import { parseLivingPersonRows } from '../../utils/adlLivingPersonRows';
+import {
+  ADL_HISTORY_PRESENT_ILLNESS_PROMPTS,
+  resolveHistoryPresentIllness,
+} from '../../utils/adlHistoryPresentIllness';
+import {
+  ADL_PAST_HISTORY_PSYCHIATRIC_LABEL_LINE,
+  resolvePastHistoryPsychiatric,
+} from '../../utils/adlPastHistoryPsychiatric';
+import {
+  ADL_GENERAL_HOME_SITUATION_LABEL_LINE,
+  resolveGeneralHomeSituation,
+} from '../../utils/adlGeneralHomeSituation';
+import {
+  ADL_DEVELOPMENT_HISTORY_LABEL_LINE,
+  resolveDevelopmentHistory,
+} from '../../utils/adlDevelopmentHistory';
+import {
+  ADL_EDUCATION_HISTORY_LABEL_LINE,
+  resolveEducationHistory,
+} from '../../utils/adlEducationHistory';
+import {
+  ADL_OCCUPATION_HISTORY_LABEL_LINE,
+  resolveOccupationHistory,
+} from '../../utils/adlOccupationHistory';
+import {
+  ADL_SEXUAL_MARRIAGE_DETAILS_LABEL_LINE,
+  resolveSexualMarriageDetails,
+} from '../../utils/adlSexualMarriageDetails';
+import {
+  ADL_RELIGION_HISTORY_LABEL_LINE,
+  resolveReligionHistory,
+} from '../../utils/adlReligionHistory';
+import {
+  ADL_LIVING_SITUATION_HISTORY_LABEL_LINE,
+  resolveLivingSituationHistory,
+} from '../../utils/adlLivingSituationHistory';
+import {
+  ADL_PREMORBID_PERSONALITY_HISTORY_LABEL_LINE,
+  resolvePremorbidPersonalityHistory,
+} from '../../utils/adlPremorbidPersonalityHistory';
+import {
+  ADL_DIAGNOSTIC_FORMULATION_LABEL_LINE,
+  ADL_FINAL_ASSESSMENT_LABEL_LINE,
+  ADL_MSE_INSIGHT_LABEL_LINE,
+  resolveDiagnosticFormulationHistory,
+  resolveFinalAssessmentHistory,
+  resolveMseInsightExamination,
+} from '../../utils/adlClosingSections';
 
 // Display Field Component with glassmorphism
 const DisplayField = ({ label, value, icon, className = '', rows }) => {
@@ -64,12 +111,7 @@ const ViewADL = ( {adlFiles} ) => {
   const complaintsPatient = useMemo(() => parseArray(adlFile?.complaints_patient), [adlFile?.complaints_patient]);
   const complaintsInformant = useMemo(() => parseArray(adlFile?.complaints_informant), [adlFile?.complaints_informant]);
   const familyHistorySiblings = useMemo(() => parseArray(adlFile?.family_history_siblings), [adlFile?.family_history_siblings]);
-  const occupationJobs = useMemo(() => parseArray(adlFile?.occupation_jobs), [adlFile?.occupation_jobs]);
   const sexualChildren = useMemo(() => parseArray(adlFile?.sexual_children), [adlFile?.sexual_children]);
-  const livingResidents = useMemo(() => parseLivingPersonRows(adlFile?.living_residents), [adlFile?.living_residents]);
-  const livingInlaws = useMemo(() => parseLivingPersonRows(adlFile?.living_inlaws), [adlFile?.living_inlaws]);
-  const premorbidPersonalityTraits = useMemo(() => parseArray(adlFile?.premorbid_personality_traits), [adlFile?.premorbid_personality_traits]);
-
   const [expandedCards, setExpandedCards] = useState({
     mainWrapper: true,
     patient: true,
@@ -234,18 +276,15 @@ const ViewADL = ( {adlFiles} ) => {
                   <div key={index} className="relative backdrop-blur-xl bg-white/60 border border-white/40 rounded-2xl p-6 shadow-lg">
                     <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-teal-500/5 rounded-2xl"></div>
                     <div className="relative grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <DisplayField
-                        label="Relationship"
-                        value={informant.relationship}
-                      />
-                      <DisplayField
-                        label="Name"
-                        value={informant.name}
-                      />
-                      <DisplayField
-                        label="Reliability / Ability to report"
-                        value={informant.reliability}
-                      />
+                      <DisplayField label="Relationship" value={informant.relationship} />
+                      <DisplayField label="Name" value={informant.name} />
+                      <DisplayField label="Age" value={informant.age} />
+                      <DisplayField label="Sex" value={informant.sex} />
+                      <DisplayField label="Education" value={informant.education} />
+                      <DisplayField label="Marital Status" value={informant.marital_status} />
+                      <DisplayField label="Occupation" value={informant.occupation} />
+                      <DisplayField label="Name of the City/District" value={informant.city_district} />
+                      <DisplayField label="Reliability / Ability to report" value={informant.reliability} />
                     </div>
                   </div>
                 ))
@@ -371,7 +410,6 @@ const ViewADL = ( {adlFiles} ) => {
               </div>
               <div>
                 <h3 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">History of Present Illness</h3>
-                <p className="text-sm text-gray-600 mt-1">Spontaneous narrative, specific enquiry, drug intake, treatment</p>
               </div>
             </div>
             {expandedCards.history ? (
@@ -383,32 +421,21 @@ const ViewADL = ( {adlFiles} ) => {
 
           {expandedCards.history && (
             <div className="p-6 space-y-6">
+              <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 space-y-2">
+                {ADL_HISTORY_PRESENT_ILLNESS_PROMPTS.map((line) => (
+                  <p key={line} className="text-sm text-gray-700 leading-snug">
+                    {line}
+                  </p>
+                ))}
+              </div>
               <DisplayField
-                label="A. Spontaneous narrative account"
-                value={adlFile?.history_narrative}
-                rows={4}
-              />
-              <DisplayField
-                label="B. Specific enquiry about mood, sleep, appetite, anxiety symptoms, suicidal risk, social interaction, job efficiency, personal hygiene, memory, etc."
-                value={adlFile?.history_specific_enquiry}
-                rows={5}
-              />
-              <DisplayField
-                label="C. Intake of dependence producing and prescription drugs"
-                value={adlFile?.history_drug_intake}
-                rows={3}
+                label="History (sections A–C)"
+                value={resolveHistoryPresentIllness(adlFile)}
+                rows={10}
               />
               <div className="border-t pt-4">
                 <h4 className="font-semibold text-gray-800 mb-3">D. Treatment received so far in this illness</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <DisplayField
-                    label="Place"
-                    value={adlFile?.history_treatment_place}
-                  />
-                  <DisplayField
-                    label="Dates"
-                    value={adlFile?.history_treatment_dates}
-                  />
                   <DisplayField
                     label="Drugs"
                     value={adlFile?.history_treatment_drugs}
@@ -461,32 +488,14 @@ const ViewADL = ( {adlFiles} ) => {
               </div>
               <div className="border-t pt-4">
                 <h4 className="font-semibold text-gray-800 mb-3">B. Psychiatric</h4>
-                <div className="space-y-4">
-                  <DisplayField
-                    label="Dates"
-                    value={adlFile?.past_history_psychiatric_dates}
-                  />
-                  <DisplayField
-                    label="Diagnosis or salient features"
-                    value={adlFile?.past_history_psychiatric_diagnosis}
-                    rows={2}
-                  />
-                  <DisplayField
-                    label="Treatment"
-                    value={adlFile?.past_history_psychiatric_treatment}
-                    rows={2}
-                  />
-                  <DisplayField
-                    label="Interim history of previous psychiatric illness"
-                    value={adlFile?.past_history_psychiatric_interim}
-                    rows={2}
-                  />
-                  <DisplayField
-                    label="Specific enquiry into completeness of recovery and socialization/personal care in the interim period"
-                    value={adlFile?.past_history_psychiatric_recovery}
-                    rows={3}
-                  />
-                </div>
+                <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+                  {ADL_PAST_HISTORY_PSYCHIATRIC_LABEL_LINE}
+                </p>
+                <DisplayField
+                  label="Psychiatric past history"
+                  value={resolvePastHistoryPsychiatric(adlFile)}
+                  rows={8}
+                />
               </div>
             </div>
           )}
@@ -601,12 +610,13 @@ const ViewADL = ( {adlFiles} ) => {
             <div className="p-6 space-y-6">
               <div>
                 <h4 className="font-semibold text-gray-800 mb-3">General Home Situation</h4>
-                <DisplayField label="Description of childhood home situation" value={adlFile?.home_situation_childhood} rows={3} />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <DisplayField label="Parents' relationship" value={adlFile?.home_situation_parents_relationship} rows={2} />
-                  <DisplayField label="Socioeconomic status" value={adlFile?.home_situation_socioeconomic} rows={2} />
-                  <DisplayField label="Interpersonal relationships" value={adlFile?.home_situation_interpersonal} rows={2} className="md:col-span-2" />
-                </div>
+                <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+                  {ADL_GENERAL_HOME_SITUATION_LABEL_LINE}
+                </p>
+                <DisplayField
+                  value={resolveGeneralHomeSituation(adlFile || {})}
+                  rows={6}
+                />
               </div>
 
               <div className="border-t pt-6">
@@ -623,17 +633,13 @@ const ViewADL = ( {adlFiles} ) => {
 
               <div className="border-t pt-6">
                 <h4 className="font-semibold text-gray-800 mb-3">Development</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <DisplayField label="Weaning age" value={adlFile?.development_weaning_age} />
-                  <DisplayField label="First words" value={adlFile?.development_first_words} />
-                  <DisplayField label="Three words sentences" value={adlFile?.development_three_words} />
-                  <DisplayField label="Walking age" value={adlFile?.development_walking} />
-                  <DisplayField label="Neurotic traits" value={adlFile?.development_neurotic_traits} rows={2} className="md:col-span-2" />
-                  <DisplayField label="Nail biting" value={adlFile?.development_nail_biting} />
-                  <DisplayField label="Bedwetting" value={adlFile?.development_bedwetting} />
-                  <DisplayField label="Phobias" value={adlFile?.development_phobias} rows={2} />
-                  <DisplayField label="Childhood illness" value={adlFile?.development_childhood_illness} rows={2} />
-                </div>
+                <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+                  {ADL_DEVELOPMENT_HISTORY_LABEL_LINE}
+                </p>
+                <DisplayField
+                  value={resolveDevelopmentHistory(adlFile || {})}
+                  rows={6}
+                />
               </div>
             </div>
           )}
@@ -663,16 +669,13 @@ const ViewADL = ( {adlFiles} ) => {
 
           {expandedCards.education && (
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <DisplayField label="Age at start of education" value={adlFile?.education_start_age} />
-                <DisplayField label="Highest class passed" value={adlFile?.education_highest_class} />
-                <DisplayField label="Performance" value={adlFile?.education_performance} rows={2} />
-                <DisplayField label="Disciplinary problems" value={adlFile?.education_disciplinary} rows={2} />
-                <DisplayField label="Peer relationships" value={adlFile?.education_peer_relationship} rows={2} />
-                <DisplayField label="Hobbies and interests" value={adlFile?.education_hobbies} rows={2} />
-                <DisplayField label="Special abilities" value={adlFile?.education_special_abilities} rows={2} />
-                <DisplayField label="Reason for discontinuing education" value={adlFile?.education_discontinue_reason} rows={2} />
-              </div>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {ADL_EDUCATION_HISTORY_LABEL_LINE}
+              </p>
+              <DisplayField
+                value={resolveEducationHistory(adlFile || {})}
+                rows={6}
+              />
             </div>
           )}
         </Card>
@@ -701,23 +704,13 @@ const ViewADL = ( {adlFiles} ) => {
 
           {expandedCards.occupation && (
             <div className="p-6 space-y-4">
-              {occupationJobs.length > 0 ? (
-                occupationJobs.map((job, index) => (
-                  <div key={index} className="border-b pb-4 last:border-b-0 space-y-3">
-                    <h4 className="font-medium text-gray-700">Job {index + 1}</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <DisplayField label="Job title" value={job.job} />
-                      <DisplayField label="Dates" value={job.dates} />
-                      <DisplayField label="Adjustment" value={job.adjustment} rows={2} />
-                      <DisplayField label="Difficulties" value={job.difficulties} rows={2} />
-                      <DisplayField label="Promotions" value={job.promotions} />
-                      <DisplayField label="Reason for change" value={job.change_reason} rows={2} />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-4 text-gray-500">No occupation history available.</div>
-              )}
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {ADL_OCCUPATION_HISTORY_LABEL_LINE}
+              </p>
+              <DisplayField
+                value={resolveOccupationHistory(adlFile || {})}
+                rows={6}
+              />
             </div>
           )}
         </Card>
@@ -752,9 +745,19 @@ const ViewADL = ( {adlFiles} ) => {
                 <DisplayField label="Sexual education" value={adlFile?.sexual_education} rows={2} className="md:col-span-2" />
                 <DisplayField label="Masturbation" value={adlFile?.sexual_masturbation} rows={2} />
                 <DisplayField label="Sexual contact" value={adlFile?.sexual_contact} rows={2} />
-                <DisplayField label="Marriage Date" value={adlFile?.sexual_marriage_date} icon={<FiCalendar className="w-4 h-4" />} />
-                <DisplayField label="Marital adjustment" value={adlFile?.sexual_marital_adjustment} rows={2} className="md:col-span-2" />
-                <DisplayField label="Sexual adjustment" value={adlFile?.sexual_sexual_adjustment} rows={2} className="md:col-span-2" />
+                <DisplayField label="Premarital/Extramarital relationships" value={adlFile?.sexual_premarital_extramarital} rows={2} className="md:col-span-2" />
+              </div>
+
+              <div className="border-t pt-6">
+                <h4 className="font-semibold text-gray-800 mb-3">Marriage</h4>
+                <DisplayField label="Marriage type" value={adlFile?.sexual_marriage_arranged} />
+                <p className="text-sm text-gray-600 mt-4 mb-3 leading-relaxed">
+                  {ADL_SEXUAL_MARRIAGE_DETAILS_LABEL_LINE}
+                </p>
+                <DisplayField
+                  value={resolveSexualMarriageDetails(adlFile || {})}
+                  rows={6}
+                />
               </div>
 
               <div className="border-t pt-6">
@@ -801,8 +804,14 @@ const ViewADL = ( {adlFiles} ) => {
           </div>
 
           {expandedCards.religion && (
-            <div className="p-6">
-              <DisplayField label="Religious beliefs and practices" value={adlFile?.religion} rows={3} />
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {ADL_RELIGION_HISTORY_LABEL_LINE}
+              </p>
+              <DisplayField
+                value={resolveReligionHistory(adlFile || {})}
+                rows={6}
+              />
             </div>
           )}
         </Card>
@@ -830,48 +839,21 @@ const ViewADL = ( {adlFiles} ) => {
           </div>
 
           {expandedCards.living && (
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <DisplayField label="Type of residence" value={adlFile?.living_type} />
-                <DisplayField label="Number of rooms" value={adlFile?.living_rooms} />
-                <DisplayField label="Relationship with residents" value={adlFile?.living_relationship} rows={2} className="md:col-span-2" />
-              </div>
-              {livingResidents.some((r) => r.name || r.relationship || r.age) && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold text-gray-800 mb-3">Residents</h4>
-                  {livingResidents.map((resident, index) => {
-                    if (!resident.name && !resident.relationship && !resident.age) return null;
-                    return (
-                      <div key={index} className="border-b pb-4 mb-4 last:border-b-0">
-                        <h5 className="font-medium text-gray-700 mb-3">Resident {index + 1}</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <DisplayField label="Name" value={resident.name} />
-                          <DisplayField label="Relationship" value={resident.relationship} />
-                          <DisplayField label="Age" value={resident.age} />
-                        </div>
-                      </div>
-                    );
-                  })}
+            <div className="p-6 space-y-4">
+              {(adlFile?.living_type || adlFile?.living_rooms || adlFile?.living_relationship) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <DisplayField label="Type of residence" value={adlFile?.living_type} />
+                  <DisplayField label="Number of rooms" value={adlFile?.living_rooms} />
+                  <DisplayField label="Relationship with residents" value={adlFile?.living_relationship} rows={2} className="md:col-span-2" />
                 </div>
               )}
-              {livingInlaws.some((r) => r.name || r.relationship || r.age) && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold text-gray-800 mb-3">In-laws</h4>
-                  {livingInlaws.map((inlaw, index) => {
-                    if (!inlaw.name && !inlaw.relationship && !inlaw.age) return null;
-                    return (
-                      <div key={index} className="border-b pb-4 mb-4 last:border-b-0">
-                        <h5 className="font-medium text-gray-700 mb-3">In-law {index + 1}</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <DisplayField label="Name" value={inlaw.name} />
-                          <DisplayField label="Relationship" value={inlaw.relationship} />
-                          <DisplayField label="Age" value={inlaw.age} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {ADL_LIVING_SITUATION_HISTORY_LABEL_LINE}
+              </p>
+              <DisplayField
+                value={resolveLivingSituationHistory(adlFile || {})}
+                rows={6}
+              />
             </div>
           )}
         </Card>
@@ -899,16 +881,14 @@ const ViewADL = ( {adlFiles} ) => {
           </div>
 
           {expandedCards.premorbid && (
-            <div className="p-6">
-              {premorbidPersonalityTraits.length > 0 ? (
-                <div className="space-y-2">
-                  {premorbidPersonalityTraits.map((trait, index) => (
-                    <DisplayField key={index} label={'Trait ' + (index + 1)} value={typeof trait === 'string' ? trait : JSON.stringify(trait)} />
-                  ))}
-                </div>
-              ) : (
-                <DisplayField label="Premorbid personality traits" value="" />
-              )}
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {ADL_PREMORBID_PERSONALITY_HISTORY_LABEL_LINE}
+              </p>
+              <DisplayField
+                value={resolvePremorbidPersonalityHistory(adlFile || {})}
+                rows={6}
+              />
             </div>
           )}
         </Card>
@@ -982,8 +962,8 @@ const ViewADL = ( {adlFiles} ) => {
               <DisplayField label="Thought content" value={adlFile?.mse_thought_content} rows={2} />
               <DisplayField label="Perception" value={adlFile?.mse_perception} rows={2} />
               <DisplayField label="Cognition" value={adlFile?.mse_cognition} rows={2} />
-              <DisplayField label="Insight" value={adlFile?.mse_insight} rows={2} />
-              <DisplayField label="Judgment" value={adlFile?.mse_judgment} rows={2} />
+              <p className="text-sm text-gray-600 leading-relaxed">{ADL_MSE_INSIGHT_LABEL_LINE}</p>
+              <DisplayField value={resolveMseInsightExamination(adlFile || {})} rows={4} />
             </div>
           )}
         </Card>
@@ -1011,8 +991,11 @@ const ViewADL = ( {adlFiles} ) => {
           </div>
 
           {expandedCards.diagnostic && (
-            <div className="p-6">
-              <DisplayField label="Diagnostic formulation" value={adlFile?.diagnostic_formulation} rows={5} />
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {ADL_DIAGNOSTIC_FORMULATION_LABEL_LINE}
+              </p>
+              <DisplayField value={resolveDiagnosticFormulationHistory(adlFile || {})} rows={6} />
             </div>
           )}
         </Card>
@@ -1040,22 +1023,11 @@ const ViewADL = ( {adlFiles} ) => {
           </div>
 
           {expandedCards.final && (
-            <div className="p-6 space-y-6">
-              <DisplayField
-                label="Provisional Diagnosis"
-                value={adlFile?.provisional_diagnosis}
-                rows={4}
-              />
-              <DisplayField
-                label="Treatment Plan"
-                value={adlFile?.treatment_plan}
-                rows={4}
-              />
-              <DisplayField
-                label="Consultant Comments"
-                value={adlFile?.consultant_comments}
-                rows={4}
-              />
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {ADL_FINAL_ASSESSMENT_LABEL_LINE}
+              </p>
+              <DisplayField value={resolveFinalAssessmentHistory(adlFile || {})} rows={6} />
             </div>
           )}
          </Card>
