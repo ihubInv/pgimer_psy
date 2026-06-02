@@ -38,6 +38,11 @@ import OutPatientIntakeRecordSummaryView from '../../components/OutPatientIntake
 import PatientClinicalHistory from '../../components/PatientClinicalHistory';
 import { useGetADLFileByIdQuery, useGetADLFileByPatientIdQuery } from '../../features/adl/adlApiSlice';
 import { useGetPrescriptionByIdQuery, useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
+import { printPatientPrescriptions } from '../../utils/prescriptionPrint';
+import {
+  mapAdultPatientForPrint,
+  mapApiPatientForPrint,
+} from '../../utils/prescriptionPrintPatient';
 
 import { SelectWithOther } from '../../components/SelectWithOther';
 import {IconInput} from '../../components/IconInput';
@@ -1092,392 +1097,6 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
     };
   };
 
-  // Print functionality for Prescription section
-  const handlePrintPrescription = async () => {
-    if (!prescriptionPrintRef.current) return;
-
-    // Convert logo to base64 for embedding in print
-    let logoBase64 = '';
-    try {
-      const logoResponse = await fetch(PGI_Logo);
-      const logoBlob = await logoResponse.blob();
-      const logoReader = new FileReader();
-      logoBase64 = await new Promise((resolve) => {
-        logoReader.onloadend = () => resolve(logoReader.result);
-        logoReader.readAsDataURL(logoBlob);
-      });
-    } catch (e) {
-      console.warn('Could not load logo for print:', e);
-    }
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow pop-ups to print this section');
-      return;
-    }
-
-    const sectionElement = prescriptionPrintRef.current;
-    const sectionHTML = sectionElement.innerHTML;
-
-    const printContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Prescription - ${patient?.name || 'Patient'}</title>
-  <style>
-    @page {
-      size: A4;
-      margin: 12mm 15mm;
-    }
-    * {
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-      box-sizing: border-box;
-    }
-    /* Hide empty elements */
-    :empty:not(input):not(textarea):not(select):not(img):not(br):not(hr):not(option) {
-      display: none !important;
-    }
-    /* Hide empty form fields */
-    input[value=""], input:not([value]),
-    textarea:empty,
-    select:not([value]):not([value=""]) {
-      display: none !important;
-    }
-    /* Hide empty containers */
-    div:empty, span:empty, p:empty {
-      display: none !important;
-    }
-    body {
-      font-family: 'Arial', 'Helvetica', sans-serif;
-      font-size: 10pt;
-      line-height: 1.5;
-      color: #1a1a1a;
-      margin: 0;
-      padding: 0;
-      background: #fff;
-    }
-    /* Professional monochrome print style */
-    body * {
-      color: #000 !important;
-      text-shadow: none !important;
-      box-shadow: none !important;
-    }
-    body .header, body .section, body .field-group, body .info-item, body .footer, body table, body table th, body table td {
-      background: #fff !important;
-    }
-    body .header {
-      border-bottom: 1px solid #000 !important;
-    }
-    body .section-title, body .field-label, body .info-label, body .field-value, body .info-value, body .footer strong,
-    h1, h2, h3, h4, h5, h6, p, span, label {
-      color: #000 !important;
-      border-color: #000 !important;
-    }
-    body .logo-container img {
-      filter: grayscale(100%);
-    }
-    body table, body table th, body table td {
-      border: 1px solid #000 !important;
-    }
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 20px;
-      padding: 20px 0;
-      border-bottom: 4px solid #f59e0b;
-      margin-bottom: 25px;
-      background: linear-gradient(to bottom, #fffbeb, #ffffff);
-    }
-    .logo-container {
-      flex-shrink: 0;
-    }
-    .logo-container img {
-      height: 70px;
-      width: auto;
-      object-fit: contain;
-    }
-    .header-text {
-      text-align: center;
-      flex: 1;
-    }
-    .header-text h1 {
-      margin: 0;
-      font-size: 20pt;
-      font-weight: bold;
-      color: #d97706;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      line-height: 1.2;
-    }
-    .header-text h2 {
-      margin: 6px 0 0 0;
-      font-size: 14pt;
-      color: #475569;
-      font-weight: 600;
-    }
-    .header-text .subtitle {
-      margin: 4px 0 0 0;
-      font-size: 11pt;
-      color: #64748b;
-      font-weight: 500;
-    }
-    .content {
-      padding: 0;
-    }
-    .section {
-      margin-bottom: 20px;
-      page-break-inside: avoid;
-      background: #ffffff;
-      padding: 15px;
-      border-radius: 6px;
-      border: 1px solid #e2e8f0;
-    }
-    .section:last-of-type {
-      margin-bottom: 0;
-    }
-    .section-title {
-      font-size: 13pt;
-      font-weight: bold;
-      color: #d97706;
-      border-bottom: 3px solid #f59e0b;
-      padding-bottom: 8px;
-      margin-bottom: 15px;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      background: linear-gradient(to right, #fffbeb, #ffffff);
-      padding-left: 10px;
-      padding-right: 10px;
-      padding-top: 8px;
-      margin-left: -15px;
-      margin-right: -15px;
-      margin-top: -15px;
-      border-radius: 6px 6px 0 0;
-    }
-    .field-group {
-      margin-bottom: 10px;
-      padding: 6px 8px;
-      background: #fffbeb;
-      border-left: 3px solid #f59e0b;
-      border-radius: 4px;
-    }
-    .field-label {
-      font-weight: 600;
-      color: #475569;
-      font-size: 9pt;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
-    .field-value {
-      color: #1e293b;
-      font-size: 10pt;
-      font-weight: 500;
-      padding-left: 4px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-      font-size: 9pt;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-    table th, table td {
-      border: 1px solid #cbd5e1;
-      padding: 10px 12px;
-      text-align: left;
-    }
-    table th {
-      background: linear-gradient(to bottom, #d97706, #f59e0b);
-      color: #ffffff;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-size: 9pt;
-    }
-    table tbody tr {
-      background: #ffffff;
-    }
-    table tbody tr:nth-child(even) {
-      background: #fffbeb;
-    }
-    table tbody tr:hover {
-      background: #fef3c7;
-    }
-    .badge {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 4px;
-      font-size: 8pt;
-      font-weight: 600;
-      border: 1px solid;
-    }
-    .footer {
-      margin-top: 40px;
-      padding-top: 20px;
-      border-top: 3px solid #e2e8f0;
-      text-align: center;
-      font-size: 9pt;
-      color: #64748b;
-      background: #f8fafc;
-      padding: 15px;
-      border-radius: 6px;
-      page-break-inside: avoid;
-    }
-    .footer p {
-      margin: 4px 0;
-    }
-    .footer strong {
-      color: #d97706;
-      font-weight: 600;
-    }
-    button, .no-print, [class*="no-print"] {
-      display: none !important;
-    }
-    .grid {
-      display: grid;
-      gap: 12px;
-    }
-    .grid-cols-1 { grid-template-columns: 1fr; }
-    .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
-    .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
-    .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
-    @media print {
-      body {
-        margin: 0;
-        padding: 0;
-        font-size: 9pt;
-      }
-      /* Hide empty elements in print */
-      :empty:not(input):not(textarea):not(select):not(img):not(br):not(hr):not(option) {
-        display: none !important;
-      }
-      /* Hide empty form fields */
-      input[value=""], input:not([value]),
-      textarea:empty,
-      select:not([value]):not([value=""]) {
-        display: none !important;
-      }
-      /* Hide empty containers */
-      div:empty, span:empty, p:empty {
-        display: none !important;
-      }
-      /* Remove excessive spacing */
-      [class*="space-y"]:empty,
-      [class*="gap-"]:empty {
-        display: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-      /* Force 2-column layout for all grids */
-      .grid, [class*="grid"], [class*="grid-cols"] {
-        display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 8px !important;
-        margin-bottom: 10px !important;
-      }
-      /* Full width items */
-      [class*="col-span"], [class*="full-width"] {
-        grid-column: 1 / -1 !important;
-      }
-      .section {
-        page-break-inside: avoid;
-        margin-bottom: 15px;
-      }
-      /* Field containers - show values from inputs */
-      [class*="relative"]:has(label), [class*="relative"]:has([class*="font-semibold"]) {
-        display: block !important;
-        margin-bottom: 8px !important;
-        padding: 6px 8px !important;
-        background: #f8fafc !important;
-        border-left: 3px solid #3b82f6 !important;
-        border-radius: 3px !important;
-        page-break-inside: avoid !important;
-      }
-      /* Show input values */
-      input[type="text"], input[type="number"], input[type="date"],
-      select, textarea {
-        display: block !important;
-        font-size: 9pt !important;
-        color: #1e293b !important;
-        margin: 0 !important;
-        padding: 2px 0 !important;
-        background: transparent !important;
-        border: none !important;
-        width: 100% !important;
-        -webkit-appearance: none !important;
-        -moz-appearance: none !important;
-        appearance: none !important;
-      }
-      /* Remove decorative elements */
-      [class*="gradient"], [class*="blur"], [class*="shadow-xl"], 
-      [class*="backdrop-blur"], [class*="absolute"] {
-        background: transparent !important;
-        backdrop-filter: none !important;
-        box-shadow: none !important;
-        position: static !important;
-      }
-      table {
-        page-break-inside: auto;
-        font-size: 8pt;
-      }
-      tr {
-        page-break-inside: avoid;
-        page-break-after: auto;
-      }
-      thead {
-        display: table-header-group;
-      }
-      tfoot {
-        display: table-footer-group;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    ${logoBase64 ? `
-    <div class="logo-container">
-      <img src="${logoBase64}" alt="PGIMER Logo" />
-    </div>
-    ` : ''}
-    <div class="header-text">
-      <h1>POSTGRADUATE INSTITUTE OF MEDICAL EDUCATION & RESEARCH</h1>
-      <h2>Department of Psychiatry</h2>
-      <p class="subtitle">Prescription</p>
-    </div>
-  </div>
-  <div class="content">
-    ${sectionHTML}
-  </div>
-  <div class="footer">
-    <p><strong>Generated on:</strong> ${new Date().toLocaleString('en-IN', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric', 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    })}</p>
-    <p><strong>PGIMER - Department of Psychiatry</strong> | Electronic Medical Record System</p>
-    <p style="font-size: 8pt; margin-top: 8px; color: #94a3b8;">This is a computer-generated document. No signature required.</p>
-  </div>
-</body>
-</html>
-    `;
-
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-        toast.success('Print dialog opened');
-      }, 500);
-    };
-  };
-
   // Print handler for unified visit cards
   const handlePrintVisit = async (visitId, visitDate) => {
     // Find the visit from trulyPastProformas
@@ -2314,6 +1933,34 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       return dateB - dateA;
     });
   }, [patientPrescriptionsData]);
+
+  const adultPatientForPrescriptionPrint = useMemo(() => {
+    const fromApi = mapApiPatientForPrint(patientPrescriptionsData?.data?.patient);
+    if (fromApi?.name) return fromApi;
+    return mapAdultPatientForPrint({
+      name: patient?.name,
+      cr_no: patient?.cr_no,
+      psy_no: patient?.psy_no,
+      age: patient?.age,
+      sex: patient?.sex,
+      contact_number: patient?.contact_number,
+      assigned_doctor_name: patient?.assigned_doctor_name,
+      assigned_doctor_role: patient?.assigned_doctor_role,
+      assigned_room: patient?.assigned_room,
+    });
+  }, [patientPrescriptionsData, patient]);
+
+  const handlePrintPrescription = () => {
+    const records = patientPrescriptionsData?.data?.prescriptions || [];
+    if (!records.length && !allPatientPrescriptions.length) {
+      toast.error('No prescriptions to print');
+      return;
+    }
+    printPatientPrescriptions(adultPatientForPrescriptionPrint, records, {
+      flatMedications: allPatientPrescriptions,
+      formatDate,
+    });
+  };
 
   // Helper function to convert date to IST date string (YYYY-MM-DD)
   const toISTDateString = (dateInput) => {

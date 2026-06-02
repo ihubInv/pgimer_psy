@@ -160,6 +160,52 @@ class Prescription {
     }
   }
 
+  /**
+   * Resolve display fields for prescription print (child or adult registration).
+   */
+  static async resolvePatientDisplayInfo(patient_id) {
+    const id = parseInt(patient_id, 10);
+    if (!id || Number.isNaN(id)) return null;
+
+    const childResult = await db.query(
+      `SELECT id, child_name, cr_number, cgc_number, age, sex, mobile_no
+       FROM child_patient_registrations WHERE id = $1`,
+      [id]
+    );
+    if (childResult.rows.length > 0) {
+      const r = childResult.rows[0];
+      return {
+        name: r.child_name || '',
+        cr_no: r.cr_number || '',
+        cgc_number: r.cgc_number || '',
+        age: r.age != null ? String(r.age) : '',
+        sex: r.sex || '',
+        mobile_no: r.mobile_no || '',
+        patient_category: 'Child',
+      };
+    }
+
+    const adultResult = await db.query(
+      `SELECT id, name, cr_no, psy_no, age, sex, contact_number
+       FROM registered_patient WHERE id = $1`,
+      [id]
+    );
+    if (adultResult.rows.length > 0) {
+      const r = adultResult.rows[0];
+      return {
+        name: r.name || '',
+        cr_no: r.cr_no || '',
+        psy_no: r.psy_no || '',
+        age: r.age != null ? String(r.age) : '',
+        sex: r.sex || '',
+        mobile_no: r.contact_number || '',
+        patient_category: 'Adult',
+      };
+    }
+
+    return null;
+  }
+
   // Find all prescriptions by patient_id (including those without clinical_proforma_id)
   static async findByPatientId(patient_id) {
     try {

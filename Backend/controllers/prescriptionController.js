@@ -116,13 +116,17 @@ const getPrescriptionsByPatientId = async (req, res) => {
     }
 
     console.log('[getPrescriptionsByPatientId] Fetching prescriptions for patient:', patientIdInt);
-    const prescriptions = await Prescription.findByPatientId(patientIdInt);
+    const [prescriptions, patient] = await Promise.all([
+      Prescription.findByPatientId(patientIdInt),
+      Prescription.resolvePatientDisplayInfo(patientIdInt),
+    ]);
 
     res.status(200).json({
       success: true,
       message: `Found ${prescriptions.length} prescription(s) for patient`,
       data: {
-        prescriptions: prescriptions.map(p => p.toJSON())
+        prescriptions: prescriptions.map(p => p.toJSON()),
+        patient,
       }
     });
   } catch (error) {

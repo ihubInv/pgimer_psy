@@ -394,6 +394,11 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
         ];
       },
     }),
+    getChildPatientById: builder.query({
+      query: (id) => `/child-patient/${id}`,
+      providesTags: (result, error, id) => [{ type: 'ChildPatient', id }],
+      keepUnusedDataFor: 120,
+    }),
     deleteChildPatient: builder.mutation({
       query: (id) => ({
         url: `/child-patient/${id}`,
@@ -527,6 +532,7 @@ export const {
   useGetPatientFilesQuery,
   useDeletePatientFileMutation,
   useGetChildPatientByCRNoQuery,
+  useGetChildPatientByIdQuery,
   useAddChildPatientToTodayListMutation,
   useDeleteChildPatientMutation,
   useUpdateChildPatientDocumentsMutation,

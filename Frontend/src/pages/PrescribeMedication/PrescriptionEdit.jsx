@@ -7,6 +7,9 @@ import { useGetPrescriptionByIdQuery, useCreatePrescriptionMutation, useUpdatePr
 import { PSYCHIATRIC_MEDS, searchPsychiatricMeds, prettyMedCategory } from '../../utils/psychiatricMeds';
 import { useGetAllPrescriptionTemplatesQuery, useCreatePrescriptionTemplateMutation } from '../../features/prescriptionTemplates/prescriptionTemplateApiSlice';
 import { FiSave, FiEdit, FiPlus, FiTrash2, FiPackage, FiDroplet, FiActivity, FiClock, FiCalendar, FiFileText, FiBookmark, FiDownload } from 'react-icons/fi';
+import PreviousPrescriptionsModal from '../../components/PreviousPrescriptionsModal';
+import { useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
+import { usePatientForPrescriptionPrint } from '../../hooks/usePatientForPrescriptionPrint';
 import Select from '../../components/Select';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
@@ -25,6 +28,7 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
   // Get patient_id and clinical_proforma_id from query params (for standalone mode)
   const patientIdFromQuery = searchParams.get('patient_id');
   const clinicalProformaIdFromQuery = searchParams.get('clinical_proforma_id');
+  const patientTypeFromQuery = searchParams.get('patient_type'); // 'child' | 'adult'
   
   // Resolve patient ID: prop > query param > proforma
   const patientId = propPatientId || (patientIdFromQuery ? parseInt(patientIdFromQuery, 10) : null) || proforma?.patient_id;
@@ -32,13 +36,22 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
   // Resolve clinical proforma ID: proforma prop > query param
   const clinicalProformaId = proforma?.id || (clinicalProformaIdFromQuery ? parseInt(clinicalProformaIdFromQuery, 10) : null);
   
-  // Check if running in standalone mode (no proforma prop, accessed via route)
-  const isStandaloneMode = !proforma && (patientIdFromQuery || clinicalProformaIdFromQuery);
-  
   const { data: prescriptionsData, isLoading: loadingPrescriptions } = useGetPrescriptionByIdQuery(
     { clinical_proforma_id: clinicalProformaId },
     { skip: !clinicalProformaId }
   );
+
+  const { data: patientPrescriptionsListData } = useGetPrescriptionsByPatientIdQuery(patientId, {
+    skip: !patientId,
+  });
+
+  const resolvedPatientType =
+    patientTypeFromQuery === 'child' ? 'child' : patientTypeFromQuery === 'adult' ? 'adult' : undefined;
+
+  const { patientForPrint: patientForPrintHeader } = usePatientForPrescriptionPrint(patientId, {
+    patientType: resolvedPatientType,
+    apiPatient: patientPrescriptionsListData?.data?.patient,
+  });
   const [createPrescription, { isLoading: isSaving }] = useCreatePrescriptionMutation();
   
   const [updatePrescription, { isLoading: isUpdating }] = useUpdatePrescriptionMutation();
@@ -60,6 +73,7 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
   const [detailsNotesRowIndex, setDetailsNotesRowIndex] = useState(null);
   const [detailsNotesField, setDetailsNotesField] = useState(null); // 'details' or 'notes'
   const [detailsNotesValue, setDetailsNotesValue] = useState('');
+  const [showPreviousPrescriptions, setShowPreviousPrescriptions] = useState(false);
   
   // Memoize existingPrescriptions to prevent infinite loops
   const existingPrescriptions = useMemo(() => {
@@ -622,18 +636,7 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
           background: #4f46e5;
         }
       `}</style>
-      
-      {/* Standalone Header - Show when accessed directly via route */}
-      {isStandaloneMode && (
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">{mode === 'create' ? 'Create Prescription' : 'Edit Prescription'}</h1>
-          <p className="text-gray-600 mt-1">{mode === 'create' ? 'Add medications for the patient' : 'Edit medications for the patient'}</p>
-          {patientId && (
-            <p className="text-sm text-gray-500 mt-2">Patient ID: {patientId}</p>
-          )}
-        </div>
-      )}
-      
+
       <div className="border border-gray-200 rounded-lg p-6 bg-gradient-to-r from-amber-50 to-yellow-50">
       {/* Visit Header - Show only when proforma is provided (embedded mode) */}
       {proforma && (
@@ -663,10 +666,21 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-white">Prescription Form</h2>
-                  <p className="text-sm text-amber-100">{mode === 'create' ? 'Add medications for the patient' : 'Edit medications for the patient'}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap justify-end">
+                {patientId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPreviousPrescriptions(true)}
+                    className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm border-white/30 text-white hover:text-white"
+                  >
+                    <FiClock className="w-4 h-4" />
+                    Previous Prescription
+                  </Button>
+                )}
                 <div className="flex items-center gap-2">
                   <div className="min-w-[200px] [&_button]:!text-white [&_button]:!bg-white/20 [&_button]:!hover:bg-white/30 [&_button]:!border-white/30 [&_button]:!backdrop-blur-sm [&_button]:!placeholder:text-white/70 [&_button>span]:!text-white">
                     <Select
@@ -1263,6 +1277,16 @@ const PrescriptionEdit = ({ proforma = null, index, patientId: propPatientId }) 
           </div>
         </div>
       </Modal>
+
+      {patientId && (
+        <PreviousPrescriptionsModal
+          isOpen={showPreviousPrescriptions}
+          onClose={() => setShowPreviousPrescriptions(false)}
+          patientId={patientId}
+          patientType={resolvedPatientType}
+          patientInfo={patientForPrintHeader}
+        />
+      )}
     </>
   );
 };

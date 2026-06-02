@@ -51,6 +51,14 @@ import {
   VIEW_PAGE_SHELL_CLASS,
   VIEW_SECTION_ICON,
 } from '../../utils/viewDetailsUi';
+import {
+  buildPrescriptionPrintDocument,
+  printPatientPrescriptions,
+} from '../../utils/prescriptionPrint';
+import {
+  mapApiPatientForPrint,
+  mapChildPatientForPrint,
+} from '../../utils/prescriptionPrintPatient';
 import ChildClinicalProformaSummaryView from '../../components/ChildClinicalProformaSummaryView';
 import FilePreview from '../../components/FilePreview';
 import PGI_Logo from '../../assets/PGI_Logo.png';
@@ -276,6 +284,26 @@ const CreateChildPatient = () => {
     });
     return items;
   }, [prescriptions]);
+
+  const childPatientForPrescriptionPrint = useMemo(() => {
+    const fromApi = mapApiPatientForPrint(prescriptionData?.data?.patient);
+    if (fromApi?.name) return fromApi;
+    return mapChildPatientForPrint({
+      child_name: formData.child_name,
+      cr_number: formData.cr_number,
+      cgc_number: formData.cgc_number,
+      age: formData.age,
+      sex: formData.sex,
+      mobile_no: formData.mobile_no,
+    });
+  }, [prescriptionData, formData]);
+
+  const handlePrintChildPrescriptionView = () => {
+    printPatientPrescriptions(childPatientForPrescriptionPrint, prescriptions, {
+      flatMedications: flatChildPrescriptionItems,
+      formatDate: formatDate,
+    });
+  };
 
   useEffect(() => {
     if (!isViewMode || !id) return;
@@ -711,7 +739,16 @@ const CreateChildPatient = () => {
         sections.push({ title: 'CAP Detailed Work-up Record', html });
       }
     }
-    if (childPrescriptionPrintRef.current) {
+    if (prescriptions.length > 0 || flatChildPrescriptionItems.length > 0) {
+      const prescHtml = buildPrescriptionPrintDocument(
+        childPatientForPrescriptionPrint,
+        prescriptions,
+        { flatMedications: flatChildPrescriptionItems, formatDate }
+      );
+      if (prescHtml) {
+        sections.push({ title: 'Prescription', html: prescHtml });
+      }
+    } else if (childPrescriptionPrintRef.current) {
       const html = sanitizeSectionHtml(childPrescriptionPrintRef.current.innerHTML);
       if (html) {
         sections.push({ title: 'Prescription', html });
@@ -2133,11 +2170,12 @@ const CreateChildPatient = () => {
                     className="no-print"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handlePrintFromChildCard(
-                        'viewPrescription',
-                        childPrescriptionPrintRef,
-                        'Prescription'
-                      );
+                      if (!expandedCards.viewPrescription) {
+                        setExpandedCards((prev) => ({ ...prev, viewPrescription: true }));
+                        window.setTimeout(handlePrintChildPrescriptionView, 350);
+                      } else {
+                        handlePrintChildPrescriptionView();
+                      }
                     }}
                   >
                     <FiPrinter className="h-4 w-4 mr-1" />
@@ -2153,7 +2191,7 @@ const CreateChildPatient = () => {
                 </div>
               </div>
               {expandedCards.viewPrescription && (
-                <div ref={childPrescriptionPrintRef} className="p-6">
+                <div ref={childPrescriptionPrintRef} className="p-6 print-prescription-screen-only">
                   {isLoadingPrescriptions ? (
                     <p className="text-sm text-gray-500">Loading…</p>
                   ) : flatChildPrescriptionItems.length === 0 ? (

@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import {
   FiSave, FiPlus, FiX, FiChevronDown, FiChevronUp,
   FiUser, FiCalendar, FiFileText, FiActivity, FiHeart,
-  FiBook, FiHome, FiClipboard,
+  FiBook, FiHome, FiClipboard, FiEdit3, FiEye, FiPlusCircle,
 } from 'react-icons/fi';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
@@ -15,25 +15,52 @@ import {
   useCreateChildCapWorkupMutation,
   useUpdateChildCapWorkupMutation,
 } from '../../features/childCapWorkup/childCapWorkupApiSlice';
+import { useGetChildPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 
 /** CAP intake form is fully enabled. */
 export const CHILD_CAP_INTAKE_COMING_SOON = false;
 
+/**
+ * Fields auto-populated from child patient registration.
+ * These are always read-only in the CAP form — they can only be
+ * changed by editing the patient registration record.
+ */
+export const PATIENT_LOCKED_FIELDS = new Set([
+  'patient_name',
+  'gender',
+  'age',
+  'education',
+  'referred_by',
+  'cap_no',
+]);
+
 // ─── Helper components ────────────────────────────────────────────────────────
 
-const DisplayField = ({ label, value, rows, plain = false }) => (
+const DisplayField = ({ label, value, rows, plain = false, locked = false }) => (
   <div className="relative">
-    {!plain && (
+    {!plain && !locked && (
       <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl" />
     )}
     <div
       className={
-        plain
+        locked
+          ? 'relative rounded-lg border border-slate-200 bg-slate-50 p-4'
+          : plain
           ? 'relative rounded-lg border border-gray-200 bg-gray-50 p-4'
           : 'relative bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm'
       }
     >
-      {label && <label className="block text-sm font-semibold text-gray-700 mb-1">{label}</label>}
+      <div className="flex items-center justify-between mb-1 gap-2">
+        {label && <label className="block text-sm font-semibold text-gray-700">{label}</label>}
+        {locked && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 shrink-0">
+            <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            From registration
+          </span>
+        )}
+      </div>
       {rows && rows > 1
         ? <p className="text-sm text-gray-900 leading-relaxed whitespace-pre-wrap">{value || 'N/A'}</p>
         : <p className="text-base font-medium text-gray-900">{value || 'N/A'}</p>}
@@ -357,13 +384,39 @@ const EditChildCapWorkupLegacy = ({
 
   const [form, setForm] = useState({ ...DEFAULT_FORM });
   const [recordId, setRecordId] = useState(null);
-  const [readOnly, setReadOnly] = useState(readOnlyView);
+  const [readOnly, setReadOnly] = useState(true); // always start read-only until data loads
+  /**
+   * formActive controls whether the form fields are rendered.
+   * - false: show empty-state prompt (no existing record) or loading guard
+   * - true: render the full form (create OR edit mode)
+   */
+  const [formActive, setFormActive] = useState(false);
   const [openSections, setOpenSections] = useState(buildOpenSections(effectiveFlatLayout));
 
   const { data, isLoading: isFetching, refetch } = useGetChildCapWorkupsByChildPatientIdQuery(childPatientId, {
     skip: !childPatientId,
     refetchOnMountOrArgChange: true,
   });
+  const { data: patientData } = useGetChildPatientByIdQuery(childPatientId, {
+    skip: !childPatientId,
+  });
+  const patientReg = patientData?.data?.childPatient ?? null;
+
+  /**
+   * Build a partial form object pre-populated from the patient registration.
+   * These values override DEFAULT_FORM when no workup record exists yet.
+   */
+  const patientPrefill = patientReg
+    ? {
+        patient_name: patientReg.child_name || '',
+        gender: patientReg.sex || '',
+        age: patientReg.age ? String(patientReg.age) : '',
+        education: patientReg.educational_status || '',
+        referred_by: patientReg.source_of_referral || '',
+        cap_no: patientReg.cgc_number || '',
+      }
+    : {};
+
   const [createWorkup, { isLoading: isCreating }] = useCreateChildCapWorkupMutation();
   const [updateWorkup, { isLoading: isUpdating }] = useUpdateChildCapWorkupMutation();
 
@@ -375,11 +428,13 @@ const EditChildCapWorkupLegacy = ({
   }, [effectiveFlatLayout]);
 
   useEffect(() => {
+    if (isFetching) return; // wait for data before deciding state
     const records = data?.data?.records || [];
     if (records.length > 0) {
       const rec = records[0];
       setRecordId(rec.id);
       setReadOnly(true);
+      setFormActive(true); // always show the form when a record exists
       // Merge fetched data over defaults
       const merged = { ...DEFAULT_FORM };
       Object.keys(merged).forEach((k) => {
@@ -393,10 +448,13 @@ const EditChildCapWorkupLegacy = ({
       if (!Array.isArray(merged.treatment_history_chart) || merged.treatment_history_chart.length === 0) merged.treatment_history_chart = [{ ...EMPTY_TREATMENT }];
       setForm(merged);
     } else {
-      setReadOnly(readOnlyView);
-      setForm({ ...DEFAULT_FORM });
+      setRecordId(null);
+      setReadOnly(false);
+      setFormActive(false); // no record yet — show empty state
+      setForm({ ...DEFAULT_FORM, ...patientPrefill });
     }
-  }, [data, readOnlyView]);
+  }, [data, isFetching, readOnlyView]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Note: patientPrefill intentionally omitted — we apply it once on handleStartCreate
 
   const toggleSection = useCallback((key) => {
     if (effectiveFlatLayout) return;
@@ -444,10 +502,46 @@ const EditChildCapWorkupLegacy = ({
         toast.success('CAP Workup record created successfully');
       }
       setReadOnly(true);
+      setFormActive(true);
       refetch();
     } catch (err) {
       toast.error(err?.data?.message || 'Failed to save workup record');
     }
+  };
+
+  const handleStartCreate = () => {
+    setForm({ ...DEFAULT_FORM, ...patientPrefill });
+    setReadOnly(false);
+    setFormActive(true);
+    if (effectiveFlatLayout) setOpenSections(buildOpenSections(true));
+  };
+
+  const handleCancelCreate = () => {
+    setForm({ ...DEFAULT_FORM });
+    setReadOnly(false);
+    setFormActive(false);
+  };
+
+  const handleStartEdit = () => {
+    setReadOnly(false);
+    if (effectiveFlatLayout) setOpenSections(buildOpenSections(true));
+  };
+
+  const handleCancelEdit = () => {
+    // restore saved data
+    const records = data?.data?.records || [];
+    if (records.length > 0) {
+      const rec = records[0];
+      const merged = { ...DEFAULT_FORM };
+      Object.keys(merged).forEach((k) => {
+        if (rec[k] !== undefined && rec[k] !== null) merged[k] = rec[k];
+      });
+      if (!Array.isArray(merged.informants) || merged.informants.length === 0) merged.informants = [{ ...EMPTY_INFORMANT }];
+      if (!Array.isArray(merged.chief_complaints_course) || merged.chief_complaints_course.length === 0) merged.chief_complaints_course = [{ ...EMPTY_COMPLAINT }];
+      if (!Array.isArray(merged.treatment_history_chart) || merged.treatment_history_chart.length === 0) merged.treatment_history_chart = [{ ...EMPTY_TREATMENT }];
+      setForm(merged);
+    }
+    setReadOnly(true);
   };
 
   if (isFetching) {
@@ -458,15 +552,74 @@ const EditChildCapWorkupLegacy = ({
     );
   }
 
-  const S = ({ k, ...rest }) => (
-    <Field
-      readOnly={readOnly}
-      onChange={handleChange}
-      {...rest}
-      name={k}
-      value={form[k]}
-    />
-  );
+  // ── Derive mode label ──────────────────────────────────────────────────────
+  const modeLabel = !formActive
+    ? null
+    : recordId
+      ? readOnly
+        ? 'Viewing'
+        : 'Editing'
+      : 'Creating New Record';
+
+  const modeClass = !modeLabel
+    ? ''
+    : recordId && !readOnly
+      ? 'bg-amber-100 text-amber-800 border-amber-200'
+      : recordId
+        ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+        : 'bg-blue-100 text-blue-800 border-blue-200';
+
+  // ── Empty state (no record exists yet, form not yet activated) ─────────────
+  if (!formActive && !readOnlyView) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-5 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-6 py-14 text-center">
+        <div className="rounded-full bg-violet-50 p-5 ring-1 ring-violet-100">
+          <FiClipboard className="h-10 w-10 text-violet-500" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-gray-800">No Intake Record Found</p>
+          <p className="mt-1 text-sm text-gray-500">
+            No CAP Work-up record has been created for this patient yet.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleStartCreate}
+          className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition-colors"
+        >
+          <FiPlusCircle className="h-4 w-4" />
+          Create Intake Record
+        </button>
+      </div>
+    );
+  }
+
+  // ── Read-only view for readOnlyView prop (no record case) ─────────────────
+  if (!formActive && readOnlyView) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-6 py-12 text-center">
+        <FiClipboard className="h-9 w-9 text-gray-300" />
+        <p className="text-sm font-medium text-gray-500">No Intake Record has been submitted for this patient.</p>
+      </div>
+    );
+  }
+
+  const S = ({ k, ...rest }) => {
+    const isLocked = PATIENT_LOCKED_FIELDS.has(k);
+    if (isLocked) {
+      // Locked fields always render as DisplayField regardless of form mode
+      return <DisplayField locked value={form[k]} {...rest} />;
+    }
+    return (
+      <Field
+        readOnly={readOnly}
+        onChange={handleChange}
+        {...rest}
+        name={k}
+        value={form[k]}
+      />
+    );
+  };
 
   const B = ({ k, label }) => (
     <BoolField readOnly={readOnly} label={label} name={k} value={form[k]} onChange={handleChange} />
@@ -474,36 +627,54 @@ const EditChildCapWorkupLegacy = ({
 
   return (
     <div className="space-y-4">
-      {!effectiveHideToolbar && (
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-gray-800">CAP Detailed Work-up Record</h2>
-            <p className="text-sm text-gray-500">Child & Adolescent Psychiatry Clinic</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {readOnly ? (
+      {/* ── Mode indicator + action bar ─────────────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        {/* Left: title (hidden when hideToolbar) + mode badge */}
+        <div className="flex items-center gap-3 min-w-0">
+          {!effectiveHideToolbar && (
+            <div>
+              <h2 className="text-lg font-bold text-gray-800">CAP Detailed Work-up Record</h2>
+              <p className="text-sm text-gray-500">Child & Adolescent Psychiatry Clinic</p>
+            </div>
+          )}
+          {modeLabel && (
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${modeClass}`}>
+              {recordId && readOnly && <FiEye className="h-3 w-3" />}
+              {recordId && !readOnly && <FiEdit3 className="h-3 w-3" />}
+              {!recordId && <FiPlusCircle className="h-3 w-3" />}
+              {modeLabel}
+            </span>
+          )}
+        </div>
+
+        {/* Right: action buttons — always rendered (even when hideToolbar hides the title) */}
+        <div className="flex items-center gap-2 shrink-0">
+          {readOnly && recordId && !readOnlyView && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleStartEdit}
+              className="flex items-center gap-1.5 border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100"
+            >
+              <FiEdit3 className="w-4 h-4" />
+              Edit Record
+            </Button>
+          )}
+          {!readOnly && !readOnlyView && (
+            <>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setReadOnly(false)}
-                className="flex items-center gap-1.5 border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                onClick={recordId ? handleCancelEdit : handleCancelCreate}
+                className="flex items-center gap-1.5"
               >
-                Edit Record
+                <FiX className="w-4 h-4" />
+                Cancel
               </Button>
-            ) : (
-              <>
-                {recordId && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setReadOnly(true)}
-                    className="flex items-center gap-1.5"
-                  >
-                    <FiX className="w-4 h-4" /> Cancel
-                  </Button>
-                )}
+              {/* Inline save (top bar) — only when full toolbar is visible */}
+              {!effectiveHideToolbar && (
                 <Button
                   type="button"
                   size="sm"
@@ -515,11 +686,11 @@ const EditChildCapWorkupLegacy = ({
                   <FiSave className="w-4 h-4" />
                   {recordId ? 'Update' : 'Save'}
                 </Button>
-              </>
-            )}
-          </div>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* ── Section: Administrative Details ─────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
@@ -1218,14 +1389,17 @@ const EditChildCapWorkupLegacy = ({
         )}
       </Card>
 
-      {/* Bottom Save Bar */}
-      {!readOnly && !readOnlyView && (!effectiveHideToolbar || effectiveFlatLayout) && (
+      {/* Bottom Save Bar — shown in flat/intake-only layout when editing/creating */}
+      {!readOnly && !readOnlyView && (
         <div className="sticky bottom-0 z-10 flex justify-end gap-3 bg-white/90 backdrop-blur-sm border-t border-gray-200 px-4 py-4 -mx-4 shadow-lg">
-          {recordId && (
-            <Button type="button" variant="outline" onClick={() => setReadOnly(true)}>
-              <FiX className="w-4 h-4 mr-1" /> Cancel
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={recordId ? handleCancelEdit : handleCancelCreate}
+          >
+            <FiX className="w-4 h-4 mr-1" />
+            Cancel
+          </Button>
           <Button
             type="button"
             onClick={handleSave}

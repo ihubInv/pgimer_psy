@@ -517,7 +517,11 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/prescriptions/create?patient_id=${patient.id}`)}
+              onClick={() => {
+                const isChildPatient = patient.patient_type === 'child';
+                const typeParam = isChildPatient ? '&patient_type=child' : '';
+                navigate(`/prescriptions/create?patient_id=${patient.id}${typeParam}`);
+              }}
               className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100 hover:border-teal-400 transition-all hover:shadow-sm"
             >
               <FiPlusCircle className="w-3.5 h-3.5" />
