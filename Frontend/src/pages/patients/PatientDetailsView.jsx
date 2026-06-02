@@ -16,7 +16,7 @@ import {
   FiCalendar, FiGlobe, FiFileText, FiHash, FiClock,
   FiHeart, FiBookOpen, FiTrendingUp, FiShield,
   FiNavigation, FiSave, FiX, FiLayers, 
-  FiFolder, FiChevronDown, FiChevronUp, FiPackage, FiDownload, FiEye
+  FiFolder, FiChevronDown, FiChevronUp, FiPackage, FiDownload, FiEye, FiPrinter
 } from 'react-icons/fi';
 import Button from '../../components/Button';
 import { toast } from 'react-toastify';
@@ -165,6 +165,251 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       ...prev,
       [cardName]: !prev[cardName]
     }));
+  };
+
+  const handlePrintFromCard = (cardName, printHandler) => {
+    if (expandedCards[cardName]) {
+      printHandler();
+      return;
+    }
+
+    setExpandedCards((prev) => ({
+      ...prev,
+      [cardName]: true,
+    }));
+
+    // Wait one render tick for the printable ref to mount.
+    window.setTimeout(() => {
+      printHandler();
+    }, 250);
+  };
+
+  const handlePrintAllCards = async () => {
+    setExpandedCards((prev) => ({
+      ...prev,
+      patient: true,
+      clinical: canViewClinicalProforma ? true : prev.clinical,
+      adl: canViewADLFile ? true : prev.adl,
+      prescriptions: canViewPrescriptions ? true : prev.prescriptions,
+    }));
+
+    // Let React render any newly expanded sections before collecting refs.
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+
+    const sanitizeSectionHtml = (rawHtml) => {
+      if (!rawHtml) return '';
+      const temp = document.createElement('div');
+      temp.innerHTML = rawHtml;
+
+      // Remove non-printable controls/content from embedded section markup.
+      temp
+        .querySelectorAll(
+          '.no-print, [class*="no-print"], button, [role="button"], script, style'
+        )
+        .forEach((el) => el.remove());
+
+      // Neutralize forced page breaks and over-constrained heights that can create blank pages.
+      temp.querySelectorAll('*').forEach((el) => {
+        el.style.pageBreakBefore = 'auto';
+        el.style.pageBreakAfter = 'auto';
+        el.style.breakBefore = 'auto';
+        el.style.breakAfter = 'auto';
+        el.style.minHeight = '0';
+      });
+
+      return temp.innerHTML.trim();
+    };
+
+    const sections = [];
+    if (patientDetailsPrintRef.current) {
+      const html = sanitizeSectionHtml(patientDetailsPrintRef.current.innerHTML);
+      if (html) {
+      sections.push({
+        title: 'Patient Details',
+        html,
+      });
+      }
+    }
+    if (canViewClinicalProforma && clinicalProformaPrintRef.current) {
+      const html = sanitizeSectionHtml(clinicalProformaPrintRef.current.innerHTML);
+      if (html) {
+      sections.push({
+        title: 'Walk-in Clinical Proforma',
+        html,
+      });
+      }
+    }
+    if (canViewADLFile && adlPrintRef.current) {
+      const html = sanitizeSectionHtml(adlPrintRef.current.innerHTML);
+      if (html) {
+      sections.push({
+        title: 'Out Patient Intake Record',
+        html,
+      });
+      }
+    }
+    if (canViewPrescriptions && prescriptionPrintRef.current) {
+      const html = sanitizeSectionHtml(prescriptionPrintRef.current.innerHTML);
+      if (html) {
+      sections.push({
+        title: 'Prescription',
+        html,
+      });
+      }
+    }
+
+    if (!sections.length) {
+      toast.error('No printable sections found');
+      return;
+    }
+
+    let logoBase64 = '';
+    try {
+      const logoResponse = await fetch(PGI_Logo);
+      const logoBlob = await logoResponse.blob();
+      const logoReader = new FileReader();
+      logoBase64 = await new Promise((resolve) => {
+        logoReader.onloadend = () => resolve(logoReader.result);
+        logoReader.readAsDataURL(logoBlob);
+      });
+    } catch (e) {
+      console.warn('Could not load logo for print:', e);
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print this section');
+      return;
+    }
+
+    const combinedHtml = sections
+      .map(
+        (section) => `
+          <section class="print-section">
+            <h3>${section.title}</h3>
+            ${section.html}
+          </section>
+        `
+      )
+      .join('');
+
+    const printContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Combined Patient Report - ${displayData?.name || 'Patient'}</title>
+  <style>
+    @page { size: A4; margin: 12mm 15mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+      font-size: 10pt;
+      line-height: 1.5;
+    }
+    body * {
+      color: #000 !important;
+      background: #fff !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      border-bottom: 1px solid #000;
+      padding: 8px 0 12px;
+      margin-bottom: 14px;
+    }
+    .logo { height: 60px; width: auto; filter: grayscale(100%); }
+    .header-text { text-align: center; }
+    .header-text h1 { font-size: 14pt; margin: 0; }
+    .header-text p { margin: 3px 0 0; font-size: 10pt; }
+    .print-section {
+      margin-bottom: 14px;
+      border: 1px solid #000;
+      padding: 10px;
+      page-break-inside: auto;
+      break-inside: auto;
+      page-break-before: auto !important;
+      break-before: auto !important;
+    }
+    .print-section * {
+      page-break-before: auto !important;
+      break-before: auto !important;
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    .print-section > h3 {
+      margin: 0 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #000;
+      font-size: 11pt;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    /* Force print content into 3-column rows */
+    .print-section .grid,
+    .print-section [class*="grid-cols-"],
+    .print-section [class*="grid "] {
+      display: grid !important;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      gap: 8px !important;
+      align-items: start !important;
+    }
+    .print-section [class*="col-span-"],
+    .print-section [class*="md:col-span-"],
+    .print-section [class*="lg:col-span-"] {
+      grid-column: auto !important;
+    }
+    .print-section .field-group,
+    .print-section .info-item {
+      margin-bottom: 6px !important;
+      padding: 6px 8px !important;
+      border: 1px solid #000 !important;
+      background: #fff !important;
+    }
+    table, th, td {
+      border: 1px solid #000 !important;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    button, .no-print, [class*="no-print"], nav, header, aside, [class*="Button"], [class*="chevron"], [class*="Printer"], [role="button"] {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    ${logoBase64 ? `<img src="${logoBase64}" alt="PGIMER Logo" class="logo" />` : ''}
+    <div class="header-text">
+      <h1>POSTGRADUATE INSTITUTE OF MEDICAL EDUCATION & RESEARCH</h1>
+      <p>Department of Psychiatry</p>
+      <p>Combined Patient Report</p>
+    </div>
+  </div>
+  ${combinedHtml}
+</body>
+</html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+        toast.success('Combined print dialog opened');
+      }, 500);
+    };
   };
 
   const togglePastHistoryCard = (cardName) => {
@@ -854,6 +1099,29 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       padding: 0;
       background: #fff;
     }
+    /* Professional monochrome print style */
+    body * {
+      color: #000 !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+    body .header, body .section, body .field-group, body .info-item, body .footer, body table, body table th, body table td {
+      background: #fff !important;
+    }
+    body .header {
+      border-bottom: 1px solid #000 !important;
+    }
+    body .section-title, body .field-label, body .info-label, body .field-value, body .info-value, body .footer strong,
+    h1, h2, h3, h4, h5, h6, p, span, label {
+      color: #000 !important;
+      border-color: #000 !important;
+    }
+    body .logo-container img {
+      filter: grayscale(100%);
+    }
+    body table, body table th, body table td {
+      border: 1px solid #000 !important;
+    }
     .header {
       display: flex;
       align-items: center;
@@ -936,7 +1204,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     /* Field Grid Layout - Print Optimized */
     .info-grid, [class*="grid"], .grid {
       display: grid !important;
-      grid-template-columns: repeat(2, 1fr) !important;
+      grid-template-columns: repeat(3, 1fr) !important;
       gap: 10px !important;
       margin-bottom: 12px !important;
     }
@@ -952,12 +1220,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       grid-column: 1 / -1 !important;
     }
     .field-label, .info-label {
-      font-weight: 600 !important;
-      color: #475569 !important;
-      font-size: 9pt !important;
+      font-weight: 700 !important;
+      color: #000 !important;
+      font-size: 10pt !important;
       margin-bottom: 4px !important;
       text-transform: uppercase !important;
-      letter-spacing: 0.3px !important;
+      letter-spacing: 0.2px !important;
       display: block !important;
     }
     .field-value, .info-value {
@@ -969,10 +1237,10 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     }
     /* Handle Tailwind grid classes in print */
     [class*="grid-cols-1"] { grid-template-columns: 1fr !important; }
-    [class*="grid-cols-2"] { grid-template-columns: repeat(2, 1fr) !important; }
+    [class*="grid-cols-2"] { grid-template-columns: repeat(3, 1fr) !important; }
     [class*="grid-cols-3"] { grid-template-columns: repeat(3, 1fr) !important; }
-    [class*="grid-cols-4"] { grid-template-columns: repeat(2, 1fr) !important; }
-    [class*="grid-cols-5"], [class*="grid-cols-6"] { grid-template-columns: repeat(2, 1fr) !important; }
+    [class*="grid-cols-4"] { grid-template-columns: repeat(3, 1fr) !important; }
+    [class*="grid-cols-5"], [class*="grid-cols-6"] { grid-template-columns: repeat(3, 1fr) !important; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -1052,17 +1320,17 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
     [class*="space-y"], [class*="gap-"] {
       margin-bottom: 10px !important;
     }
-    /* Grid layout for fields - ensure proper 2-column layout */
+    /* Grid layout for fields - ensure strict 3-column layout */
     .grid, [class*="grid"] {
       display: grid !important;
-      grid-template-columns: repeat(2, 1fr) !important;
+      grid-template-columns: repeat(3, 1fr) !important;
       gap: 10px !important;
       margin-bottom: 12px !important;
     }
     .grid-cols-1 { grid-template-columns: 1fr !important; }
-    .grid-cols-2 { grid-template-columns: repeat(2, 1fr) !important; }
-    .grid-cols-3 { grid-template-columns: repeat(2, 1fr) !important; }
-    .grid-cols-4 { grid-template-columns: repeat(2, 1fr) !important; }
+    .grid-cols-2 { grid-template-columns: repeat(3, 1fr) !important; }
+    .grid-cols-3 { grid-template-columns: repeat(3, 1fr) !important; }
+    .grid-cols-4 { grid-template-columns: repeat(3, 1fr) !important; }
     /* Field items styling - handle nested structure */
     [class*="relative"] {
       position: static !important;
@@ -1129,19 +1397,20 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         margin: 0 !important;
         padding: 0 !important;
       }
-      /* Force 2-column layout for all grids */
+      /* Force 3-column layout for all grids */
       .grid, [class*="grid"], [class*="grid-cols"] {
         display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
+        grid-template-columns: repeat(3, 1fr) !important;
         gap: 8px !important;
         margin-bottom: 10px !important;
       }
-      /* Full width items */
+      /* Keep 3-column flow in print */
       [class*="col-span"], [class*="full-width"] {
-        grid-column: 1 / -1 !important;
+        grid-column: auto !important;
       }
       .section {
-        page-break-inside: avoid;
+        page-break-inside: auto;
+        break-inside: auto;
         margin-bottom: 15px;
       }
       /* Field containers */
@@ -1152,7 +1421,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         background: #f8fafc !important;
         border-left: 3px solid #3b82f6 !important;
         border-radius: 3px !important;
-        page-break-inside: avoid !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
       }
       /* Remove decorative elements */
       [class*="gradient"], [class*="blur"], [class*="shadow-xl"], 
@@ -1286,6 +1556,33 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       margin: 0;
       padding: 0;
       background: #fff;
+    }
+    /* Professional monochrome print style */
+    * {
+      color: #000 !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+    .header, .section, .field-group, .info-item, .footer, table, table th, table td {
+      background: #fff !important;
+    }
+    .header {
+      border-bottom: 1px solid #000 !important;
+    }
+    .section-title, .field-label, .info-label, .field-value, .info-value, .footer strong,
+    h1, h2, h3, h4, h5, h6, p, span, label {
+      color: #000 !important;
+      border-color: #000 !important;
+    }
+    .field-label, .info-label, label, [class*="font-semibold"] {
+      font-weight: 700 !important;
+      color: #000 !important;
+    }
+    .logo-container img {
+      filter: grayscale(100%);
+    }
+    table, table th, table td {
+      border: 1px solid #000 !important;
     }
     .header {
       display: flex;
@@ -1477,19 +1774,20 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         margin: 0 !important;
         padding: 0 !important;
       }
-      /* Force 2-column layout for all grids */
+      /* Force 3-column layout for all grids */
       .grid, [class*="grid"], [class*="grid-cols"] {
         display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
+        grid-template-columns: repeat(3, 1fr) !important;
         gap: 8px !important;
         margin-bottom: 10px !important;
       }
-      /* Full width items */
+      /* Keep 3-column flow in print */
       [class*="col-span"], [class*="full-width"] {
-        grid-column: 1 / -1 !important;
+        grid-column: auto !important;
       }
       .section {
-        page-break-inside: avoid;
+        page-break-inside: auto;
+        break-inside: auto;
         margin-bottom: 15px;
       }
       /* Field containers */
@@ -1500,7 +1798,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         background: #f8fafc !important;
         border-left: 3px solid #3b82f6 !important;
         border-radius: 3px !important;
-        page-break-inside: avoid !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
       }
       /* Remove decorative elements */
       [class*="gradient"], [class*="blur"], [class*="shadow-xl"], 
@@ -1634,6 +1933,33 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       margin: 0;
       padding: 0;
       background: #fff;
+    }
+    /* Professional monochrome print style */
+    * {
+      color: #000 !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+    .header, .section, .field-group, .info-item, .footer, table, table th, table td {
+      background: #fff !important;
+    }
+    .header {
+      border-bottom: 1px solid #000 !important;
+    }
+    .section-title, .field-label, .info-label, .field-value, .info-value, .footer strong,
+    h1, h2, h3, h4, h5, h6, p, span, label {
+      color: #000 !important;
+      border-color: #000 !important;
+    }
+    .field-label, .info-label, label, [class*="font-semibold"] {
+      font-weight: 700 !important;
+      color: #000 !important;
+    }
+    .logo-container img {
+      filter: grayscale(100%);
+    }
+    table, table th, table td {
+      border: 1px solid #000 !important;
     }
     .header {
       display: flex;
@@ -1825,19 +2151,20 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         margin: 0 !important;
         padding: 0 !important;
       }
-      /* Force 2-column layout for all grids */
+      /* Force 3-column layout for all grids */
       .grid, [class*="grid"], [class*="grid-cols"] {
         display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
+        grid-template-columns: repeat(3, 1fr) !important;
         gap: 8px !important;
         margin-bottom: 10px !important;
       }
-      /* Full width items */
+      /* Keep 3-column flow in print */
       [class*="col-span"], [class*="full-width"] {
-        grid-column: 1 / -1 !important;
+        grid-column: auto !important;
       }
       .section {
-        page-break-inside: avoid;
+        page-break-inside: auto;
+        break-inside: auto;
         margin-bottom: 15px;
       }
       /* Field containers */
@@ -1848,7 +2175,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         background: #f8fafc !important;
         border-left: 3px solid #3b82f6 !important;
         border-radius: 3px !important;
-        page-break-inside: avoid !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
       }
       /* Remove decorative elements */
       [class*="gradient"], [class*="blur"], [class*="shadow-xl"], 
@@ -1982,6 +2310,33 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       margin: 0;
       padding: 0;
       background: #fff;
+    }
+    /* Professional monochrome print style */
+    * {
+      color: #000 !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+    .header, .section, .field-group, .info-item, .footer, table, table th, table td {
+      background: #fff !important;
+    }
+    .header {
+      border-bottom: 1px solid #000 !important;
+    }
+    .section-title, .field-label, .info-label, .field-value, .info-value, .footer strong,
+    h1, h2, h3, h4, h5, h6, p, span, label {
+      color: #000 !important;
+      border-color: #000 !important;
+    }
+    .field-label, .info-label, label, [class*="font-semibold"] {
+      font-weight: 700 !important;
+      color: #000 !important;
+    }
+    .logo-container img {
+      filter: grayscale(100%);
+    }
+    table, table th, table td {
+      border: 1px solid #000 !important;
     }
     .header {
       display: flex;
@@ -2173,19 +2528,20 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         margin: 0 !important;
         padding: 0 !important;
       }
-      /* Force 2-column layout for all grids */
+      /* Force 3-column layout for all grids */
       .grid, [class*="grid"], [class*="grid-cols"] {
         display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
+        grid-template-columns: repeat(3, 1fr) !important;
         gap: 8px !important;
         margin-bottom: 10px !important;
       }
-      /* Full width items */
+      /* Keep 3-column flow in print */
       [class*="col-span"], [class*="full-width"] {
-        grid-column: 1 / -1 !important;
+        grid-column: auto !important;
       }
       .section {
-        page-break-inside: avoid;
+        page-break-inside: auto;
+        break-inside: auto;
         margin-bottom: 15px;
       }
       /* Field containers */
@@ -2196,7 +2552,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         background: #f8fafc !important;
         border-left: 3px solid #3b82f6 !important;
         border-radius: 3px !important;
-        page-break-inside: avoid !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
       }
       /* Remove decorative elements */
       [class*="gradient"], [class*="blur"], [class*="shadow-xl"], 
@@ -3523,6 +3880,12 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button variant="outline" className="no-print" onClick={handlePrintAllCards}>
+          <FiPrinter className="h-4 w-4 mr-2" />
+          Print All Cards
+        </Button>
+      </div>
       {/* Card 1: Patient Details */}
         <Card className="shadow-lg border-0 bg-white">
         <div
@@ -3541,6 +3904,18 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
             </div>
           </div>
           <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="no-print"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrintFromCard('patient', handlePrintPatientDetails);
+                }}
+              >
+                <FiPrinter className="h-4 w-4 mr-1" />
+                Print
+              </Button>
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('patient')}
@@ -3780,7 +4155,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               <div className="my-6 border-t border-gray-200" />
 
               {patient?.id && (
-                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="no-print rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                   <h4 className="mb-4 flex items-center gap-3 text-xl font-bold text-gray-900">
                     <div className="rounded-xl border border-white/30 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 p-2.5 shadow-md backdrop-blur-sm">
                       <FiFileText className="h-5 w-5 text-indigo-600" />
@@ -3838,6 +4213,18 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="no-print"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrintFromCard('clinical', handlePrintClinicalProforma);
+                }}
+              >
+                <FiPrinter className="h-4 w-4 mr-1" />
+                Print
+              </Button>
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('clinical')}
@@ -3903,6 +4290,18 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="no-print"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrintFromCard('adl', handlePrintADL);
+                }}
+              >
+                <FiPrinter className="h-4 w-4 mr-1" />
+                Print
+              </Button>
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('adl')}
@@ -3917,7 +4316,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           </div>
 
           {expandedCards.adl && (
-            <div className="p-6">
+            <div ref={adlPrintRef} className="p-6">
               {patientAdlFiles.length > 0 ? (
                 <OutPatientIntakeRecordSummaryView adlFile={patientAdlFiles[0]} patient={patient} />
               ) : (
@@ -3954,6 +4353,18 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="no-print"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrintFromCard('prescriptions', handlePrintPrescription);
+                }}
+              >
+                <FiPrinter className="h-4 w-4 mr-1" />
+                Print
+              </Button>
               <div 
                 className="cursor-pointer"
                 onClick={() => toggleCard('prescriptions')}
@@ -3968,7 +4379,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           </div>
 
           {expandedCards.prescriptions && (
-            <div className="p-6">
+            <div ref={prescriptionPrintRef} className="p-6">
               {allPrescriptions.length > 0 ? (
                 <PrescriptionView
                   prescription={allPrescriptions}
@@ -4024,7 +4435,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
           {expandedCards.pastHistory && (
             <div className="space-y-4 p-6">
               {patient?.id && (
-                <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-white p-5 shadow-sm">
+                <div className="no-print rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-white p-5 shadow-sm">
                   <h4 className="mb-2 flex items-center gap-2 text-lg font-bold text-gray-900">
                     <span className="rounded-lg border border-indigo-100 bg-white p-2 shadow-sm">
                       <FiFileText className="h-5 w-5 text-indigo-600" />

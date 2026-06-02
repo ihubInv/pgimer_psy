@@ -570,7 +570,7 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
       )}
 
       {patientId && existingFiles.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="no-print rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h4 className="mb-4 flex items-center gap-3 text-lg font-semibold text-gray-900">
             <div className="rounded-lg bg-indigo-50 p-2">
               <FiFileText className="h-5 w-5 text-indigo-600" />

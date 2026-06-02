@@ -367,6 +367,29 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       padding: 0;
       background: #fff;
     }
+    /* Professional monochrome print style */
+    body * {
+      color: #000 !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+    body .header, body .section, body .field-group, body .info-item, body .footer, body table, body table th, body table td {
+      background: #fff !important;
+    }
+    body .header {
+      border-bottom: 1px solid #000 !important;
+    }
+    body .section-title, body .field-label, body .info-label, body .field-value, body .info-value, body .footer strong,
+    h1, h2, h3, h4, h5, h6, p, span, label {
+      color: #000 !important;
+      border-color: #000 !important;
+    }
+    body .logo-container img {
+      filter: grayscale(100%);
+    }
+    body table, body table th, body table td {
+      border: 1px solid #000 !important;
+    }
     .header {
       display: flex;
       align-items: center;
@@ -743,6 +766,29 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       padding: 0;
       background: #fff;
     }
+    /* Professional monochrome print style */
+    body * {
+      color: #000 !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+    body .header, body .section, body .field-group, body .info-item, body .footer, body table, body table th, body table td {
+      background: #fff !important;
+    }
+    body .header {
+      border-bottom: 1px solid #000 !important;
+    }
+    body .section-title, body .field-label, body .info-label, body .field-value, body .info-value, body .footer strong,
+    h1, h2, h3, h4, h5, h6, p, span, label {
+      color: #000 !important;
+      border-color: #000 !important;
+    }
+    body .logo-container img {
+      filter: grayscale(100%);
+    }
+    body table, body table th, body table td {
+      border: 1px solid #000 !important;
+    }
     .header {
       display: flex;
       align-items: center;
@@ -1109,6 +1155,29 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       margin: 0;
       padding: 0;
       background: #fff;
+    }
+    /* Professional monochrome print style */
+    body * {
+      color: #000 !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+    body .header, body .section, body .field-group, body .info-item, body .footer, body table, body table th, body table td {
+      background: #fff !important;
+    }
+    body .header {
+      border-bottom: 1px solid #000 !important;
+    }
+    body .section-title, body .field-label, body .info-label, body .field-value, body .info-value, body .footer strong,
+    h1, h2, h3, h4, h5, h6, p, span, label {
+      color: #000 !important;
+      border-color: #000 !important;
+    }
+    body .logo-container img {
+      filter: grayscale(100%);
+    }
+    body table, body table th, body table td {
+      border: 1px solid #000 !important;
     }
     .header {
       display: flex;
@@ -3756,7 +3825,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                     </div>
 
                     {/* Address Details */}
-                    <div className="space-y-6 pt-6 border-t border-white/30">
+                    <div className="no-print space-y-6 pt-6 border-t border-white/30">
                       <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                         <div className="p-2.5 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-md">
                           <FiMapPin className="w-5 h-5 text-blue-600" />
@@ -5575,7 +5644,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                         </Card>
 
                         {patient?.id && (
-                          <Card className="shadow-md border-2 border-indigo-200">
+                          <Card className="no-print shadow-md border-2 border-indigo-200">
                             <div
                               className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-indigo-50/50 transition-colors cursor-pointer"
                               onClick={() => togglePastHistoryCard('patientDocuments')}
