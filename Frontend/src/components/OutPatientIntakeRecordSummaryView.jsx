@@ -212,7 +212,7 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
               if (!any) return null;
               return (
                 <div key={index} className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-800">
                     Informant {index + 1}
                   </p>
                   <PatientDetailFieldGroup>
@@ -383,7 +383,7 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
                   if (!row) return null;
                   return (
                     <div key={index} className="mb-4 last:mb-0">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-800">
                         Sibling {index + 1}
                       </p>
                       <PatientDetailFieldGroup>
@@ -468,7 +468,7 @@ export default function OutPatientIntakeRecordSummaryView({ adlFile, patient: pa
               if (!hasRecorded(child?.age) && !hasRecorded(child?.sex) && !hasRecorded(child?.health)) return null;
               return (
                 <div key={index} className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700">Child {index + 1}</p>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-800">Child {index + 1}</p>
                   <PatientDetailFieldGroup>
                     <Val label="Age" value={child?.age} />
                     <Val label="Sex" value={child?.sex} />

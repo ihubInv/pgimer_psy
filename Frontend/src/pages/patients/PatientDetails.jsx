@@ -64,6 +64,12 @@ const PatientDetails = () => {
   // Check for edit query parameter on mount and when searchParams change
   useEffect(() => {
     const editParam = searchParams.get('edit');
+    const modeParam = searchParams.get('mode');
+    if (modeParam === 'view') {
+      setIsEditing(false);
+      localStorage.removeItem(`patient_edit_${patientId}`);
+      return;
+    }
     if (editParam === 'true') {
       setIsEditing(true);
       // Store edit state in localStorage for persistence
@@ -600,8 +606,12 @@ const PatientDetails = () => {
     updated_at: patient.updated_at,
   };
 
+  const pageTitleClass = isEditing
+    ? 'text-3xl font-bold text-blue-800 drop-shadow-sm tracking-wide transition-colors hover:text-cyan-700'
+    : 'text-3xl font-bold text-gray-900 tracking-wide';
+
   return (
-    <div className="space-y-6">
+    <div className={isEditing ? 'space-y-6' : 'min-h-screen bg-gray-50 space-y-6'}>
 
 
       {/* <div className="flex items-center justify-between w-full"> */}
@@ -609,15 +619,7 @@ const PatientDetails = () => {
         <div
 
         >
-          <h1
-            className="
-          text-3xl font-bold text-blue-800
-          drop-shadow-sm
-          tracking-wide
-          transition-colors
-          hover:text-cyan-700
-        "
-          >
+          <h1 className={pageTitleClass}>
             {(() => {
               const editParam = searchParams.get('edit');
               const modeParam = searchParams.get('mode');
@@ -641,7 +643,7 @@ const PatientDetails = () => {
               } else if (editParam === 'true') {
                 return 'Update patient information';
               } else {
-                return 'View and manage patient information';
+                return 'View patient records (read-only)';
               }
             })()}
           </p>

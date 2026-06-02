@@ -38,12 +38,19 @@ import { useGetAllRoomsQuery } from '../../features/rooms/roomsApiSlice';
 import { useGetChildClinicalProformasByChildPatientIdQuery } from '../../features/clinical/childClinicalApiSlice';
 import { useGetFollowUpsByChildPatientIdQuery } from '../../features/followUp/followUpApiSlice';
 import { useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
-import { useGetChildCapWorkupsByChildPatientIdQuery } from '../../features/childCapWorkup/childCapWorkupApiSlice';
 import { formatDate } from '../../utils/formatters';
 import EditChildClinicalProforma from '../clinical/EditChildClinicalProforma';
-import EditChildCapWorkup, { CHILD_CAP_INTAKE_COMING_SOON } from '../adl/EditChildCapWorkup';
-import ChildCapIntakeComingSoon from '../../components/ChildCapIntakeComingSoon';
+import EditChildCapWorkup from '../adl/EditChildCapWorkup';
+import { useGetChildCapWorkupsByChildPatientIdQuery } from '../../features/childCapWorkup/childCapWorkupApiSlice';
+import PrescriptionView from '../PrescribeMedication/PrescriptionView';
 import ChildPatientRegistrationViewCards from '../../components/ChildPatientRegistrationViewCards';
+import { ReadOnlyToneProvider } from '../../components/PatientDetailReadOnlyCard';
+import ViewEmptyMessage from '../../components/ViewEmptyMessage';
+import {
+  VIEW_NESTED_PANEL_CLASS,
+  VIEW_PAGE_SHELL_CLASS,
+  VIEW_SECTION_ICON,
+} from '../../utils/viewDetailsUi';
 import ChildClinicalProformaSummaryView from '../../components/ChildClinicalProformaSummaryView';
 import FilePreview from '../../components/FilePreview';
 import PGI_Logo from '../../assets/PGI_Logo.png';
@@ -53,8 +60,10 @@ const CreateChildPatient = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const mode = searchParams.get('mode'); // 'view' or 'edit'
+  const section = searchParams.get('section');
   const isViewMode = mode === 'view';
   const isEditMode = Boolean(id) && !isViewMode;
+  const isIntakeOnlyMode = isEditMode && section === 'intakeRecord';
   const currentUser = useSelector(selectCurrentUser);
   const token = useSelector(selectCurrentToken);
   const isAdminUser = isAdmin(currentUser?.role);
@@ -63,7 +72,7 @@ const CreateChildPatient = () => {
   const canEditChildWalkInProforma = isResident || isFaculty || isAdminUser;
   const hideChildViewChromeForMWO = isViewMode && isMWO(currentUser?.role);
   // Same as adult edit: everyone sees Patient Details; MWO does not see clinical / ADL / prescription stack
-  const showChildRegistrationCard = true;
+  const showChildRegistrationCard = !isIntakeOnlyMode;
   const showClinicalProformaAndIntakeInEdit =
     isEditMode && id && !isMWO(currentUser?.role);
   /** Today's / view flow: show clinical + intake + prescription cards (same idea as edit), read-only summaries */
@@ -71,6 +80,7 @@ const CreateChildPatient = () => {
     isViewMode && Boolean(id) && !isMWO(currentUser?.role);
   // Match adult PatientDetails edit: clean shell + page title (not the CGC marketing gradient)
   const useAdultEditShell = Boolean(id) && isEditMode && !isViewMode;
+  const usePatientViewShell = isViewMode && Boolean(id);
   const { data: roomsData } = useGetAllRoomsQuery({ page: 1, limit: 100, is_active: true });
   
   const [formData, setFormData] = useState({
@@ -200,6 +210,12 @@ const CreateChildPatient = () => {
   );
   
   // Prescriptions for this patient only (avoids broad list + works for all roles including MWO)
+  const { data: childCapWorkupData, isLoading: isLoadingChildCapWorkup } =
+    useGetChildCapWorkupsByChildPatientIdQuery(id, {
+      skip: !id || !isViewMode,
+      refetchOnMountOrArgChange: true,
+    });
+
   const { data: prescriptionData, isLoading: isLoadingPrescriptions } = useGetPrescriptionsByPatientIdQuery(
     id,
     {
@@ -208,11 +224,6 @@ const CreateChildPatient = () => {
     }
   );
 
-  const { data: childCapWorkupData, isLoading: isLoadingChildCapWorkup } = useGetChildCapWorkupsByChildPatientIdQuery(id, {
-    skip: !id || !isViewMode || CHILD_CAP_INTAKE_COMING_SOON,
-    refetchOnMountOrArgChange: true,
-  });
-  
   // Extract child clinical proformas
   const childClinicalProformas = Array.isArray(childClinicalData?.data?.proformas)
     ? childClinicalData.data.proformas
@@ -252,7 +263,30 @@ const CreateChildPatient = () => {
     ? prescriptionData.data.prescriptions
     : [];
 
-  const childCapWorkupRecords = Array.isArray(childCapWorkupData?.data?.records) ? childCapWorkupData.data.records : [];
+  const childCapWorkupRecords = Array.isArray(childCapWorkupData?.data?.records)
+    ? childCapWorkupData.data.records
+    : [];
+
+  const flatChildPrescriptionItems = useMemo(() => {
+    const items = [];
+    prescriptions.forEach((rec) => {
+      if (Array.isArray(rec.prescription)) {
+        items.push(...rec.prescription);
+      }
+    });
+    return items;
+  }, [prescriptions]);
+
+  useEffect(() => {
+    if (!isViewMode || !id) return;
+    setExpandedCards((prev) => ({
+      ...prev,
+      childPatientRegistration: true,
+      viewChildClinical: true,
+      viewIntake: true,
+      viewPrescription: true,
+    }));
+  }, [isViewMode, id]);
 
   const childDocumentFilesForPreview = useMemo(() => {
     const docs = Array.isArray(formData.documents) ? [...formData.documents] : [];
@@ -284,6 +318,25 @@ const CreateChildPatient = () => {
       [cardName]: !prev[cardName]
     }));
   };
+
+  const openChildIntakeForm = () => {
+    if (!id) return;
+    navigate(`/child-patient/${id}?mode=edit&section=intakeRecord`);
+  };
+
+  useEffect(() => {
+    if (!id || section !== 'intakeRecord') return;
+
+    if (isViewMode) {
+      navigate(`/child-patient/${id}?mode=edit&section=intakeRecord`, { replace: true });
+      return;
+    }
+
+    setExpandedCards((prev) => ({
+      ...prev,
+      intakeRecord: true,
+    }));
+  }, [id, section, isViewMode, navigate]);
   
   // Helper function to toggle visit card expansion
   const toggleVisitCard = (visitId) => {
@@ -1131,14 +1184,17 @@ const CreateChildPatient = () => {
   const rooms = roomsData?.data?.rooms || [];
 
   return (
+    <ReadOnlyToneProvider tone="neutral">
     <div
       className={
-        useAdultEditShell
+        usePatientViewShell
+          ? VIEW_PAGE_SHELL_CLASS
+          : useAdultEditShell
           ? 'space-y-6'
           : 'min-h-screen bg-gradient-to-br from-slate-100 via-blue-50/30 to-indigo-100/40 relative overflow-hidden'
       }
     >
-      {!useAdultEditShell && (
+      {!useAdultEditShell && !usePatientViewShell && (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-400/20 rounded-full blur-3xl" />
           <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-400/20 rounded-full blur-3xl" />
@@ -1148,12 +1204,32 @@ const CreateChildPatient = () => {
 
       <div
         className={
-          useAdultEditShell
+          useAdultEditShell || usePatientViewShell
             ? 'relative w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6'
             : 'relative w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8'
         }
       >
-        {useAdultEditShell && (
+        {usePatientViewShell && !isMWO(currentUser?.role) && (
+          <div className="flex flex-wrap items-center justify-between gap-4 w-full">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 tracking-wide">
+                Patient Details
+              </h1>
+              <p className="text-gray-600 mt-2 text-base tracking-normal">
+                View patient records (read-only)
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="no-print"
+              onClick={handlePrintAllChildCards}
+            >
+              <FiPrinter className="h-4 w-4 mr-2" />
+              Print All Cards
+            </Button>
+          </div>
+        )}
+        {useAdultEditShell && !isIntakeOnlyMode && (
           <div className="flex items-center gap-4 w-full">
             <div>
               <h1 className="text-3xl font-bold text-blue-800 drop-shadow-sm tracking-wide transition-colors hover:text-cyan-700">
@@ -1165,21 +1241,9 @@ const CreateChildPatient = () => {
             </div>
           </div>
         )}
-        {isViewMode && id && !isMWO(currentUser?.role) && (
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              className="no-print"
-              onClick={handlePrintAllChildCards}
-            >
-              <FiPrinter className="h-4 w-4 mr-2" />
-              Print All Cards
-            </Button>
-          </div>
-        )}
         {/* Registration / view: always. Edit demographics: MWO only (others use proforma+intake below). */}
         {showChildRegistrationCard && (
-          <Card className="shadow-lg border-0 bg-white">
+          <Card variant={id ? 'solid' : 'glass'}>
             {/* Collapsible header: view, new registration, or edit (same expand key as body below) */}
             {isViewMode ? (
               <div
@@ -1187,8 +1251,8 @@ const CreateChildPatient = () => {
                 onClick={() => toggleCard('childPatientRegistration')}
               >
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg">
-                    <FiUsers className="h-6 w-6 text-primary-600" />
+                  <div className={VIEW_SECTION_ICON.patient}>
+                    <FiUsers className="h-6 w-6 text-slate-700" />
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">
@@ -1883,12 +1947,16 @@ const CreateChildPatient = () => {
                         </div>
                         Patient Documents & Files
                       </h4>
-                      <FilePreview
-                        files={childDocumentFilesForPreview}
-                        patient_id={id}
-                        canDelete={false}
-                        baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
-                      />
+                      {childDocumentFilesForPreview.length === 0 ? (
+                        <ViewEmptyMessage message="No Data Available" />
+                      ) : (
+                        <FilePreview
+                          files={childDocumentFilesForPreview}
+                          patient_id={id}
+                          canDelete={false}
+                          baseUrl={(import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '')}
+                        />
+                      )}
                     </div>
                   </div>
                   {!hideChildViewChromeForMWO && (
@@ -1902,14 +1970,6 @@ const CreateChildPatient = () => {
                         <FiX className="mr-2" />
                         Back
                       </Button>
-                      <Button
-                        type="button"
-                        onClick={() => navigate(`/child-patient/${id}?mode=edit`)}
-                        className="px-6 lg:px-8 py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200"
-                      >
-                        <FiEdit className="mr-2" />
-                        Edit
-                      </Button>
                     </div>
                   )}
                 </>
@@ -1921,14 +1981,14 @@ const CreateChildPatient = () => {
         {/* View mode (non-MWO): clinical stack for Today's Patients / view — mirrors edit cards, read-only */}
         {showChildClinicalSummaryInView && (
           <>
-            <Card className="shadow-lg border-0 bg-white">
+            <Card variant="solid">
               <div className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors">
                 <div
                   className="flex cursor-pointer items-center gap-4 flex-1"
                   onClick={() => toggleCard('viewChildClinical')}
                 >
-                  <div className="rounded-lg bg-green-100 p-3">
-                    <FiClipboard className="h-6 w-6 text-green-600" />
+                  <div className={VIEW_SECTION_ICON.clinical}>
+                    <FiClipboard className="h-6 w-6 text-emerald-700" />
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">Child Clinical Proforma</h3>
@@ -1966,9 +2026,7 @@ const CreateChildPatient = () => {
                   {isLoadingChildProformas ? (
                     <p className="text-sm text-gray-500">Loading…</p>
                   ) : childClinicalProformas.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-4 py-8 text-center">
-                      <p className="text-sm font-medium text-gray-500">Not created yet</p>
-                    </div>
+                    <ViewEmptyMessage message="No Proforma Available" icon={FiClipboard} />
                   ) : (
                     <div className="space-y-10">
                       {[...childClinicalProformas]
@@ -1995,23 +2053,19 @@ const CreateChildPatient = () => {
               )}
             </Card>
 
-            <Card className="shadow-lg border-0 bg-white">
+            <Card variant="solid">
               <div className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors">
                 <div
                   className="flex cursor-pointer items-center gap-4 flex-1"
                   onClick={() => toggleCard('viewIntake')}
                 >
-                  <div className="rounded-lg bg-purple-100 p-3">
-                    <FiFolder className="h-6 w-6 text-purple-600" />
+                  <div className={VIEW_SECTION_ICON.intake}>
+                    <FiFolder className="h-6 w-6 text-violet-700" />
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">CAP Detailed Work-up Record</h3>
                     <p className="mt-1 text-sm text-gray-500">
-                      {CHILD_CAP_INTAKE_COMING_SOON
-                        ? 'Coming soon — detailed intake work-up is being updated'
-                        : childCapWorkupRecords.length > 0
-                          ? `Record created ${formatDate(childCapWorkupRecords[0].created_at)}`
-                          : 'Child & Adolescent Psychiatry intake record'}
+                      Child & Adolescent Psychiatry detailed intake record
                     </p>
                   </div>
                 </div>
@@ -2043,46 +2097,29 @@ const CreateChildPatient = () => {
               </div>
               {expandedCards.viewIntake && (
                 <div ref={childCapPrintRef} className="p-6">
-                  {CHILD_CAP_INTAKE_COMING_SOON ? (
-                    <ChildCapIntakeComingSoon />
-                  ) : isLoadingChildCapWorkup ? (
+                  {isLoadingChildCapWorkup ? (
                     <p className="text-sm text-gray-500">Loading…</p>
                   ) : childCapWorkupRecords.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-4 py-8 text-center">
-                      <p className="text-sm font-medium text-gray-500">Not created yet</p>
-                    </div>
+                    <ViewEmptyMessage message="Form Not Yet Submitted" icon={FiFolder} />
                   ) : (
-                    <ul className="space-y-2">
-                      {childCapWorkupRecords.map((rec) => (
-                        <li
-                          key={rec.id}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm"
-                        >
-                          <span className="text-gray-800">
-                            {rec.cap_no ? `CAP ${rec.cap_no}` : `Work-up record #${rec.id}`}
-                            {rec.created_at && (
-                              <span className="text-gray-500"> · {formatDate(rec.created_at)}</span>
-                            )}
-                            {rec.provisional_diagnosis && (
-                              <span className="text-gray-600"> · {rec.provisional_diagnosis}</span>
-                            )}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                    <EditChildCapWorkup
+                      childPatientId={id}
+                      isEmbedded
+                      readOnlyView
+                    />
                   )}
                 </div>
               )}
             </Card>
 
-            <Card className="shadow-lg border-0 bg-white">
+            <Card variant="solid">
               <div className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors">
                 <div
                   className="flex cursor-pointer items-center gap-4 flex-1"
                   onClick={() => toggleCard('viewPrescription')}
                 >
-                  <div className="rounded-lg bg-amber-100 p-3">
-                    <FiPackage className="h-6 w-6 text-amber-600" />
+                  <div className={VIEW_SECTION_ICON.prescription}>
+                    <FiPackage className="h-6 w-6 text-amber-700" />
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">Prescription</h3>
@@ -2119,42 +2156,13 @@ const CreateChildPatient = () => {
                 <div ref={childPrescriptionPrintRef} className="p-6">
                   {isLoadingPrescriptions ? (
                     <p className="text-sm text-gray-500">Loading…</p>
-                  ) : prescriptions.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-4 py-8 text-center">
-                      <p className="text-sm font-medium text-gray-500">Not created yet</p>
-                    </div>
+                  ) : flatChildPrescriptionItems.length === 0 ? (
+                    <ViewEmptyMessage message="No Data Available" icon={FiPackage} />
                   ) : (
-                    <ul className="space-y-2">
-                      {prescriptions.map((rec) => (
-                        <li
-                          key={rec.id || rec.prescription_record_id || JSON.stringify(rec.created_at)}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-800"
-                        >
-                          <span className="font-medium text-gray-900">
-                            {formatDate(rec.visit_date || rec.created_at || rec.prescription_date)}
-                            {Array.isArray(rec.prescription) && rec.prescription.length > 0 && (
-                              <span className="font-normal text-gray-600">
-                                {' '}
-                                · {rec.prescription.length} medicine{rec.prescription.length > 1 ? 's' : ''}
-                              </span>
-                            )}
-                          </span>
-                          {(rec.id || rec.prescription_record_id) && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                navigate(`/prescriptions/edit/${rec.id || rec.prescription_record_id}`)
-                              }
-                            >
-                              <FiEye className="mr-1 inline" />
-                              View
-                            </Button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
+                    <PrescriptionView
+                      prescription={flatChildPrescriptionItems}
+                      patientId={id}
+                    />
                   )}
                 </div>
               )}
@@ -2165,7 +2173,8 @@ const CreateChildPatient = () => {
         {/* Edit mode (non-MWO): same card order & chrome as adult PatientDetailsEdit */}
         {showClinicalProformaAndIntakeInEdit && (
           <>
-            <Card className="shadow-lg border-0 bg-white">
+            {!isIntakeOnlyMode && (
+            <Card variant="solid">
               <div
                 className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
               >
@@ -2221,7 +2230,7 @@ const CreateChildPatient = () => {
                   ) : (
                     <div className="space-y-4 border-t border-gray-200 pt-6">
                       <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                        <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-800">
                           First Visit
                         </span>
                         <span className="text-sm text-gray-500 font-normal">
@@ -2232,11 +2241,11 @@ const CreateChildPatient = () => {
                         </span>
                       </h4>
 
-                      <div className="border-2 border-purple-300 rounded-lg p-4 bg-purple-50/30">
+                      <div className={VIEW_NESTED_PANEL_CLASS}>
                         <div className="flex items-start justify-between mb-4 gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3 mb-2 flex-wrap">
-                              <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-800">
                                 First Visit
                               </span>
                             </div>
@@ -2314,8 +2323,9 @@ const CreateChildPatient = () => {
                 </div>
               )}
             </Card>
+            )}
 
-            <Card className="shadow-lg border-0 bg-white">
+            <Card variant="solid">
               <div
                 className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
               >
@@ -2323,15 +2333,13 @@ const CreateChildPatient = () => {
                   className="flex items-center gap-4 cursor-pointer flex-1"
                   onClick={() => toggleCard('intakeRecord')}
                 >
-                  <div className="p-3 bg-purple-100 rounded-lg">
-                    <FiFolder className="h-6 w-6 text-purple-600" />
+                  <div className={VIEW_SECTION_ICON.intake}>
+                    <FiFolder className="h-6 w-6 text-violet-600" />
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">CAP Detailed Work-up Record</h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      {CHILD_CAP_INTAKE_COMING_SOON
-                        ? 'Coming soon — detailed intake work-up is being updated'
-                        : 'Child & Adolescent Psychiatry detailed intake record'}
+                      Child & Adolescent Psychiatry detailed intake record
                     </p>
                   </div>
                 </div>
@@ -2352,12 +2360,15 @@ const CreateChildPatient = () => {
                   <EditChildCapWorkup
                     isEmbedded={true}
                     childPatientId={id}
+                    hideToolbar={isIntakeOnlyMode}
+                    flatLayout={isIntakeOnlyMode}
                   />
                 </div>
               )}
             </Card>
 
-            <Card className="shadow-lg border-0 bg-white">
+            {!isIntakeOnlyMode && (
+            <Card variant="solid">
               <div
                 className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
               >
@@ -2423,12 +2434,13 @@ const CreateChildPatient = () => {
                 </div>
               )}
             </Card>
+            )}
           </>
         )}
         
         {/* Past History Section - hidden for Psychiatric Welfare Officer (MWO) */}
         {id && isViewMode && !isMWO(currentUser?.role) && (
-          <Card className="shadow-lg border-0 bg-white mt-6">
+          <Card variant="solid" className="mt-6">
             <div
               className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
             >
@@ -2436,8 +2448,8 @@ const CreateChildPatient = () => {
                 className="flex items-center gap-4 cursor-pointer flex-1"
                 onClick={() => toggleCard('pastHistory')}
               >
-                <div className="p-3 bg-purple-100 rounded-lg">
-                  <FiClock className="h-6 w-6 text-purple-600" />
+                <div className={VIEW_SECTION_ICON.history}>
+                  <FiClock className="h-6 w-6 text-slate-600" />
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">Past History</h3>
@@ -2468,10 +2480,10 @@ const CreateChildPatient = () => {
 
             {expandedCards.pastHistory && (
               <div className="p-6 space-y-4">
-                <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-white p-5 shadow-sm">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
                   <h4 className="mb-2 flex items-center gap-2 text-lg font-bold text-gray-900">
-                    <span className="rounded-lg border border-indigo-100 bg-white p-2 shadow-sm">
-                      <FiFileText className="h-5 w-5 text-indigo-600" />
+                    <span className="rounded-lg bg-white border border-gray-200 p-2">
+                      <FiFileText className="h-5 w-5 text-slate-600" />
                     </span>
                     Patient documents & files
                   </h4>
@@ -2501,14 +2513,14 @@ const CreateChildPatient = () => {
                       const n = visitGroup.visits.length;
 
                       return (
-                        <Card key={`date-${dateKey}`} className="shadow-lg border-2 border-purple-200">
+                        <Card key={`date-${dateKey}`} className={viewDetailsCardClass}>
                           <div
-                            className="flex items-center justify-between p-5 border-b border-gray-200 hover:bg-purple-50 transition-colors cursor-pointer"
+                            className="flex items-center justify-between p-5 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
                             onClick={() => toggleVisitCard(`date-${dateKey}`)}
                           >
                             <div className="flex items-center gap-4">
-                              <div className="p-3 bg-purple-100 rounded-lg">
-                                <FiCalendar className="h-6 w-6 text-purple-600" />
+                              <div className={VIEW_SECTION_ICON.history}>
+                                <FiCalendar className="h-6 w-6 text-slate-600" />
                               </div>
                               <div>
                                 <h4 className="text-xl font-bold text-gray-900">{visitDate}</h4>
@@ -2534,10 +2546,10 @@ const CreateChildPatient = () => {
                               {visitGroup.visits.map(({ visitId, followUp }) => (
                                 <div
                                   key={visitId}
-                                  className="rounded-lg border-l-4 border-blue-500 bg-blue-50/80 p-4"
+                                  className="rounded-lg border border-gray-200 bg-gray-50 p-4"
                                 >
                                   <h5 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
-                                    <FiFileText className="h-4 w-4 text-blue-600" />
+                                    <FiFileText className="h-4 w-4 text-slate-600" />
                                     Follow-up visit
                                   </h5>
                                   <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
@@ -2582,8 +2594,8 @@ const CreateChildPatient = () => {
                   </div>
                 ) : (
                   <div className="py-8 text-center">
-                    <div className="mx-auto max-w-2xl rounded-lg border border-blue-200 bg-blue-50 p-6">
-                      <FiFileText className="mx-auto mb-4 h-12 w-12 text-blue-500" />
+                    <div className="mx-auto max-w-2xl rounded-lg border border-gray-200 bg-gray-50 p-6">
+                      <FiFileText className="mx-auto mb-4 h-12 w-12 text-gray-400" />
                       <h3 className="mb-2 text-lg font-semibold text-gray-900">No follow-up history</h3>
                       <p className="text-sm text-gray-600">
                         This child patient has no follow-up visits recorded yet.
@@ -2597,6 +2609,7 @@ const CreateChildPatient = () => {
         )}
       </div>
     </div>
+    </ReadOnlyToneProvider>
   );
 };
 

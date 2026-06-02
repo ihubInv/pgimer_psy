@@ -918,26 +918,21 @@ const EditChildClinicalProforma = ({
           </div>
         )
       ) : (
-        <div className="bg-white border-b border-gray-200 shadow-sm print:hidden">
-          <div className="px-4 py-4 max-w-6xl mx-auto w-full">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <button
-                  type="button"
-                  onClick={() => navigate(-1)}
-                  className="p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 transition-colors shrink-0"
-                  aria-label="Go back"
-                >
-                  <FiArrowLeft className="w-5 h-5" />
-                </button>
+        <div className="px-4 sm:px-6 lg:px-8 pt-6 w-full print:hidden">
+          <Card variant="solid" className="overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-4 p-6 border-b border-gray-200">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="rounded-lg bg-green-100 p-3 shrink-0">
+                  <FiClipboard className="h-6 w-6 text-green-600" />
+                </div>
                 <div className="min-w-0">
-                  <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">
-                    PRIME — Child & Adolescent Psychiatry / Walk-in Clinical Proforma
+                  <h1 className="text-xl font-bold text-gray-900">Child Clinical Proforma</h1>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Child & Adolescent Psychiatry walk-in clinical proforma
                   </p>
-                  <h1 className="text-lg font-bold text-gray-900 leading-tight">Walk-in Clinical Proforma</h1>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 {isViewMode && (
                   <span className="hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-semibold border border-amber-200">
                     <FiAlertCircle className="w-3 h-3" /> View Mode
@@ -952,24 +947,38 @@ const EditChildClinicalProforma = ({
                     <FiEdit3 className="w-4 h-4" /> Edit
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  aria-label="Go back"
+                >
+                  <FiArrowLeft className="w-4 h-4" />
+                  Back
+                </button>
               </div>
             </div>
             {childPatient && (
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="grid grid-cols-2 gap-3 p-6 sm:grid-cols-4 bg-gray-50/50">
                 {patientDemographicsFields.map((item) => (
                   <div key={item.label}>
-                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-0.5">{item.label}</p>
-                    <p className="text-gray-900 font-medium truncate">{item.value}</p>
+                    <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      {item.label}
+                    </p>
+                    <p className="truncate font-medium text-gray-900">{item.value}</p>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Card>
         </div>
       )}
 
       {/* ── FORM BODY ──────────────────────────────────────────────────────── */}
-      <div ref={printSectionRef} className={isEmbedded ? 'px-0 py-0' : 'px-4 py-6 max-w-6xl mx-auto w-full'}>
+      <div
+        ref={printSectionRef}
+        className={isEmbedded ? 'px-0 py-0' : 'px-4 sm:px-6 lg:px-8 py-6 w-full'}
+      >
         <form
           onSubmit={(e) => {
             if (isViewMode) {

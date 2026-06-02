@@ -15,17 +15,24 @@ import {
   useCreateChildCapWorkupMutation,
   useUpdateChildCapWorkupMutation,
 } from '../../features/childCapWorkup/childCapWorkupApiSlice';
-import ChildCapIntakeComingSoon from '../../components/ChildCapIntakeComingSoon';
 
-/** Set to `false` to show the full CAP intake form again (`EditChildCapWorkupLegacy` below). */
-export const CHILD_CAP_INTAKE_COMING_SOON = true;
+/** CAP intake form is fully enabled. */
+export const CHILD_CAP_INTAKE_COMING_SOON = false;
 
 // ─── Helper components ────────────────────────────────────────────────────────
 
-const DisplayField = ({ label, value, rows }) => (
+const DisplayField = ({ label, value, rows, plain = false }) => (
   <div className="relative">
-    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl" />
-    <div className="relative bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm">
+    {!plain && (
+      <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-xl" />
+    )}
+    <div
+      className={
+        plain
+          ? 'relative rounded-lg border border-gray-200 bg-gray-50 p-4'
+          : 'relative bg-white/40 border border-white/40 rounded-xl p-4 shadow-sm'
+      }
+    >
       {label && <label className="block text-sm font-semibold text-gray-700 mb-1">{label}</label>}
       {rows && rows > 1
         ? <p className="text-sm text-gray-900 leading-relaxed whitespace-pre-wrap">{value || 'N/A'}</p>
@@ -34,8 +41,18 @@ const DisplayField = ({ label, value, rows }) => (
   </div>
 );
 
-const Field = ({ readOnly, label, value, rows, name, onChange, placeholder, type = 'text', className = '' }) => {
-  if (readOnly) return <DisplayField label={label} value={value} rows={rows} />;
+const Field = ({
+  readOnly,
+  label,
+  value,
+  rows,
+  name,
+  onChange,
+  placeholder,
+  type = 'text',
+  className = '',
+}) => {
+  if (readOnly) return <DisplayField label={label} value={value} rows={rows} plain />;
   if (rows && rows > 1) {
     return (
       <Textarea
@@ -87,7 +104,14 @@ const BoolField = ({ readOnly, label, name, value, onChange }) => {
   );
 };
 
-const SectionHeader = ({ title, icon: Icon, expanded, onToggle, color = 'blue' }) => {
+const SectionHeader = ({
+  title,
+  icon: Icon,
+  expanded,
+  onToggle,
+  color = 'blue',
+  collapsible = true,
+}) => {
   const colorMap = {
     blue: 'bg-blue-100 text-blue-600',
     green: 'bg-green-100 text-green-600',
@@ -100,6 +124,21 @@ const SectionHeader = ({ title, icon: Icon, expanded, onToggle, color = 'blue' }
     cyan: 'bg-cyan-100 text-cyan-600',
     slate: 'bg-slate-100 text-slate-600',
   };
+  if (!collapsible) {
+    return (
+      <div className="w-full flex items-center justify-between p-4 rounded-t-xl border-b border-gray-100">
+        <div className="flex items-center gap-3">
+          {Icon && (
+            <div className={`p-2 rounded-lg ${colorMap[color] || colorMap.blue}`}>
+              <Icon className="h-5 w-5" />
+            </div>
+          )}
+          <h3 className="text-base font-semibold text-gray-800">{title}</h3>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -122,6 +161,28 @@ const SectionHeader = ({ title, icon: Icon, expanded, onToggle, color = 'blue' }
 const EMPTY_INFORMANT = { name: '', relationship_with_patient: '', age: '', sex: '', education: '', occupation: '', duration_stay_with_patient: '' };
 const EMPTY_COMPLAINT = { complaint: '', duration: '', onset: '', precipitating_factor_present: '', precipitating_factor_elaborate: '', course: '' };
 const EMPTY_TREATMENT = { contact_no: '', year: '', facility: '', diagnosis: '', treatment: '', duration: '', response: '' };
+const ALL_SECTION_KEYS = [
+  'admin',
+  'informants',
+  'complaints',
+  'hpi',
+  'treatment',
+  'history',
+  'antenatal',
+  'natal',
+  'neonatal',
+  'dev',
+  'habits',
+  'play',
+  'education',
+  'sexual',
+  'temperament',
+  'family',
+  'physical',
+  'mse',
+  'diagnosis',
+  'consultant',
+];
 
 // ─── Default form state ───────────────────────────────────────────────────────
 
@@ -279,11 +340,25 @@ const DEFAULT_FORM = {
 
 // ─── Main Component (legacy CAP intake — gated by CHILD_CAP_INTAKE_COMING_SOON) ─
 
-const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
+const EditChildCapWorkupLegacy = ({
+  childPatientId,
+  isEmbedded = false,
+  hideToolbar = false,
+  flatLayout = false,
+  readOnlyView = false,
+}) => {
+  const effectiveFlatLayout = flatLayout || readOnlyView;
+  const effectiveHideToolbar = hideToolbar || readOnlyView;
+  const buildOpenSections = (openAll = false) =>
+    ALL_SECTION_KEYS.reduce(
+      (acc, key) => ({ ...acc, [key]: openAll || key === 'admin' }),
+      {}
+    );
+
   const [form, setForm] = useState({ ...DEFAULT_FORM });
   const [recordId, setRecordId] = useState(null);
-  const [readOnly, setReadOnly] = useState(false);
-  const [openSections, setOpenSections] = useState({ admin: true });
+  const [readOnly, setReadOnly] = useState(readOnlyView);
+  const [openSections, setOpenSections] = useState(buildOpenSections(effectiveFlatLayout));
 
   const { data, isLoading: isFetching, refetch } = useGetChildCapWorkupsByChildPatientIdQuery(childPatientId, {
     skip: !childPatientId,
@@ -293,6 +368,11 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
   const [updateWorkup, { isLoading: isUpdating }] = useUpdateChildCapWorkupMutation();
 
   const isSaving = isCreating || isUpdating;
+
+  useEffect(() => {
+    if (!effectiveFlatLayout) return;
+    setOpenSections(buildOpenSections(true));
+  }, [effectiveFlatLayout]);
 
   useEffect(() => {
     const records = data?.data?.records || [];
@@ -313,14 +393,15 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       if (!Array.isArray(merged.treatment_history_chart) || merged.treatment_history_chart.length === 0) merged.treatment_history_chart = [{ ...EMPTY_TREATMENT }];
       setForm(merged);
     } else {
-      setReadOnly(false);
+      setReadOnly(readOnlyView);
       setForm({ ...DEFAULT_FORM });
     }
-  }, [data]);
+  }, [data, readOnlyView]);
 
   const toggleSection = useCallback((key) => {
+    if (effectiveFlatLayout) return;
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
+  }, [effectiveFlatLayout]);
 
   const handleChange = useCallback((e) => {
     const { name, value, type, checked } = e.target;
@@ -378,7 +459,13 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
   }
 
   const S = ({ k, ...rest }) => (
-    <Field readOnly={readOnly} onChange={handleChange} {...rest} name={k} value={form[k]} />
+    <Field
+      readOnly={readOnly}
+      onChange={handleChange}
+      {...rest}
+      name={k}
+      value={form[k]}
+    />
   );
 
   const B = ({ k, label }) => (
@@ -387,56 +474,59 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-gray-800">CAP Detailed Work-up Record</h2>
-          <p className="text-sm text-gray-500">Child & Adolescent Psychiatry Clinic</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {readOnly ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setReadOnly(false)}
-              className="flex items-center gap-1.5 border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100"
-            >
-              Edit Record
-            </Button>
-          ) : (
-            <>
-              {recordId && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setReadOnly(true)}
-                  className="flex items-center gap-1.5"
-                >
-                  <FiX className="w-4 h-4" /> Cancel
-                </Button>
-              )}
+      {!effectiveHideToolbar && (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-gray-800">CAP Detailed Work-up Record</h2>
+            <p className="text-sm text-gray-500">Child & Adolescent Psychiatry Clinic</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {readOnly ? (
               <Button
                 type="button"
+                variant="outline"
                 size="sm"
-                onClick={handleSave}
-                loading={isSaving}
-                disabled={isSaving}
-                className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
+                onClick={() => setReadOnly(false)}
+                className="flex items-center gap-1.5 border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100"
               >
-                <FiSave className="w-4 h-4" />
-                {recordId ? 'Update' : 'Save'}
+                Edit Record
               </Button>
-            </>
-          )}
+            ) : (
+              <>
+                {recordId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReadOnly(true)}
+                    className="flex items-center gap-1.5"
+                  >
+                    <FiX className="w-4 h-4" /> Cancel
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSave}
+                  loading={isSaving}
+                  disabled={isSaving}
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
+                >
+                  <FiSave className="w-4 h-4" />
+                  {recordId ? 'Update' : 'Save'}
+                </Button>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Section: Administrative Details ─────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Administrative & Identification Details" icon={FiFileText} color="blue"
-          expanded={openSections.admin} onToggle={() => toggleSection('admin')} />
+          expanded={effectiveFlatLayout ? true : openSections.admin}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('admin')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.admin && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-4">
             <S k="workup_date" label="Workup Date" type="date" />
@@ -458,7 +548,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Informants ──────────────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Informants" icon={FiUser} color="indigo"
-          expanded={openSections.informants} onToggle={() => toggleSection('informants')} />
+          expanded={effectiveFlatLayout ? true : openSections.informants}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('informants')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.informants && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="md:col-span-3">
@@ -499,7 +591,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Chief Complaints ────────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Chief Complaints, Onset, Precipitating Factor & Course" icon={FiClipboard} color="rose"
-          expanded={openSections.complaints} onToggle={() => toggleSection('complaints')} />
+          expanded={effectiveFlatLayout ? true : openSections.complaints}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('complaints')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.complaints && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             {(form.chief_complaints_course || []).map((c, i) => (
@@ -544,7 +638,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: HPI ─────────────────────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="History of Present Illness (HPI)" icon={FiFileText} color="purple"
-          expanded={openSections.hpi} onToggle={() => toggleSection('hpi')} />
+          expanded={effectiveFlatLayout ? true : openSections.hpi}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('hpi')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.hpi && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 gap-4">
             <S k="hpi_developmental_history_symptoms" label="Developmental History & Symptoms" rows={4} placeholder="Developmental history and symptom description..." />
@@ -566,7 +662,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Treatment History ───────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Treatment History" icon={FiActivity} color="teal"
-          expanded={openSections.treatment} onToggle={() => toggleSection('treatment')} />
+          expanded={effectiveFlatLayout ? true : openSections.treatment}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('treatment')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.treatment && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -610,7 +708,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Past / Medical / Family / Life Chart ────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Past Psychiatric, Medical, Family History & Life Chart" icon={FiHeart} color="amber"
-          expanded={openSections.history} onToggle={() => toggleSection('history')} />
+          expanded={effectiveFlatLayout ? true : openSections.history}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('history')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.history && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 gap-4">
             <S k="past_psychiatric_history" label="Past Psychiatric History" rows={3} placeholder="Details of past psychiatric history..." />
@@ -640,7 +740,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Ante-natal History ─────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Ante-natal History" icon={FiCalendar} color="green"
-          expanded={openSections.antenatal} onToggle={() => toggleSection('antenatal')} />
+          expanded={effectiveFlatLayout ? true : openSections.antenatal}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('antenatal')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.antenatal && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <S k="ante_natal_mother_age_conception" label="Mother's Age at Conception" type="number" />
@@ -680,7 +782,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Natal History ───────────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Natal History" icon={FiCalendar} color="cyan"
-          expanded={openSections.natal} onToggle={() => toggleSection('natal')} />
+          expanded={effectiveFlatLayout ? true : openSections.natal}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('natal')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.natal && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <S k="natal_gestational_age_weeks" label="Gestational Age (weeks)" type="number" />
@@ -711,7 +815,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Neonatal / Post-natal ──────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Neonatal & Post-natal History" icon={FiHeart} color="orange"
-          expanded={openSections.neonatal} onToggle={() => toggleSection('neonatal')} />
+          expanded={effectiveFlatLayout ? true : openSections.neonatal}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('neonatal')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.neonatal && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <S k="neonatal_birth_weight_kg" label="Birth Weight (kg)" type="number" />
@@ -742,7 +848,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Developmental Milestones ───────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Developmental Milestones" icon={FiActivity} color="green"
-          expanded={openSections.dev} onToggle={() => toggleSection('dev')} />
+          expanded={effectiveFlatLayout ? true : openSections.dev}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('dev')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.dev && (
           <div className="p-4 border-t border-gray-100">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -772,7 +880,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Habits & Neurotic Traits ───────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Habits, Feeding, Sleep & Neurotic Traits" icon={FiHome} color="amber"
-          expanded={openSections.habits} onToggle={() => toggleSection('habits')} />
+          expanded={effectiveFlatLayout ? true : openSections.habits}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('habits')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.habits && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -801,7 +911,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Play ────────────────────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Play" icon={FiUser} color="teal"
-          expanded={openSections.play} onToggle={() => toggleSection('play')} />
+          expanded={effectiveFlatLayout ? true : openSections.play}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('play')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.play && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -830,7 +942,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Educational History ────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Educational History" icon={FiBook} color="purple"
-          expanded={openSections.education} onToggle={() => toggleSection('education')} />
+          expanded={effectiveFlatLayout ? true : openSections.education}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('education')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.education && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <S k="edu_schooling_type" label="Schooling Type" placeholder="Formal / Non-formal / Home-schooled" />
@@ -856,7 +970,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Sexual & Menstrual History ─────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Sexual & Menstrual History" icon={FiUser} color="rose"
-          expanded={openSections.sexual} onToggle={() => toggleSection('sexual')} />
+          expanded={effectiveFlatLayout ? true : openSections.sexual}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('sexual')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.sexual && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <S k="sexual_menstrual_age_appropriate_context" label="Age-appropriate Context / Awareness" rows={2} />
@@ -875,7 +991,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Temperamental Characteristics ──────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Temperamental Characteristics" icon={FiActivity} color="indigo"
-          expanded={openSections.temperament} onToggle={() => toggleSection('temperament')} />
+          expanded={effectiveFlatLayout ? true : openSections.temperament}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('temperament')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.temperament && (
           <div className="p-4 border-t border-gray-100">
             <div className="overflow-x-auto">
@@ -922,7 +1040,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Strengths & Family ─────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Strengths, Family Structure & Parental Functioning" icon={FiHome} color="green"
-          expanded={openSections.family} onToggle={() => toggleSection('family')} />
+          expanded={effectiveFlatLayout ? true : openSections.family}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('family')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.family && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -986,7 +1106,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Physical Examination ───────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="General Physical & Systemic Examination" icon={FiActivity} color="slate"
-          expanded={openSections.physical} onToggle={() => toggleSection('physical')} />
+          expanded={effectiveFlatLayout ? true : openSections.physical}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('physical')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.physical && (
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1024,7 +1146,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: MSE ─────────────────────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Mental State Examination (MSE)" icon={FiClipboard} color="purple"
-          expanded={openSections.mse} onToggle={() => toggleSection('mse')} />
+          expanded={effectiveFlatLayout ? true : openSections.mse}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('mse')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.mse && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <S k="mse_interview_approach_notes" label="Interview Approach / Notes" rows={2} />
@@ -1050,7 +1174,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Diagnosis & Plan ────────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Diagnosis & Plan" icon={FiFileText} color="indigo"
-          expanded={openSections.diagnosis} onToggle={() => toggleSection('diagnosis')} />
+          expanded={effectiveFlatLayout ? true : openSections.diagnosis}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('diagnosis')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.diagnosis && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
@@ -1069,7 +1195,9 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       {/* ── Section: Consultant Review ───────────────────────────────── */}
       <Card className="border border-gray-200 shadow-sm overflow-hidden">
         <SectionHeader title="Consultant / SR Review & Final Management" icon={FiClipboard} color="rose"
-          expanded={openSections.consultant} onToggle={() => toggleSection('consultant')} />
+          expanded={effectiveFlatLayout ? true : openSections.consultant}
+          onToggle={effectiveFlatLayout ? undefined : () => toggleSection('consultant')}
+          collapsible={!effectiveFlatLayout} />
         {openSections.consultant && (
           <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
@@ -1091,7 +1219,7 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
       </Card>
 
       {/* Bottom Save Bar */}
-      {!readOnly && (
+      {!readOnly && !readOnlyView && (!effectiveHideToolbar || effectiveFlatLayout) && (
         <div className="sticky bottom-0 z-10 flex justify-end gap-3 bg-white/90 backdrop-blur-sm border-t border-gray-200 px-4 py-4 -mx-4 shadow-lg">
           {recordId && (
             <Button type="button" variant="outline" onClick={() => setReadOnly(true)}>
@@ -1115,9 +1243,6 @@ const EditChildCapWorkupLegacy = ({ childPatientId, isEmbedded = false }) => {
 };
 
 const EditChildCapWorkup = (props) => {
-  if (CHILD_CAP_INTAKE_COMING_SOON) {
-    return <ChildCapIntakeComingSoon />;
-  }
   return <EditChildCapWorkupLegacy {...props} />;
 };
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useContext } from 'react';
 import { formatDate } from '../utils/formatters';
 import { normalizeArrayField } from '../utils/clinicalMultiSelectArray';
 import {
@@ -6,6 +6,7 @@ import {
   PatientDetailSectionTitle,
   PatientDetailFieldGroup,
   PatientDetailField,
+  ReadOnlyToneContext,
 } from './PatientDetailReadOnlyCard';
 import {
   CHILD_CLINICAL_RELIABILITY_OPTIONS,
@@ -74,6 +75,7 @@ function CheckboxSummary({ label, fieldValue, options }) {
  * @param {boolean} [hideTitleBlock] — hide top "CHILD CLINICAL PROFORMA" / visit date strip when the parent UI already shows that context (e.g. Past History).
  */
 export default function ChildClinicalProformaSummaryView({ proforma, hideTitleBlock = false }) {
+  const readOnlyTone = useContext(ReadOnlyToneContext);
   const visitLabel = formatVisitDate(proforma);
 
   const hasAnyContent = useMemo(() => {
@@ -216,7 +218,11 @@ export default function ChildClinicalProformaSummaryView({ proforma, hideTitleBl
     <div className="child-clinical-proforma-summary space-y-6">
       {!hideTitleBlock && (
         <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
-          <h2 className="text-lg font-bold uppercase tracking-wide text-blue-800 sm:text-xl">
+          <h2
+            className={`text-lg font-bold uppercase tracking-wide sm:text-xl ${
+              readOnlyTone === 'neutral' ? 'text-gray-900' : 'text-blue-800'
+            }`}
+          >
             Child Clinical Proforma
           </h2>
           {visitLabel && (

@@ -33,7 +33,10 @@ import {
   PatientDetailSectionTitle,
   PatientDetailFieldGroup,
   PatientDetailCardShell,
+  ReadOnlyToneProvider,
 } from '../../components/PatientDetailReadOnlyCard';
+import { VIEW_NESTED_PANEL_CLASS, VIEW_SECTION_ICON } from '../../utils/viewDetailsUi';
+import ViewEmptyMessage from '../../components/ViewEmptyMessage';
 import { selectCurrentUser } from '../../features/auth/authSlice';
 import { useSelector } from 'react-redux';
 import PGI_Logo from '../../assets/PGI_Logo.png';
@@ -133,10 +136,10 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   const getReferredByLabel = (value) => getLabelFromOptions(value, REFERRED_BY_OPTIONS);
 
   const [expandedCards, setExpandedCards] = useState({
-    patient: false,
-    clinical: false,
-    adl: false,
-    prescriptions: false,
+    patient: true,
+    clinical: true,
+    adl: true,
+    prescriptions: true,
     pastHistory: false,
   });
 
@@ -3879,6 +3882,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   // Note: canViewPrescriptions is now determined by filled_by_role above
 
   return (
+    <ReadOnlyToneProvider tone="neutral">
     <div className="space-y-6">
       <div className="flex justify-end">
         <Button variant="outline" className="no-print" onClick={handlePrintAllCards}>
@@ -3887,7 +3891,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
         </Button>
       </div>
       {/* Card 1: Patient Details */}
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
         <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
           >
@@ -3895,8 +3899,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               className="flex items-center gap-4 cursor-pointer flex-1"
           onClick={() => toggleCard('patient')}
         >
-              <div className="p-3 bg-blue-100 rounded-lg">
-              <FiUser className="h-6 w-6 text-blue-600" />
+              <div className={VIEW_SECTION_ICON.patient}>
+              <FiUser className="h-6 w-6 text-slate-700" />
             </div>
             <div>
                 <h3 className="text-xl font-bold text-gray-900">Patient Details</h3>
@@ -3972,7 +3976,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                     )}
                   </PatientDetailFieldGroup>
                   <div className="space-y-3 border-t border-gray-100 pt-4">
-                    <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-gray-800">
                       Address details
                     </p>
                     <PatientDetailFieldGroup>
@@ -4096,7 +4100,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                   </PatientDetailFieldGroup>
 
                   <div className="space-y-3 border-t border-gray-100 pt-4">
-                    <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-gray-800">
                       Permanent Address
                     </p>
                     <PatientDetailFieldGroup>
@@ -4117,7 +4121,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                   </div>
 
                   <div className="space-y-3 border-t border-gray-100 pt-4">
-                    <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-gray-800">
                       Present Address
                     </p>
                     <PatientDetailFieldGroup>
@@ -4138,7 +4142,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                   </div>
 
                   <div className="space-y-3 border-t border-gray-100 pt-4">
-                    <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-gray-800">
                       Local Address
                     </p>
                     <PatientDetailFieldGroup>
@@ -4182,7 +4186,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
       {/* Card 2: Walk-in Clinical Proforma - Show only if filled_by_role is Admin, JR, or SR */}
       {canViewClinicalProforma && (
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
           >
@@ -4190,8 +4194,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               className="flex items-center gap-4 cursor-pointer flex-1"
             onClick={() => toggleCard('clinical')}
           >
-              <div className="p-3 bg-green-100 rounded-lg">
-                <FiFileText className="h-6 w-6 text-green-600" />
+              <div className={VIEW_SECTION_ICON.clinical}>
+                <FiFileText className="h-6 w-6 text-emerald-700" />
               </div>
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Walk-in Clinical Proforma</h3>
@@ -4260,7 +4264,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <FiFileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                  <p className="text-base">No clinical proforma records found</p>
+                  <p className="text-base font-medium">No Proforma Available</p>
                 </div>
               )}
             </div>
@@ -4269,7 +4273,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       )}
       {/* Card 3: Additional Details (ADL File) - Show card even if empty, as long as user has permission */}
       {canViewADLFile && (
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
           >
@@ -4277,8 +4281,8 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               className="flex items-center gap-4 cursor-pointer flex-1"
             onClick={() => toggleCard('adl')}
           >
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <FiFolder className="h-6 w-6 text-purple-600" />
+              <div className={VIEW_SECTION_ICON.intake}>
+                <FiFolder className="h-6 w-6 text-violet-700" />
               </div>
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Out Patient Intake Record</h3>
@@ -4322,7 +4326,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <FiFolder className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                  <p className="text-base">No  Out Patient Intake Record found</p>
+                  <p className="text-base font-medium">Form Not Yet Submitted</p>
                 </div>
               )}
             </div>
@@ -4332,7 +4336,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
       {/* Card 4: Prescription History - Show only if current user is Admin, JR, or SR */}
       {canViewPrescriptions && (
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
           >
@@ -4340,15 +4344,15 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               className="flex items-center gap-4 cursor-pointer flex-1"
             onClick={() => toggleCard('prescriptions')}
           >
-              <div className="p-3 bg-amber-100 rounded-lg">
-                <FiPackage className="h-6 w-6 text-amber-600" />
+              <div className={VIEW_SECTION_ICON.prescription}>
+                <FiPackage className="h-6 w-6 text-amber-700" />
               </div>
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Prescription</h3>
                 <p className="text-sm text-gray-500 mt-1">
                   {allPrescriptions.length > 0
                     ? `${allPrescriptions.length} prescription${allPrescriptions.length > 1 ? 's' : ''} across ${Object.keys(prescriptionsByVisit).length} visit${Object.keys(prescriptionsByVisit).length > 1 ? 's' : ''}`
-                    : 'No prescriptions found'}
+                    : 'No Data Available'}
                 </p>
               </div>
             </div>
@@ -4389,7 +4393,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <FiPackage className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                  <p className="text-base">No prescription history found</p>
+                  <p className="text-base font-medium">No Data Available</p>
                   <p className="text-sm text-gray-400 mt-1">Prescriptions will appear here once medications are prescribed</p>
                 </div>
               )}
@@ -4400,7 +4404,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
 
       {/* Card 5: Past History — follow-up visits and notes only (grouped by date) */}
       {canViewClinicalProforma && (
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div className="flex items-center justify-between border-b border-gray-200 p-6 transition-colors hover:bg-gray-50">
             <div
               className="flex flex-1 cursor-pointer items-center gap-4"
@@ -4471,14 +4475,14 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                     const n = visitGroup.visits.length;
 
                     return (
-                      <Card key={dateToggleId} className="border-2 border-purple-200 shadow-lg">
+                      <Card key={dateToggleId} variant="solid">
                         <div
-                          className="flex cursor-pointer items-center justify-between border-b border-gray-200 p-5 transition-colors hover:bg-purple-50"
+                          className="flex cursor-pointer items-center justify-between border-b border-gray-200 p-5 transition-colors hover:bg-gray-50"
                           onClick={() => toggleVisitCard(dateToggleId)}
                         >
                           <div className="flex items-center gap-4">
-                            <div className="rounded-lg bg-purple-100 p-3">
-                              <FiCalendar className="h-6 w-6 text-purple-600" />
+                            <div className={VIEW_SECTION_ICON.history}>
+                              <FiCalendar className="h-6 w-6 text-slate-600" />
                             </div>
                             <div>
                               <h4 className="text-xl font-bold text-gray-900">{visitDate}</h4>
@@ -4506,7 +4510,7 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                               return (
                                 <div
                                   key={visitId}
-                                  className="rounded-lg border-l-4 border-blue-500 bg-blue-50/80 p-4"
+                                  className={VIEW_NESTED_PANEL_CLASS}
                                 >
                                   <h5 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
                                     <FiFileText className="h-4 w-4 text-blue-600" />
@@ -4554,21 +4558,18 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
                   })}
                 </div>
               ) : (
-                <div className="py-12 text-center">
-                  <div className="mx-auto max-w-2xl rounded-lg border border-purple-200 bg-purple-50 p-6">
-                    <FiFileText className="mx-auto mb-4 h-12 w-12 text-purple-500" />
-                    <h3 className="mb-2 text-lg font-semibold text-gray-900">No follow-up history</h3>
-                    <p className="text-sm text-gray-600">
-                      This patient has no follow-up visits in past history yet.
-                    </p>
-                  </div>
-                </div>
+                <ViewEmptyMessage
+                  message="No follow-up history"
+                  description="This patient has no follow-up visits in past history yet."
+                  icon={FiFileText}
+                />
               )}
             </div>
           )}
         </Card>
       )}
     </div>
+    </ReadOnlyToneProvider>
   );
 });
 

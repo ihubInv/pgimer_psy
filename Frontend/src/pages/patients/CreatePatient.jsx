@@ -676,7 +676,7 @@ const CreatePatient = () => {
         {(!isMWO(currentUser?.role) || activeTab === 'adult') && (
           <>
         {/* Patient Details Card - Collapsible */}
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div
             className="flex items-center justify-between cursor-pointer p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
             onClick={() => setExpandedPatientDetails(!expandedPatientDetails)}

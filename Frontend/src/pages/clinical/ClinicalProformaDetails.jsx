@@ -1575,13 +1575,13 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
 
                 {/* Provisional Diagnosis and Treatment Plan */}
                 {resolveDiagnosticFormulationHistory(adlFile) && (
-                  <Card title="Diagnostic Formulation" className="border-2 border-emerald-200 bg-emerald-50/30">
+                  <Card title="Diagnostic Formulation" variant="solid">
                     <p className="text-gray-900 whitespace-pre-wrap">{resolveDiagnosticFormulationHistory(adlFile)}</p>
                   </Card>
                 )}
 
                 {resolveFinalAssessmentHistory(adlFile) && (
-                  <Card title="Final Assessment" className="border-2 border-blue-200 bg-blue-50/30">
+                  <Card title="Final Assessment" variant="solid">
                     <p className="text-gray-900 whitespace-pre-wrap">{resolveFinalAssessmentHistory(adlFile)}</p>
                   </Card>
                 )}

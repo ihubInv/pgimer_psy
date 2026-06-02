@@ -78,7 +78,7 @@ export default function ChildPatientRegistrationViewCards({ formData, rooms = []
           <PatientDetailSectionTitle>Child Patient Registration</PatientDetailSectionTitle>
         </div>
         <div className="space-y-4 px-5 pb-5">
-          <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+          <p className="text-sm font-semibold uppercase tracking-wide text-gray-800">
             Visit & identification
           </p>
           <PatientDetailFieldGroup>

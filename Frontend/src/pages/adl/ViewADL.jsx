@@ -9,6 +9,7 @@ import FilePreview from '../../components/FilePreview';
 import { FiChevronDown, FiChevronUp, FiFileText, FiCalendar, FiUser, FiHome, FiX, FiArrowLeft } from 'react-icons/fi';
 import { formatDate, formatDateTime } from '../../utils/formatters';
 import Button from '../../components/Button';
+import { VIEW_NESTED_PANEL_CLASS } from '../../utils/viewDetailsUi';
 import {
   ADL_HISTORY_PRESENT_ILLNESS_PROMPTS,
   resolveHistoryPresentIllness,
@@ -421,7 +422,7 @@ const ViewADL = ( {adlFiles} ) => {
 
           {expandedCards.history && (
             <div className="p-6 space-y-6">
-              <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 space-y-2">
+              <div className={`${VIEW_NESTED_PANEL_CLASS} space-y-2`}>
                 {ADL_HISTORY_PRESENT_ILLNESS_PROMPTS.map((line) => (
                   <p key={line} className="text-sm text-gray-700 leading-snug">
                     {line}

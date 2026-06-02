@@ -497,7 +497,7 @@ const PatientRow = ({ patient, navigate, onMarkCompleted, onRoomChanged, availab
               onClick={() => {
                 const isChildPatient = patient.patient_type === 'child';
                 if (isChildPatient) {
-                  navigate(`/child-patient/${patient.id}`);
+                  navigate(`/child-patient/${patient.id}?mode=edit&section=intakeRecord`);
                 } else {
                   if (patient.has_adl_file) {
                     navigate(`/adl/patient/${patient.id}`);

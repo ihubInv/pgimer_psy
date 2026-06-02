@@ -43,6 +43,8 @@ import { SelectWithOther } from '../../components/SelectWithOther';
 import {IconInput} from '../../components/IconInput';
 import PGI_Logo from '../../assets/PGI_Logo.png';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
+import { ReadOnlyToneProvider } from '../../components/PatientDetailReadOnlyCard';
+import { VIEW_NESTED_PANEL_CLASS } from '../../utils/viewDetailsUi';
 
 const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, adlData, usersData, userRole, onSave, onCancel }) => {
   const [searchParams] = useSearchParams();
@@ -3606,10 +3608,11 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   };
 
   return (
+    <ReadOnlyToneProvider tone="neutral">
     <div className="space-y-6">
 
       {/* Patient Details Card - Collapsible */}
-      <Card className="shadow-lg border-0 bg-white">
+      <Card variant="solid">
         <div
           className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
         >
@@ -4641,7 +4644,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       {/* Additional Sections: Walk-in Clinical Proforma, ADL File, Prescriptions */}
       {/* Card 1: Walk-in Clinical Proforma - Show only if current user is Admin, JR, or SR */}
       {canViewClinicalProforma && (
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
           >
@@ -5092,7 +5095,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
       {/* Card 2: Out Patient Intake Record — always visible for clinical roles (independent of proforma) */}
       {canViewADLFile && (
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
           >
@@ -5175,7 +5178,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
 
       {/* Card 3: Prescription History - Show only if current user is Admin, JR, or SR */}
       {canViewPrescriptions && (
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
           >
@@ -5283,7 +5286,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
       {/* Card 1.5: Child Clinical Proforma - Show only for child patients and if current user is Admin, JR, or SR */}
       {/* This section is ALWAYS VISIBLE (non-collapsible) for child patients */}
       {isChildPatient && canViewClinicalProforma && (
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-purple-100 rounded-lg">
@@ -5428,7 +5431,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
         (canViewPrescriptions ||
         canViewClinicalProforma ||
         (canViewAllSections && patientAdlFiles.length > 0)) && (
-        <Card className="shadow-lg border-0 bg-white">
+        <Card variant="solid">
           <div
             className="flex items-center justify-between p-6 border-b border-gray-200 hover:bg-gray-50 transition-colors"
           >
@@ -5831,7 +5834,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                                         /* Standalone prescription - no proforma section */
                                         null
                                       ) : visit.isFollowUp ? (
-                                        <div className="border-l-4 border-blue-500 pl-4">
+                                        <div className={VIEW_NESTED_PANEL_CLASS}>
                                           <div className="flex items-center justify-between mb-3">
                                             <h5 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                                               <FiFileText className="h-5 w-5 text-blue-600" />
@@ -6128,6 +6131,7 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   </div>
 )}
     </div>
+    </ReadOnlyToneProvider>
   );
 };
 
