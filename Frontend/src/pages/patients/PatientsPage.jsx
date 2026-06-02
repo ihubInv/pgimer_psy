@@ -126,7 +126,12 @@ const PatientsPage = () => {
     const p = {};
     if (listFilters.state) p.state = listFilters.state;
     if (listFilters.gender) p.gender = listFilters.gender;
-    if (listFilters.period) p.period = listFilters.period;
+    if (listFilters.date_from && listFilters.date_to) {
+      p.date_from = listFilters.date_from;
+      p.date_to = listFilters.date_to;
+    } else if (listFilters.period) {
+      p.period = listFilters.period;
+    }
     return p;
   }, [listFilters]);
 

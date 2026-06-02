@@ -30,7 +30,24 @@ class PatientController {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   }
 
-  /** Parse state / gender / week|month period for patient list endpoints */
+  /** YYYY-MM-DD for patient list date filters (IST calendar dates). */
+  static _normalizeDateParam(val) {
+    if (val == null || val === '') return null;
+    const s = String(val).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const [y, m, d] = s.split('-').map((x) => parseInt(x, 10));
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    if (
+      dt.getUTCFullYear() !== y ||
+      dt.getUTCMonth() !== m - 1 ||
+      dt.getUTCDate() !== d
+    ) {
+      return null;
+    }
+    return s;
+  }
+
+  /** Parse state / gender / week|month period / custom date range for patient list endpoints */
   static _parsePatientListFilters(query) {
     const state = query.state ? String(query.state).trim() : '';
     const genderRaw = query.gender || query.sex || '';
@@ -53,10 +70,21 @@ class PatientController {
       else if (g === 'other' || g === 'o') childSex = 'Other';
     }
 
+    const dateFrom = PatientController._normalizeDateParam(
+      query.date_from || query.created_from
+    );
+    const dateTo = PatientController._normalizeDateParam(
+      query.date_to || query.created_to
+    );
+
     let created_from = null;
     let created_to = null;
     const today = PatientController._todayISTDateString();
-    if (period === 'week') {
+
+    if (dateFrom || dateTo) {
+      created_from = dateFrom;
+      created_to = dateTo;
+    } else if (period === 'week') {
       const d = new Date();
       d.setDate(d.getDate() - 6);
       created_from = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
@@ -73,7 +101,12 @@ class PatientController {
       childSex,
       created_from,
       created_to,
-      period: period === 'week' || period === 'month' ? period : null,
+      period:
+        dateFrom || dateTo
+          ? null
+          : period === 'week' || period === 'month'
+            ? period
+            : null,
     };
   }
 

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { FiFilter, FiX } from 'react-icons/fi';
+import { FiFilter, FiX, FiCalendar } from 'react-icons/fi';
+import { toast } from 'react-toastify';
 import Button from './Button';
+import CustomDatePicker from './CustomDatePicker';
 
 const INDIAN_STATES = [
   'Andhra Pradesh',
@@ -42,6 +44,8 @@ const EMPTY_FILTERS = {
   state: '',
   gender: '',
   period: '',
+  date_from: '',
+  date_to: '',
 };
 
 const PERIOD_LABELS = {
@@ -49,9 +53,25 @@ const PERIOD_LABELS = {
   month: 'This month',
 };
 
+const todayIso = () => new Date().toISOString().split('T')[0];
+
+const formatChipDate = (iso) => {
+  if (!iso) return '';
+  try {
+    return new Date(`${iso}T12:00:00`).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
+};
+
 const PatientListFilters = ({ appliedFilters, onApply, onReset, isLoading }) => {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState({ ...EMPTY_FILTERS, ...appliedFilters });
+  const maxDate = todayIso();
 
   useEffect(() => {
     if (open) {
@@ -68,15 +88,59 @@ const PatientListFilters = ({ appliedFilters, onApply, onReset, isLoading }) => 
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const activeCount = [appliedFilters.state, appliedFilters.gender, appliedFilters.period].filter(
-    Boolean
-  ).length;
+  const activeCount = [
+    appliedFilters.state,
+    appliedFilters.gender,
+    appliedFilters.period,
+    appliedFilters.date_from && appliedFilters.date_to ? 'date_range' : '',
+  ].filter(Boolean).length;
+
+  const handlePeriodChange = (period) => {
+    setDraft((prev) => ({
+      ...prev,
+      period,
+      ...(period ? { date_from: '', date_to: '' } : {}),
+    }));
+  };
+
+  const handleDateFromChange = (e) => {
+    const date_from = e.target.value;
+    setDraft((prev) => ({
+      ...prev,
+      date_from,
+      period: date_from || prev.date_to ? '' : prev.period,
+    }));
+  };
+
+  const handleDateToChange = (e) => {
+    const date_to = e.target.value;
+    setDraft((prev) => ({
+      ...prev,
+      date_to,
+      period: date_to || prev.date_from ? '' : prev.period,
+    }));
+  };
 
   const handleApply = () => {
+    const date_from = draft.date_from || '';
+    const date_to = draft.date_to || '';
+    const period = draft.period || '';
+
+    if ((date_from && !date_to) || (!date_from && date_to)) {
+      toast.error('Please select both start and end dates for the date range');
+      return;
+    }
+    if (date_from && date_to && date_from > date_to) {
+      toast.error('Start date cannot be after end date');
+      return;
+    }
+
     onApply({
       state: draft.state || '',
       gender: draft.gender || '',
-      period: draft.period || '',
+      period: date_from && date_to ? '' : period,
+      date_from: date_from && date_to ? date_from : '',
+      date_to: date_from && date_to ? date_to : '',
     });
     setOpen(false);
   };
@@ -169,17 +233,51 @@ const PatientListFilters = ({ appliedFilters, onApply, onReset, isLoading }) => 
               </label>
 
               <label className="block">
-                <span className="text-sm font-medium text-gray-700">Period</span>
+                <span className="text-sm font-medium text-gray-700">Quick period</span>
                 <select
                   value={draft.period}
-                  onChange={(e) => setDraft({ ...draft, period: e.target.value })}
+                  onChange={(e) => handlePeriodChange(e.target.value)}
                   className="mt-1.5 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500"
+                  disabled={Boolean(draft.date_from || draft.date_to)}
                 >
                   <option value="">All time</option>
                   <option value="week">This week</option>
                   <option value="month">This month</option>
                 </select>
               </label>
+
+              <div className="sm:col-span-2 border-t border-gray-100 pt-4">
+                <p className="text-sm font-medium text-gray-700 mb-1">
+                  Registration date range
+                </p>
+                <p className="text-xs text-gray-500 mb-3">
+                  Filter patients registered between two dates (IST). Overrides quick period when both dates are set.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <CustomDatePicker
+                    label="From date"
+                    name="date_from"
+                    value={draft.date_from}
+                    onChange={handleDateFromChange}
+                    max={draft.date_to || maxDate}
+                    icon={<FiCalendar className="w-4 h-4" />}
+                    dropdownZIndex={1000000}
+                  />
+                  <CustomDatePicker
+                    label="To date"
+                    name="date_to"
+                    value={draft.date_to}
+                    onChange={handleDateToChange}
+                    min={draft.date_from}
+                    max={maxDate}
+                    icon={<FiCalendar className="w-4 h-4" />}
+                    dropdownZIndex={1000000}
+                  />
+                </div>
+                {draft.date_from && draft.date_to && draft.date_from > draft.date_to && (
+                  <p className="mt-2 text-xs text-red-600">Start date must be on or before end date.</p>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-3 px-5 py-4 border-t border-gray-100 bg-gray-50/80 rounded-b-2xl">
@@ -210,6 +308,13 @@ export function PatientListActiveFilters({ appliedFilters, onClear, onClearAll }
   if (appliedFilters.period) {
     chips.push({ key: 'period', label: PERIOD_LABELS[appliedFilters.period] || appliedFilters.period });
   }
+  if (appliedFilters.date_from && appliedFilters.date_to) {
+    chips.push({
+      key: 'date_range',
+      label: `Registered: ${formatChipDate(appliedFilters.date_from)} – ${formatChipDate(appliedFilters.date_to)}`,
+      clearKeys: ['date_from', 'date_to'],
+    });
+  }
   if (chips.length === 0) return null;
 
   return (
@@ -219,7 +324,13 @@ export function PatientListActiveFilters({ appliedFilters, onClear, onClearAll }
         <button
           key={c.key}
           type="button"
-          onClick={() => onClear(c.key)}
+          onClick={() => {
+            if (c.clearKeys) {
+              c.clearKeys.forEach((k) => onClear(k));
+            } else {
+              onClear(c.key);
+            }
+          }}
           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-100 text-primary-800 text-xs font-medium hover:bg-primary-200 transition-colors"
         >
           {c.label}
