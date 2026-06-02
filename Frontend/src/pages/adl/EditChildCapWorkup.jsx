@@ -1018,7 +1018,13 @@ const EditChildCapWorkupLegacy = ({
                 ['dev_bowel_control_age', 'Bowel Control'],
                 ['dev_bladder_control_age', 'Bladder Control'],
               ].map(([k, lbl]) => (
-                <S key={k} k={k} label={lbl} placeholder="Age (e.g. 3m, 1y)" />
+                <CapFormField
+                  key={k}
+                  {...capFieldProps}
+                  k={k}
+                  label={lbl}
+                  placeholder="Age (e.g. 3m, 1y)"
+                />
               ))}
             </div>
           </div>
