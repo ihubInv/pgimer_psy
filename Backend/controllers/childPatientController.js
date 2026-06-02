@@ -443,6 +443,43 @@ class ChildPatientController {
       const updatedDateIST = new Date(updatedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       console.log(`[addChildPatientToTodayList] Updated child patient ${child_patient_id}: assigned_room="${roomToUse}", updated_at="${updatedAt}" (IST: ${updatedAtIST}, Date: ${updatedDateIST})`);
 
+      // Ensure a follow-up visit row exists for TODAY so the child appears in
+      // Today's Patients lists (which rely on followup_visits for child has_visit_today
+      // and doctor assignment filters).
+      const existingTodayVisit = await db.query(
+        `SELECT id, visit_status
+           FROM followup_visits
+          WHERE child_patient_id = $1
+            AND DATE(visit_date) = $2::date
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        [parseInt(child_patient_id, 10), todayDate]
+      );
+
+      if (existingTodayVisit.rowCount > 0) {
+        // Keep completed status intact, otherwise ensure scheduled status.
+        const currentStatus = existingTodayVisit.rows[0].visit_status;
+        const nextStatus = currentStatus === 'completed' ? 'completed' : 'scheduled';
+        await db.query(
+          `UPDATE followup_visits
+              SET assigned_doctor_id = $1,
+                  filled_by = $1,
+                  room_no = $2,
+                  visit_status = $3,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = $4`,
+          [currentUserId, roomToUse, nextStatus, existingTodayVisit.rows[0].id]
+        );
+      } else {
+        await db.query(
+          `INSERT INTO followup_visits
+             (child_patient_id, visit_date, clinical_assessment, filled_by, assigned_doctor_id, room_no, visit_status)
+           VALUES
+             ($1, $2, 'Follow-up consultation', $3, $3, $4, 'scheduled')`,
+          [parseInt(child_patient_id, 10), todayDate, currentUserId, roomToUse]
+        );
+      }
+
       // Refresh the child patient data
       const updatedChildPatient = await ChildPatientRegistration.findById(child_patient_id);
 

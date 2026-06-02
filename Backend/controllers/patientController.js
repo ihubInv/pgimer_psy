@@ -971,7 +971,9 @@ class PatientController {
       // Adults (default)
       const patientTypeFilter = 'adult';
       const wantChildOnly = false;
-      const wantAdultOnly = true;
+      // Keep adult dataset as primary, but allow child merge for room/date based lists
+      // (e.g. Today's Patients where child follow-ups must appear together).
+      const wantAdultOnly = false;
 
       /** Per-child follow-up row counts (followup_visits), set when children are loaded */
       let childFollowUpVisitCountMap = {};
