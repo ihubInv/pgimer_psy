@@ -584,6 +584,12 @@ router.get(
   authorizeRoles('Admin', 'Faculty', 'Resident'),
   PatientController.getReferralLogs
 );
+router.patch(
+  '/referrals/:referralId/revoke',
+  authenticateToken,
+  authorizeRoles('Admin'),
+  PatientController.revokeReferral
+);
 
 /**
  * @swagger

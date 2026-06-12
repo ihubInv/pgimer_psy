@@ -201,6 +201,43 @@ class ChildClinicalProforma {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // ALLOWED VALUES + VALIDATION
+  // ─────────────────────────────────────────────────────────────────────────
+
+  static ALLOWED = {
+    school_type:          ['Govt', 'Private', 'Special'],
+    reliability:          ['Good', 'Fair', 'Poor'],
+    family_type:          ['Nuclear', 'Joint', 'Single Parent'],
+    academic_performance: ['Below Avg', 'Avg', 'Above Avg'],
+    school_refusal:       ['Yes', 'No'],
+    bullying:             ['Victim', 'Perpetrator', 'Both', 'No'],
+    duration_of_illness:  ['Less than a week', '1–4 weeks', '2–4 weeks', '3–6 months', '6–12 months', '1–4 years', 'Since birth', 'Not known'],
+    onset:                ['Sudden', 'Insidious (≈ 1 week)', 'Sub-acute (1–4 weeks)', 'Gradual (> 4 weeks)'],
+    course:               ['Worsening', 'Steady', 'Fluctuating', 'Improving', 'Periodic', 'Not known'],
+    physical_development: ['Average', 'Less than average'],
+    high_risk_management: ['Yes', 'No'],
+    disposal_status:      ['Given', 'Managed in Walk-in only'],
+    sex:                  ['Male', 'Female', 'Other'],
+    status:               ['draft', 'submitted'],
+  };
+
+  /**
+   * Validate enum fields. Returns an array of error strings (empty array = valid).
+   */
+  static validate(data) {
+    const errors = [];
+    for (const [field, allowed] of Object.entries(ChildClinicalProforma.ALLOWED)) {
+      const v = data[field];
+      if (v !== undefined && v !== null && v !== '' && !allowed.includes(v)) {
+        errors.push(
+          `"${field}" must be one of: ${allowed.map(o => `"${o}"`).join(', ')}. Received: "${v}"`
+        );
+      }
+    }
+    return errors;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // CREATE
   // ─────────────────────────────────────────────────────────────────────────
   static async create(proformaData) {

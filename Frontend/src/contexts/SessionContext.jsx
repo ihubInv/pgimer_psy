@@ -66,15 +66,15 @@ export const SessionProvider = ({ children }) => {
     }
   }, [token, updateActivity]);
 
-  // Idle timer hook — **10 minutes** timeout
+  // Idle timer hook — **30 minutes** timeout (matches JWT_ACCESS_EXPIRES_IN)
   useIdleTimer({
-    timeout: 600 * 1000, // ⏳ 10 minutes
+    timeout: 1800 * 1000, // ⏳ 30 minutes
     onIdle: handleSessionExpired,
     onActive: handleActive,
     enabled: !!token && !isSessionExpired
   });
 
-  // Auto refresh token before expiry (every 8 minutes for 10-minute session)
+  // Auto refresh token before expiry (every 20 minutes for 30-minute token)
   useEffect(() => {
     if (!token || isSessionExpired) return;
 
@@ -115,20 +115,20 @@ export const SessionProvider = ({ children }) => {
           handleSessionExpired();
         }
       }
-    }, 480000); // 🔁 8 minutes (refresh before 10-minute expiry)
+    }, 1200000); // 🔁 20 minutes (refresh before 30-minute token expiry)
 
     return () => clearInterval(refreshInterval);
   }, [token, refreshToken, dispatch, isSessionExpired, handleSessionExpired]);
 
-  // Every 2 minutes -> check session status (for 10-minute session)
+  // Every 5 minutes -> check session status (for 30-minute session)
   useEffect(() => {
     if (!token || isSessionExpired) return;
 
     const interval = setInterval(async () => {
       const diff = Date.now() - lastActivityRef.current;
 
-      // Skip check if user is active (within 5 minutes for 10-minute session)
-      if (diff < 300000) return; // 5 minutes
+      // Skip check if user is active (within 20 minutes for 30-minute session)
+      if (diff < 1200000) return; // 20 minutes
 
       try {
         const result = await refreshToken().unwrap();
@@ -149,7 +149,7 @@ export const SessionProvider = ({ children }) => {
           handleSessionExpired();
         }
       }
-    }, 120000); // 2 minutes
+    }, 300000); // 5 minutes
 
     return () => clearInterval(interval);
   }, [token, refreshToken, dispatch, isSessionExpired, handleSessionExpired]);

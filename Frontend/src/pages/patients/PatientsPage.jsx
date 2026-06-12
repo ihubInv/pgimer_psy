@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import { 
   FiPlus, FiSearch, FiTrash2, FiEye,  FiEdit, FiUsers, 
    FiDownload,
-  FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle, FiClipboard, FiChevronDown
+  FiFileText, FiShield, FiX, FiUserPlus, FiCheckCircle, FiClipboard, FiChevronDown, FiXCircle
 } from 'react-icons/fi';
 import { BsFileEarmarkExcelFill } from 'react-icons/bs';
 import {
@@ -16,6 +16,7 @@ import {
   useMarkReferralSeenMutation,
   useCompleteReferralMutation,
   useAddPatientToMyListMutation,
+  useRevokeReferralMutation,
 } from '../../features/patients/patientsApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
 import { formatPatientsForExport, exportData } from '../../utils/exportUtils';
@@ -88,6 +89,7 @@ const PatientsPage = () => {
   const [assignDoctorDropdownPatientId, setAssignDoctorDropdownPatientId] = useState(null);
   const [selectedAssignDoctorId, setSelectedAssignDoctorId] = useState('');
   const assignDoctorDropdownRef = useRef(null);
+  const [revokeConfirmRow, setRevokeConfirmRow] = useState(null);
   const [listFilters, setListFilters] = useState(PATIENT_LIST_EMPTY_FILTERS);
 
   const isUnassignedTab = patientType === 'unassigned';
@@ -221,6 +223,7 @@ const PatientsPage = () => {
 
   const [markReferralSeen] = useMarkReferralSeenMutation();
   const [completeReferral] = useCompleteReferralMutation();
+  const [revokeReferral, { isLoading: isRevoking }] = useRevokeReferralMutation();
   const [addPatientToMyList, { isLoading: isAddingToMyList }] = useAddPatientToMyListMutation();
 
   const currentIsLoading = isLoading;
@@ -433,6 +436,19 @@ const PatientsPage = () => {
       refetch();
     } catch (err) {
       toast.error(err?.data?.message || 'Failed to complete referral');
+    }
+  };
+
+  const handleConfirmRevoke = async () => {
+    if (!revokeConfirmRow?.referral_id) return;
+    try {
+      await revokeReferral({ referralId: revokeConfirmRow.referral_id }).unwrap();
+      toast.success('Referral revoked successfully');
+      setRevokeConfirmRow(null);
+      refetch();
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to revoke referral');
+      setRevokeConfirmRow(null);
     }
   };
 
@@ -3200,8 +3216,10 @@ const PatientsPage = () => {
       if (isReferredTab) {
         const showReferredClinical = canFillClinicalProformaForReferral(user);
         const showReferredIntake = canFillIntakeRecordForReferral(user);
-        const referralCompleted =
-          (row.referral_status || '').toLowerCase() === 'completed';
+        const referralStatus = (row.referral_status || '').toLowerCase();
+        const referralCompleted = referralStatus === 'completed';
+        const referralRevoked = referralStatus === 'revoked' || referralStatus === 'cancelled';
+        const canRevoke = isAdmin(user?.role) && referralSubView === 'by_me' && !referralCompleted && !referralRevoked && row.referral_id;
 
         const referredBtnBase =
           'w-full h-9 flex items-center justify-center gap-1 px-1.5 text-[11px] sm:text-xs font-medium rounded-lg shadow-sm';
@@ -3249,7 +3267,18 @@ const PatientsPage = () => {
               <div className="h-9" aria-hidden />
             )}
             {row.referral_id ? (
-              referralCompleted ? (
+              referralRevoked ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  className={`${referredBtnBase} bg-red-50 border-red-200 text-red-400 cursor-not-allowed`}
+                  title="Referral has been revoked"
+                >
+                  <FiXCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Revoked</span>
+                </Button>
+              ) : referralCompleted ? (
                 <Button
                   variant="outline"
                   size="sm"
@@ -3275,6 +3304,18 @@ const PatientsPage = () => {
             ) : (
               <div className="h-9" aria-hidden />
             )}
+            {canRevoke ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRevokeConfirmRow(row)}
+                className={`col-span-2 ${referredBtnBase} bg-red-50 border-red-200 text-red-700 hover:bg-red-100 hover:border-red-400`}
+                title="Revoke this referral"
+              >
+                <FiXCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Revoke Referral</span>
+              </Button>
+            ) : null}
           </div>
         );
       }
@@ -3467,10 +3508,20 @@ const PatientsPage = () => {
                   ? 'bg-green-100 text-green-800 border-green-200'
                   : st === 'seen'
                     ? 'bg-blue-100 text-blue-800 border-blue-200'
-                    : 'bg-amber-100 text-amber-900 border-amber-200';
+                    : st === 'revoked' || st === 'cancelled'
+                      ? 'bg-red-100 text-red-700 border-red-200'
+                      : 'bg-amber-100 text-amber-900 border-amber-200';
+              const label =
+                st === 'completed'
+                  ? 'Completed'
+                  : st === 'seen'
+                    ? 'Seen'
+                    : st === 'revoked' || st === 'cancelled'
+                      ? 'Revoked'
+                      : 'Pending';
               return (
                 <Badge className={`border ${styles}`}>
-                  {st === 'completed' ? 'Completed' : st === 'seen' ? 'Seen' : 'Pending'}
+                  {label}
                 </Badge>
               );
             },
@@ -4021,6 +4072,55 @@ const PatientsPage = () => {
         onClose={() => setIsExportModalOpen(false)}
         onExport={handleExportAll}
       />
+
+      {/* Revoke Referral Confirmation Modal */}
+      {revokeConfirmRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="flex items-center gap-3 px-6 py-4 bg-red-50 border-b border-red-100">
+              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-100">
+                <FiXCircle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-red-800">Revoke Referral</h3>
+                <p className="text-xs text-red-600">This action cannot be undone</p>
+              </div>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                Are you sure you want to revoke this referral? The patient{' '}
+                <span className="font-semibold text-gray-900">
+                  {revokeConfirmRow.name || 'this patient'}
+                </span>{' '}
+                will no longer be visible to{' '}
+                <span className="font-semibold text-gray-900">
+                  Dr. {revokeConfirmRow.referred_to_name || 'the selected doctor'}
+                </span>
+                .
+              </p>
+            </div>
+            <div className="flex gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100 justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRevokeConfirmRow(null)}
+                disabled={isRevoking}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border-gray-300 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleConfirmRevoke}
+                disabled={isRevoking}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 border-transparent disabled:opacity-60"
+              >
+                {isRevoking ? 'Revoking…' : 'Yes, Revoke Referral'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

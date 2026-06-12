@@ -8,6 +8,7 @@ import {
   FiClock, FiChevronDown, FiChevronUp, FiEye, FiEdit3, FiClipboard, FiPackage,
   FiFolder, FiPrinter,
 } from 'react-icons/fi';
+import { printCapWorkup } from '../../utils/capWorkupPrint';
 import { IconInput } from '../../components/IconInput';
 import Card from '../../components/Card';
 import Select from '../../components/Select';
@@ -306,16 +307,7 @@ const CreateChildPatient = () => {
     });
   };
 
-  useEffect(() => {
-    if (!isViewMode || !id) return;
-    setExpandedCards((prev) => ({
-      ...prev,
-      childPatientRegistration: true,
-      viewChildClinical: true,
-      viewIntake: true,
-      viewPrescription: true,
-    }));
-  }, [isViewMode, id]);
+  // Cards start collapsed in view mode — user clicks to expand each one.
 
   const childDocumentFilesForPreview = useMemo(() => {
     const docs = Array.isArray(formData.documents) ? [...formData.documents] : [];
@@ -385,11 +377,22 @@ const CreateChildPatient = () => {
     const temp = document.createElement('div');
     temp.innerHTML = rawHtml;
 
+    // Remove UI controls and non-printable elements
     temp
       .querySelectorAll(
         '.no-print, [class*="no-print"], button, [role="button"], script, style'
       )
       .forEach((el) => el.remove());
+
+    // Remove all SVG icons — they have no Tailwind sizing in the print window
+    // and expand to full block size, producing large blank rectangles
+    temp.querySelectorAll('svg').forEach((el) => el.remove());
+
+    // Remove empty icon-wrapper divs left behind after SVG removal
+    // (e.g. <div class="rounded-lg bg-indigo-50 p-2"> that only wrapped an icon)
+    temp.querySelectorAll('div').forEach((el) => {
+      if (!el.textContent.trim() && !el.querySelector('img')) el.remove();
+    });
 
     if (stripDocuments) {
       const docHeadings = Array.from(temp.querySelectorAll('h4'));
@@ -512,6 +515,7 @@ const CreateChildPatient = () => {
       text-align: center;
       color: #000;
     }
+    svg, .no-print, [class*="no-print"] { display: none !important; }
     table, th, td {
       border: 1px solid #000 !important;
       border-collapse: collapse;
@@ -658,6 +662,7 @@ const CreateChildPatient = () => {
     .print-content [role="button"] {
       display: none !important;
     }
+    svg, .no-print, [class*="no-print"] { display: none !important; }
     table, th, td {
       border: 1px solid #000 !important;
       border-collapse: collapse;
@@ -740,6 +745,16 @@ const CreateChildPatient = () => {
         sections.push({ title: 'CAP Detailed Work-up Record', html });
       }
     }
+    // Strip embedded prescription header (own logo + PGIMER title) to avoid
+    // a duplicate logo inside the combined print document.
+    const stripEmbeddedHeader = (html) => {
+      if (!html) return '';
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      tmp.querySelectorAll('.print-header, .print-footer').forEach(el => el.remove());
+      return tmp.innerHTML.trim();
+    };
+
     if (prescriptions.length > 0 || flatChildPrescriptionItems.length > 0) {
       const prescHtml = buildPrescriptionPrintDocument(
         childPatientForPrescriptionPrint,
@@ -747,7 +762,7 @@ const CreateChildPatient = () => {
         { flatMedications: flatChildPrescriptionItems, formatDate }
       );
       if (prescHtml) {
-        sections.push({ title: 'Prescription', html: prescHtml });
+        sections.push({ title: 'Prescription', html: stripEmbeddedHeader(prescHtml) });
       }
     } else if (childPrescriptionPrintRef.current) {
       const html = sanitizeSectionHtml(childPrescriptionPrintRef.current.innerHTML);
@@ -2114,11 +2129,12 @@ const CreateChildPatient = () => {
                     className="no-print"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handlePrintFromChildCard(
-                        'viewIntake',
-                        childCapPrintRef,
-                        'CAP Detailed Work-up Record'
-                      );
+                      const record = childCapWorkupRecords?.[0];
+                      if (record) {
+                        printCapWorkup(record);
+                      } else {
+                        toast.error('No CAP Workup record to print');
+                      }
                     }}
                   >
                     <FiPrinter className="h-4 w-4 mr-1" />

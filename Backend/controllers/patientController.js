@@ -3543,6 +3543,7 @@ class PatientController {
         referred_to_name: r.referred_to_name,
         referred_to_role: r.referred_to_role,
         referred_to_sub_role: r.referred_to_sub_role,
+        revoked_at: r.revoked_at,
       }));
 
       return res.json({
@@ -3872,6 +3873,47 @@ class PatientController {
       res.status(500).json({
         success: false,
         message: 'Failed to load referral logs',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      });
+    }
+  }
+
+  static async revokeReferral(req, res) {
+    try {
+      if (req.user.role !== 'Admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Only Admins can revoke referrals',
+        });
+      }
+
+      const referralId = parseInt(req.params.referralId, 10);
+      if (!referralId) {
+        return res.status(400).json({ success: false, message: 'Invalid referral ID' });
+      }
+
+      const notes = req.body?.notes?.trim() || null;
+
+      const PatientReferral = require('../models/PatientReferral');
+      const referral = await PatientReferral.revokeReferral(referralId, req.user.id, notes);
+
+      if (!referral) {
+        return res.status(404).json({ success: false, message: 'Referral not found' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Referral has been revoked successfully',
+        data: { referral: referral.toJSON() },
+      });
+    } catch (error) {
+      if (error.code === 'CONFLICT') {
+        return res.status(409).json({ success: false, message: error.message });
+      }
+      console.error('[revokeReferral] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to revoke referral',
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
       });
     }

@@ -455,6 +455,14 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
     getReferralLogs: builder.query({
       query: (referralId) => `/patients/referrals/${referralId}/logs`,
     }),
+    revokeReferral: builder.mutation({
+      query: ({ referralId, notes }) => ({
+        url: `/patients/referrals/${referralId}/revoke`,
+        method: 'PATCH',
+        body: notes ? { notes } : {},
+      }),
+      invalidatesTags: ['Patient', { type: 'Patient', id: 'LIST' }],
+    }),
     updateChildPatientDocuments: builder.mutation({
       queryFn: async ({ id, files = [], files_to_remove = [] }, _queryApi, _extraOptions) => {
         const formData = new FormData();
@@ -541,5 +549,6 @@ export const {
   useMarkReferralSeenMutation,
   useCompleteReferralMutation,
   useGetReferralLogsQuery,
+  useRevokeReferralMutation,
 } = patientsApiSlice;
 

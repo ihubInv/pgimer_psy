@@ -860,7 +860,12 @@ const EditChildClinicalProforma = ({
           navigate('/clinical-today-patients');
         }
       } else {
-        toast.error(data.message || 'Failed to save child clinical proforma');
+        const errors = data?.errors;
+        if (Array.isArray(errors) && errors.length) {
+          errors.forEach(e => toast.error(e, { autoClose: 6000 }));
+        } else {
+          toast.error(data.message || 'Failed to save child clinical proforma');
+        }
       }
     } catch (error) {
       console.error('Error saving proforma:', error);

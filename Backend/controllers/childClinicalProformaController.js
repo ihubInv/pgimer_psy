@@ -58,6 +58,15 @@ class ChildClinicalProformaController {
         status: data.status || 'draft'
       };
 
+      const validationErrors = ChildClinicalProforma.validate(proformaData);
+      if (validationErrors.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid field value(s)',
+          errors: validationErrors,
+        });
+      }
+
       const proforma = await ChildClinicalProforma.create(proformaData);
 
       res.status(201).json({
@@ -202,6 +211,15 @@ class ChildClinicalProformaController {
         return res.status(400).json({
           success: false,
           message: 'Disposal reason is required when status is "Managed in Walk-in only"'
+        });
+      }
+
+      const validationErrors = ChildClinicalProforma.validate(updateData);
+      if (validationErrors.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid field value(s)',
+          errors: validationErrors,
         });
       }
 

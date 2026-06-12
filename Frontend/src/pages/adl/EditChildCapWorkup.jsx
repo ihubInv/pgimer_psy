@@ -3,11 +3,13 @@ import { toast } from 'react-toastify';
 import {
   FiSave, FiPlus, FiX, FiChevronDown, FiChevronUp,
   FiUser, FiCalendar, FiFileText, FiActivity, FiHeart,
-  FiBook, FiHome, FiClipboard, FiEdit3, FiEye, FiPlusCircle,
+  FiBook, FiHome, FiClipboard, FiEdit3, FiEye, FiPlusCircle, FiPrinter,
 } from 'react-icons/fi';
+import { printCapWorkup } from '../../utils/capWorkupPrint';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
 import Textarea from '../../components/Textarea';
+import Select from '../../components/Select';
 import Button from '../../components/Button';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import {
@@ -126,6 +128,20 @@ const CapFormField = ({ k, form, readOnly, onChange, ...rest }) => {
 const CapBoolField = ({ k, label, form, readOnly, onChange }) => (
   <BoolField readOnly={readOnly} label={label} name={k} value={form[k]} onChange={onChange} />
 );
+
+const CapSelectField = ({ k, label, options, form, readOnly, onChange }) => {
+  if (readOnly) return <DisplayField label={label} value={form[k]} plain />;
+  return (
+    <Select
+      label={label}
+      name={k}
+      value={form[k] || ''}
+      onChange={onChange}
+      options={options}
+      placeholder={`Select ${label}`}
+    />
+  );
+};
 
 const BoolField = ({ readOnly, label, name, value, onChange }) => {
   if (readOnly) {
@@ -529,7 +545,12 @@ const EditChildCapWorkupLegacy = ({
       setFormActive(true);
       refetch();
     } catch (err) {
-      toast.error(err?.data?.message || 'Failed to save workup record');
+      const errors = err?.data?.errors;
+      if (Array.isArray(errors) && errors.length) {
+        errors.forEach(e => toast.error(e, { autoClose: 6000 }));
+      } else {
+        toast.error(err?.data?.message || 'Failed to save workup record');
+      }
     }
   };
 
@@ -652,7 +673,7 @@ const EditChildCapWorkupLegacy = ({
           )}
         </div>
 
-        {/* Right: Edit only in view mode — Save/Cancel live in the bottom bar while editing */}
+        {/* Right: Edit — shown in view mode only */}
         <div className="flex items-center gap-2 shrink-0">
           {readOnly && recordId && !readOnlyView && (
             <Button
@@ -684,7 +705,11 @@ const EditChildCapWorkupLegacy = ({
             <CapFormField {...capFieldProps} k="date_of_birth" label="Date of Birth" type="date" />
             <CapFormField {...capFieldProps} k="gender" label="Gender" placeholder="Male / Female / Other" />
             <CapFormField {...capFieldProps} k="education" label="Education" placeholder="Current class / level" />
-            <CapFormField {...capFieldProps} k="school_type" label="School Type" placeholder="Government / Private / Special" />
+            <CapSelectField {...capFieldProps} k="school_type" label="School Type" options={[
+              { value: 'Government', label: 'Government' },
+              { value: 'Private', label: 'Private' },
+              { value: 'Special', label: 'Special' },
+            ]} />
             <CapFormField {...capFieldProps} k="referred_by" label="Referred By" placeholder="Referral source" />
             <div className="md:col-span-3">
               <CapFormField {...capFieldProps} k="reason_referral_present_consultation" label="Reason for Referral / Present Consultation" rows={3} placeholder="Reason for referral..." />
@@ -802,7 +827,13 @@ const EditChildCapWorkupLegacy = ({
             <CapFormField {...capFieldProps} k="hpi_continued" label="HPI Continued" rows={3} placeholder="Continued narrative..." />
             <CapFormField {...capFieldProps} k="relevant_negative_history" label="Relevant Negative History" rows={3} placeholder="Relevant negatives..." />
             <CapFormField {...capFieldProps} k="functioning_overall_assessment" label="Overall Functioning Assessment" rows={3} placeholder="Global functioning assessment..." />
-            <CapFormField {...capFieldProps} k="impairment_severity" label="Impairment Severity (Mild / Moderate / Severe / None)" placeholder="Mild / Moderate / Severe / None / Not impaired" />
+            <CapSelectField {...capFieldProps} k="impairment_severity" label="Impairment Severity" options={[
+              { value: 'Mild', label: 'Mild' },
+              { value: 'Moderate', label: 'Moderate' },
+              { value: 'Severe', label: 'Severe' },
+              { value: 'None', label: 'None' },
+              { value: 'Not impaired', label: 'Not impaired' },
+            ]} />
           </div>
         )}
       </Card>
@@ -817,7 +848,14 @@ const EditChildCapWorkupLegacy = ({
           <div className="p-4 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <CapFormField {...capFieldProps} k="treatment_who_initiated_first_contact" label="Who Initiated First Contact?" rows={2} placeholder="Person who initiated first contact..." />
-              <CapFormField {...capFieldProps} k="treatment_first_contact_due_to" label="First Contact Due To" placeholder="Parental perception / Teacher referral / Physician / Pediatrician / Relative / Other" />
+              <CapSelectField {...capFieldProps} k="treatment_first_contact_due_to" label="First Contact Due To" options={[
+                { value: 'Parental perception', label: 'Parental perception' },
+                { value: 'Teacher referral', label: 'Teacher referral' },
+                { value: 'Referral from any physician', label: 'Referral from any physician' },
+                { value: 'Referral from a pediatrician', label: 'Referral from a pediatrician' },
+                { value: 'Advice of a relative', label: 'Advice of a relative' },
+                { value: 'Any other', label: 'Any other' },
+              ]} />
               <CapFormField {...capFieldProps} k="treatment_first_contact_due_to_other" label="First Contact (Other – specify)" placeholder="If other, specify..." />
             </div>
             <h4 className="font-semibold text-sm text-teal-700 mt-2">Treatment History Chart (up to 4 contacts)</h4>

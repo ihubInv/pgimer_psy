@@ -32,6 +32,14 @@ class ChildCapWorkupController {
       if (!child_patient_id) {
         return res.status(400).json({ success: false, message: 'child_patient_id is required' });
       }
+      const validationErrors = ChildCapWorkup.validate(rest);
+      if (validationErrors.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid field value(s)',
+          errors: validationErrors,
+        });
+      }
       const record = await ChildCapWorkup.create({ child_patient_id, ...rest });
       res.status(201).json({ success: true, message: 'Workup record created', data: { record: record.toJSON() } });
     } catch (error) {
@@ -47,6 +55,14 @@ class ChildCapWorkupController {
       const existing = await ChildCapWorkup.findById(id);
       if (!existing) return res.status(404).json({ success: false, message: 'Workup record not found' });
 
+      const validationErrors = ChildCapWorkup.validate(req.body);
+      if (validationErrors.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid field value(s)',
+          errors: validationErrors,
+        });
+      }
       const updated = await ChildCapWorkup.update(id, req.body);
       res.json({ success: true, message: 'Workup record updated', data: { record: updated.toJSON() } });
     } catch (error) {

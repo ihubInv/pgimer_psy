@@ -13,6 +13,7 @@ class PatientReferral {
     this.seen_at = data.seen_at;
     this.completed_at = data.completed_at;
     this.notes = data.notes;
+    this.revoked_at = data.revoked_at || null;
     this.created_at = data.created_at;
     this.updated_at = data.updated_at;
 
@@ -44,6 +45,7 @@ class PatientReferral {
       seen_at: this.seen_at,
       completed_at: this.completed_at,
       notes: this.notes,
+      revoked_at: this.revoked_at,
       created_at: this.created_at,
       updated_at: this.updated_at,
       referred_by_name: this.referred_by_name,
@@ -203,6 +205,8 @@ class PatientReferral {
 
     if (statusFilter === 'active') {
       where += ` AND pr.status IN ('pending', 'seen')`;
+    } else if (statusFilter === 'all') {
+      // No status filter — show every status including completed, revoked, cancelled
     } else if (statusFilter) {
       params.push(statusFilter);
       where += ` AND pr.status = $${params.length}`;
@@ -360,6 +364,42 @@ class PatientReferral {
       );
 
       await PatientReferral.addLog(referralId, doctorId, 'completed', notes, client);
+
+      await client.query('COMMIT');
+      return PatientReferral.findById(referralId);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  static async revokeReferral(referralId, adminId, notes = null) {
+    const referral = await PatientReferral.findById(referralId);
+    if (!referral) return null;
+
+    if (referral.status === 'completed' || referral.status === 'revoked' || referral.status === 'cancelled') {
+      const err = new Error(`Referral is already ${referral.status} and cannot be revoked`);
+      err.code = 'CONFLICT';
+      throw err;
+    }
+
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      await client.query(
+        `UPDATE patient_referrals
+         SET status = 'revoked',
+             revoked_at = CURRENT_TIMESTAMP,
+             notes = COALESCE($2, notes),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [referralId, notes]
+      );
+
+      await PatientReferral.addLog(referralId, adminId, 'revoked', notes, client);
 
       await client.query('COMMIT');
       return PatientReferral.findById(referralId);

@@ -351,6 +351,37 @@ class ChildCapWorkup {
     return { ...this };
   }
 
+  // ─── Allowed values for constrained enum fields ────────────────────────────
+
+  static ALLOWED = {
+    school_type: ['Government', 'Private', 'Special'],
+    impairment_severity: ['Mild', 'Moderate', 'Severe', 'None', 'Not impaired'],
+    treatment_first_contact_due_to: [
+      'Parental perception',
+      'Teacher referral',
+      'Referral from any physician',
+      'Referral from a pediatrician',
+      'Advice of a relative',
+      'Any other',
+    ],
+  };
+
+  /**
+   * Validate enum fields. Returns an array of error strings (empty = valid).
+   */
+  static validate(data) {
+    const errors = [];
+    for (const [field, allowed] of Object.entries(ChildCapWorkup.ALLOWED)) {
+      const v = data[field];
+      if (v !== undefined && v !== null && v !== '' && !allowed.includes(v)) {
+        errors.push(
+          `"${field}" must be one of: ${allowed.map(o => `"${o}"`).join(', ')}. Received: "${v}"`
+        );
+      }
+    }
+    return errors;
+  }
+
   // ─── Static Query Helpers ───────────────────────────────────────────────────
 
   static async findByChildPatientId(childPatientId) {

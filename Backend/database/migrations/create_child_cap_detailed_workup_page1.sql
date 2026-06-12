@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS child_cap_detailed_workup (
     school_type VARCHAR(20)
         CHECK (
             school_type IS NULL
-            OR school_type IN ('Regular', 'Special')
+            OR school_type IN ('Government', 'Private', 'Special')
         ),
 
     -- --- Referral ---
@@ -1260,6 +1260,22 @@ ALTER TABLE child_cap_detailed_workup ADD COLUMN IF NOT EXISTS management_plan_i
 ALTER TABLE child_cap_detailed_workup ADD COLUMN IF NOT EXISTS management_advice TEXT;
 ALTER TABLE child_cap_detailed_workup ADD COLUMN IF NOT EXISTS signature_consultant_sr_name TEXT;
 ALTER TABLE child_cap_detailed_workup ADD COLUMN IF NOT EXISTS signature_resident_name TEXT;
+
+-- Upgrade: drop old school_type constraint (allowed 'Regular'/'Special') and replace with correct values.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'child_cap_detailed_workup_school_type_check'
+          AND conrelid = 'child_cap_detailed_workup'::regclass
+    ) THEN
+        ALTER TABLE child_cap_detailed_workup
+            DROP CONSTRAINT child_cap_detailed_workup_school_type_check;
+    END IF;
+    ALTER TABLE child_cap_detailed_workup
+        ADD CONSTRAINT child_cap_detailed_workup_school_type_check
+        CHECK (school_type IS NULL OR school_type IN ('Government', 'Private', 'Special'));
+END $$;
 
 DO $$
 BEGIN
