@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const PatientController = require('../controllers/patientController');
+const PatientReportController = require('../controllers/patientReportController');
 const PatientFileController = require('../controllers/patientFileController');
 const { authenticateToken, requireMWOOrDoctor, requireAdmin, authorizeRoles } = require('../middleware/auth');
 const {
@@ -617,6 +618,46 @@ router.patch(
  *         description: Server error
  */
 router.get('/cr/:cr_no', authenticateToken, authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'), PatientController.getPatientByCRNo);
+
+/**
+ * Bulk patient export (Excel) — must be registered before /:id routes.
+ */
+router.post(
+  '/reports/bulk',
+  authenticateToken,
+  authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'),
+  PatientReportController.bulkPatientReports
+);
+
+/**
+ * @swagger
+ * /api/patients/{id}/report:
+ *   get:
+ *     summary: Download patient report (Excel or print-ready HTML)
+ *     tags: [Patient Management]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: format
+ *         schema:
+ *           type: string
+ *           enum: [xlsx, html, pdf]
+ *           default: xlsx
+ *     responses:
+ *       200:
+ *         description: Report file or HTML
+ */
+router.get(
+  '/:id/report',
+  authenticateToken,
+  authorizeRoles('Admin', 'Psychiatric Welfare Officer', 'Faculty', 'Resident'),
+  validateId,
+  PatientReportController.getPatientReport
+);
 
 /**
  * @swagger

@@ -21,6 +21,10 @@ import {
 import Button from '../../components/Button';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx-js-style';
+import {
+  downloadPatientReportExcel,
+  openPatientReportPrint,
+} from '../../utils/patientReportApi';
 
 import { useGetPrescriptionByIdQuery, useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
 import { useGetPatientVisitHistoryQuery, useGetPatientFilesQuery } from '../../features/patients/patientsApiSlice';
@@ -301,238 +305,18 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   };
 
   const handlePrintAllCards = async () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { toast.error('Please allow pop-ups to print this section'); return; }
-
-    /* ── 1. Fetch logo once ── */
-    let logoBase64 = '';
+    if (!patient?.id) {
+      toast.error('No patient loaded');
+      return;
+    }
     try {
-      const res  = await fetch(PGI_Logo);
-      const blob = await res.blob();
-      logoBase64 = await new Promise(resolve => {
-        const r = new FileReader();
-        r.onloadend = () => resolve(r.result);
-        r.readAsDataURL(blob);
-      });
-    } catch { /* logo optional */ }
-
-    /* ── 2. Collect content-only sections (no header/footer per-card) ── */
-    const cards = [];
-
-    if (patient) {
-      const html = patientDetailsContentOnlyHtml(patient, formData, userRole);
-      if (html?.trim()) cards.push({ title: 'Patient Details', html });
+      toast.info('Loading print report...');
+      await openPatientReportPrint(patient.id);
+      toast.success('Print dialog opened');
+    } catch (err) {
+      console.error('Print error:', err);
+      toast.error(err?.message || 'Failed to print patient report');
     }
-
-    if (canViewClinicalProforma && lastVisitProforma) {
-      const html = clinicalProformaContentOnlyHtml(lastVisitProforma, patient, clinicalOptions);
-      if (html?.trim()) cards.push({ title: 'Walk-in Clinical Proforma', html });
-    }
-
-    if (canViewADLFile && patientAdlFiles[0]) {
-      const html = adlIntakeContentOnlyHtml(patientAdlFiles[0], patient);
-      if (html?.trim()) cards.push({ title: 'Out-Patient Intake Record', html });
-    }
-
-    if (canViewPrescriptions) {
-      const prescFullHtml = buildPrescriptionPrintDocument(
-        adultPatientForPrescriptionPrint,
-        patientPrescriptionsData?.data?.prescriptions || [],
-        { flatMedications: allPrescriptions, formatDate }
-      );
-      if (prescFullHtml?.trim()) {
-        /* Extract body content from the standalone prescription doc */
-        const tmp = document.createElement('div');
-        tmp.innerHTML = prescFullHtml;
-        tmp.querySelectorAll('.print-header, .print-footer, .print-patient-info').forEach(el => el.remove());
-        const prescContent = tmp.innerHTML.trim();
-        if (prescContent) cards.push({ title: 'Prescription', html: prescContent, isPrescription: true });
-      } else {
-        cards.push({ title: 'Prescription', html: '', empty: true });
-      }
-    }
-
-    if (!cards.length) { toast.error('No printable sections found'); printWindow.close(); return; }
-
-    /* ── 3. Patient summary bar data ── */
-    const ptName   = displayData?.name        || '—';
-    const ptCrNo   = displayData?.cr_no       || '—';
-    const ptPsyNo  = displayData?.psy_no      || '';
-    const ptAge    = displayData?.age         || '—';
-    const ptSex    = displayData?.sex         || '—';
-    const ptMobile = displayData?.contact_number || '—';
-    const ptDept   = displayData?.department  || '—';
-    const ptFileNo = displayData?.file_no     || '—';
-    const ptDate   = (() => {
-      const d = displayData?.date;
-      if (!d) return '—';
-      try { return new Date(String(d).split('T')[0]).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }); }
-      catch { return String(d); }
-    })();
-
-    /* ── 4. Build card group HTML ── */
-    const cardsHtml = cards.map(card => {
-      if (card.empty) {
-        return `<div class="card-group">
-  <div class="card-group-title">${card.title}</div>
-  <div class="card-group-body card-empty">No prescription records available.</div>
-</div>`;
-      }
-      const bodyClass = card.isPrescription ? 'card-group-body presc-body' : 'card-group-body';
-      return `<div class="card-group">
-  <div class="card-group-title">${card.title}</div>
-  <div class="${bodyClass}">${card.html}</div>
-</div>`;
-    }).join('\n');
-
-    /* ── 5. Unified CSS ── */
-    const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-@page { size: A4 portrait; margin: 10mm 10mm 10mm 10mm; }
-*, *::before, *::after { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-body { font-family: 'Inter','Roboto','Segoe UI',Arial,sans-serif; font-size: 9pt; line-height: 1.35; color: #111827; margin: 0; padding: 0; background: #fff; }
-
-/* ── SINGLE DOCUMENT HEADER ── */
-.doc-hdr { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 3px solid #1E3A8A; margin-bottom: 5px; }
-.doc-hdr img { max-width: 60px; max-height: 60px; width: auto; height: auto; flex-shrink: 0; }
-.doc-hdr-text { flex: 1; text-align: center; }
-.doc-hdr-text h1 { margin: 0; font-size: 12pt; font-weight: 700; color: #1E3A8A; line-height: 1.2; }
-.doc-hdr-text .dept { font-size: 9pt; color: #374151; font-weight: 600; margin: 1px 0 0; }
-.doc-hdr-text .rpt-title { font-size: 9.5pt; font-weight: 700; color: #1E3A8A; text-transform: uppercase; letter-spacing: 0.4px; margin: 2px 0 0; }
-
-/* ── PATIENT SUMMARY BAR ── */
-.pt-summary { border: 1px solid #D1D5DB; border-radius: 4px; overflow: hidden; margin-bottom: 6px; background: #F8FAFC; }
-.pt-summary-row { display: grid; gap: 0; }
-.pt-summary-row.row1 { grid-template-columns: repeat(4,1fr); }
-.pt-summary-row.row2 { grid-template-columns: repeat(3,1fr); border-top: 1px solid #E5E7EB; }
-.ps-cell { padding: 4px 8px; border-right: 1px solid #E5E7EB; font-size: 8pt; }
-.ps-cell:last-child { border-right: none; }
-.ps-cell .psl { font-weight: 600; color: #6B7280; font-size: 7pt; text-transform: uppercase; display: block; }
-.ps-cell .psv { font-weight: 700; color: #111827; font-size: 8.5pt; }
-
-/* ── CARD GROUP ── */
-.card-group { margin: 6px 0; }
-.card-group-title {
-  background: #1E3A8A; color: #fff; font-size: 8.5pt; font-weight: 700;
-  padding: 4px 9px; text-transform: uppercase; letter-spacing: 0.5px;
-  border-radius: 4px 4px 0 0;
-}
-.card-group-body { border: 1px solid #D1D5DB; border-top: none; border-radius: 0 0 4px 4px; padding: 4px 5px; }
-.card-empty { font-size: 8pt; color: #6B7280; font-style: italic; padding: 6px 9px !important; min-height: 0; }
-
-/* ── INNER SECTION (from content-only html) ── */
-.sec { margin: 4px 0; }
-.sec-hdr { background: #2563EB; color: #fff; font-size: 7.5pt; font-weight: 700; padding: 2px 6px; border-radius: 2px 2px 0 0; text-transform: uppercase; letter-spacing: 0.4px; }
-.sec-body { border: 1px solid #D1D5DB; border-top: none; border-radius: 0 0 2px 2px; padding: 4px 6px; background: #fff; }
-
-/* ── KV GRID ── */
-.kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 0; }
-.kv-grid.cols-2 { grid-template-columns: repeat(2,1fr); }
-.kv-grid.cols-3 { grid-template-columns: repeat(3,1fr); }
-.kv-grid.cols-4 { grid-template-columns: repeat(4,1fr); }
-.kv { padding: 2px 4px; border-bottom: 1px solid #F3F4F6; border-right: 1px solid #F3F4F6; }
-.kv.span2 { grid-column: span 2; }
-.kv.span3 { grid-column: span 3; }
-.kv.span4 { grid-column: span 4; border-right: none; }
-.kv .kl { font-size: 6.5pt; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.2px; display: block; }
-.kv .kv-val { font-size: 8pt; color: #111827; font-weight: 500; }
-
-/* ── TABLES ── */
-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin: 0; }
-table th { background: #EFF6FF; color: #1E3A8A; font-weight: 700; padding: 2px 5px; border: 1px solid #BFDBFE; text-align: left; font-size: 7.5pt; text-transform: uppercase; }
-table td { padding: 2px 5px; border: 1px solid #E5E7EB; vertical-align: top; }
-table tbody tr:nth-child(even) td { background: #F9FAFB; }
-
-/* Prescription tables */
-.presc-body table th { background: #F3F4F6; color: #111827; border-color: #D1D5DB; }
-.presc-body .print-section-title { font-size: 8pt; font-weight: 700; margin: 4px 0 3px; text-transform: uppercase; color: #1E3A8A; }
-.presc-body .print-table th, .presc-body .print-table td { padding: 2px 5px; border: 1px solid #D1D5DB; }
-
-/* ── NARRATIVE ── */
-.narrative { font-size: 8.5pt; line-height: 1.4; color: #111827; white-space: pre-wrap; text-align: justify; padding: 2px 0; }
-
-/* ── HIGHLIGHTED BOXES ── */
-.diag-box { background: #EFF6FF; border: 1px solid #BFDBFE; border-left: 4px solid #1E3A8A; border-radius: 3px; padding: 4px 6px; }
-.assessment-box { background: #F0FDF4; border: 1px solid #BBF7D0; border-left: 4px solid #16A34A; border-radius: 3px; overflow: hidden; }
-.assessment-box table th { background: #DCFCE7; color: #15803D; border-color: #A7F3D0; }
-.assessment-box table td { border-color: #BBF7D0; }
-
-/* ── PHYSICAL EXAM ── */
-.phys-lbl  { font-weight: 600; background: #F8FAFC !important; color: #374151; font-size: 7.5pt; width: 22%; white-space: nowrap; }
-.assess-lbl{ font-weight: 600; background: #F8FAFC !important; width: 30%; color: #1E3A8A; font-size: 7.5pt; white-space: nowrap; }
-.mse-lbl   { font-weight: 600; background: #FAFAFA !important; width: 32%; color: #374151; font-size: 7.5pt; white-space: nowrap; }
-
-/* ── CLINICAL PROFORMA CHIPS ── */
-.chips-row { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px 4px; }
-.chip { background: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; font-size: 7pt; font-weight: 600; padding: 1px 4px; border-radius: 8px; }
-
-/* ── MISC ── */
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-.sub-lbl { font-size: 7pt; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: 0.3px; margin: 3px 0 2px; }
-
-/* ── SINGLE FOOTER ── */
-.doc-ftr { margin-top: 6px; padding-top: 4px; border-top: 1px solid #D1D5DB; text-align: center; font-size: 7pt; color: #6B7280; }
-.doc-ftr p { margin: 1px 0; }
-
-/* ── SUPPRESS any accidental per-card headers / footers ── */
-.hdr, .meta-bar, .ftr { display: none !important; }
-
-/* ── PRINT ── */
-@media print {
-  .card-group { page-break-inside: auto; }
-  table        { page-break-inside: avoid; }
-  .diag-box, .assessment-box { page-break-inside: avoid; }
-  .narrative   { page-break-inside: auto; }
-}
-`;
-
-    /* ── 6. Build full document ── */
-    const printContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Combined Patient Report — ${ptName}</title>
-  <style>${CSS}</style>
-</head>
-<body>
-  <div class="doc-hdr">
-    ${logoBase64 ? `<img src="${logoBase64}" alt="PGIMER Logo" />` : ''}
-    <div class="doc-hdr-text">
-      <h1>POSTGRADUATE INSTITUTE OF MEDICAL EDUCATION &amp; RESEARCH</h1>
-      <div class="dept">Department of Psychiatry, Chandigarh</div>
-      <div class="rpt-title">Combined Patient Report</div>
-    </div>
-  </div>
-
-  <div class="pt-summary">
-    <div class="pt-summary-row row1">
-      <div class="ps-cell"><span class="psl">CR No.</span><span class="psv">${ptCrNo}</span></div>
-      <div class="ps-cell"><span class="psl">Patient Name</span><span class="psv">${ptName}</span></div>
-      <div class="ps-cell"><span class="psl">Age / Sex</span><span class="psv">${ptAge} / ${ptSex}</span></div>
-      <div class="ps-cell"><span class="psl">Reg. Date</span><span class="psv">${ptDate}</span></div>
-    </div>
-    <div class="pt-summary-row row2">
-      <div class="ps-cell"><span class="psl">Mobile</span><span class="psv">${ptMobile}</span></div>
-      <div class="ps-cell"><span class="psl">Department</span><span class="psv">${ptDept}</span></div>
-      <div class="ps-cell"><span class="psl">File No. ${ptPsyNo ? '/ Psy. No.' : ''}</span><span class="psv">${ptFileNo}${ptPsyNo ? ` / ${ptPsyNo}` : ''}</span></div>
-    </div>
-  </div>
-
-  ${cardsHtml}
-
-  <div class="doc-ftr">
-    <p><strong>Generated:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
-    <p>PGIMER — Department of Psychiatry | Electronic Medical Record System</p>
-    <p>Computer-generated document — no signature required.</p>
-  </div>
-</body>
-</html>`;
-
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      setTimeout(() => { printWindow.print(); toast.success('Combined report ready'); }, 400);
-    };
   };
 
   const togglePastHistoryCard = (cardName) => {
@@ -1257,175 +1041,19 @@ table tbody tr:nth-child(even) td { background: #F9FAFB; }
     ws['!cols'] = colWidths;
   };
 
-  // Export patient details to Excel
-  // Psychiatric Welfare Officer (MWO) can only export patient details, not clinical proformas, ADL files, or prescriptions
-  const handleExportPatient = () => {
+  // Export patient details to Excel (backend API)
+  const handleExportPatient = async () => {
+    if (!patient?.id) {
+      toast.error('No patient data available to export');
+      return;
+    }
     try {
-      if (!patient && !displayData) {
-        toast.error('No patient data available to export');
-        return;
-      }
-
-      // Check if user is MWO (Psychiatric Welfare Officer)
-      const isMWOUser = userRole && isMWO(userRole);
-
-      // Create a new workbook
-      const wb = XLSX.utils.book_new();
-
-      // Sheet 1: Patient Basic Details (always included)
-      // Use PATIENT_REGISTRATION_FORM labels as Excel headers
-      // For PWO: Exclude category, unit_consit, room_no, serial_no, unit_days
-      const fieldsToExcludeForPWO = ['category', 'unit_consit', 'room_no', 'serial_no', 'unit_days'];
-      const patientExportData = {};
-
-      PATIENT_REGISTRATION_FORM.forEach(field => {
-        // Skip excluded fields for PWO
-        if (isMWOUser && fieldsToExcludeForPWO.includes(field.value)) {
-          return;
-        }
-        
-        const value = displayData[field.value];
-
-        // Handle special cases
-        if (field.value === 'mobile_no') {
-          // Use contact_number if mobile_no is not available
-          patientExportData[field.label] = displayData.contact_number || displayData.mobile_no || 'N/A';
-        } else if (field.value === 'date') {
-          // Format date if available
-          patientExportData[field.label] = value ? formatDate(value) : 'N/A';
-        } else if (field.value === 'seen_in_walk_in_on' || field.value === 'worked_up_on') {
-          // Format date fields
-          patientExportData[field.label] = value ? formatDate(value) : 'N/A';
-        } else if (field.value === 'patient_income') {
-          // Use patient_income if patient_income is not available
-          const incomeValue = value || displayData.patient_income || '';
-          patientExportData[field.label] = incomeValue ? (typeof incomeValue === 'number' ? `₹${incomeValue}` : incomeValue) : 'N/A';
-        } else if (field.value === 'family_income') {
-          // Use family_income if family_income is not available
-          const familyIncomeValue = value || displayData.family_income || '';
-          patientExportData[field.label] = familyIncomeValue ? (typeof familyIncomeValue === 'number' ? `₹${familyIncomeValue}` : familyIncomeValue) : 'N/A';
-        } else if (field.value === 'education') {
-          // Use education_level if education is not available
-          patientExportData[field.label] = value || displayData.education_level || 'N/A';
-        } else if (field.value === 'assigned_doctor_name') {
-          // Format assigned doctor with role if available
-          const doctorName = value || displayData.assigned_doctor_name || '';
-          const doctorRole = displayData.assigned_doctor_role || '';
-          patientExportData[field.label] = doctorName
-            ? (doctorRole ? `${doctorName} (${doctorRole})` : doctorName)
-            : 'Not assigned';
-        } else {
-          // Default: use value or 'N/A'
-          patientExportData[field.label] = (value !== null && value !== undefined && value !== '') ? value : 'N/A';
-        }
-      });
-
-      const ws1 = XLSX.utils.json_to_sheet([patientExportData]);
-
-      // Apply header styling with different colors for different sections
-      // Color ranges based on PATIENT_REGISTRATION_FORM structure
-      const totalFields = PATIENT_REGISTRATION_FORM.length;
-      applyHeaderStyles(ws1, [
-        { start: 0, end: 13, color: '2E86AB' }, // Quick Entry & Registration (Blue) - CR No to Contact Number
-        // { start: 14, end: 18, color: '28A745' }, // Personal Info (Green) - Seen in Walk-in to Age Group
-        // { start: 19, end: 22, color: '6F42C1' }, // Personal Information (Purple) - Marital Status to No of Children Female
-        // { start: 23, end: 27, color: 'FD7E14' }, // Occupation & Education (Orange) - Occupation to Family Type
-        // { start: 28, end: 33, color: 'DC3545' }, // Head of Family (Red) - Family Head Name to Family Head Income
-        // { start: 34, end: 36, color: '20C997' }, // Distance, Mobility, Referred (Teal)
-        // { start: 37, end: 42, color: '6610F2' }, // Address Details (Indigo) - Address Line to Pin Code
-        // { start: 43, end: totalFields - 1, color: 'E83E8C' }, // Additional Fields (Pink) - Assigned Doctor fields
-      ]);
-
-      XLSX.utils.book_append_sheet(wb, ws1, 'Patient Details');
-
-      // Sheet 2: Clinical Proformas (only if user has permission and is not MWO)
-      if (!isMWOUser && canViewClinicalProforma && clinicalProformaRows.length > 0) {
-        const proformaData = clinicalProformaRows.map((proforma, index) => ({
-          'Visit #': index + 1,
-          'Visit Date': proforma.visit_date ? formatDate(proforma.visit_date) : 'N/A',
-          'Visit Type': proforma.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up',
-          'Room Number': proforma.room_no || 'N/A',
-          'Doctor Name': proforma.doctor_name || 'N/A',
-          'Doctor Role': proforma.doctor_role || 'N/A',
-          'Case Severity': getCaseSeverityLabel(proforma.case_severity) || 'N/A',
-          'Decision': proforma.decision || 'N/A',
-          'Doctor Decision': proforma.doctor_decision === 'complex_case' ? 'Instantly Requires Detailed Work-Up' : (proforma.doctor_decision === 'simple_case' ? 'Requires Detailed Workup on Next Follow-Up' : 'N/A'),
-          'Requires ADL File': proforma.requires_adl_file ? 'Yes' : 'No',
-          'Informant Present': proforma.informant_present ? 'Yes' : 'No',
-          'Diagnosis': proforma.diagnosis || 'N/A',
-          'ICD Code': proforma.icd_code || 'N/A',
-          'Disposal': proforma.disposal || 'N/A',
-          'Workup Appointment': proforma.workup_appointment ? formatDate(proforma.workup_appointment) : 'N/A',
-          'Referred To': proforma.referred_to || 'N/A',
-          'Treatment Prescribed': proforma.treatment_prescribed || 'N/A',
-          'ADL Reasoning': proforma.adl_reasoning || 'N/A',
-          'Created At': proforma.created_at ? formatDateTime(proforma.created_at) : 'N/A',
-        }));
-        const ws2 = XLSX.utils.json_to_sheet(proformaData);
-        applyHeaderStyles(ws2, [{ start: 0, end: 17, color: '2E86AB' }]); // Blue for all columns
-        XLSX.utils.book_append_sheet(wb, ws2, 'Clinical Proformas');
-      }
-
-      // Sheet 3: ADL Files (only if user has permission and is not MWO)
-      if (!isMWOUser && canViewADLFile && patientAdlFiles.length > 0) {
-        const adlData = patientAdlFiles.map((file, index) => ({
-          'ADL File #': index + 1,
-          'ADL Number': file.adl_no || 'N/A',
-          'File Status': getFileStatusLabel(file.file_status) || 'N/A',
-          'Patient Name': file.patient_name || 'N/A',
-          'CR Number': file.cr_no || 'N/A',
-          'PSY Number': file.psy_no || 'N/A',
-          'Assigned Doctor': file.assigned_doctor_name ? `${file.assigned_doctor_name}${file.assigned_doctor_role ? ` (${file.assigned_doctor_role})` : ''}` : 'N/A',
-          'Visit Date': file.proforma_visit_date ? formatDate(file.proforma_visit_date) : 'N/A',
-          'Created By': file.created_by_name ? `${file.created_by_name}${file.created_by_role ? ` (${file.created_by_role})` : ''}` : 'N/A',
-          'Physical File Location': file.physical_file_location || 'N/A',
-          'Total Visits': file.total_visits || 'N/A',
-          'File Created Date': file.file_created_date ? formatDate(file.file_created_date) : 'N/A',
-          'Last Updated': file.updated_at ? formatDateTime(file.updated_at) : 'N/A',
-        }));
-        const ws3 = XLSX.utils.json_to_sheet(adlData);
-        applyHeaderStyles(ws3, [{ start: 0, end: 11, color: '6F42C1' }]); // Purple for all columns
-        XLSX.utils.book_append_sheet(wb, ws3, 'ADL Files');
-      }
-
-      // Sheet 4: Prescriptions (only if user has permission and is not MWO)
-      if (!isMWOUser && canViewPrescriptions && allPrescriptions.length > 0) {
-        const prescriptionData = allPrescriptions.map((prescription, index) => ({
-          'Prescription #': index + 1,
-          'Visit Date': prescription.visit_date ? formatDate(prescription.visit_date) : 'N/A',
-          'Visit Type': prescription.visit_type === 'first_visit' ? 'First Visit' : 'Follow-up',
-          'Medicine': prescription.medicine || 'N/A',
-          'Dosage': prescription.dosage || 'N/A',
-          'When to Take': prescription.when_to_take || prescription.when || 'N/A',
-          'Frequency': prescription.frequency || 'N/A',
-          'Duration': prescription.duration || 'N/A',
-          'Quantity': prescription.quantity || prescription.qty || 'N/A',
-          'Details': prescription.details || 'N/A',
-          'Notes': prescription.notes || 'N/A',
-          'Prescribed At': prescription.created_at ? formatDateTime(prescription.created_at) : 'N/A',
-        }));
-        const ws4 = XLSX.utils.json_to_sheet(prescriptionData);
-        applyHeaderStyles(ws4, [{ start: 0, end: 10, color: '28A745' }]); // Green for all columns
-        XLSX.utils.book_append_sheet(wb, ws4, 'Prescriptions');
-      }
-
-      // Generate filename with patient name and date
-      const patientName = displayData.name || displayData.cr_no || 'Patient';
-      const sanitizedName = patientName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      const filename = `patient_${sanitizedName}_${new Date().toISOString().split('T')[0]}`;
-
-      // Write the file
-      XLSX.writeFile(wb, `${filename}.xlsx`);
-
-      // Show appropriate success message based on role
-      if (isMWOUser) {
-        toast.success('Patient details exported to Excel successfully (Patient Details only)');
-      } else {
-        toast.success('Patient details exported to Excel successfully');
-      }
+      toast.info('Generating Excel report...');
+      await downloadPatientReportExcel(patient.id);
+      toast.success('Patient report exported successfully');
     } catch (error) {
       console.error('Export error:', error);
-      toast.error('Failed to export patient details');
+      toast.error(error?.message || 'Failed to export patient report');
     }
   };
 
