@@ -13,7 +13,8 @@ export const patientsApiSlice = apiSlice.injectEndpoints({
           tags.push({ type: 'Patient', id: `REFERRAL-${arg.referral_view}` });
         }
         if (arg?.date) {
-          tags.push({ type: 'Patient', id: `LIST-${arg.date}` });
+          const roomSuffix = arg?.assigned_room ? `-${arg.assigned_room}` : '';
+          tags.push({ type: 'Patient', id: `LIST-${arg.date}${roomSuffix}` });
         }
         if (arg?.unassigned_only) {
           tags.push({ type: 'Patient', id: 'UNASSIGNED' });

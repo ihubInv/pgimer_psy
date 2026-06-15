@@ -121,13 +121,9 @@ class PatientController {
     if (listFilters.created_to) target.created_to = listFilters.created_to;
   }
 
-  /** Junior residents: today's list includes patients in their selected room (same as child list). */
-  static async _resolveJuniorResidentListScope(doctorId, forTodayList) {
-    if (!doctorId) return {};
-    if (!forTodayList) {
-      return { treating_doctor_id: doctorId };
-    }
-    let doctorRoom = null;
+  /** Doctor's selected room for today (null if none or stale from a previous day). */
+  static async _resolveDoctorRoomForToday(doctorId) {
+    if (!doctorId) return null;
     try {
       const db = require('../config/database');
       const roomRes = await db.query(
@@ -135,23 +131,31 @@ class PatientController {
         [doctorId]
       );
       const roomRow = roomRes.rows[0];
-      if (roomRow?.current_room) {
-        const todayRes = await db.query('SELECT CURRENT_DATE AS today');
-        let isAssignedToday = true;
-        if (roomRow.room_assignment_time) {
-          const assignedTodayRes = await db.query(
-            'SELECT DATE($1::timestamp) = $2::date AS ok',
-            [roomRow.room_assignment_time, todayRes.rows[0].today]
-          );
-          isAssignedToday = assignedTodayRes.rows[0]?.ok === true;
-        }
-        if (isAssignedToday) {
-          doctorRoom = roomRow.current_room;
-        }
+      if (!roomRow?.current_room) return null;
+
+      const todayRes = await db.query('SELECT CURRENT_DATE AS today');
+      let isAssignedToday = true;
+      if (roomRow.room_assignment_time) {
+        const assignedTodayRes = await db.query(
+          'SELECT DATE($1::timestamp) = $2::date AS ok',
+          [roomRow.room_assignment_time, todayRes.rows[0].today]
+        );
+        isAssignedToday = assignedTodayRes.rows[0]?.ok === true;
       }
+      return isAssignedToday ? roomRow.current_room : null;
     } catch (roomErr) {
-      console.warn('[getAllPatients] Could not resolve junior resident room:', roomErr.message);
+      console.warn('[getAllPatients] Could not resolve doctor room for today:', roomErr.message);
+      return null;
     }
+  }
+
+  /** Junior residents: today's list includes patients in their selected room (same as child list). */
+  static async _resolveJuniorResidentListScope(doctorId, forTodayList) {
+    if (!doctorId) return {};
+    if (!forTodayList) {
+      return { treating_doctor_id: doctorId };
+    }
+    const doctorRoom = await PatientController._resolveDoctorRoomForToday(doctorId);
     return {
       junior_my_patients: {
         doctor_id: doctorId,
@@ -897,6 +901,26 @@ class PatientController {
           : { treating_doctor_id: scopedDoctorId }
         : {};
 
+      // Faculty today's list: scope API results to the doctor's selected room
+      if (forTodayList && isFaculty && !filters.assigned_room) {
+        const facultyRoom = await PatientController._resolveDoctorRoomForToday(req.user?.id);
+        if (!facultyRoom) {
+          return res.json({
+            success: true,
+            data: {
+              patients: [],
+              pagination: {
+                page,
+                limit,
+                total: 0,
+                pages: 0,
+              },
+            },
+          });
+        }
+        filters.assigned_room = facultyRoom;
+      }
+
       // Today's Patients: JR/SR must select today's room before the list is populated
       if (
         forTodayList &&
@@ -1024,6 +1048,11 @@ class PatientController {
           if (filters.date) {
             childFilters.date = filters.date;
             console.log(`[getAllPatients] Fetching child patients with date filter: ${filters.date}`);
+          }
+          if (scopedDoctorId && residentScope.junior_my_patients) {
+            childFilters.junior_my_patients = residentScope.junior_my_patients;
+          } else if (scopedDoctorId) {
+            childFilters.treating_doctor_id = scopedDoctorId;
           }
           const childResult = await ChildPatientRegistration.findAll(page, limit, childFilters);
           childPatients = childResult.child_patients || [];

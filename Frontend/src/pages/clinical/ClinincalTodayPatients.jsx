@@ -888,15 +888,25 @@ const ClinicalTodayPatients = () => {
 
   // Get today's date in IST for backend filtering
   const todayIST = toISTDateString(selectedDate || new Date());
+
+  const doctorRoomForApi =
+    effectiveRoomData?.data?.current_room?.trim?.() ||
+    effectiveRoomData?.data?.current_room ||
+    null;
+  // Faculty: request only patients in the selected room (Admin/MWO/Residents use other scoping)
+  const shouldFilterPatientsByRoom =
+    Boolean(doctorRoomForApi) &&
+    isFacultyUser(currentUser) &&
+    !isAdminUser &&
+    !isMWO(currentUser?.role);
   
   // Fetch patients data - use a high limit (backend caps at 1000) to get all today's patients at once
-  // This ensures newly created/assigned patients in any room appear immediately
-  // Pass date parameter to filter on backend - only patients created today OR with visits today
+  // Faculty pass assigned_room so the API returns only their room (not all rooms for the date)
   const { data, isLoading, isFetching, refetch, error } = useGetAllPatientsQuery({
     page: 1,
     limit: 1000,
-    date: todayIST, // Filter by today's date on backend
-    // search: search.trim() || undefined // Only include search if it has a value
+    date: todayIST,
+    ...(shouldFilterPatientsByRoom ? { assigned_room: doctorRoomForApi } : {}),
   }, {
     pollingInterval: 60000, // Increased from 30s to 60s to reduce API calls
     refetchOnMountOrArgChange: true,
