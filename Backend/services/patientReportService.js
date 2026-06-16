@@ -1,5 +1,6 @@
 const Patient = require('../models/Patient');
 const Prescription = require('../models/Prescription');
+const ClinicalOption = require('../models/ClinicalOption');
 const PatientController = require('../controllers/patientController');
 const {
   isMWORole,
@@ -37,26 +38,35 @@ class PatientReportService {
     let prescriptionRecords = [];
     let flatPrescriptions = [];
 
+    let clinicalOptions = {};
+
     if (includeHistory) {
-      const [records, adl, prescriptions] = await Promise.all([
+      const [records, adl, prescriptions, options] = await Promise.all([
         patient.getClinicalRecords(),
         patient.getADLFiles(),
         Prescription.findByPatientId(id),
+        ClinicalOption.findAllGroups(true).catch(() => ({})),
       ]);
-      clinicalRecords = records || [];
-      adlFiles = adl || [];
+      clinicalRecords     = records || [];
+      adlFiles            = adl    || [];
       prescriptionRecords = (prescriptions || []).map((p) => p.toJSON());
-      flatPrescriptions = flattenPrescriptionRows(prescriptionRecords);
+      flatPrescriptions   = flattenPrescriptionRows(prescriptionRecords);
+      clinicalOptions     = options || {};
     }
+
+    const allProformas      = clinicalProformasOnly(clinicalRecords);
+    const firstVisitProforma = allProformas.find(p => p.visit_type === 'first_visit') || allProformas[0] || null;
 
     return {
       patient: patientJson,
       clinicalRecords,
-      clinicalProformas: clinicalProformasOnly(clinicalRecords),
+      clinicalProformas: allProformas,
+      firstVisitProforma,
       followUpVisits: followupVisitsOnly(clinicalRecords),
       adlFiles,
       prescriptionRecords,
       flatPrescriptions,
+      clinicalOptions,
       includeHistory,
       isMWO: isMWORole(userRole),
     };

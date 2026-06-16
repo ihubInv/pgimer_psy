@@ -63,11 +63,16 @@ export async function downloadPatientReportExcel(patientId) {
 }
 
 /**
- * Open print-ready HTML report from backend (triggers browser print dialog).
+ * Open print-ready HTML report from backend in a new window.
+ * @param {number|string} patientId
+ * @param {{ section?: string }} [options]
  */
-export async function openPatientReportPrint(patientId) {
+async function openPatientReportHtml(patientId, { section = null } = {}) {
   const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/patients/${patientId}/report?format=html`, {
+  const params = new URLSearchParams({ format: 'html' });
+  if (section) params.set('section', section);
+
+  const res = await fetch(`${baseUrl}/patients/${patientId}/report?${params}`, {
     method: 'GET',
     headers: getAuthHeaders(),
     credentials: 'include',
@@ -85,6 +90,22 @@ export async function openPatientReportPrint(patientId) {
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
+}
+
+/**
+ * Open combined print-ready HTML report (Print All Cards).
+ */
+export async function openPatientReportPrint(patientId) {
+  return openPatientReportHtml(patientId);
+}
+
+/**
+ * Open a single-section print-ready HTML report.
+ * @param {number|string} patientId
+ * @param {'patient-details'|'clinical-proforma'|'adl'|'prescription'} section
+ */
+export async function openPatientReportSectionPrint(patientId, section) {
+  return openPatientReportHtml(patientId, { section });
 }
 
 /**

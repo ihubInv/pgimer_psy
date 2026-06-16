@@ -24,6 +24,7 @@ import * as XLSX from 'xlsx-js-style';
 import {
   downloadPatientReportExcel,
   openPatientReportPrint,
+  openPatientReportSectionPrint,
 } from '../../utils/patientReportApi';
 
 import { useGetPrescriptionByIdQuery, useGetPrescriptionsByPatientIdQuery } from '../../features/prescriptions/prescriptionApiSlice';
@@ -59,12 +60,10 @@ import {
   adlIntakeContentOnlyHtml,
 } from '../../utils/adlIntakePrint';
 import {
-  generatePatientDetailsPrintHtml,
   patientDetailsSectionHtml,
   patientDetailsContentOnlyHtml,
 } from '../../utils/patientDetailsPrint';
 import {
-  generateClinicalProformaPrintHtml,
   clinicalProformaSectionHtml,
   clinicalProformaContentOnlyHtml,
 } from '../../utils/clinicalProformaPrint';
@@ -920,35 +919,25 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
   // Visit-based print refs (using Map to store refs for each visit)
   const visitPrintRefs = useRef(new Map());
 
-  // Print functionality for Patient Details section
-  const handlePrintPatientDetails = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { toast.error('Please allow pop-ups to print this section'); return; }
-    printWindow.document.write(generatePatientDetailsPrintHtml(patient, formData, userRole));
-    printWindow.document.close();
-    printWindow.onload = () => setTimeout(() => { printWindow.print(); toast.success('Print dialog opened'); }, 400);
+  const printSectionFromApi = async (section) => {
+    if (!patient?.id) {
+      toast.error('No patient loaded');
+      return;
+    }
+    try {
+      toast.info('Loading print report...');
+      await openPatientReportSectionPrint(patient.id, section);
+      toast.success('Print dialog opened');
+    } catch (err) {
+      console.error('Print error:', err);
+      toast.error(err?.message || 'Failed to print patient report');
+    }
   };
 
-  // Print functionality for Walk-in Clinical Proforma section
-  const handlePrintClinicalProforma = () => {
-    if (!lastVisitProforma) { toast.error('No clinical proforma found'); return; }
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { toast.error('Please allow pop-ups to print this section'); return; }
-    printWindow.document.write(generateClinicalProformaPrintHtml(lastVisitProforma, patient, clinicalOptions));
-    printWindow.document.close();
-    printWindow.onload = () => setTimeout(() => { printWindow.print(); toast.success('Print dialog opened'); }, 400);
-  };
-
-  // Print functionality for ADL / Intake Record section
-  const handlePrintADL = () => {
-    const adlFile = patientAdlFiles[0];
-    if (!adlFile) { toast.error('No intake record found'); return; }
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { toast.error('Please allow pop-ups to print this section'); return; }
-    printWindow.document.write(generateAdlIntakePrintHtml(adlFile, patient));
-    printWindow.document.close();
-    printWindow.onload = () => setTimeout(() => { printWindow.print(); toast.success('Print dialog opened'); }, 400);
-  };
+  const handlePrintPatientDetails = () => printSectionFromApi('patient-details');
+  const handlePrintClinicalProforma = () => printSectionFromApi('clinical-proforma');
+  const handlePrintADL = () => printSectionFromApi('adl');
+  const handlePrintPrescription = () => printSectionFromApi('prescription');
 
   const adultPatientForPrescriptionPrint = useMemo(() => {
     const fromApi = mapApiPatientForPrint(patientPrescriptionsData?.data?.patient);
@@ -965,18 +954,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       assigned_room: displayData?.assigned_room,
     });
   }, [patientPrescriptionsData, displayData]);
-
-  const handlePrintPrescription = () => {
-    const records = patientPrescriptionsData?.data?.prescriptions || [];
-    if (!records.length && !allPrescriptions.length) {
-      toast.error('No prescriptions to print');
-      return;
-    }
-    printPatientPrescriptions(adultPatientForPrescriptionPrint, records, {
-      flatMedications: allPrescriptions,
-      formatDate,
-    });
-  };
 
   // Helper function to apply header styles with different colors
   const applyHeaderStyles = (ws, colorRanges) => {

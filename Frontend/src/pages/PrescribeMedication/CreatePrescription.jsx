@@ -15,6 +15,7 @@ import Select from '../../components/Select';
 import Modal from '../../components/Modal';
 import { FiPackage, FiUser, FiSave, FiX, FiPlus, FiTrash2, FiHome, FiUserCheck, FiCalendar, FiFileText, FiClock, FiSearch, FiDroplet, FiActivity, FiBookmark, FiDownload, FiArrowLeft } from 'react-icons/fi';
 import PGI_Logo from '../../assets/PGI_Logo.png';
+import { printPatientPrescriptions } from '../../utils/prescriptionPrint';
 import { 
   PRESCRIPTION_FORM,
   PRESCRIPTION_OPTIONS,
@@ -497,238 +498,17 @@ const CreatePrescription = ({
   };
 
   const handlePrint = () => {
-    // Filter out empty prescriptions
     const validPrescriptions = prescriptions.filter(p => p.medicine || p.dosage || p.frequency || p.details);
-    
     if (validPrescriptions.length === 0) {
       toast.error('Please add at least one medication before printing');
       return;
     }
-
-    // Get print content HTML
-    if (!printRef.current) {
-      toast.error('Print content not found');
-      return;
-    }
-
-    // Open new window with print content
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow pop-ups to print');
-      return;
-    }
-
-    // Function to write print content
-    const writePrintContent = (win, logo) => {
-      const printHTML = printRef.current.innerHTML;
-      win.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Prescription - ${finalPatient?.name || 'Patient'}</title>
-            <meta charset="UTF-8">
-            <style>
-              @page {
-                size: A4;
-                margin: 12mm 10mm 20mm 10mm;
-                @bottom-center {
-                  content: "This is electronically generated, no signature required";
-                  font-size: 8pt;
-                  color: #666;
-                  font-style: italic;
-                }
-              }
-              * {
-                box-sizing: border-box;
-                margin: 0;
-                padding: 0;
-              }
-              body {
-                font-family: 'Times New Roman', serif;
-                font-size: 10pt;
-                line-height: 1.4;
-                color: #000;
-                background: white;
-                margin: 0;
-                padding: 0;
-              }
-              .print-header {
-                margin-bottom: 10px;
-                padding-bottom: 6px;
-                border-bottom: 2px solid #000;
-                text-align: center;
-              }
-              .print-header > div {
-                text-align: center;
-              }
-              .print-header img {
-                max-height: 60px;
-                width: auto;
-                display: block;
-                margin: 0 auto 6px auto;
-              }
-              .print-header h1 {
-                margin: 0 0 4px 0;
-                font-size: 14pt;
-                font-weight: bold;
-                text-align: center;
-              }
-              .print-header h2 {
-                margin: 8px 0 0 0;
-                font-size: 12pt;
-                font-weight: bold;
-                text-align: center;
-              }
-              .print-header p {
-                margin: 2px 0;
-                font-size: 9pt;
-                text-align: center;
-              }
-              .mx-auto {
-                margin-left: auto;
-                margin-right: auto;
-              }
-              .mb-2 {
-                margin-bottom: 6px;
-              }
-              .mt-3 {
-                margin-top: 8px;
-              }
-              .print-patient-info {
-                font-size: 9.5pt;
-                margin-bottom: 10px;
-                padding: 6px 0;
-                border-bottom: 1px solid #000;
-              }
-              .print-patient-info span {
-                font-size: 9.5pt;
-              }
-              .print-section-title {
-                font-size: 10pt;
-                font-weight: bold;
-                margin: 8px 0 4px 0;
-                text-transform: uppercase;
-              }
-              .print-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin: 6px 0;
-                font-size: 9pt;
-              }
-              .print-table th,
-              .print-table td {
-                border: 1px solid #000;
-                padding: 4px 5px;
-                text-align: left;
-                vertical-align: top;
-              }
-              .print-table th {
-                font-weight: bold;
-                font-size: 9pt;
-              }
-              .print-footer {
-                margin-top: 12px;
-                padding-top: 6px;
-                border-top: 1px solid #000;
-              }
-              .print-footer p {
-                font-size: 9pt;
-                margin: 2px 0;
-              }
-              .print-footer .mb-16 {
-                margin-bottom: 30px;
-              }
-              .print-footer .border-t {
-                border-top: 1px solid #000;
-              }
-              .print-footer .text-center {
-                text-align: center;
-              }
-              .print-footer .mt-4 {
-                margin-top: 8px;
-              }
-              .print-footer .pt-2 {
-                padding-top: 4px;
-              }
-              .print-footer .text-xs {
-                font-size: 8pt;
-              }
-              .print-footer .italic {
-                font-style: italic;
-              }
-              .grid {
-                display: grid;
-              }
-              .flex {
-                display: flex;
-              }
-              .gap-12 {
-                gap: 20px;
-              }
-              .gap-x-8 {
-                column-gap: 14px;
-              }
-              .gap-y-2 {
-                row-gap: 3px;
-              }
-              .my-4 {
-                margin: 6px 0;
-              }
-              .mt-4 {
-                margin-top: 6px;
-              }
-              .pt-3 {
-                padding-top: 4px;
-              }
-              .mt-6 {
-                margin-top: 10px;
-              }
-              .ml-2 {
-                margin-left: 5px;
-              }
-              .space-y-1 > * + * {
-                margin-top: 2px;
-              }
-            </style>
-          </head>
-          <body>
-            ${printHTML}
-          </body>
-        </html>
-      `);
-      win.document.close();
-      
-      setTimeout(() => {
-        win.print();
-        toast.success('Print dialog opened');
-      }, 250);
-    };
-
-    // Get logo as base64 (optional)
-    try {
-      const logoImg = new Image();
-      logoImg.crossOrigin = 'anonymous';
-      logoImg.src = PGI_Logo;
-      logoImg.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = logoImg.width;
-          canvas.height = logoImg.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(logoImg, 0, 0);
-          const logoBase64 = canvas.toDataURL('image/png');
-          // Update logo in print content if needed
-        } catch (e) {
-          // Continue without logo
-        }
-        writePrintContent(printWindow, '');
-      };
-      logoImg.onerror = () => {
-        writePrintContent(printWindow, '');
-      };
-    } catch (e) {
-      writePrintContent(printWindow, '');
-    }
+    const prescriptionRecords = [{
+      prescription: validPrescriptions,
+      visit_date: new Date().toISOString(),
+      visit_type: 'first_visit',
+    }];
+    printPatientPrescriptions(finalPatient, prescriptionRecords);
   };
 
   // Save current prescriptions as template

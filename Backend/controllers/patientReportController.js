@@ -6,17 +6,21 @@ const {
   reportFilename,
   bulkFilename,
 } = require('../services/patientReportExcel');
-const { buildPatientReportHtml } = require('../services/patientReportHtml');
+const { buildPatientReportHtml, buildPatientSectionReportHtml, VALID_SECTIONS } = require('../services/patientReportHtml');
+
+const HISTORY_SECTIONS = new Set(['clinical-proforma', 'adl', 'prescription']);
 
 class PatientReportController {
   /**
-   * GET /api/patients/:id/report?format=xlsx|html|pdf
+   * GET /api/patients/:id/report?format=xlsx|html|pdf&section=patient-details|clinical-proforma|adl|prescription
    * pdf is an alias for html (print-ready document).
+   * section omitted = combined "Print All Cards" report.
    */
   static async getPatientReport(req, res) {
     try {
       const { id } = req.params;
       const format = String(req.query.format || 'xlsx').toLowerCase();
+      const section = String(req.query.section || 'all').toLowerCase();
 
       if (!['xlsx', 'html', 'pdf'].includes(format)) {
         return res.status(400).json({
@@ -25,7 +29,29 @@ class PatientReportController {
         });
       }
 
+      if (section !== 'all' && !VALID_SECTIONS.includes(section)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid section. Use: ${VALID_SECTIONS.join(', ')}.`,
+        });
+      }
+
+      if (section !== 'all' && format === 'xlsx') {
+        return res.status(400).json({
+          success: false,
+          message: 'Section filter applies to html or pdf format only.',
+        });
+      }
+
       const report = await PatientReportService.buildReport(id, req.user?.role);
+
+      if (HISTORY_SECTIONS.has(section) && !report.includeHistory) {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized for this report section.',
+        });
+      }
+
       const filename = reportFilename(report, format === 'xlsx' ? 'xlsx' : 'html');
 
       if (format === 'xlsx') {
@@ -39,14 +65,13 @@ class PatientReportController {
         return res.send(buffer);
       }
 
-      const html = buildPatientReportHtml(report);
-      if (format === 'pdf') {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Content-Disposition', `inline; filename="${filename.replace('.html', '.html')}"`);
-      } else {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-      }
+      const html =
+        section === 'all'
+          ? buildPatientReportHtml(report)
+          : buildPatientSectionReportHtml(report, section);
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
       return res.send(html);
     } catch (error) {
       console.error('[getPatientReport] Error:', error);

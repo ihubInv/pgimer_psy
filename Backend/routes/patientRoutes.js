@@ -647,6 +647,12 @@ router.post(
  *           type: string
  *           enum: [xlsx, html, pdf]
  *           default: xlsx
+ *       - in: query
+ *         name: section
+ *         schema:
+ *           type: string
+ *           enum: [patient-details, clinical-proforma, adl, prescription]
+ *         description: Optional section for html/pdf print (omit for combined report)
  *     responses:
  *       200:
  *         description: Report file or HTML
