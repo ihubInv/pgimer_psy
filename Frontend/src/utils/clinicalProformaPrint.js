@@ -7,6 +7,7 @@
  */
 
 import PGI_Logo from '../assets/PGI_Logo.png';
+import { normalizeArrayField } from './clinicalMultiSelectArray';
 
 /* ── helpers ─────────────────────────────────────────────── */
 
@@ -47,27 +48,26 @@ function has(val) {
 }
 
 function normalizeArr(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value;
-  try {
-    const p = JSON.parse(value);
-    return Array.isArray(p) ? p : (p ? [p] : []);
-  } catch {
-    if (typeof value === 'string' && value.startsWith('{')) {
-      const inner = value.slice(1, -1);
-      const matches = inner.match(/"([^"]+)"/g);
-      if (matches) return matches.map(m => m.slice(1, -1));
-    }
-    return value ? [value] : [];
-  }
+  return normalizeArrayField(value);
 }
 
 function labelsFromOptions(vals, options) {
-  if (!options?.length) return vals.join(', ');
-  return vals.map(val => {
-    const opt = options.find(o => o.value === val);
-    return opt ? opt.label : val;
-  }).join(', ');
+  if (!options?.length) {
+    return vals.map((v) => String(v)).join(', ');
+  }
+  return vals
+    .map((val) => {
+      const strVal = String(val).trim();
+      if (!strVal) return '';
+      const opt = options.find((o) => {
+        if (typeof o === 'string') return o === strVal;
+        return o?.value === strVal || o?.label === strVal;
+      });
+      if (!opt) return strVal;
+      return typeof opt === 'string' ? opt : opt.label || opt.value || strVal;
+    })
+    .filter(Boolean)
+    .join(', ');
 }
 
 /* ── CSS (shared with adlIntakePrint design language) ─────── */

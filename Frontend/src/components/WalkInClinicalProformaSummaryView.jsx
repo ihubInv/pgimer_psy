@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useGetAllClinicalOptionsQuery } from '../features/clinical/clinicalApiSlice';
 import { formatDate } from '../utils/formatters';
 import { getDoctorDecisionLabel } from '../utils/enumMappings';
-import { normalizeArrayField } from '../utils/clinicalMultiSelectArray';
+import { normalizeArrayField, labelsFromClinicalOptions } from '../utils/clinicalMultiSelectArray';
 import {
   PatientDetailCardShell,
   PatientDetailSectionTitle,
@@ -24,14 +24,10 @@ function hasDisplay(value) {
   return String(value).trim() !== '';
 }
 
-function labelsFromOptions(selectedValues, options) {
-  if (!options?.length) return selectedValues.join(', ');
-  return selectedValues
-    .map((val) => {
-      const opt = options.find((o) => o.value === val);
-      return opt ? opt.label : val;
-    })
-    .join(', ');
+function CheckboxSummary({ label, fieldValue, options }) {
+  const text = labelsFromClinicalOptions(fieldValue, options || []);
+  if (!text) return null;
+  return <PatientDetailField label={label} value={text} className="md:col-span-2" />;
 }
 
 function formatMaybeDate(raw) {
@@ -45,13 +41,6 @@ function formatMaybeDate(raw) {
     }
   }
   return s;
-}
-
-function CheckboxSummary({ label, fieldValue, options }) {
-  const vals = normalizeArrayField(fieldValue);
-  if (!vals.length) return null;
-  const text = labelsFromOptions(vals, options || []);
-  return <PatientDetailField label={label} value={text} className="md:col-span-2" />;
 }
 
 /**

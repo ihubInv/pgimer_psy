@@ -1,8 +1,7 @@
 /**
- * Parse PostgreSQL text[] literal form, e.g. {"Depressive","Delusion of persecution"}.
- * This is not valid JSON (JSON arrays use [...]), so it must be handled explicitly.
- * Returns null if the string does not look like a PG array literal.
+ * Backend mirror of Frontend clinicalMultiSelectArray.js (normalize + label resolution).
  */
+
 function tryParsePostgresTextArrayLiteral(str) {
   if (typeof str !== 'string') return null;
   const s = str.trim();
@@ -46,7 +45,6 @@ function tryParsePostgresTextArrayLiteral(str) {
   return out;
 }
 
-/** Tokens that indicate corrupted / empty multi-select data in the DB. */
 function isGarbageArrayToken(item) {
   if (item === null || item === undefined) return true;
   if (typeof item === 'object') {
@@ -64,11 +62,7 @@ function filterClinicalArrayTokens(arr) {
   return arr.filter((item) => !isGarbageArrayToken(item));
 }
 
-/**
- * Normalize clinical multi-select / checkbox-group values from the API:
- * JS array, JSON array string, PostgreSQL text[] literal, comma-separated text, or single value.
- */
-export function normalizeArrayField(value) {
+function normalizeArrayField(value) {
   if (value === null || value === undefined || value === '') return [];
   if (Array.isArray(value)) return filterClinicalArrayTokens(value);
 
@@ -100,11 +94,7 @@ export function normalizeArrayField(value) {
   return isGarbageArrayToken(value) ? [] : [value];
 }
 
-/**
- * Resolve stored checkbox values to display labels.
- * Options may be string[] (clinical options API) or { value, label }[].
- */
-export function labelsFromClinicalOptions(selectedValues, options = []) {
+function labelsFromClinicalOptions(selectedValues, options = []) {
   const vals = normalizeArrayField(selectedValues);
   if (!vals.length) return '';
 
@@ -126,3 +116,8 @@ export function labelsFromClinicalOptions(selectedValues, options = []) {
     .filter(Boolean)
     .join(', ');
 }
+
+module.exports = {
+  normalizeArrayField,
+  labelsFromClinicalOptions,
+};

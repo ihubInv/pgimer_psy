@@ -96,19 +96,8 @@ function parseArr(val) {
 }
 
 function normalizeArr(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value;
-  try {
-    const p = JSON.parse(value);
-    return Array.isArray(p) ? p : (p ? [p] : []);
-  } catch {
-    if (typeof value === 'string' && value.startsWith('{')) {
-      const inner   = value.slice(1, -1);
-      const matches = inner.match(/"([^"]+)"/g);
-      if (matches) return matches.map(m => m.slice(1, -1));
-    }
-    return value ? [value] : [];
-  }
+  const { normalizeArrayField } = require('../utils/clinicalMultiSelectArray');
+  return normalizeArrayField(value);
 }
 
 /* ── Section / KV helpers ───────────────────────────────── */
