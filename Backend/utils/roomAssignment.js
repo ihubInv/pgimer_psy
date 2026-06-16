@@ -576,42 +576,17 @@ async function assignPatientsToDoctor(doctorId, roomNumber, assignmentTime) {
       console.log(`[assignPatientsToDoctor] Found ${childPatients.length} child patient(s) in room ${roomNumber} (not assigned to doctor)`);
     }
 
-    // Create visit records for adult patients only (child patients don't use patient_visits table)
+    // Scheduling rows in patient_visits are only updated when they already exist
+    // (e.g. created when a follow-up form is saved). Do not auto-create visits here —
+    // registration and room assignment are not counted as consultations.
     for (const patient of adultPatients) {
-      // Check if visit exists
       const visitCheck = await db.query(
         `SELECT id FROM patient_visits 
          WHERE patient_id = $1 AND DATE(visit_date) = $2::date`,
         [patient.id, todayDate]
       );
 
-      if (visitCheck.rows.length === 0) {
-        // Check if this is first visit or follow-up
-        const visitCountResult = await db.query(
-          `SELECT COUNT(*) as count FROM patient_visits WHERE patient_id = $1`,
-          [patient.id]
-        );
-        const visitCount = parseInt(visitCountResult.rows[0]?.count || 0, 10);
-        const visitType = visitCount === 0 ? 'first_visit' : 'follow_up';
-        
-        // Create visit record
-        const insertResult = await db.query(
-          `INSERT INTO patient_visits 
-           (patient_id, visit_date, visit_type, has_file, assigned_doctor_id, room_no, visit_status, notes)
-           VALUES ($1, $2, $3, false, $4, $5, 'scheduled', $6)
-           RETURNING id`,
-          [
-            patient.id,
-            todayDate,
-            visitType,
-            doctorId,
-            roomNumber,
-            `Auto-assigned to ${doctor.name} at ${assignmentTime}`
-          ]
-        );
-        console.log(`[assignPatientsToDoctor] Created visit record for patient ${patient.id}: visit_id=${insertResult.rows[0]?.id}`);
-      } else {
-        // Update existing visit record
+      if (visitCheck.rows.length > 0) {
         const updateResult = await db.query(
           `UPDATE patient_visits 
            SET assigned_doctor_id = $1, room_no = $2, updated_at = CURRENT_TIMESTAMP

@@ -1,6 +1,7 @@
 const Patient = require('../models/Patient');
 const PatientFile = require('../models/PatientFile');
 const PatientVisit = require('../models/PatientVisit');
+const FollowUp = require('../models/FollowUp');
 const ClinicalProforma = require('../models/ClinicalProforma');
 const ADLFile = require('../models/ADLFile');
 const path = require('path');
@@ -24,6 +25,29 @@ class PatientController {
     }
     
     return patientData;
+  }
+
+  /** Add registration_date and total_visits (consultation count; registration is not a visit). */
+  static async enrichPatientWithVisitMetadata(patientData) {
+    if (!patientData?.id) return patientData;
+    const patientId = parseInt(patientData.id, 10);
+    if (Number.isNaN(patientId)) return patientData;
+
+    try {
+      const patient = await Patient.findById(patientId);
+      const registration_date = patient
+        ? await patient.getRegistrationDate()
+        : null;
+      const total_visits = await FollowUp.getConsultationVisitCount(patientId);
+      return {
+        ...patientData,
+        registration_date,
+        total_visits,
+      };
+    } catch (err) {
+      console.error('[enrichPatientWithVisitMetadata] Error:', err);
+      return patientData;
+    }
   }
 
   static _todayISTDateString() {
@@ -348,8 +372,9 @@ class PatientController {
           });
         }
 
-        // Create a visit record for the existing patient
-        // patient_id is now an integer
+        // Registration does not create a visit. Adding an existing patient to today's
+        // list only updates room/doctor assignment; Visit No. 1 is created when the
+        // doctor saves the Follow-Up form (POST /api/follow-ups).
         const patientIdInt = parseInt(patient_id, 10);
         if (isNaN(patientIdInt)) {
           return res.status(400).json({
@@ -357,10 +382,8 @@ class PatientController {
             message: 'Invalid patient ID format'
           });
         }
-        
-        // Get visit count to determine visit type
-        const visitCount = await PatientVisit.getVisitCount(patientIdInt);
-        const visitType = visitCount === 0 ? 'first_visit' : 'follow_up';
+
+        const consultationCount = await FollowUp.getConsultationVisitCount(patientIdInt);
 
         // Determine room for today's visit
         // IMPORTANT BUSINESS RULE:
@@ -433,18 +456,7 @@ class PatientController {
           console.log(`[createPatient] Room doctor: ${finalAssignedDoctorId} (${roomDoctorRow.name}) in room ${roomToUse.trim()}`);
         }
 
-        console.log(`[createPatient] Creating visit for patient ${patientIdInt} — date: ${todayDate}, room: ${roomToUse}, doctor: ${finalAssignedDoctorId}`);
-
-        const visit = await PatientVisit.assignPatient({
-          patient_id: patientIdInt,
-          assigned_doctor_id: finalAssignedDoctorId,
-          room_no: roomToUse,
-          visit_date: todayDate,
-          visit_type: visitType,
-          notes: `Visit created via Existing Patient flow - Visit #${visitCount + 1}`
-        });
-
-        console.log(`[createPatient] Visit created:`, { visit_id: visit.id, patient_id: patientIdInt, visit_date: visit.visit_date, room_no: visit.room_no, assigned_doctor_id: visit.assigned_doctor_id });
+        console.log(`[createPatient] Adding existing patient ${patientIdInt} to today's list — date: ${todayDate}, room: ${roomToUse}, doctor: ${finalAssignedDoctorId}`);
 
         // Update the patient record to reflect today's assignment.
         // updated_at is ALWAYS bumped so the frontend date-filter (which checks updated_at)
@@ -482,14 +494,17 @@ class PatientController {
           );
         }
 
+        const patientJson = existingPatient.toJSON();
+        const enrichedPatient = await PatientController.enrichPatientWithVisitMetadata(patientJson);
+
         return res.status(201).json({
           success: true,
-          message: 'Visit record created successfully',
+          message: "Patient added to today's list successfully",
           data: {
-            patient: existingPatient.toJSON(),
-            visit: visit,
-            visit_count: visitCount + 1, // Include in response
-            visit_type: visitType
+            patient: enrichedPatient,
+            visit_count: consultationCount,
+            total_visits: consultationCount,
+            next_visit_number: consultationCount + 1,
           }
         });
       }
@@ -542,14 +557,16 @@ class PatientController {
         });
       }
 
-      const visitCount = await PatientVisit.getVisitCount(patientIdInt);
-      const visits = await PatientVisit.getPatientVisits(patientIdInt);
+      const visitCount = await FollowUp.getConsultationVisitCount(patientIdInt);
+      const visits = await FollowUp.getConsultationVisits(patientIdInt);
 
       res.status(200).json({
         success: true,
         data: {
           visit_count: visitCount,
-          visits: visits,
+          total_visits: visitCount,
+          visits,
+          visitHistory: visits,
           next_visit_number: visitCount + 1
         }
       });
@@ -1254,26 +1271,6 @@ class PatientController {
             visitsTodayError = true;
           }
 
-          // Ordinal visit number (1, 2, …) per patient — additive field; visit_status unchanged for clients
-          let visitNumberByVisitId = new Map();
-          try {
-            const visitNumResult = await db.query(
-              `SELECT id, patient_id,
-                      ROW_NUMBER() OVER (
-                        PARTITION BY patient_id ORDER BY visit_date ASC, id ASC
-                      )::int AS visit_number
-               FROM patient_visits
-               WHERE patient_id = ANY($1::int[])`,
-              [patientIds]
-            );
-            (visitNumResult.rows || []).forEach((r) => {
-              visitNumberByVisitId.set(Number(r.id), Number(r.visit_number));
-            });
-          } catch (vnErr) {
-            console.error('[getAllPatients] Error computing visit_number (non-fatal):', vnErr);
-            visitNumberByVisitId = new Map();
-          }
-          
           // Fetch clinical proformas for the same calendar day as the list (IST for created_at, matches findAll)
           let proformasToday = [];
           let proformasTodayError = false;
@@ -1301,14 +1298,14 @@ class PatientController {
             proformasToday.forEach(p => patientsWithProformaToday.add(String(p.patient_id)));
           }
 
-          // Count follow-up visits per adult (patient_visits.visit_type = 'follow_up')
+          // Total completed consultations per adult (followup_visits — registration is not a visit)
           let followUpVisitCountByPatientId = new Map();
           try {
             const fuRes = await db.query(
               `SELECT patient_id, COUNT(*)::int AS visit_count
-               FROM patient_visits
+               FROM followup_visits
                WHERE patient_id = ANY($1::int[])
-                 AND visit_type = 'follow_up'
+                 AND is_active = true
                GROUP BY patient_id`,
               [patientIds]
             );
@@ -1370,16 +1367,7 @@ class PatientController {
                 ? visitsToday.find(v => String(v.patient_id) === patientIdStr)
                 : latest;
 
-              const activeVisitId =
-                visitInfo?.id != null
-                  ? Number(visitInfo.id)
-                  : latest?.id != null
-                    ? Number(latest.id)
-                    : null;
-              const visit_number =
-                activeVisitId != null && visitNumberByVisitId.has(activeVisitId)
-                  ? visitNumberByVisitId.get(activeVisitId)
-                  : null;
+              const visit_number = followUpVisitCountByPatientId.get(patientIdStr) ?? 0;
 
               const listHasAdl =
                 !!p.has_adl_file ||
@@ -1583,7 +1571,7 @@ class PatientController {
       console.log(`[getPatientById] Fetching patient with ID: ${id} (type: ${typeof id})`);
       
       const patient = await Patient.findById(id);
-  console.log(">>>>>>>",patient)
+
       if (!patient) {
         console.log(`[getPatientById] Patient with ID ${id} not found`);
         return res.status(404).json({
@@ -1610,16 +1598,16 @@ class PatientController {
       console.log(`[getPatientById] Successfully fetched patient ID: ${patient.id}, Name: ${patient.name}`);
 
       const patientJson = patient.toJSON();
-      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
       const filteredPatient = PatientController.filterPatientDataForRole(
         patientJson,
         req.user?.role
       );
+      const enrichedPatient = await PatientController.enrichPatientWithVisitMetadata(filteredPatient);
 
       res.json({
         success: true,
         data: {
-          patient: filteredPatient
+          patient: enrichedPatient
         }
       });
     } catch (error) {
@@ -2092,15 +2080,18 @@ class PatientController {
         patient.getADLFiles()
       ]);
 
+      const total_visits = visitHistory.length;
       const patientJson = patient.toJSON();
-      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
       const filteredPatient = PatientController.filterPatientDataForRole(patientJson, req.user?.role);
+      const enrichedPatient = await PatientController.enrichPatientWithVisitMetadata(filteredPatient);
 
       res.json({
         success: true,
         data: {
-          patient: filteredPatient,
+          patient: enrichedPatient,
+          total_visits,
           visitHistory,
+          visits: visitHistory,
           clinicalRecords,
           adlFiles
         }
@@ -2138,14 +2129,17 @@ class PatientController {
       }
 
       const patientJson = patient.toJSON();
-      // Use the static helper on the controller class (not `this`, which is undefined in Express handlers)
       const filteredPatient = PatientController.filterPatientDataForRole(patientJson, req.user?.role);
+      const enrichedPatient = await PatientController.enrichPatientWithVisitMetadata(filteredPatient);
+      const total_visits = visitHistory.length;
 
       res.json({
         success: true,
         data: {
-          patient: filteredPatient,
-          visitHistory
+          patient: enrichedPatient,
+          total_visits,
+          visitHistory,
+          visits: visitHistory,
         }
       });
     } catch (error) {

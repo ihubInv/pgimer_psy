@@ -58,9 +58,10 @@ class FollowUpController {
         if (visitCheck.rows.length > 0) {
           visitId = visitCheck.rows[0].id;
         } else {
-          // Create visit record
-          const visitCount = await PatientVisit.getVisitCount(patient_id);
-          const visitType = visitCount === 0 ? 'first_visit' : 'follow_up';
+          const existingConsultations = await FollowUp.getConsultationVisitCount(
+            parseInt(patient_id, 10)
+          );
+          const visitType = existingConsultations === 0 ? 'first_visit' : 'follow_up';
 
           const visit = await PatientVisit.assignPatient({
             patient_id: parseInt(patient_id, 10),
@@ -91,6 +92,29 @@ class FollowUpController {
         room_no: room_no || null,
       });
 
+      let visit_number = null;
+      let total_visits = null;
+      if (patient_id) {
+        const patientIdInt = parseInt(patient_id, 10);
+        visit_number = await FollowUp.getVisitNumberForFollowUp(followUp.id, patientIdInt);
+        total_visits = await FollowUp.getConsultationVisitCount(patientIdInt);
+      } else if (child_patient_id) {
+        const childIdInt = parseInt(child_patient_id, 10);
+        total_visits = await FollowUp.getChildConsultationVisitCount(childIdInt);
+        const numResult = await db.query(
+          `SELECT visit_number FROM (
+             SELECT id,
+                    ROW_NUMBER() OVER (ORDER BY visit_date ASC, id ASC)::int AS visit_number
+             FROM followup_visits
+             WHERE child_patient_id = $1 AND is_active = true
+           ) numbered WHERE id = $2`,
+          [childIdInt, followUp.id]
+        );
+        visit_number = numResult.rows[0]?.visit_number != null
+          ? Number(numResult.rows[0].visit_number)
+          : null;
+      }
+
       // Update visit record with follow-up reference if visit was created
       if (visitId) {
         try {
@@ -111,6 +135,8 @@ class FollowUpController {
         message: 'Follow-up visit created successfully',
         data: {
           followup: followUp.toJSON(),
+          visit_number,
+          total_visits,
         },
       });
     } catch (error) {

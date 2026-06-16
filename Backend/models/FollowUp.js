@@ -231,6 +231,99 @@ class FollowUp {
     }
   }
 
+  /** Count completed doctor consultations (followup_visits with notes). */
+  static async getConsultationVisitCount(patient_id) {
+    try {
+      const result = await db.query(
+        `SELECT COUNT(*)::int AS total
+         FROM followup_visits
+         WHERE patient_id = $1 AND is_active = true`,
+        [patient_id]
+      );
+      return Number(result.rows[0]?.total || 0);
+    } catch (error) {
+      console.error('[FollowUp.getConsultationVisitCount] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Count completed consultations for a child patient. */
+  static async getChildConsultationVisitCount(child_patient_id) {
+    try {
+      const result = await db.query(
+        `SELECT COUNT(*)::int AS total
+         FROM followup_visits
+         WHERE child_patient_id = $1 AND is_active = true`,
+        [child_patient_id]
+      );
+      return Number(result.rows[0]?.total || 0);
+    } catch (error) {
+      console.error('[FollowUp.getChildConsultationVisitCount] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Consultation visit history with sequential visit_number (1, 2, 3…).
+   * Registration is not included — only rows saved via follow-up / consultation.
+   */
+  static async getConsultationVisits(patient_id) {
+    try {
+      const result = await db.query(
+        `SELECT
+           fv.id AS followup_id,
+           fv.patient_id,
+           fv.visit_id,
+           fv.visit_date,
+           fv.clinical_assessment,
+           fv.assigned_doctor_id,
+           fv.room_no,
+           fv.filled_by,
+           fv.created_at,
+           fv.updated_at,
+           u.name AS doctor_name,
+           u.role AS doctor_role,
+           ROW_NUMBER() OVER (
+             ORDER BY fv.visit_date ASC, fv.id ASC
+           )::int AS visit_number,
+           'followup_visit' AS record_type
+         FROM followup_visits fv
+         LEFT JOIN users u ON fv.assigned_doctor_id = u.id
+         WHERE fv.patient_id = $1 AND fv.is_active = true
+         ORDER BY fv.visit_date ASC, fv.id ASC`,
+        [patient_id]
+      );
+      return result.rows || [];
+    } catch (error) {
+      console.error('[FollowUp.getConsultationVisits] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Visit number for a single follow-up row (after create). */
+  static async getVisitNumberForFollowUp(followupId, patient_id) {
+    try {
+      const result = await db.query(
+        `SELECT visit_number FROM (
+           SELECT id,
+                  ROW_NUMBER() OVER (
+                    ORDER BY visit_date ASC, id ASC
+                  )::int AS visit_number
+           FROM followup_visits
+           WHERE patient_id = $1 AND is_active = true
+         ) numbered
+         WHERE id = $2`,
+        [patient_id, followupId]
+      );
+      return result.rows[0]?.visit_number != null
+        ? Number(result.rows[0].visit_number)
+        : null;
+    } catch (error) {
+      console.error('[FollowUp.getVisitNumberForFollowUp] Error:', error);
+      throw error;
+    }
+  }
+
   // Soft delete (set is_active to false)
   static async delete(id) {
     try {

@@ -1082,100 +1082,24 @@ class Patient {
     }
   }
 
-  // Get visit history (includes both patient_visits and followup_visits)
+  // Consultation visit history (followup_visits only — registration is not a visit)
   async getVisitHistory() {
+    const FollowUp = require('./FollowUp');
+    return FollowUp.getConsultationVisits(this.id);
+  }
+
+  /** IST calendar registration date (not counted as a visit). */
+  async getRegistrationDate() {
     try {
-      // Get regular visits from patient_visits table
-      const visitsResult = await db.query(
-        `SELECT 
-           pv.id,
-           pv.patient_id,
-           pv.visit_date,
-           pv.visit_type,
-           pv.visit_status,
-           pv.assigned_doctor_id,
-           pv.room_no,
-           pv.notes,
-           pv.created_at,
-           pv.updated_at,
-           u.name as doctor_name,
-           u.role as doctor_role,
-           'patient_visit' as record_type,
-           NULL as clinical_assessment,
-           NULL as followup_id
-         FROM patient_visits pv
-         LEFT JOIN users u ON pv.assigned_doctor_id = u.id
-         WHERE pv.patient_id = $1
-         
-         UNION ALL
-         
-         SELECT 
-           fv.visit_id as id,
-           fv.patient_id,
-           fv.visit_date,
-           'follow_up'::varchar as visit_type,
-           'completed'::varchar as visit_status,
-           fv.assigned_doctor_id,
-           fv.room_no,
-           NULL as notes,
-           fv.created_at,
-           fv.updated_at,
-           u2.name as doctor_name,
-           u2.role as doctor_role,
-           'followup_visit' as record_type,
-           fv.clinical_assessment,
-           fv.id as followup_id
-         FROM followup_visits fv
-         LEFT JOIN users u2 ON fv.assigned_doctor_id = u2.id
-         WHERE fv.patient_id = $1 AND fv.is_active = true
-         
-         ORDER BY visit_date DESC, created_at DESC`,
+      const result = await db.query(
+        `SELECT DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') AS registration_date
+         FROM registered_patient
+         WHERE id = $1`,
         [this.id]
       );
-      return visitsResult.rows;
+      return result.rows[0]?.registration_date || null;
     } catch (error) {
-      console.error('[Patient.getVisitHistory] Error:', error);
-      // Graceful fallback: if followup_visits table or related objects are missing,
-      // return basic patient_visits history instead of failing with 500
-      const isMissingFollowupTable =
-        error.code === '42P01' || // undefined_table in PostgreSQL
-        (typeof error.message === 'string' &&
-          (error.message.includes('followup_visits') ||
-           error.message.includes('relation "followup_visits" does not exist')));
-
-      if (isMissingFollowupTable) {
-        console.warn('[Patient.getVisitHistory] Falling back to patient_visits only (followup_visits not available).');
-        try {
-          const fallbackResult = await db.query(
-            `SELECT 
-               pv.id,
-               pv.patient_id,
-               pv.visit_date,
-               pv.visit_type,
-               pv.visit_status,
-               pv.assigned_doctor_id,
-               pv.room_no,
-               pv.notes,
-               pv.created_at,
-               pv.updated_at,
-               u.name as doctor_name,
-               u.role as doctor_role,
-               'patient_visit' as record_type,
-               NULL as clinical_assessment,
-               NULL as followup_id
-             FROM patient_visits pv
-             LEFT JOIN users u ON pv.assigned_doctor_id = u.id
-             WHERE pv.patient_id = $1
-             ORDER BY pv.visit_date DESC, pv.created_at DESC`,
-            [this.id]
-          );
-          return fallbackResult.rows;
-        } catch (fallbackError) {
-          console.error('[Patient.getVisitHistory] Fallback query error:', fallbackError);
-          throw fallbackError;
-        }
-      }
-
+      console.error('[Patient.getRegistrationDate] Error:', error);
       throw error;
     }
   }
