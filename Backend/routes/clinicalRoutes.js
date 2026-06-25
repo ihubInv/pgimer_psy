@@ -9,6 +9,7 @@ const {
   requireClinicalProformaWriter,
 } = require('../middleware/auth');
 const ClinicalOptionsController = require('../controllers/clinicalOptionsController');
+const IcdNodesController = require('../controllers/icdNodesController');
 const {
   validateClinicalProforma,
   validateId,
@@ -1042,6 +1043,16 @@ router.get('/options', authenticateToken, ClinicalOptionsController.getAllGroups
  *         description: Options fetched
  */
 router.get('/options/:group', authenticateToken, ClinicalOptionsController.getGroup);
+
+// ICD-11 hierarchy nodes — MUST be before /:id route to avoid route conflicts
+router.get('/icd-nodes', authenticateToken, IcdNodesController.getChildren);
+router.get('/icd-nodes/search', authenticateToken, IcdNodesController.search);
+router.get('/icd-nodes/path/:code', authenticateToken, IcdNodesController.getPathByCode);
+router.get('/icd-nodes/:id/path', authenticateToken, IcdNodesController.getPathById);
+router.post('/icd-nodes', authenticateToken, IcdNodesController.createNode);
+router.put('/icd-nodes/:id', authenticateToken, IcdNodesController.updateNode);
+router.delete('/icd-nodes/:id', authenticateToken, IcdNodesController.deleteNode);
+router.post('/icd-nodes/seed', authenticateToken, IcdNodesController.seed);
 
 /**
  * @swagger

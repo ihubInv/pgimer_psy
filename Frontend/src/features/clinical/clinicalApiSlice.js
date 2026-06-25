@@ -44,6 +44,61 @@ export const clinicalApiSlice = apiSlice.injectEndpoints({
         'ClinicalOptions'
       ],
     }),
+    getIcdNodes: builder.query({
+      query: (parentId) => ({
+        url: '/clinical-proformas/icd-nodes',
+        params: {
+          parent_id:
+            parentId === null || parentId === undefined ? 'root' : parentId,
+        },
+      }),
+      providesTags: (result, error, parentId) => [
+        { type: 'IcdNodes', id: parentId ?? 'root' },
+        'IcdNodes',
+      ],
+      transformResponse: (resp) => resp?.data?.nodes || [],
+    }),
+    searchIcdNodes: builder.query({
+      query: (q) => ({
+        url: '/clinical-proformas/icd-nodes/search',
+        params: { q, limit: 30 },
+      }),
+      providesTags: ['IcdNodes'],
+      transformResponse: (resp) => resp?.data?.nodes || [],
+    }),
+    getIcdPathByCode: builder.query({
+      query: (code) => `/clinical-proformas/icd-nodes/path/${encodeURIComponent(code)}`,
+      providesTags: ['IcdNodes'],
+      transformResponse: (resp) => resp?.data || { path: [], node: null },
+    }),
+    getIcdPathById: builder.query({
+      query: (id) => `/clinical-proformas/icd-nodes/${id}/path`,
+      providesTags: ['IcdNodes'],
+      transformResponse: (resp) => resp?.data || { path: [], node: null },
+    }),
+    addIcdNode: builder.mutation({
+      query: (body) => ({
+        url: '/clinical-proformas/icd-nodes',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['IcdNodes'],
+    }),
+    updateIcdNode: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/clinical-proformas/icd-nodes/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['IcdNodes'],
+    }),
+    deleteIcdNode: builder.mutation({
+      query: (id) => ({
+        url: `/clinical-proformas/icd-nodes/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['IcdNodes'],
+    }),
     getAllClinicalProformas: builder.query({
       query: ({ page = 1, limit = 10, ...filters }) => ({
         url: '/clinical-proformas',
@@ -180,4 +235,12 @@ export const {
   useAddClinicalOptionMutation,
   useUpdateClinicalOptionMutation,
   useDeleteClinicalOptionMutation,
+  useGetIcdNodesQuery,
+  useSearchIcdNodesQuery,
+  useGetIcdPathByCodeQuery,
+  useLazyGetIcdPathByCodeQuery,
+  useLazyGetIcdPathByIdQuery,
+  useAddIcdNodeMutation,
+  useUpdateIcdNodeMutation,
+  useDeleteIcdNodeMutation,
 } = clinicalApiSlice;

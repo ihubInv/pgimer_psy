@@ -13,6 +13,7 @@
     "seed:clear": "node database/supabaseSeed.js clear",
     "seed:clinical-options": "node scripts/seedClinicalOptions.js",
     "format:clinical-option-labels": "node scripts/formatClinicalOptionLabels.js",
+    "seed:icd-nodes": "node scripts/seedIcdNodes.js",
     "db:setup": "npm run migrate && npm run seed",
     "audit-fix": "npm audit fix",
     "lint": "eslint .",

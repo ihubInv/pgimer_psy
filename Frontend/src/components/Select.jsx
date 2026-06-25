@@ -17,6 +17,7 @@ const Select = ({
   dropdownZIndex = 999999,
   usePortal = true,
   searchable = false,
+  renderOptionSuffix = null,
   ...props
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -114,6 +115,7 @@ const Select = ({
       className="backdrop-blur-2xl bg-white/90 border border-white/40 rounded-xl shadow-2xl overflow-hidden"
       style={{
         maxHeight: '240px',
+        minWidth: renderOptionSuffix ? '320px' : undefined,
         zIndex: dropdownZIndex,
       }}
     >
@@ -142,29 +144,47 @@ const Select = ({
           filteredOptions.map((option, index) => {
             const isDisabled = option.disabled === true;
             return (
-              <button
+              <div
                 key={option.value}
-                type="button"
-                onClick={() => !isDisabled && handleSelect(option.value)}
-                disabled={isDisabled}
                 className={`
-                  w-full px-4 py-3 text-left
-                  flex items-center justify-between
+                  w-full flex items-center gap-1
                   transition-colors duration-150
-                  ${isDisabled 
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-60' 
+                  ${isDisabled
+                    ? 'bg-gray-100 text-gray-400 opacity-60'
                     : value === option.value
-                      ? 'bg-primary-50 text-primary-700 font-semibold'
+                      ? 'bg-primary-50 text-primary-700'
                       : 'text-gray-700 hover:bg-gray-50'}
                   ${index !== 0 ? 'border-t border-gray-100' : ''}
                 `}
-                title={isDisabled ? option.disabledReason || 'This option is disabled' : undefined}
               >
-              <span className="flex-1">{option.label}</span>
-              {value === option.value && !isDisabled && (
-                <FiCheck className="h-5 w-5 text-primary-600 flex-shrink-0 ml-2" />
-              )}
-            </button>
+                <button
+                  type="button"
+                  onClick={() => !isDisabled && handleSelect(option.value)}
+                  disabled={isDisabled}
+                  className={`
+                    flex-1 min-w-0 px-4 py-3 text-left
+                    flex items-center justify-between gap-2
+                    transition-colors duration-150
+                    ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}
+                    ${value === option.value ? 'font-semibold' : ''}
+                  `}
+                  title={isDisabled ? option.disabledReason || 'This option is disabled' : option.label}
+                >
+                  <span className="flex-1 truncate">{option.label}</span>
+                  {value === option.value && !isDisabled && (
+                    <FiCheck className="h-5 w-5 text-primary-600 flex-shrink-0" />
+                  )}
+                </button>
+                {renderOptionSuffix && !isDisabled && (
+                  <div
+                    className="flex items-center gap-1 pr-2 flex-shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    {renderOptionSuffix(option)}
+                  </div>
+                )}
+              </div>
             );
           })
         )}
@@ -252,7 +272,7 @@ const Select = ({
                     position: 'fixed',
                     top: menuStyle.top,
                     left: menuStyle.left,
-                    width: menuStyle.width,
+                    width: Math.max(menuStyle.width, renderOptionSuffix ? 320 : 0),
                     zIndex: dropdownZIndex,
                   }}
                 >
