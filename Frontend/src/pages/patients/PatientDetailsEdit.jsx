@@ -1717,13 +1717,10 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
   const isSelectedComplexCase = selectedProforma?.doctor_decision === 'complex_case' && selectedProforma?.adl_file_id;
 
   useEffect(() => {
-    if (isEdit && canViewADLFile) {
-      setExpandedCards((prev) => ({ ...prev, adl: true }));
-    }
     if (autoFillAdlData) {
       setExpandedCards((prev) => ({ ...prev, adl: true }));
     }
-  }, [isEdit, canViewADLFile, autoFillAdlData]);
+  }, [autoFillAdlData]);
 
   const [formData, setFormData] = useState(() => {
     // Helper to safely get value
