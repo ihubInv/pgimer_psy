@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { FiSearch, FiX, FiPlus, FiSave, FiEdit3, FiTrash2 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import Select from './Select';
@@ -56,41 +57,62 @@ function canManageNode(node) {
   return node && !node.is_system;
 }
 
-function showDeleteConfirmToast(node, onConfirm) {
-  toast(
-    ({ closeToast }) => (
-      <div className="text-sm text-gray-800">
-        <p className="font-medium mb-1">Confirm delete</p>
-        <p className="text-gray-600 mb-3">
-          Delete &quot;{node.title}&quot; and all items under it?
-        </p>
-        <div className="flex justify-end gap-2">
+function IcdDialog({ open, onClose, title, children, maxWidth = 'max-w-md' }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="icd-dialog-title"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/30"
+        aria-label="Close dialog"
+        onClick={onClose}
+      />
+      <div
+        className={`relative z-10 w-full ${maxWidth} max-h-[min(85vh,100%)] overflow-y-auto bg-white shadow-xl border border-gray-200 rounded-t-2xl sm:rounded-xl p-4 sm:p-5`}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <h3 id="icd-dialog-title" className="text-base sm:text-lg font-semibold text-gray-800 pr-2">
+            {title}
+          </h3>
           <button
             type="button"
-            onClick={closeToast}
-            className="px-3 py-1.5 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+            onClick={onClose}
+            className="shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded"
+            aria-label="Close"
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              closeToast();
-              onConfirm(node);
-            }}
-            className="px-3 py-1.5 text-white bg-gray-800 rounded-md hover:bg-gray-900"
-          >
-            Delete
+            <FiX className="w-5 h-5" />
           </button>
         </div>
+        {children}
       </div>
-    ),
-    {
-      autoClose: false,
-      closeOnClick: false,
-      draggable: false,
-      closeButton: true,
-    }
+    </div>,
+    document.body
   );
 }
 
@@ -113,7 +135,7 @@ function IcdLevelSelect({
   const labelText = levelIndex === 0 ? 'Chapter' : levelLabel(levelIndex, parentNode);
 
   return (
-    <div className="flex-shrink-0 min-w-[280px]">
+    <div className="w-full min-w-0 sm:min-w-[220px] sm:flex-1 sm:max-w-xs lg:max-w-sm">
       <div className="flex items-center justify-between gap-2 mb-1">
         <label className="block text-sm font-medium text-gray-700">{labelText}</label>
         <button
@@ -223,17 +245,10 @@ function IcdNodeFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <FiX className="w-5 h-5" />
-          </button>
-        </div>
-
+    <IcdDialog open={open} onClose={onClose} title={title}>
+      <div className="space-y-4">
         {parentNode && !isEdit && (
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-600 break-words">
             Under: <span className="font-medium">{icdNodeLabel(parentNode)}</span>
           </p>
         )}
@@ -274,16 +289,16 @@ function IcdNodeFormModal({
           placeholder="Optional block code"
         />
 
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button type="button" onClick={handleSave} disabled={isLoading}>
+          <Button type="button" onClick={handleSave} disabled={isLoading} className="w-full sm:w-auto">
             <FiSave className="w-4 h-4 mr-1" /> Save
           </Button>
         </div>
       </div>
-    </div>
+    </IcdDialog>
   );
 }
 
@@ -291,28 +306,48 @@ function SubcategoryPromptModal({ open, savedNode, onYes, onNo, onClose }) {
   if (!open || !savedNode) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-800">Add subcategory?</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <FiX className="w-5 h-5" />
-          </button>
-        </div>
-        <p className="text-sm text-gray-600">
+    <IcdDialog open={open} onClose={onClose} title="Add subcategory?" maxWidth="max-w-sm">
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600 break-words">
           <span className="font-medium">{icdNodeLabel(savedNode)}</span> was saved successfully.
           Do you want to add a subcategory under this item?
         </p>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onNo}>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onNo} className="w-full sm:w-auto">
             No
           </Button>
-          <Button type="button" onClick={onYes}>
+          <Button type="button" onClick={onYes} className="w-full sm:w-auto">
             Yes
           </Button>
         </div>
       </div>
-    </div>
+    </IcdDialog>
+  );
+}
+
+function DeleteConfirmModal({ open, node, onConfirm, onClose }) {
+  if (!open || !node) return null;
+
+  return (
+    <IcdDialog open={open} onClose={onClose} title="Confirm delete" maxWidth="max-w-sm">
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600 break-words">
+          Delete &quot;{node.title}&quot; and all items under it?
+        </p>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={() => onConfirm(node)}
+            className="w-full sm:w-auto bg-gray-800 hover:bg-gray-900 text-white"
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
+    </IcdDialog>
   );
 }
 
@@ -324,6 +359,7 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
   const [highlight, setHighlight] = useState(0);
   const [addModal, setAddModal] = useState({ open: false, parentNode: null, levelIndex: 0 });
   const [editModal, setEditModal] = useState({ open: false, node: null });
+  const [deleteModal, setDeleteModal] = useState({ open: false, node: null });
   const [subcategoryPrompt, setSubcategoryPrompt] = useState({ open: false, node: null, path: [] });
   const [allowEmptyChildLevel, setAllowEmptyChildLevel] = useState(null);
   const globalBoxRef = useRef(null);
@@ -570,7 +606,12 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
 
   const requestDeleteNode = (node) => {
     if (!canManageNode(node)) return;
-    showDeleteConfirmToast(node, handleDeleteNode);
+    setDeleteModal({ open: true, node });
+  };
+
+  const confirmDeleteNode = async (node) => {
+    setDeleteModal({ open: false, node: null });
+    await handleDeleteNode(node);
   };
 
   const lastNode = selectedPath[selectedPath.length - 1];
@@ -653,7 +694,7 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
         )}
       </div>
 
-      <div className="flex flex-wrap items-end gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
         {levelsToRender.map((levelIndex) => {
           const parentId = levelIndex === 0 ? null : selectedPath[levelIndex - 1]?.id;
           const parentNode = levelIndex === 0 ? null : selectedPath[levelIndex - 1];
@@ -711,6 +752,13 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
         onClose={() => setEditModal({ open: false, node: null })}
         onSubmit={handleEditSubmit}
         isLoading={isUpdating}
+      />
+
+      <DeleteConfirmModal
+        open={deleteModal.open}
+        node={deleteModal.node}
+        onClose={() => setDeleteModal({ open: false, node: null })}
+        onConfirm={confirmDeleteNode}
       />
 
       <SubcategoryPromptModal
