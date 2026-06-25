@@ -72,6 +72,19 @@ export default defineConfig({
         entryFileNames: 'assets/[hash].js',
         chunkFileNames: 'assets/[hash].js',
         assetFileNames: 'assets/[hash].[ext]',
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('chart.js') || id.includes('react-chartjs-2')) return 'charts';
+          if (id.includes('xlsx-js-style')) return 'xlsx';
+          if (
+            id.includes('react-dom') ||
+            id.includes('react-router') ||
+            id.includes('/react/') ||
+            id.includes('scheduler')
+          ) {
+            return 'react-vendor';
+          }
+        },
         // Don't include source file paths in comments
         banner: '',
         footer: '',
@@ -95,7 +108,8 @@ export default defineConfig({
     // Ensure /src/ directory is never included in build
     emptyOutDir: true,
     // Don't expose chunk loading error details
-    chunkSizeWarningLimit: 1000
+    // xlsx-js-style is ~1.2 MB and loads only on Excel export via dynamic import
+    chunkSizeWarningLimit: 1500
   },
   // SECURITY FIX #2.8: CRITICAL - Block ALL direct /src file browsing
   // Strategy: Only allow entry point, assets, and Vite transform requests with specific query params

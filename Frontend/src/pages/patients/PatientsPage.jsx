@@ -19,7 +19,6 @@ import {
   useRevokeReferralMutation,
 } from '../../features/patients/patientsApiSlice';
 import { selectCurrentUser, selectCurrentToken } from '../../features/auth/authSlice';
-import { formatPatientsForExport, exportData } from '../../utils/exportUtils';
 import {
   downloadPatientReportExcel,
   openPatientReportPrint,
@@ -60,7 +59,6 @@ import PatientListFilters, {
   PatientListActiveFilters,
 } from '../../components/PatientListFilters';
 import PGI_Logo from '../../assets/PGI_Logo.png';
-import * as XLSX from 'xlsx-js-style';
 import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords';
 import { resolveFinalAssessmentHistory } from '../../utils/adlClosingSections';
 

@@ -20,7 +20,6 @@ import {
 } from 'react-icons/fi';
 import Button from '../../components/Button';
 import { toast } from 'react-toastify';
-import * as XLSX from 'xlsx-js-style';
 import {
   downloadPatientReportExcel,
   openPatientReportPrint,
@@ -954,69 +953,6 @@ const PatientDetailsView = memo(({ patient, formData, clinicalData, adlData, out
       assigned_room: displayData?.assigned_room,
     });
   }, [patientPrescriptionsData, displayData]);
-
-  // Helper function to apply header styles with different colors
-  const applyHeaderStyles = (ws, colorRanges) => {
-    if (!ws['!ref']) return;
-
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    const numCols = range.e.c + 1;
-
-    // Apply styles to each header cell
-    for (let col = 0; col < numCols; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-
-      if (!ws[cellAddress]) continue;
-
-      // Find which color range this column belongs to
-      let headerColor = '2E86AB'; // Default blue
-      for (const range of colorRanges) {
-        if (col >= range.start && col <= range.end) {
-          headerColor = range.color;
-          break;
-        }
-      }
-
-      // Apply header styling with bold, colored background, and white text
-      ws[cellAddress].s = {
-        font: {
-          bold: true,
-          color: { rgb: "FFFFFF" },
-          size: 12
-        },
-        fill: {
-          fgColor: { rgb: headerColor }
-        },
-        alignment: {
-          horizontal: "center",
-          vertical: "center",
-          wrapText: true
-        },
-        border: {
-          top: { style: "thin", color: { rgb: "000000" } },
-          bottom: { style: "thin", color: { rgb: "000000" } },
-          left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } }
-        }
-      };
-    }
-
-    // Set column widths for better readability
-    const colWidths = [];
-    for (let col = 0; col < numCols; col++) {
-      const header = ws[XLSX.utils.encode_cell({ r: 0, c: col })]?.v || '';
-      let width = Math.max(String(header).length * 1.2, 12);
-      if (String(header).includes('Address') || String(header).includes('Description')) {
-        width = Math.max(width, 25);
-      } else if (String(header).includes('Date') || String(header).includes('Time')) {
-        width = Math.max(width, 18);
-      } else if (String(header).includes('Income') || String(header).includes('Amount')) {
-        width = Math.max(width, 15);
-      }
-      colWidths.push({ wch: Math.min(width, 50) });
-    }
-    ws['!cols'] = colWidths;
-  };
 
   // Export patient details to Excel (backend API)
   const handleExportPatient = async () => {

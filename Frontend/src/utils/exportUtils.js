@@ -1,5 +1,14 @@
 import { saveAs } from 'file-saver';
-import * as XLSX from 'xlsx';
+
+let xlsxPromise;
+
+async function loadXlsx() {
+  if (!xlsxPromise) {
+    xlsxPromise = import('xlsx-js-style');
+  }
+  const mod = await xlsxPromise;
+  return mod.default ?? mod;
+}
 
 /**
  * Export data to CSV format
@@ -44,11 +53,13 @@ export const exportToCSV = (data, filename = 'export', columns = []) => {
  * @param {string} filename - Name of the file (without extension)
  * @param {Array} columns - Array of column definitions with header and accessor
  */
-export const exportToExcel = (data, filename = 'export', columns = []) => {
+export const exportToExcel = async (data, filename = 'export', columns = []) => {
   if (!data || data.length === 0) {
     console.warn('No data to export');
     return;
   }
+
+  const XLSX = await loadXlsx();
 
   // If columns are provided, use them to format the data
   let excelData = data;
@@ -377,12 +388,11 @@ export const formatPatientsForExport = (patients) => {
  * @param {string} baseFilename - Base filename for export
  * @param {Array} columns - Column definitions
  */
-export const showExportOptions = (data, baseFilename = 'patients', columns = []) => {
-  // Create a simple modal or use browser confirm for now
+export const showExportOptions = async (data, baseFilename = 'patients', columns = []) => {
   const format = window.confirm('Choose export format:\nOK = Excel (.xlsx)\nCancel = CSV (.csv)');
   
   if (format) {
-    exportToExcel(data, baseFilename, columns);
+    await exportToExcel(data, baseFilename, columns);
   } else {
     exportToCSV(data, baseFilename, columns);
   }
@@ -395,9 +405,9 @@ export const showExportOptions = (data, baseFilename = 'patients', columns = [])
  * @param {string} format - Export format ('excel' or 'csv')
  * @param {string} colorTheme - Color theme for Excel headers ('blue', 'green', 'purple', 'orange', 'red')
  */
-export const exportData = (data, filename, format = 'excel', colorTheme = 'blue') => {
+export const exportData = async (data, filename, format = 'excel', colorTheme = 'blue') => {
   if (format === 'excel') {
-    exportToExcelWithTheme(data, filename, colorTheme);
+    await exportToExcelWithTheme(data, filename, colorTheme);
   } else {
     exportToCSV(data, filename);
   }
@@ -409,11 +419,13 @@ export const exportData = (data, filename, format = 'excel', colorTheme = 'blue'
  * @param {string} filename - Name of the file (without extension)
  * @param {string} colorTheme - Color theme for headers
  */
-export const exportToExcelWithTheme = (data, filename = 'export', colorTheme = 'blue') => {
+export const exportToExcelWithTheme = async (data, filename = 'export', colorTheme = 'blue') => {
   if (!data || data.length === 0) {
     console.warn('No data to export');
     return;
   }
+
+  const XLSX = await loadXlsx();
 
   // Create workbook and worksheet
   const wb = XLSX.utils.book_new();

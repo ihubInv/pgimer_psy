@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { ToastContainer } from 'react-toastify';
@@ -13,48 +14,45 @@ import ForgotPassword from './pages/ForgotPassword';
 import VerifyOTP from './pages/VerifyOTP';
 import ResetPassword from './pages/ResetPassword';
 import SetupPassword from './pages/SetupPassword';
-import Dashboard from './pages/Dashboard';
 import NotFound from './pages/NotFound';
 
-// Patient Pages
-import PatientsPage from './pages/patients/PatientsPage';
-import CreatePatient from './pages/patients/CreatePatient';
-import PatientDetails from './pages/patients/PatientDetails';
-import SelectExistingPatient from './pages/patients/SelectExistingPatient';
-import CreateChildPatient from './pages/patients/CreateChildPatient';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
 
+const PatientsPage = lazy(() => import('./pages/patients/PatientsPage'));
+const CreatePatient = lazy(() => import('./pages/patients/CreatePatient'));
+const PatientDetails = lazy(() => import('./pages/patients/PatientDetails'));
+const CreateChildPatient = lazy(() => import('./pages/patients/CreateChildPatient'));
 
-// Walk-in Clinical Proforma Pages
-import ClinicalProformaPage from './pages/clinical/ClinicalProformaPage';
-import EditClinicalProforma from './pages/clinical/EditClinicalProforma';
-import ClinicalProformaDetails from './pages/clinical/ClinicalProformaDetails';
-import FollowUpForm from './pages/clinical/FollowUpForm';
-import EditChildClinicalProforma from './pages/clinical/EditChildClinicalProforma';
-import ChildFollowUpForm from './pages/clinical/ChildFollowUpForm';
+const ClinicalProformaPage = lazy(() => import('./pages/clinical/ClinicalProformaPage'));
+const EditClinicalProforma = lazy(() => import('./pages/clinical/EditClinicalProforma'));
+const ClinicalProformaDetails = lazy(() => import('./pages/clinical/ClinicalProformaDetails'));
+const FollowUpForm = lazy(() => import('./pages/clinical/FollowUpForm'));
+const EditChildClinicalProforma = lazy(() => import('./pages/clinical/EditChildClinicalProforma'));
+const ChildFollowUpForm = lazy(() => import('./pages/clinical/ChildFollowUpForm'));
+const ClinicalTodayPatients = lazy(() => import('./pages/clinical/ClinincalTodayPatients'));
 
-// Prescription Pages
-import PrescriptionEdit from './pages/PrescribeMedication/PrescriptionEdit';
-import PrescriptionView from './pages/PrescribeMedication/PrescriptionView';
+const PrescriptionEdit = lazy(() => import('./pages/PrescribeMedication/PrescriptionEdit'));
+const PrescriptionView = lazy(() => import('./pages/PrescribeMedication/PrescriptionView'));
 
-// ADL File Pages
-import ADLFilesPage from './pages/adl/ADLFilesPage';
+const ADLFilesPage = lazy(() => import('./pages/adl/ADLFilesPage'));
+const EditADL = lazy(() => import('./pages/adl/EditADL'));
+const ViewADL = lazy(() => import('./pages/adl/ViewADL'));
 
-// User Management Pages
-import UsersPage from './pages/users/UsersPage';
-import CreateUser from './pages/users/CreateUser';
-import EditUser from './pages/users/EditUser';
+const UsersPage = lazy(() => import('./pages/users/UsersPage'));
+const CreateUser = lazy(() => import('./pages/users/CreateUser'));
+const EditUser = lazy(() => import('./pages/users/EditUser'));
 
-// Room Management Pages
-import RoomManagementPage from './pages/rooms/RoomManagementPage';
+const RoomManagementPage = lazy(() => import('./pages/rooms/RoomManagementPage'));
+const Profile = lazy(() => import('./pages/Profile'));
+const ApiTest = lazy(() => import('./pages/ApiTest'));
 
-// Profile
-import Profile from './pages/Profile';
-
-// API Test (Development only)
-import ApiTest from './pages/ApiTest';
-import ClinicalTodayPatients from './pages/clinical/ClinincalTodayPatients';
-import EditADL from './pages/adl/EditADL';
-import ViewADL from './pages/adl/ViewADL';
+function PageLoader() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-primary-600" />
+    </div>
+  );
+}
 
 function App() {
   const isAuthenticated = useSelector(selectIsAuthenticated);
@@ -62,6 +60,7 @@ function App() {
   return (
     <BrowserRouter>
       <SessionProvider>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public routes */}
           <Route
@@ -154,6 +153,7 @@ function App() {
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
         <SessionExpiredModal />
       </SessionProvider>
       <ToastContainer

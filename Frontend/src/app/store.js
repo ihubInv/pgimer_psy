@@ -1,11 +1,34 @@
 import { configureStore, createListenerMiddleware } from '@reduxjs/toolkit';
 import { setupListeners } from '@reduxjs/toolkit/query';
 import { persistStore, persistReducer, FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER } from 'redux-persist';
-import storage from 'redux-persist/lib/storage';
+import createWebStorage from 'redux-persist/lib/storage/createWebStorage';
 import { combineReducers } from '@reduxjs/toolkit';
 import { apiSlice } from './api/apiSlice';
 import authReducer, { logout } from '../features/auth/authSlice';
 import formReducer from '../features/form/formSlice';
+
+function createPersistStorage() {
+  if (typeof window === 'undefined') {
+    return {
+      getItem: () => Promise.resolve(null),
+      setItem: () => Promise.resolve(),
+      removeItem: () => Promise.resolve(),
+    };
+  }
+
+  try {
+    const factory = createWebStorage.default ?? createWebStorage;
+    return factory('local');
+  } catch {
+    return {
+      getItem: () => Promise.resolve(null),
+      setItem: () => Promise.resolve(),
+      removeItem: () => Promise.resolve(),
+    };
+  }
+}
+
+const storage = createPersistStorage();
 
 // Reset RTK Query cache on logout
 const rtkqResetOnLogout = createListenerMiddleware();
