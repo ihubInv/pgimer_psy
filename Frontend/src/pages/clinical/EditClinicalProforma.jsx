@@ -1383,24 +1383,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                 <div className="space-y-6">
                   <CheckboxGroup label="Behaviour" name="mse_behaviour" value={formData.mse_behaviour || []} onChange={handleChange} options={clinicalOptions.mse_behaviour || []} note={formData.mse_behaviour_notes || ''} onNoteChange={handleChange} />
                   <CheckboxGroup label="Affect & Mood" name="mse_affect" value={formData.mse_affect || []} onChange={handleChange} options={clinicalOptions.mse_affect || []} note={formData.mse_affect_notes || ''} onNoteChange={handleChange} />
-                  <CheckboxGroup
-                    label="Thought (Flow, Form, Content)"
-                    name="mse_thought"
-                    value={formData.mse_thought || []}
-                    onChange={handleChange}
-                    options={clinicalOptions.mse_thought || []}
-                    note={formData.mse_thought_notes || ''}
-                    onNoteChange={handleChange}
-                    rightInlineExtra={
-                      <Input
-                        name="mse_delusions"
-                        value={formData.mse_delusions}
-                        onChange={handleChange}
-                        placeholder="Delusions / Ideas of (optional)"
-                        className="max-w-xs"
-                      />
-                    }
-                  />
+                  <CheckboxGroup label="Thought (Flow, Form, Content)" name="mse_thought" value={formData.mse_thought || []} onChange={handleChange} options={clinicalOptions.mse_thought || []} note={formData.mse_thought_notes || ''} onNoteChange={handleChange} />
                   <CheckboxGroup label="Perception" name="mse_perception" value={formData.mse_perception || []} onChange={handleChange} options={clinicalOptions.mse_perception || []} note={formData.mse_perception_notes || ''} onNoteChange={handleChange} />
                   <CheckboxGroup label="Cognitive Functions" name="mse_cognitive_function" value={formData.mse_cognitive_function || []} onChange={handleChange} options={clinicalOptions.mse_cognitive_function || []} note={formData.mse_cognitive_function_notes || ''} onNoteChange={handleChange} />
                 </div>
@@ -1827,24 +1810,7 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
                 <div className="space-y-6">
                     <CheckboxGroup label="Behaviour" name="mse_behaviour" value={formData.mse_behaviour || []} onChange={handleChange} options={clinicalOptions.mse_behaviour || []} note={formData.mse_behaviour_notes || ''} onNoteChange={handleChange} />
                     <CheckboxGroup label="Affect & Mood" name="mse_affect" value={formData.mse_affect || []} onChange={handleChange} options={clinicalOptions.mse_affect || []} note={formData.mse_affect_notes || ''} onNoteChange={handleChange} />
-                  <CheckboxGroup
-                    label="Thought (Flow, Form, Content)"
-                    name="mse_thought"
-                    value={formData.mse_thought || []}
-                    onChange={handleChange}
-                    options={clinicalOptions.mse_thought || []}
-                    note={formData.mse_thought_notes || ''}
-                    onNoteChange={handleChange}
-                    rightInlineExtra={
-                      <Input
-                        name="mse_delusions"
-                        value={formData.mse_delusions}
-                        onChange={handleChange}
-                        placeholder="Delusions / Ideas of (optional)"
-                        className="max-w-xs"
-                      />
-                    }
-                  />
+                  <CheckboxGroup label="Thought (Flow, Form, Content)" name="mse_thought" value={formData.mse_thought || []} onChange={handleChange} options={clinicalOptions.mse_thought || []} note={formData.mse_thought_notes || ''} onNoteChange={handleChange} />
                     <CheckboxGroup label="Perception" name="mse_perception" value={formData.mse_perception || []} onChange={handleChange} options={clinicalOptions.mse_perception || []} note={formData.mse_perception_notes || ''} onNoteChange={handleChange} />
                     <CheckboxGroup label="Cognitive Functions" name="mse_cognitive_function" value={formData.mse_cognitive_function || []} onChange={handleChange} options={clinicalOptions.mse_cognitive_function || []} note={formData.mse_cognitive_function_notes || ''} onNoteChange={handleChange} />
                 </div>

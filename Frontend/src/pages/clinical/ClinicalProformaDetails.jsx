@@ -712,16 +712,6 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
                 onChange={() => {}}
                 options={clinicalOptions.mse_thought || []}
                 disabled={true}
-                rightInlineExtra={
-                  <Input
-                    name="mse_delusions"
-                    value={proforma.mse_delusions || ''}
-                    onChange={() => {}}
-                    placeholder="Delusions / Ideas of (optional)"
-                    className="max-w-xs"
-                    disabled={true}
-                  />
-                }
               />
               <CheckboxGroup 
                 label="Perception" 
