@@ -9,9 +9,9 @@
   ],
   "behaviour": [
     "Suspiciousness",
-    "Talking/Smiling to self",
-    "Hallucinatory behaviour",
-    "Increased goal-directed activity",
+    "Talking/Smiling To Self",
+    "Hallucinatory Behaviour",
+    "Increased Goal-Directed Activity",
     "Compulsions",
     "Apathy",
     "Anhedonia",
@@ -22,8 +22,8 @@
     "Ambitendency",
     "Disinhibition",
     "Impulsivity",
-    "Anger outbursts",
-    "Suicide/self-harm attempts"
+    "Anger Outbursts",
+    "Suicide/Self-Harm Attempts"
   ],
   "speech": [
     "Irrelevant",
@@ -44,13 +44,13 @@
     "Poverty",
     "Nihilism",
     "Hypochondriasis",
-    "Wish to die",
-    "Active suicidal ideation",
+    "Wish To Die",
+    "Active Suicidal Ideation",
     "Plans",
     "Worries",
     "Obsessions",
     "Phobias",
-    "Panic attacks"
+    "Panic Attacks"
   ],
   "perception": [
     "Hallucination - Auditory",
@@ -75,10 +75,10 @@
     "Sleep",
     "Appetite",
     "Bowel/Bladder",
-    "Self-care"
+    "Self-Care"
   ],
   "adjustment": [
-    "Work output",
+    "Work Output",
     "Socialization"
   ],
   "cognitive_function": [
@@ -91,16 +91,16 @@
     "Epileptic",
     "Dissociative",
     "Mixed",
-    "Not clear"
+    "Not Clear"
   ],
   "sexual_problem": [
     "Dhat",
-    "Poor erection",
-    "Early ejaculation",
-    "Decreased desire",
+    "Poor Erection",
+    "Early Ejaculation",
+    "Decreased Desire",
     "Perversion",
     "Homosexuality",
-    "Gender dysphoria"
+    "Gender Dysphoria"
   ],
   "substance_use": [
     "Alcohol",
@@ -108,13 +108,13 @@
     "Cannabis",
     "Benzodiazepines",
     "Tobacco",
-    "patient is depend on mdma fro 3 months"
+    "Patient Is Depend On Mdma Fro 3 Months"
   ],
   "associated_medical_surgical": [
     "Hypertension",
     "Diabetes",
     "Dyslipidemia",
-    "Thyroid dysfunction"
+    "Thyroid Dysfunction"
   ],
   "mse_behaviour": [
     "Uncooperative",
@@ -156,7 +156,7 @@
   ],
   "mse_cognitive_function": [
     "Impaired",
-    "Not impaired"
+    "Not Impaired"
   ],
   "nature_of_information": [
     "Reliable",

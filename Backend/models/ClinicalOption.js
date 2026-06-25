@@ -1,4 +1,8 @@
 const db = require('../config/database');
+const {
+  formatClinicalOptionLabel,
+  normalizeOptionLabelForCompare,
+} = require('../utils/formatClinicalOptionLabel');
 
 class ClinicalOption {
   constructor(data) {
@@ -35,7 +39,7 @@ class ClinicalOption {
         query += ' AND is_active = true';
       }
       
-      query += ' ORDER BY display_order ASC, option_label ASC';
+      query += ' ORDER BY LOWER(option_label) ASC';
       
       const result = await db.query(query, params);
       return result.rows.map(row => new ClinicalOption(row));
@@ -54,7 +58,7 @@ class ClinicalOption {
         query += ' WHERE is_active = true';
       }
       
-      query += ' ORDER BY option_group ASC, display_order ASC, option_label ASC';
+      query += ' ORDER BY option_group ASC, LOWER(option_label) ASC';
       
       const result = await db.query(query, params);
       
@@ -114,9 +118,17 @@ class ClinicalOption {
   static async create(data) {
     try {
       const { option_group, option_label, display_order = 0, is_system = false } = data;
-      
-      // Check if option already exists
-      const existing = await ClinicalOption.findByGroupAndLabel(option_group, option_label);
+      const formattedLabel = formatClinicalOptionLabel(option_label);
+
+      if (!formattedLabel) {
+        throw new Error('Option label is required');
+      }
+
+      const groupOptions = await ClinicalOption.findByGroup(option_group, true);
+      const normalized = normalizeOptionLabelForCompare(formattedLabel);
+      const existing = groupOptions.find(
+        (opt) => normalizeOptionLabelForCompare(opt.option_label) === normalized
+      );
       if (existing) {
         throw new Error('Option already exists in this group');
       }
@@ -133,7 +145,7 @@ class ClinicalOption {
         `INSERT INTO clinical_options (option_group, option_label, display_order, is_active, is_system, created_at, updated_at)
          VALUES ($1, $2, $3, true, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
-        [option_group, option_label, finalDisplayOrder, is_system]
+        [option_group, formattedLabel, finalDisplayOrder, is_system]
       );
 
       return new ClinicalOption(result.rows[0]);
@@ -151,13 +163,23 @@ class ClinicalOption {
       let paramIndex = 1;
 
       if (option_label !== undefined) {
-        // Check if new label conflicts with existing option in same group
-        const existing = await ClinicalOption.findByGroupAndLabel(this.option_group, option_label);
-        if (existing && existing.id !== this.id) {
+        const formattedLabel = formatClinicalOptionLabel(option_label);
+        if (!formattedLabel) {
+          throw new Error('Option label is required');
+        }
+
+        const groupOptions = await ClinicalOption.findByGroup(this.option_group, true);
+        const normalized = normalizeOptionLabelForCompare(formattedLabel);
+        const existing = groupOptions.find(
+          (opt) =>
+            opt.id !== this.id &&
+            normalizeOptionLabelForCompare(opt.option_label) === normalized
+        );
+        if (existing) {
           throw new Error('Option label already exists in this group');
         }
         updates.push(`option_label = $${paramIndex++}`);
-        params.push(option_label);
+        params.push(formattedLabel);
       }
 
       if (display_order !== undefined) {

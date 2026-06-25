@@ -25,6 +25,11 @@ import {
 import Input from './Input';
 import Button from './Button';
 import Textarea from './Textarea';
+import {
+  formatClinicalOptionLabel,
+  optionLabelExists,
+  sortClinicalOptionLabels,
+} from '../utils/formatClinicalOptionLabel';
 
 const iconByGroup = {
   nature_of_information: <FiList className="w-6 h-6 text-blue-600" />,
@@ -110,14 +115,16 @@ export const ClinicalMultiSelectDropdown = ({
   const localOptions = useMemo(() => {
     const baseOpts = Array.isArray(options) ? options : [];
     const remoteOpts = Array.isArray(remoteOptions) ? remoteOptions : [];
-    return Array.from(
-      new Set([
-        ...remoteOpts,
-        ...baseOpts,
-        ...(Array.isArray(value) ? value : []),
-        ...Array.from(userCreatedOptions),
-        ...optimisticAdds,
-      ])
+    return sortClinicalOptionLabels(
+      Array.from(
+        new Set([
+          ...remoteOpts,
+          ...baseOpts,
+          ...(Array.isArray(value) ? value : []),
+          ...Array.from(userCreatedOptions),
+          ...optimisticAdds,
+        ])
+      )
     );
   }, [remoteOptions, options, value, userCreatedOptions, optimisticAdds]);
 
@@ -224,12 +231,12 @@ export const ClinicalMultiSelectDropdown = ({
   };
 
   const handleSaveAdd = async () => {
-    const opt = customOption.trim();
+    const opt = formatClinicalOptionLabel(customOption);
     if (!opt) {
       setShowAdd(false);
       return;
     }
-    if (localOptions.includes(opt)) {
+    if (optionLabelExists(localOptions, opt)) {
       toast.info('This option already exists.');
       setCustomOption('');
       setShowAdd(false);
@@ -274,8 +281,13 @@ export const ClinicalMultiSelectDropdown = ({
   };
 
   const handleSaveEdit = async () => {
-    const newLabel = editValue.trim();
+    const newLabel = formatClinicalOptionLabel(editValue);
     if (!newLabel || !editingOption || newLabel === editingOption) {
+      setEditingOption(null);
+      return;
+    }
+    if (optionLabelExists(localOptions.filter((o) => o !== editingOption), newLabel)) {
+      toast.info('This option already exists.');
       setEditingOption(null);
       return;
     }

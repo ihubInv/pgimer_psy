@@ -1,4 +1,5 @@
 const ClinicalOption = require('../models/ClinicalOption');
+const { formatClinicalOptionLabel } = require('../utils/formatClinicalOptionLabel');
 
 class ClinicalOptionsController {
   // Get all options for a specific group
@@ -73,9 +74,17 @@ class ClinicalOptionsController {
         });
       }
 
+      const formattedLabel = formatClinicalOptionLabel(label);
+      if (!formattedLabel) {
+        return res.status(400).json({
+          success: false,
+          message: 'Label is required',
+        });
+      }
+
       const option = await ClinicalOption.create({
         option_group: group,
-        option_label: label.trim(),
+        option_label: formattedLabel,
         display_order: display_order,
         is_system: false // Explicitly set to false for user-created options
       });
@@ -131,7 +140,16 @@ class ClinicalOptionsController {
       }
 
       const updateData = {};
-      if (label !== undefined) updateData.option_label = label.trim();
+      if (label !== undefined) {
+        const formattedLabel = formatClinicalOptionLabel(label);
+        if (!formattedLabel) {
+          return res.status(400).json({
+            success: false,
+            message: 'Label is required',
+          });
+        }
+        updateData.option_label = formattedLabel;
+      }
       if (display_order !== undefined) updateData.display_order = display_order;
       if (is_active !== undefined) updateData.is_active = is_active;
 

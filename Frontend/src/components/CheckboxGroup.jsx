@@ -4,6 +4,11 @@ import { FiX, FiSave, FiPlus, FiHeart, FiActivity, FiUser, FiClipboard, FiList, 
 import Input from './Input';
 import Button from './Button';
 import Textarea from './Textarea';
+import {
+  formatClinicalOptionLabel,
+  optionLabelExists,
+  sortClinicalOptionLabels,
+} from '../utils/formatClinicalOptionLabel';
 
 export const CheckboxGroup = ({ label, name, value = [], onChange, options = [], rightInlineExtra = null, disabled = false, note = '', onNoteChange = null }) => {
     // Initialize with provided options to ensure they're always available
@@ -120,8 +125,10 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
       // Merge both arrays, keeping all unique options
       // This ensures that when a new option is added, existing hardcoded options don't disappear
       // Priority: Show all options from both sources, with remote options appearing first
-      const mergedOptions = Array.from(new Set([...remoteOpts, ...baseOptions]));
-      setLocalOptions(mergedOptions.length > 0 ? mergedOptions : baseOptions);
+      const mergedOptions = sortClinicalOptionLabels(
+        Array.from(new Set([...remoteOpts, ...baseOptions]))
+      );
+      setLocalOptions(mergedOptions.length > 0 ? mergedOptions : sortClinicalOptionLabels(baseOptions));
     }, [remoteOptions, options, remoteOptionsWithMeta, userCreatedOptions]);
 
     const filteredOptions = useMemo(() => {
@@ -164,7 +171,7 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
         } catch (softError) {
           console.error('Failed to delete option:', softError);
           // Re-add to UI if deletion failed
-          setLocalOptions((prev) => [...prev, opt].sort());
+          setLocalOptions((prev) => sortClinicalOptionLabels([...prev, opt]));
           // Re-add to user-created options if deletion failed
           setUserCreatedOptions((prev) => new Set(prev).add(opt));
         }
@@ -206,8 +213,14 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
     };
   
     const handleSaveAdd = async () => {
-      const opt = customOption.trim();
+      const opt = formatClinicalOptionLabel(customOption);
       if (!opt) {
+        setShowAdd(false);
+        return;
+      }
+
+      if (optionLabelExists(localOptions, opt)) {
+        setCustomOption('');
         setShowAdd(false);
         return;
       }
@@ -222,7 +235,9 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
         return updated;
       });
       
-      setLocalOptions((prev) => (prev.includes(opt) ? prev : [...prev, opt]));
+      setLocalOptions((prev) =>
+        optionLabelExists(prev, opt) ? prev : sortClinicalOptionLabels([...prev, opt])
+      );
       const next = value.includes(opt) ? value : [...value, opt];
       onChange({ target: { name, value: next } });
       setCustomOption('');
