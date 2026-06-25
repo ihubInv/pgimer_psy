@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useGetClinicalOptionsQuery, useAddClinicalOptionMutation, useDeleteClinicalOptionMutation } from '../features/clinical/clinicalApiSlice';
-import { FiX, FiSave, FiPlus, FiHeart, FiActivity, FiUser, FiClipboard, FiList, FiCheckSquare, FiFileText, FiEdit3 } from 'react-icons/fi';
+import { FiX, FiSave, FiPlus, FiHeart, FiActivity, FiUser, FiClipboard, FiList, FiCheckSquare, FiFileText, FiEdit3, FiSearch } from 'react-icons/fi';
 import Input from './Input';
 import Button from './Button';
 import Textarea from './Textarea';
@@ -15,6 +15,7 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
     const [customOption, setCustomOption] = useState('');
     const [showNote, setShowNote] = useState(false);
     const [localNote, setLocalNote] = useState(note || '');
+    const [searchQuery, setSearchQuery] = useState('');
     const { data: remoteOptionsData } = useGetClinicalOptionsQuery(name);
     const [addOption] = useAddClinicalOptionMutation();
     const [deleteOption] = useDeleteClinicalOptionMutation();
@@ -25,10 +26,11 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
     }, [note]);
     
     // Extract options and system flags from API response
-    const remoteOptions = remoteOptionsData?.data?.options || [];
-    const remoteOptionsWithMeta = remoteOptionsData?.data?.optionsWithMeta || [];
+    const remoteOptions = remoteOptionsData?.options || [];
+    const remoteOptionsWithMeta = remoteOptionsData?.optionsWithMeta || [];
   
     const iconByGroup = {
+      nature_of_information: <FiList className="w-6 h-6 text-blue-600" />,
       mood: <FiHeart className="w-6 h-6 text-rose-600" />,
       behaviour: <FiActivity className="w-6 h-6 text-violet-600" />,
       speech: <FiUser className="w-6 h-6 text-sky-600" />,
@@ -121,6 +123,16 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
       const mergedOptions = Array.from(new Set([...remoteOpts, ...baseOptions]));
       setLocalOptions(mergedOptions.length > 0 ? mergedOptions : baseOptions);
     }, [remoteOptions, options, remoteOptionsWithMeta, userCreatedOptions]);
+
+    const filteredOptions = useMemo(() => {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return localOptions;
+      return localOptions.filter(
+        (opt) => opt.toLowerCase().includes(q) || value.includes(opt)
+      );
+    }, [localOptions, searchQuery, value]);
+
+    const searchPlaceholder = label ? `Search ${label}...` : 'Search...';
   
     const toggle = (opt) => {
       const exists = value.includes(opt);
@@ -233,13 +245,42 @@ export const CheckboxGroup = ({ label, name, value = [], onChange, options = [],
     return (
       <div className="space-y-2">
         {label && (
-          <div className="flex items-center gap-3 text-base font-semibold text-gray-800">
-            <span>{iconByGroup[name] || <FiList className="w-6 h-6 text-gray-500" />}</span>
-            <span>{label}</span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex items-center gap-3 text-base font-semibold text-gray-800 shrink-0">
+              <span>{iconByGroup[name] || <FiList className="w-6 h-6 text-gray-500" />}</span>
+              <span>{label}</span>
+            </div>
+            <div className="relative w-full sm:max-w-xs sm:min-w-[220px]">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={searchPlaceholder}
+                disabled={disabled && localOptions.length === 0}
+                className="w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-lg bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                aria-label={searchPlaceholder}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded"
+                  aria-label="Clear search"
+                >
+                  <FiX className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         )}
         <div className="flex flex-wrap items-center gap-3">
-          {localOptions?.map((opt) => {
+          {filteredOptions.length === 0 && searchQuery.trim() && (
+            <p className="text-sm text-gray-500 w-full">
+              No matching options for &quot;{searchQuery.trim()}&quot;
+            </p>
+          )}
+          {filteredOptions?.map((opt) => {
             // Determine if this is a system option (hardcoded or from database with is_system=true)
             const isSystemOption = systemOptions.has(opt);
             // Show delete button only for non-system, non-disabled options
