@@ -53,7 +53,7 @@ import { clinicalProformaRecordsOnly } from '../../utils/clinicalPatientRecords'
 import { ReadOnlyToneProvider } from '../../components/PatientDetailReadOnlyCard';
 import { VIEW_NESTED_PANEL_CLASS } from '../../utils/viewDetailsUi';
 
-const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, adlData, usersData, userRole, onSave, onCancel }) => {
+const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, adlData, usersData, userRole, onSave, onCancel, refetchClinicalData }) => {
   const [searchParams] = useSearchParams();
   const mode = searchParams.get('mode'); // Check for 'create' mode
   const isEdit = searchParams.get('edit') === 'true'; // Check for 'edit' mode
@@ -3646,7 +3646,12 @@ const PatientDetailsEdit = ({ patient, formData: initialFormData, clinicalData, 
                               : new Date().toISOString().split('T')[0],
                             assigned_doctor: firstVisitProforma.assigned_doctor?.toString() || patient?.assigned_doctor_id?.toString() || '',
                           }}
-                          onUpdate={() => setIsEditingFirstVisitProforma(false)}
+                          onUpdate={async () => {
+                            if (refetchClinicalData) {
+                              await refetchClinicalData();
+                            }
+                            setIsEditingFirstVisitProforma(false);
+                          }}
                         />
                       ) : (
                         <ClinicalProformaDetails proforma={firstVisitProforma} />

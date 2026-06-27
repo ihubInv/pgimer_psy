@@ -10,6 +10,7 @@ import {
   useSearchIcdNodesQuery,
   useLazyGetIcdPathByCodeQuery,
   useLazyGetIcdPathByIdQuery,
+  useLazySearchIcdNodesQuery,
   useAddIcdNodeMutation,
   useUpdateIcdNodeMutation,
   useDeleteIcdNodeMutation,
@@ -37,6 +38,14 @@ function deepestCodeFromPath(path) {
     if (c) return String(c);
   }
   return '';
+}
+
+/** Value persisted on the proforma: WHO code when present, otherwise the selected node label. */
+function storedValueFromPath(path) {
+  const code = deepestCodeFromPath(path);
+  if (code) return code;
+  const last = path[path.length - 1];
+  return last ? icdNodeLabel(last) : '';
 }
 
 function defaultNodeType(parentNode) {
@@ -367,6 +376,7 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
 
   const [fetchPathByCode] = useLazyGetIcdPathByCodeQuery();
   const [fetchPathById] = useLazyGetIcdPathByIdQuery();
+  const [searchIcdNodes] = useLazySearchIcdNodesQuery();
   const [addNode, { isLoading: isAdding }] = useAddIcdNodeMutation();
   const [updateNode, { isLoading: isUpdating }] = useUpdateIcdNodeMutation();
   const [deleteNode] = useDeleteIcdNodeMutation();
@@ -400,17 +410,36 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
         const data = await fetchPathByCode(v).unwrap();
         if (data?.path?.length) {
           setSelectedPath(data.path);
-          setSelectedCode(deepestCodeFromPath(data.path) || v);
-        } else {
-          setSelectedCode(v);
-          setSelectedPath([]);
+          setSelectedCode(storedValueFromPath(data.path) || v);
+          return;
         }
       } catch {
-        setSelectedCode(v);
-        setSelectedPath([]);
+        /* fall through to title search */
       }
+
+      // Custom/local selections are stored as node titles when no WHO code exists
+      try {
+        const searchResult = await searchIcdNodes(v).unwrap();
+        const needle = v.trim().toLowerCase();
+        const match =
+          searchResult?.find?.((n) => icdNodeLabel(n).toLowerCase() === needle) ||
+          searchResult?.find?.((n) => String(n.title || '').trim().toLowerCase() === needle);
+        if (match?.id) {
+          const byId = await fetchPathById(match.id).unwrap();
+          if (byId?.path?.length) {
+            setSelectedPath(byId.path);
+            setSelectedCode(storedValueFromPath(byId.path) || v);
+            return;
+          }
+        }
+      } catch {
+        /* show stored label only */
+      }
+
+      setSelectedCode(v);
+      setSelectedPath([]);
     },
-    [fetchPathByCode]
+    [fetchPathByCode, fetchPathById, searchIcdNodes]
   );
 
   useEffect(() => {
@@ -439,10 +468,10 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
   const applyPath = useCallback(
     (path) => {
       setSelectedPath(path);
-      const deepest = deepestCodeFromPath(path);
-      setSelectedCode(deepest);
-      lastEmittedValueRef.current = deepest;
-      onChange({ target: { name: 'icd_code', value: deepest } });
+      const stored = storedValueFromPath(path);
+      setSelectedCode(stored);
+      lastEmittedValueRef.current = stored;
+      onChange({ target: { name: 'icd_code', value: stored } });
     },
     [onChange]
   );
@@ -451,10 +480,10 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
     (updatedNode) => {
       setSelectedPath((prev) => {
         const next = prev.map((n) => (n.id === updatedNode.id ? updatedNode : n));
-        const deepest = deepestCodeFromPath(next);
-        setSelectedCode(deepest);
-        lastEmittedValueRef.current = deepest;
-        onChange({ target: { name: 'icd_code', value: deepest } });
+        const stored = storedValueFromPath(next);
+        setSelectedCode(stored);
+        lastEmittedValueRef.current = stored;
+        onChange({ target: { name: 'icd_code', value: stored } });
         return next;
       });
     },

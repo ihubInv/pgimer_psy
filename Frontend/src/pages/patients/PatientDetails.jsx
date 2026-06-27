@@ -692,6 +692,7 @@ const PatientDetails = () => {
           adlData={adlData}
           usersData={usersData}
           userRole={user?.role}
+          refetchClinicalData={refetchClinicalData}
           onSave={() => {
             setIsEditing(false);
             // Clear edit state from localStorage

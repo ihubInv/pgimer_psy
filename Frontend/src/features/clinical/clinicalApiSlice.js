@@ -237,6 +237,7 @@ export const {
   useDeleteClinicalOptionMutation,
   useGetIcdNodesQuery,
   useSearchIcdNodesQuery,
+  useLazySearchIcdNodesQuery,
   useGetIcdPathByCodeQuery,
   useLazyGetIcdPathByCodeQuery,
   useLazyGetIcdPathByIdQuery,

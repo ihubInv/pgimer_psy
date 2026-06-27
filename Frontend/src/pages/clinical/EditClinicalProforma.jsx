@@ -787,9 +787,9 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
         // 1a: We have a real proforma ID → hit the API to persist changes, then notify parent
         if (propInitialData?.id) {
           try {
-            await updateProforma({ ...updateData, id: propInitialData.id }).unwrap();
+            const result = await updateProforma({ ...updateData, id: propInitialData.id }).unwrap();
             toast.success('Clinical proforma updated successfully!');
-            propOnUpdate(); // e.g. close the inline edit panel
+            await propOnUpdate(result?.data?.clinical_proforma);
           } catch (err) {
             toast.error(err?.data?.message || 'Failed to update proforma');
           }
@@ -901,6 +901,13 @@ const EditClinicalProforma = ({ initialData: propInitialData = null, onUpdate: p
           // Backend returns data.clinical_proforma (not data.proforma) for the update endpoint
           savedProforma = result?.data?.clinical_proforma || result?.data?.proforma || proforma;
           toast.success("Clinical proforma updated successfully!");
+          if (canRefetchProformaById) {
+            try {
+              await refetch();
+            } catch {
+              /* RTK #38: query skipped/unsubscribed */
+            }
+          }
         } else {
           // CREATE NEW performa for this visit (default behavior for all new visits)
           // This applies to:
