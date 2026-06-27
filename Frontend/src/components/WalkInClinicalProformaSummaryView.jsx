@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useGetAllClinicalOptionsQuery } from '../features/clinical/clinicalApiSlice';
 import { formatDate } from '../utils/formatters';
-import { getDoctorDecisionLabel } from '../utils/enumMappings';
 import { normalizeArrayField, labelsFromClinicalOptions } from '../utils/clinicalMultiSelectArray';
 import {
   PatientDetailCardShell,
@@ -110,7 +109,6 @@ export default function WalkInClinicalProformaSummaryView({ proforma, patient })
       proforma.gpe,
       proforma.diagnosis,
       proforma.icd_code,
-      proforma.doctor_decision,
       proforma.disposal,
       proforma.referred_to,
       proforma.treatment_prescribed,
@@ -367,7 +365,6 @@ export default function WalkInClinicalProformaSummaryView({ proforma, patient })
       {(hasDisplay(proforma.gpe) ||
         hasDisplay(proforma.diagnosis) ||
         hasDisplay(proforma.icd_code) ||
-        hasDisplay(proforma.doctor_decision) ||
         hasDisplay(proforma.disposal) ||
         hasDisplay(proforma.referred_to) ||
         hasDisplay(proforma.treatment_prescribed) ||
@@ -387,12 +384,6 @@ export default function WalkInClinicalProformaSummaryView({ proforma, patient })
                 <PatientDetailField label="Diagnosis" value={proforma.diagnosis} className="md:col-span-2" />
               )}
               {hasDisplay(proforma.icd_code) && <PatientDetailField label="ICD code" value={proforma.icd_code} />}
-              {hasDisplay(proforma.doctor_decision) && (
-                <PatientDetailField
-                  label="Doctor decision"
-                  value={getDoctorDecisionLabel(proforma.doctor_decision) || proforma.doctor_decision}
-                />
-              )}
               {hasDisplay(proforma.disposal) && (
                 <PatientDetailField label="Disposal & referral" value={proforma.disposal} className="md:col-span-2" />
               )}

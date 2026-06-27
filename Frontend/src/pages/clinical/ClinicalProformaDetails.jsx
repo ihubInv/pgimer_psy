@@ -17,7 +17,6 @@ import Badge from '../../components/Badge';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import FilePreview from '../../components/FilePreview';
 // formatDate removed - not used in view mode
-import { getDoctorDecisionLabel } from '../../utils/enumMappings';
 import { normalizeArrayField } from '../../utils/clinicalMultiSelectArray';
 import { useGetPatientVisitHistoryQuery, useGetPatientByIdQuery } from '../../features/patients/patientsApiSlice';
 import { useGetClinicalProformaByPatientIdQuery, useGetAllClinicalOptionsQuery } from '../../features/clinical/clinicalApiSlice';
@@ -768,14 +767,6 @@ const ClinicalProformaDetails = ({ proforma: propProforma }) => {
                 onChange={() => {}}
                 disabled={true}
               />
-              <div>
-                <label className="text-sm font-medium text-gray-500">Doctor Decision</label>
-                <div className="mt-1">
-                  <Badge variant={proforma.doctor_decision === 'complex_case' ? 'warning' : 'success'}>
-                    {getDoctorDecisionLabel(proforma.doctor_decision) || 'N/A'}
-                  </Badge>
-                </div>
-              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Textarea
                   label="Disposal & Referral"
