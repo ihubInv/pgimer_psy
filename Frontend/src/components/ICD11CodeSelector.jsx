@@ -80,7 +80,7 @@ function IcdDialog({ open, onClose, title, children, maxWidth = 'max-w-md' }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4"
+      className="fixed inset-0 z-[1000000] flex items-end sm:items-center justify-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="icd-dialog-title"
@@ -363,6 +363,7 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
   const [subcategoryPrompt, setSubcategoryPrompt] = useState({ open: false, node: null, path: [] });
   const [allowEmptyChildLevel, setAllowEmptyChildLevel] = useState(null);
   const globalBoxRef = useRef(null);
+  const lastEmittedValueRef = useRef(value || '');
 
   const [fetchPathByCode] = useLazyGetIcdPathByCodeQuery();
   const [fetchPathById] = useLazyGetIcdPathByIdQuery();
@@ -413,7 +414,12 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
   );
 
   useEffect(() => {
-    syncFromValue(value || '');
+    const incoming = value || '';
+    // Ignore value changes that originated from our own selection; only
+    // rebuild the path when the value is set externally (initial load / reset).
+    if (incoming === lastEmittedValueRef.current) return;
+    lastEmittedValueRef.current = incoming;
+    syncFromValue(incoming);
   }, [value, syncFromValue]);
 
   useEffect(() => {
@@ -435,6 +441,7 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
       setSelectedPath(path);
       const deepest = deepestCodeFromPath(path);
       setSelectedCode(deepest);
+      lastEmittedValueRef.current = deepest;
       onChange({ target: { name: 'icd_code', value: deepest } });
     },
     [onChange]
@@ -446,6 +453,7 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
         const next = prev.map((n) => (n.id === updatedNode.id ? updatedNode : n));
         const deepest = deepestCodeFromPath(next);
         setSelectedCode(deepest);
+        lastEmittedValueRef.current = deepest;
         onChange({ target: { name: 'icd_code', value: deepest } });
         return next;
       });
@@ -519,11 +527,16 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
 
       const node = selectedPath[i];
       const userRequestedChild = allowEmptyChildLevel === next;
-      const isDrillDownParent = node.node_type === 'chapter' || node.node_type === 'category';
-      const subcategoryHasChildren =
-        node.node_type === 'subcategory' && pendingChildren.length > 0 && pendingChildParent?.id === node.id;
+      // WHO/system chapters & categories reliably have children, so drill in
+      // immediately (avoids a fetch delay). For custom nodes, only open the
+      // child column when there are actual children to drill into — otherwise
+      // selecting a leaf node should NOT spawn an empty "Subcategory" column.
+      const isSystemContainer =
+        node.is_system && (node.node_type === 'chapter' || node.node_type === 'category');
+      const hasFetchedChildren =
+        pendingChildParent?.id === node.id && pendingChildren.length > 0;
 
-      if (isDrillDownParent || userRequestedChild || subcategoryHasChildren) {
+      if (isSystemContainer || hasFetchedChildren || userRequestedChild) {
         if (!levels.includes(next)) levels.push(next);
       }
       break;
@@ -721,6 +734,21 @@ export const ICD11CodeSelector = ({ value, onChange, error }) => {
           );
         })}
       </div>
+
+      {lastNode &&
+      HIERARCHY_TYPES.includes(lastNode.node_type) &&
+      !levelsToRender.includes(selectedPath.length) ? (
+        <button
+          type="button"
+          onClick={() => {
+            setAllowEmptyChildLevel(selectedPath.length);
+            openAddSubcategoryUnder(lastNode, selectedPath);
+          }}
+          className="text-xs text-gray-600 hover:text-gray-800 flex items-center gap-1"
+        >
+          <FiPlus className="w-3 h-3" /> Add item under &quot;{lastNode.title}&quot;
+        </button>
+      ) : null}
 
       {selectedCode ? (
         <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md">
